@@ -10,6 +10,43 @@ use serde::{Deserialize, Serialize};
 #[folder = "var/prompts/"]
 struct BuiltinPrompts;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PromptSource {
+    BuiltIn,
+    User,
+    Local,
+}
+
+impl PromptSource {
+    pub fn priority(&self) -> u8 {
+        match self {
+            PromptSource::BuiltIn => 1,
+            PromptSource::User => 2,
+            PromptSource::Local => 3,
+        }
+    }
+
+    pub fn from_path(path: &str) -> Self {
+        if path.starts_with("builtin:") {
+            PromptSource::BuiltIn
+        } else if path.contains("/.swissarmyhammer/") {
+            // Check if this is a user directory path
+            if let Some(home_dir) = dirs::home_dir() {
+                let home_path = home_dir.to_string_lossy();
+                let expected_user_path = format!("{}/.swissarmyhammer/", home_path);
+                if path.contains(&expected_user_path) {
+                    return PromptSource::User;
+                }
+            }
+            // If not user directory, it's local
+            PromptSource::Local
+        } else {
+            // Any other path is considered local
+            PromptSource::Local
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct PromptArgument {
     pub name: String,
@@ -36,10 +73,15 @@ pub struct Prompt {
     pub arguments: Vec<PromptArgument>,
     pub content: String,
     pub source_path: String,
+    pub source: PromptSource,
+    pub relative_path: String,
 }
 
 impl Prompt {
     pub fn new(name: String, content: String, source_path: String) -> Self {
+        let source = PromptSource::from_path(&source_path);
+        let relative_path = Self::extract_relative_path(&source_path);
+        
         Self {
             name,
             title: None,
@@ -47,6 +89,8 @@ impl Prompt {
             arguments: Vec::new(),
             content,
             source_path,
+            source,
+            relative_path,
         }
     }
 
@@ -56,6 +100,9 @@ impl Prompt {
         content: String,
         source_path: String,
     ) -> Self {
+        let source = PromptSource::from_path(&source_path);
+        let relative_path = Self::extract_relative_path(&source_path);
+        
         if let Some(fm) = front_matter {
             Self {
                 name: fm.name.unwrap_or(name),
@@ -64,9 +111,29 @@ impl Prompt {
                 arguments: fm.arguments,
                 content,
                 source_path,
+                source,
+                relative_path,
             }
         } else {
             Self::new(name, content, source_path)
+        }
+    }
+
+    fn extract_relative_path(source_path: &str) -> String {
+        if source_path.starts_with("builtin:/") {
+            // For builtin prompts, remove "builtin:/" prefix
+            source_path.strip_prefix("builtin:/").unwrap_or(source_path).to_string()
+        } else if let Some(pos) = source_path.find("/.swissarmyhammer/") {
+            // For user/local prompts, extract path after .swissarmyhammer/
+            let after_dir = &source_path[pos + "/.swissarmyhammer/".len()..];
+            after_dir.to_string()
+        } else {
+            // Fallback to using the filename
+            std::path::Path::new(source_path)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or(source_path)
+                .to_string()
         }
     }
 }
@@ -96,7 +163,7 @@ impl PromptLoader {
             if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("md") {
                 match self.load_prompt_from_file(path) {
                     Ok(prompt) => {
-                        self.prompts.insert(prompt.name.clone(), prompt);
+                        self.insert_prompt_with_override(prompt);
                     }
                     Err(e) => {
                         tracing::warn!("Failed to load prompt from {:?}: {}", path, e);
@@ -187,7 +254,7 @@ impl PromptLoader {
                 let source_path = format!("builtin:/{}", file_path);
                 let prompt = Prompt::new_with_front_matter(name.clone(), front_matter, markdown_content, source_path);
                 
-                self.prompts.insert(name, prompt);
+                self.insert_prompt_with_override(prompt);
             }
         }
         Ok(())
@@ -238,6 +305,60 @@ impl PromptLoader {
         }
         
         Ok(())
+    }
+
+    pub fn insert_prompt_with_override(&mut self, prompt: Prompt) {
+        let name_key = prompt.name.clone();
+        
+        // Check if a prompt with the same relative path already exists
+        // We need to check by relative path for override detection, but store by name
+        let mut should_insert = true;
+        let mut replace_key: Option<String> = None;
+        
+        // Look for existing prompts with the same relative path
+        for (existing_name, existing_prompt) in &self.prompts {
+            if existing_prompt.relative_path == prompt.relative_path {
+                // Found a prompt with the same relative path
+                if prompt.source.priority() > existing_prompt.source.priority() {
+                    tracing::debug!(
+                        "Overriding prompt '{}' (relative path: '{}') from {:?} with {:?} (priority {} > {})",
+                        existing_name,
+                        prompt.relative_path,
+                        existing_prompt.source,
+                        prompt.source,
+                        prompt.source.priority(),
+                        existing_prompt.source.priority()
+                    );
+                    replace_key = Some(existing_name.clone());
+                    break;
+                } else {
+                    tracing::debug!(
+                        "Keeping existing prompt '{}' (relative path: '{}') from {:?}, ignoring {:?} (priority {} <= {})",
+                        existing_name,
+                        prompt.relative_path,
+                        existing_prompt.source,
+                        prompt.source,
+                        existing_prompt.source.priority(),
+                        prompt.source.priority()
+                    );
+                    should_insert = false;
+                    break;
+                }
+            }
+        }
+        
+        if should_insert {
+            if let Some(key_to_remove) = replace_key {
+                self.prompts.remove(&key_to_remove);
+            }
+            tracing::debug!(
+                "Adding prompt '{}' (relative path: '{}') from {:?}",
+                name_key,
+                prompt.relative_path,
+                prompt.source
+            );
+            self.prompts.insert(name_key, prompt);
+        }
     }
 }
 
@@ -369,5 +490,159 @@ This is the markdown content."#;
         assert_eq!(plan_prompt.arguments[0].name, "task");
         assert!(plan_prompt.arguments[0].required);
         assert_eq!(plan_prompt.arguments[0].default, None);
+    }
+
+    #[test]
+    fn test_prompt_source_tracking() {
+        let builtin_prompt = Prompt::new(
+            "test".to_string(),
+            "content".to_string(),
+            "builtin:/test.md".to_string(),
+        );
+        assert_eq!(builtin_prompt.source, PromptSource::BuiltIn);
+        assert_eq!(builtin_prompt.relative_path, "test.md");
+
+        // Use actual home directory for user prompt test
+        if let Some(home_dir) = dirs::home_dir() {
+            let user_path = format!("{}/.swissarmyhammer/test.md", home_dir.to_string_lossy());
+            let user_prompt = Prompt::new(
+                "test".to_string(),
+                "content".to_string(),
+                user_path,
+            );
+            assert_eq!(user_prompt.source, PromptSource::User);
+            assert_eq!(user_prompt.relative_path, "test.md");
+        }
+
+        let local_prompt = Prompt::new(
+            "test".to_string(),
+            "content".to_string(),
+            "/project/.swissarmyhammer/test.md".to_string(),
+        );
+        assert_eq!(local_prompt.source, PromptSource::Local);
+        assert_eq!(local_prompt.relative_path, "test.md");
+    }
+
+    #[test]
+    fn test_prompt_source_priority() {
+        assert!(PromptSource::Local.priority() > PromptSource::User.priority());
+        assert!(PromptSource::User.priority() > PromptSource::BuiltIn.priority());
+    }
+
+    #[test]
+    fn test_prompt_override_logic() {
+        let mut loader = PromptLoader::new();
+        
+        // Test that override works - this test will fail until we implement it
+        let builtin_prompt = Prompt::new(
+            "example".to_string(),
+            "builtin content".to_string(),
+            "builtin:/example.md".to_string(),
+        );
+        
+        // Use actual home directory for consistent testing
+        let user_path = if let Some(home_dir) = dirs::home_dir() {
+            format!("{}/.swissarmyhammer/example.md", home_dir.to_string_lossy())
+        } else {
+            "/fallback/home/.swissarmyhammer/example.md".to_string()
+        };
+        
+        let user_prompt = Prompt::new(
+            "example".to_string(),
+            "user content".to_string(),
+            user_path,
+        );
+        
+        let local_prompt = Prompt::new(
+            "example".to_string(),
+            "local content".to_string(),
+            "/project/.swissarmyhammer/example.md".to_string(),
+        );
+        
+        // Insert prompts with override logic
+        loader.insert_prompt_with_override(builtin_prompt);
+        loader.insert_prompt_with_override(user_prompt);
+        loader.insert_prompt_with_override(local_prompt);
+        
+        // Local should win due to highest priority
+        assert!(loader.prompts.contains_key("example"));
+        let final_prompt = &loader.prompts["example"];
+        assert_eq!(final_prompt.content, "local content");
+        assert_eq!(final_prompt.source, PromptSource::Local);
+    }
+
+    #[test]
+    fn test_three_level_override_scenario() {
+        let mut loader = PromptLoader::new();
+        
+        // Simulate the exact scenario described in the requirements:
+        // Built-in example.md, User override, Local override
+        
+        // 1. Load builtin example.md (already exists from previous tests)
+        loader.load_builtin_prompts().unwrap();
+        
+        // Verify builtin is loaded
+        assert!(loader.prompts.contains_key("example"));
+        let builtin_example = &loader.prompts["example"];
+        assert_eq!(builtin_example.source, PromptSource::BuiltIn);
+        assert!(builtin_example.content.contains("Example Prompt"));
+        
+        // 2. Add user override for example.md
+        let user_path = if let Some(home_dir) = dirs::home_dir() {
+            format!("{}/.swissarmyhammer/example.md", home_dir.to_string_lossy())
+        } else {
+            "/fallback/home/.swissarmyhammer/example.md".to_string()
+        };
+        
+        let user_override = Prompt::new_with_front_matter(
+            "example".to_string(),
+            Some(PromptFrontMatter {
+                name: None,
+                title: "User Customized Example".to_string(),
+                description: "A user-customized version of the example prompt".to_string(),
+                arguments: vec![],
+            }),
+            "# User Override\nThis is a user-customized example prompt.".to_string(),
+            user_path,
+        );
+        
+        loader.insert_prompt_with_override(user_override);
+        
+        // Verify user override took effect
+        let user_example = &loader.prompts["example"];
+        assert_eq!(user_example.source, PromptSource::User);
+        assert_eq!(user_example.title, Some("User Customized Example".to_string()));
+        assert!(user_example.content.contains("User Override"));
+        
+        // 3. Add local override for example.md
+        let local_override = Prompt::new_with_front_matter(
+            "example".to_string(),
+            Some(PromptFrontMatter {
+                name: None,
+                title: "Local Project Example".to_string(),
+                description: "A project-specific version of the example prompt".to_string(),
+                arguments: vec![],
+            }),
+            "# Local Override\nThis is a project-specific example prompt.".to_string(),
+            "/project/.swissarmyhammer/example.md".to_string(),
+        );
+        
+        loader.insert_prompt_with_override(local_override);
+        
+        // Verify local override won (highest priority)
+        let final_example = &loader.prompts["example"];
+        assert_eq!(final_example.source, PromptSource::Local);
+        assert_eq!(final_example.title, Some("Local Project Example".to_string()));
+        assert!(final_example.content.contains("Local Override"));
+        assert_eq!(final_example.relative_path, "example.md");
+        
+        // Verify that only one "example" prompt exists (the local one)
+        assert_eq!(loader.prompts.len(), 3); // example, help, plan
+        assert_eq!(
+            loader.prompts.values()
+                .filter(|p| p.relative_path == "example.md")
+                .count(),
+            1
+        );
     }
 }

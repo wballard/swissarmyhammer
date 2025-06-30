@@ -15,3 +15,6 @@ tracing-subscriber = "0.3"
 colored = "2"
 is-terminal = "0.4"
 rmcp = { version = "0.1.5", features = ["server", "transport-io"] }
+walkdir = "2"
+dirs = "5"
+rust-embed = "8"

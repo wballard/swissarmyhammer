@@ -11,9 +11,11 @@ use dashmap::DashMap;
 use notify::{Watcher, RecommendedWatcher, RecursiveMode, Event, EventKind};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
+use serde_json::Value;
+use crate::template::{TemplateEngine, TemplateArgument as TemplateArg};
 
 #[derive(RustEmbed)]
-#[folder = "var/prompts/"]
+#[folder = "prompts/builtin/"]
 struct BuiltinPrompts;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -114,7 +116,15 @@ impl Prompt {
                 name: fm.name.unwrap_or(name),
                 title: Some(fm.title),
                 description: Some(fm.description),
-                arguments: fm.arguments,
+                arguments: fm.arguments.into_iter().map(|arg| {
+                    // Ensure default field is mapped correctly
+                    PromptArgument {
+                        name: arg.name,
+                        description: arg.description,
+                        required: arg.required,
+                        default: arg.default,
+                    }
+                }).collect(),
                 content,
                 source_path,
                 source,
@@ -141,6 +151,23 @@ impl Prompt {
                 .unwrap_or(source_path)
                 .to_string()
         }
+    }
+    
+    /// Process the prompt template with the given arguments
+    pub fn process_template(&self, arguments: &HashMap<String, Value>) -> Result<String> {
+        let engine = TemplateEngine::new();
+        
+        // Convert our PromptArgument to template::TemplateArgument
+        let template_args: Vec<TemplateArg> = self.arguments.iter()
+            .map(|arg| TemplateArg {
+                name: arg.name.clone(),
+                description: Some(arg.description.clone()),
+                required: arg.required,
+                default_value: arg.default.clone(),
+            })
+            .collect();
+        
+        engine.process_with_validation(&self.content, arguments, &template_args)
     }
 }
 
@@ -871,7 +898,7 @@ This is the markdown content."#;
         assert_eq!(final_example.relative_path, "example.md");
         
         // Verify that only one "example" prompt exists (the local one)
-        assert_eq!(loader.storage.len(), 3); // example, help, plan
+        assert_eq!(loader.storage.len(), 5); // example, help, plan, code-review, refactor
         assert_eq!(
             loader.storage.iter()
                 .filter(|(_, p)| p.relative_path == "example.md")
@@ -979,5 +1006,81 @@ This is the markdown content."#;
             WatchEvent::DirectoryChanged(_) => {}
             _ => panic!("Expected DirectoryChanged"),
         }
+    }
+    
+    #[test]
+    fn test_example_prompts_loaded() {
+        let mut loader = PromptLoader::new();
+        loader.load_all().unwrap();
+        
+        // Check that code-review prompt is loaded
+        let code_review = loader.storage.get("code-review");
+        assert!(code_review.is_some(), "code-review prompt should be loaded");
+        let code_review = code_review.unwrap();
+        assert_eq!(code_review.name, "code-review");
+        assert!(code_review.description.is_some());
+        assert_eq!(code_review.arguments.len(), 2);
+        assert!(code_review.arguments.iter().any(|a| a.name == "file_path" && a.required));
+        assert!(code_review.arguments.iter().any(|a| a.name == "context" && !a.required));
+        
+        // Check that refactor prompt is loaded
+        let refactor = loader.storage.get("refactor");
+        assert!(refactor.is_some(), "refactor prompt should be loaded");
+        let refactor = refactor.unwrap();
+        assert_eq!(refactor.name, "refactor");
+        assert!(refactor.description.is_some());
+        assert_eq!(refactor.arguments.len(), 2);
+        assert!(refactor.arguments.iter().all(|a| a.required));
+    }
+    
+    #[test]
+    fn test_prompt_template_processing() {
+        // Create a prompt with arguments
+        let prompt = Prompt {
+            name: "test".to_string(),
+            title: Some("Test Prompt".to_string()),
+            description: Some("A test prompt".to_string()),
+            arguments: vec![
+                PromptArgument {
+                    name: "name".to_string(),
+                    description: "The name".to_string(),
+                    required: true,
+                    default: None,
+                },
+                PromptArgument {
+                    name: "greeting".to_string(),
+                    description: "The greeting".to_string(),
+                    required: false,
+                    default: Some("Hello".to_string()),
+                },
+            ],
+            content: "{{greeting}}, {{name}}! Welcome to {{place}}.".to_string(),
+            source_path: "test.md".to_string(),
+            source: PromptSource::Local,
+            relative_path: "test.md".to_string(),
+        };
+        
+        // Test with all arguments provided
+        let mut args = HashMap::new();
+        args.insert("name".to_string(), serde_json::json!("Alice"));
+        args.insert("greeting".to_string(), serde_json::json!("Hi"));
+        args.insert("place".to_string(), serde_json::json!("Wonderland"));
+        
+        let result = prompt.process_template(&args).unwrap();
+        assert_eq!(result, "Hi, Alice! Welcome to Wonderland.");
+        
+        // Test with default value
+        let mut args2 = HashMap::new();
+        args2.insert("name".to_string(), serde_json::json!("Bob"));
+        args2.insert("place".to_string(), serde_json::json!("the party"));
+        
+        let result2 = prompt.process_template(&args2).unwrap();
+        assert_eq!(result2, "Hello, Bob! Welcome to the party.");
+        
+        // Test missing required argument
+        let args3 = HashMap::new();
+        let result3 = prompt.process_template(&args3);
+        assert!(result3.is_err());
+        assert!(result3.unwrap_err().to_string().contains("Missing required argument 'name'"));
     }
 }

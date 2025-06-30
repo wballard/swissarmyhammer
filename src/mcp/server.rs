@@ -6,6 +6,7 @@ use rmcp::{
 use serde_json::{json, Value};
 use tokio::sync::oneshot;
 use tracing::info;
+use std::collections::HashMap;
 use crate::prompts::{PromptLoader, PromptWatcher, PromptStorage};
 
 #[derive(Clone)]
@@ -68,19 +69,21 @@ impl MCPServer {
     pub fn get_prompt_by_name(&self, name: &str, arguments: Option<&Value>) -> Result<Value> {
         match self.storage.get(name) {
             Some(prompt) => {
-                let mut content = prompt.content.clone();
-                
-                // Apply template substitution if arguments provided
-                if let Some(args) = arguments {
-                    if let Some(args_obj) = args.as_object() {
-                        for (arg_name, arg_value) in args_obj {
-                            let placeholder = format!("{{{{{}}}}}", arg_name);
-                            if let Some(value_str) = arg_value.as_str() {
-                                content = content.replace(&placeholder, value_str);
-                            }
-                        }
+                // Convert JSON arguments to HashMap for the template engine
+                let args_map = if let Some(args) = arguments {
+                    if let Some(obj) = args.as_object() {
+                        obj.iter()
+                            .map(|(k, v)| (k.clone(), v.clone()))
+                            .collect()
+                    } else {
+                        HashMap::new()
                     }
-                }
+                } else {
+                    HashMap::new()
+                };
+                
+                // Use the template engine to process the prompt
+                let processed_content = prompt.process_template(&args_map)?;
 
                 Ok(json!({
                     "description": prompt.description.as_deref().unwrap_or(""),
@@ -88,7 +91,7 @@ impl MCPServer {
                         "role": "user",
                         "content": {
                             "type": "text",
-                            "text": content
+                            "text": processed_content
                         }
                     }]
                 }))

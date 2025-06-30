@@ -1,10 +1,16 @@
-use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs;
+use std::sync::Arc;
+use std::time::Duration;
+use std::collections::HashMap;
 use walkdir::WalkDir;
 use anyhow::{Result, Context};
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
+use dashmap::DashMap;
+use notify::{Watcher, RecommendedWatcher, RecursiveMode, Event, EventKind};
+use tokio::sync::mpsc;
+use tokio::time::timeout;
 
 #[derive(RustEmbed)]
 #[folder = "var/prompts/"]
@@ -138,9 +144,62 @@ impl Prompt {
     }
 }
 
+#[derive(Clone)]
+pub struct PromptStorage {
+    prompts: Arc<DashMap<String, Prompt>>,
+}
+
+impl Default for PromptStorage {
+    fn default() -> Self {
+        Self {
+            prompts: Arc::new(DashMap::new()),
+        }
+    }
+}
+
+impl PromptStorage {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn insert(&self, name: String, prompt: Prompt) {
+        self.prompts.insert(name, prompt);
+    }
+
+    pub fn get(&self, name: &str) -> Option<Prompt> {
+        self.prompts.get(name).map(|entry| entry.value().clone())
+    }
+
+    pub fn remove(&self, name: &str) -> Option<Prompt> {
+        self.prompts.remove(name).map(|(_, prompt)| prompt)
+    }
+
+    pub fn contains_key(&self, name: &str) -> bool {
+        self.prompts.contains_key(name)
+    }
+
+    pub fn len(&self) -> usize {
+        self.prompts.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.prompts.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (String, Prompt)> + '_ {
+        self.prompts.iter().map(|entry| (entry.key().clone(), entry.value().clone()))
+    }
+
+    pub fn find_by_relative_path(&self, relative_path: &str) -> Option<(String, Prompt)> {
+        self.prompts.iter()
+            .find(|entry| entry.value().relative_path == relative_path)
+            .map(|entry| (entry.key().clone(), entry.value().clone()))
+    }
+}
+
 #[derive(Default)]
 pub struct PromptLoader {
-    pub prompts: HashMap<String, Prompt>,
+    pub storage: PromptStorage,
 }
 
 impl PromptLoader {
@@ -175,7 +234,7 @@ impl PromptLoader {
         Ok(())
     }
 
-    fn load_prompt_from_file(&self, path: &Path) -> Result<Prompt> {
+    pub fn load_prompt_from_file(&self, path: &Path) -> Result<Prompt> {
         let file_content = fs::read_to_string(path)
             .with_context(|| format!("Failed to read prompt file: {:?}", path))?;
 
@@ -311,54 +370,229 @@ impl PromptLoader {
         let name_key = prompt.name.clone();
         
         // Check if a prompt with the same relative path already exists
-        // We need to check by relative path for override detection, but store by name
-        let mut should_insert = true;
-        let mut replace_key: Option<String> = None;
-        
-        // Look for existing prompts with the same relative path
-        for (existing_name, existing_prompt) in &self.prompts {
-            if existing_prompt.relative_path == prompt.relative_path {
-                // Found a prompt with the same relative path
-                if prompt.source.priority() > existing_prompt.source.priority() {
-                    tracing::debug!(
-                        "Overriding prompt '{}' (relative path: '{}') from {:?} with {:?} (priority {} > {})",
-                        existing_name,
-                        prompt.relative_path,
-                        existing_prompt.source,
-                        prompt.source,
-                        prompt.source.priority(),
-                        existing_prompt.source.priority()
-                    );
-                    replace_key = Some(existing_name.clone());
-                    break;
-                } else {
-                    tracing::debug!(
-                        "Keeping existing prompt '{}' (relative path: '{}') from {:?}, ignoring {:?} (priority {} <= {})",
-                        existing_name,
-                        prompt.relative_path,
-                        existing_prompt.source,
-                        prompt.source,
-                        existing_prompt.source.priority(),
-                        prompt.source.priority()
-                    );
-                    should_insert = false;
-                    break;
-                }
+        if let Some((existing_name, existing_prompt)) = self.storage.find_by_relative_path(&prompt.relative_path) {
+            if prompt.source.priority() > existing_prompt.source.priority() {
+                tracing::debug!(
+                    "Overriding prompt '{}' (relative path: '{}') from {:?} with {:?} (priority {} > {})",
+                    existing_name,
+                    prompt.relative_path,
+                    existing_prompt.source,
+                    prompt.source,
+                    prompt.source.priority(),
+                    existing_prompt.source.priority()
+                );
+                self.storage.remove(&existing_name);
+                self.storage.insert(name_key, prompt);
+            } else {
+                tracing::debug!(
+                    "Keeping existing prompt '{}' (relative path: '{}') from {:?}, ignoring {:?} (priority {} <= {})",
+                    existing_name,
+                    prompt.relative_path,
+                    existing_prompt.source,
+                    prompt.source,
+                    existing_prompt.source.priority(),
+                    prompt.source.priority()
+                );
             }
-        }
-        
-        if should_insert {
-            if let Some(key_to_remove) = replace_key {
-                self.prompts.remove(&key_to_remove);
-            }
+        } else {
             tracing::debug!(
                 "Adding prompt '{}' (relative path: '{}') from {:?}",
                 name_key,
                 prompt.relative_path,
                 prompt.source
             );
-            self.prompts.insert(name_key, prompt);
+            self.storage.insert(name_key, prompt);
         }
+    }
+}
+
+#[derive(Debug)]
+pub enum WatchEvent {
+    PromptChanged(PathBuf),
+    PromptDeleted(PathBuf),
+    DirectoryChanged(PathBuf),
+}
+
+pub struct PromptWatcher {
+    _watcher: RecommendedWatcher,
+    event_receiver: mpsc::UnboundedReceiver<WatchEvent>,
+    storage: PromptStorage,
+}
+
+impl PromptWatcher {
+    pub fn new(storage: PromptStorage) -> Result<Self> {
+        let (event_sender, event_receiver) = mpsc::unbounded_channel();
+        
+        // Create a debounced sender to handle rapid file system events
+        let debounced_sender = Self::create_debounced_sender(event_sender);
+        
+        let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
+            match res {
+                Ok(event) => {
+                    if let Err(e) = Self::handle_fs_event(&debounced_sender, event) {
+                        tracing::warn!("Failed to handle file system event: {}", e);
+                    }
+                }
+                Err(e) => tracing::error!("File watcher error: {}", e),
+            }
+        })?;
+
+        // Watch user and local .swissarmyhammer directories
+        if let Some(home_dir) = dirs::home_dir() {
+            let user_dir = home_dir.join(".swissarmyhammer");
+            if user_dir.exists() {
+                watcher.watch(&user_dir, RecursiveMode::Recursive)
+                    .with_context(|| format!("Failed to watch user directory: {:?}", user_dir))?;
+                tracing::info!("Watching user prompts directory: {:?}", user_dir);
+            }
+        }
+
+        let local_dir = std::env::current_dir()?.join(".swissarmyhammer");
+        if local_dir.exists() {
+            watcher.watch(&local_dir, RecursiveMode::Recursive)
+                .with_context(|| format!("Failed to watch local directory: {:?}", local_dir))?;
+            tracing::info!("Watching local prompts directory: {:?}", local_dir);
+        }
+
+        Ok(Self {
+            _watcher: watcher,
+            event_receiver,
+            storage,
+        })
+    }
+
+    fn create_debounced_sender(sender: mpsc::UnboundedSender<WatchEvent>) -> mpsc::UnboundedSender<(PathBuf, EventKind)> {
+        let (debounce_sender, mut debounce_receiver) = mpsc::unbounded_channel::<(PathBuf, EventKind)>();
+        
+        // Spawn a task to handle debouncing
+        tokio::spawn(async move {
+            let mut pending_events: HashMap<PathBuf, EventKind> = HashMap::new();
+            
+            loop {
+                // Wait for events or timeout
+                let event_result = timeout(Duration::from_millis(100), debounce_receiver.recv()).await;
+                
+                match event_result {
+                    Ok(Some((path, kind))) => {
+                        // New event received, add to pending
+                        pending_events.insert(path, kind);
+                    }
+                    Ok(None) => {
+                        // Channel closed
+                        break;
+                    }
+                    Err(_) => {
+                        // Timeout - process pending events
+                        for (path, kind) in pending_events.drain() {
+                            let watch_event = match kind {
+                                EventKind::Remove(_) => WatchEvent::PromptDeleted(path),
+                                EventKind::Create(_) | EventKind::Modify(_) => {
+                                    if path.is_dir() {
+                                        WatchEvent::DirectoryChanged(path)
+                                    } else {
+                                        WatchEvent::PromptChanged(path)
+                                    }
+                                }
+                                _ => continue,
+                            };
+                            
+                            if let Err(e) = sender.send(watch_event) {
+                                tracing::error!("Failed to send debounced event: {}", e);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        debounce_sender
+    }
+
+    fn handle_fs_event(sender: &mpsc::UnboundedSender<(PathBuf, EventKind)>, event: Event) -> Result<()> {
+        // Filter for markdown files in .swissarmyhammer directories
+        for path in event.paths {
+            if (path.extension().and_then(|s| s.to_str()) == Some("md") || path.is_dir()) && path.to_string_lossy().contains("/.swissarmyhammer/") {
+                sender.send((path, event.kind))
+                    .map_err(|e| anyhow::anyhow!("Failed to send file system event: {}", e))?;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn run(mut self, mut prompt_loader: PromptLoader) -> Result<()> {
+        tracing::info!("Starting prompt file watcher...");
+        
+        while let Some(event) = self.event_receiver.recv().await {
+            match event {
+                WatchEvent::PromptChanged(path) => {
+                    tracing::debug!("Prompt file changed: {:?}", path);
+                    if let Err(e) = self.handle_prompt_changed(&mut prompt_loader, &path).await {
+                        tracing::warn!("Failed to reload changed prompt {:?}: {}", path, e);
+                    }
+                }
+                WatchEvent::PromptDeleted(path) => {
+                    tracing::debug!("Prompt file deleted: {:?}", path);
+                    if let Err(e) = self.handle_prompt_deleted(&path).await {
+                        tracing::warn!("Failed to handle deleted prompt {:?}: {}", path, e);
+                    }
+                }
+                WatchEvent::DirectoryChanged(path) => {
+                    tracing::debug!("Directory changed: {:?}", path);
+                    if let Err(e) = self.handle_directory_changed(&mut prompt_loader, &path).await {
+                        tracing::warn!("Failed to handle directory change {:?}: {}", path, e);
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    async fn handle_prompt_changed(&self, prompt_loader: &mut PromptLoader, path: &Path) -> Result<()> {
+        if !path.exists() {
+            return Ok(()); // File might have been deleted between events
+        }
+
+        match prompt_loader.load_prompt_from_file(path) {
+            Ok(prompt) => {
+                let name = prompt.name.clone();
+                prompt_loader.insert_prompt_with_override(prompt);
+                tracing::info!("Reloaded prompt '{}' from {:?}", name, path);
+            }
+            Err(e) => {
+                tracing::warn!("Failed to reload prompt from {:?}: {}", path, e);
+            }
+        }
+        
+        Ok(())
+    }
+
+    async fn handle_prompt_deleted(&self, path: &Path) -> Result<()> {
+        // Find and remove the prompt by searching for its path
+        let path_str = path.to_string_lossy();
+        let mut to_remove = Vec::new();
+        
+        for (name, prompt) in self.storage.iter() {
+            if prompt.source_path == path_str {
+                to_remove.push(name);
+            }
+        }
+        
+        for name in to_remove {
+            self.storage.remove(&name);
+            tracing::info!("Removed deleted prompt '{}' from {:?}", name, path);
+        }
+        
+        Ok(())
+    }
+
+    async fn handle_directory_changed(&self, prompt_loader: &mut PromptLoader, path: &Path) -> Result<()> {
+        if path.exists() && path.is_dir() {
+            tracing::info!("Rescanning directory: {:?}", path);
+            prompt_loader.scan_directory(path)?;
+        }
+        Ok(())
     }
 }
 
@@ -383,7 +617,7 @@ mod tests {
     #[test]
     fn test_prompt_loader_creation() {
         let loader = PromptLoader::new();
-        assert!(loader.prompts.is_empty());
+        assert!(loader.storage.is_empty());
     }
 
     #[test]
@@ -403,8 +637,8 @@ mod tests {
         assert!(result.is_ok());
         
         // Check that at least the example prompt is loaded
-        assert!(loader.prompts.contains_key("example"));
-        let example = &loader.prompts["example"];
+        assert!(loader.storage.contains_key("example"));
+        let example = loader.storage.get("example").unwrap();
         assert!(example.content.contains("Example Prompt"));
         assert_eq!(example.source_path, "builtin:/example.md");
     }
@@ -416,8 +650,8 @@ mod tests {
         assert!(result.is_ok());
         
         // At minimum, builtin prompts should be loaded
-        assert!(!loader.prompts.is_empty());
-        assert!(loader.prompts.contains_key("example"));
+        assert!(!loader.storage.is_empty());
+        assert!(loader.storage.contains_key("example"));
     }
 
     #[test]
@@ -472,8 +706,8 @@ This is the markdown content."#;
         assert!(result.is_ok());
         
         // Check that help prompt is loaded with front matter
-        assert!(loader.prompts.contains_key("help"));
-        let help_prompt = &loader.prompts["help"];
+        assert!(loader.storage.contains_key("help"));
+        let help_prompt = loader.storage.get("help").unwrap();
         assert_eq!(help_prompt.title, Some("Help Assistant".to_string()));
         assert_eq!(help_prompt.description, Some("A prompt for providing helpful assistance and guidance to users".to_string()));
         assert_eq!(help_prompt.arguments.len(), 2);
@@ -482,8 +716,8 @@ This is the markdown content."#;
         assert_eq!(help_prompt.arguments[0].default, Some("general assistance".to_string()));
         
         // Check that plan prompt is loaded with front matter
-        assert!(loader.prompts.contains_key("plan"));
-        let plan_prompt = &loader.prompts["plan"];
+        assert!(loader.storage.contains_key("plan"));
+        let plan_prompt = loader.storage.get("plan").unwrap();
         assert_eq!(plan_prompt.title, Some("Task Planning Assistant".to_string()));
         assert_eq!(plan_prompt.description, Some("A prompt for creating structured plans and breaking down complex tasks".to_string()));
         assert_eq!(plan_prompt.arguments.len(), 3);
@@ -565,8 +799,8 @@ This is the markdown content."#;
         loader.insert_prompt_with_override(local_prompt);
         
         // Local should win due to highest priority
-        assert!(loader.prompts.contains_key("example"));
-        let final_prompt = &loader.prompts["example"];
+        assert!(loader.storage.contains_key("example"));
+        let final_prompt = loader.storage.get("example").unwrap();
         assert_eq!(final_prompt.content, "local content");
         assert_eq!(final_prompt.source, PromptSource::Local);
     }
@@ -582,8 +816,8 @@ This is the markdown content."#;
         loader.load_builtin_prompts().unwrap();
         
         // Verify builtin is loaded
-        assert!(loader.prompts.contains_key("example"));
-        let builtin_example = &loader.prompts["example"];
+        assert!(loader.storage.contains_key("example"));
+        let builtin_example = loader.storage.get("example").unwrap();
         assert_eq!(builtin_example.source, PromptSource::BuiltIn);
         assert!(builtin_example.content.contains("Example Prompt"));
         
@@ -609,7 +843,7 @@ This is the markdown content."#;
         loader.insert_prompt_with_override(user_override);
         
         // Verify user override took effect
-        let user_example = &loader.prompts["example"];
+        let user_example = loader.storage.get("example").unwrap();
         assert_eq!(user_example.source, PromptSource::User);
         assert_eq!(user_example.title, Some("User Customized Example".to_string()));
         assert!(user_example.content.contains("User Override"));
@@ -630,19 +864,120 @@ This is the markdown content."#;
         loader.insert_prompt_with_override(local_override);
         
         // Verify local override won (highest priority)
-        let final_example = &loader.prompts["example"];
+        let final_example = loader.storage.get("example").unwrap();
         assert_eq!(final_example.source, PromptSource::Local);
         assert_eq!(final_example.title, Some("Local Project Example".to_string()));
         assert!(final_example.content.contains("Local Override"));
         assert_eq!(final_example.relative_path, "example.md");
         
         // Verify that only one "example" prompt exists (the local one)
-        assert_eq!(loader.prompts.len(), 3); // example, help, plan
+        assert_eq!(loader.storage.len(), 3); // example, help, plan
         assert_eq!(
-            loader.prompts.values()
-                .filter(|p| p.relative_path == "example.md")
+            loader.storage.iter()
+                .filter(|(_, p)| p.relative_path == "example.md")
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn test_prompt_storage_operations() {
+        let storage = PromptStorage::new();
+        assert!(storage.is_empty());
+        assert_eq!(storage.len(), 0);
+        assert!(!storage.contains_key("test"));
+        
+        let prompt = Prompt::new(
+            "test".to_string(),
+            "content".to_string(),
+            "/path/test.md".to_string(),
+        );
+        
+        storage.insert("test".to_string(), prompt.clone());
+        
+        assert!(!storage.is_empty());
+        assert_eq!(storage.len(), 1);
+        assert!(storage.contains_key("test"));
+        
+        let retrieved = storage.get("test").unwrap();
+        assert_eq!(retrieved.name, "test");
+        assert_eq!(retrieved.content, "content");
+        
+        let removed = storage.remove("test").unwrap();
+        assert_eq!(removed.name, "test");
+        assert!(storage.is_empty());
+    }
+
+    #[test]
+    fn test_prompt_storage_find_by_relative_path() {
+        let storage = PromptStorage::new();
+        
+        let prompt1 = Prompt::new(
+            "test1".to_string(),
+            "content1".to_string(),
+            "builtin:/test.md".to_string(),
+        );
+        
+        let prompt2 = Prompt::new(
+            "test2".to_string(),
+            "content2".to_string(),
+            "/project/.swissarmyhammer/test.md".to_string(),
+        );
+        
+        storage.insert("test1".to_string(), prompt1);
+        storage.insert("test2".to_string(), prompt2);
+        
+        let found = storage.find_by_relative_path("test.md");
+        assert!(found.is_some());
+        
+        // Should find the first one that matches
+        let (name, prompt) = found.unwrap();
+        assert!(name == "test1" || name == "test2");
+        assert_eq!(prompt.relative_path, "test.md");
+    }
+
+    #[tokio::test]
+    async fn test_prompt_watcher_creation() {
+        let storage = PromptStorage::new();
+        let watcher_result = PromptWatcher::new(storage);
+        
+        // This might fail if no .swissarmyhammer directories exist, which is fine
+        // We're mainly testing that the function can be called without panicking
+        match watcher_result {
+            Ok(_) => {
+                // Watcher created successfully
+            }
+            Err(e) => {
+                // This is acceptable - no directories to watch might exist
+                eprintln!("Watcher creation failed (expected in test environment): {}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_watch_event_types() {
+        use std::path::PathBuf;
+        
+        let path = PathBuf::from("/test/path.md");
+        
+        let event1 = WatchEvent::PromptChanged(path.clone());
+        let event2 = WatchEvent::PromptDeleted(path.clone());
+        let event3 = WatchEvent::DirectoryChanged(path.clone());
+        
+        // Test that we can create different event types
+        match event1 {
+            WatchEvent::PromptChanged(_) => {}
+            _ => panic!("Expected PromptChanged"),
+        }
+        
+        match event2 {
+            WatchEvent::PromptDeleted(_) => {}
+            _ => panic!("Expected PromptDeleted"),
+        }
+        
+        match event3 {
+            WatchEvent::DirectoryChanged(_) => {}
+            _ => panic!("Expected DirectoryChanged"),
+        }
     }
 }

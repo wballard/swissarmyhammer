@@ -18,3 +18,5 @@ rmcp = { version = "0.1.5", features = ["server", "transport-io"] }
 walkdir = "2"
 dirs = "5"
 rust-embed = "8"
+notify = "6"
+dashmap = "6"

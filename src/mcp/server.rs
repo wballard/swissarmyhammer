@@ -5,11 +5,13 @@ use rmcp::{
 };
 use tokio::sync::oneshot;
 use tracing::info;
+use crate::prompts::{PromptLoader, PromptWatcher, PromptStorage};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct MCPServer {
     name: String,
     version: String,
+    storage: PromptStorage,
 }
 
 impl MCPServer {
@@ -17,7 +19,20 @@ impl MCPServer {
         Self {
             name: "swissarmyhammer".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
+            storage: PromptStorage::new(),
         }
+    }
+    
+    pub async fn initialize(&self) -> Result<()> {
+        info!("Initializing prompt storage...");
+        let mut loader = PromptLoader::new();
+        loader.storage = self.storage.clone();
+        
+        // Load all prompts at startup
+        loader.load_all()?;
+        info!("Loaded {} prompts", self.storage.len());
+        
+        Ok(())
     }
 }
 
@@ -30,6 +45,29 @@ impl Default for MCPServer {
 impl MCPServer {
     pub async fn run(self, shutdown_rx: oneshot::Receiver<()>) -> Result<()> {
         info!("Starting MCP server via stdio");
+
+        // Initialize prompts
+        self.initialize().await?;
+
+        // Set up file watcher
+        let mut loader = PromptLoader::new();
+        loader.storage = self.storage.clone();
+        
+        let watcher_result = PromptWatcher::new(self.storage.clone());
+        let watcher_task = match watcher_result {
+            Ok(watcher) => {
+                info!("File watcher initialized successfully");
+                Some(tokio::spawn(async move {
+                    if let Err(e) = watcher.run(loader).await {
+                        tracing::error!("File watcher error: {}", e);
+                    }
+                }))
+            }
+            Err(e) => {
+                tracing::warn!("Failed to initialize file watcher (continuing without file watching): {}", e);
+                None
+            }
+        };
 
         let transport = (tokio::io::stdin(), tokio::io::stdout());
 
@@ -47,6 +85,11 @@ impl MCPServer {
             _ = shutdown_rx => {
                 info!("MCP server shutting down due to signal");
             }
+        }
+
+        // Clean up the watcher task if it was created
+        if let Some(task) = watcher_task {
+            task.abort();
         }
 
         Ok(())

@@ -1,8 +1,11 @@
 use std::process;
 use swissarmyhammer::cli::{Cli, Commands};
+use swissarmyhammer::mcp::MCPServer;
+use tokio::sync::oneshot;
 use tracing::Level;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse_args();
 
     // Configure logging based on verbosity flags
@@ -22,7 +25,7 @@ fn main() {
     let exit_code = match cli.command {
         Some(Commands::Serve) => {
             tracing::info!("Starting MCP server");
-            run_server()
+            run_server().await
         }
         Some(Commands::Doctor) => {
             tracing::info!("Running diagnostics");
@@ -37,7 +40,7 @@ fn main() {
             } else {
                 // Not in terminal (likely stdio), default to serve mode
                 tracing::info!("No subcommand specified, defaulting to serve mode via stdio");
-                run_server()
+                run_server().await
             }
         }
     };
@@ -45,10 +48,32 @@ fn main() {
     process::exit(exit_code);
 }
 
-fn run_server() -> i32 {
-    // TODO: Implement MCP server
-    println!("MCP server would start here");
-    0
+async fn run_server() -> i32 {
+    let server = MCPServer::new();
+
+    // Set up shutdown channel
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+
+    // Set up signal handlers
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to listen for ctrl+c");
+
+        tracing::info!("Shutdown signal received");
+        let _ = shutdown_tx.send(());
+    });
+
+    match server.run(shutdown_rx).await {
+        Ok(_) => {
+            tracing::info!("MCP server exited successfully");
+            0
+        }
+        Err(e) => {
+            tracing::error!("MCP server error: {}", e);
+            1
+        }
+    }
 }
 
 fn run_doctor() -> i32 {

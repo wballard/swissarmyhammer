@@ -77,7 +77,14 @@ async fn run_server() -> i32 {
 }
 
 fn run_doctor() -> i32 {
-    // TODO: Implement diagnostics
-    println!("Diagnostics would run here");
-    0
+    use swissarmyhammer::doctor::Doctor;
+    
+    let mut doctor = Doctor::new();
+    match doctor.run_diagnostics() {
+        Ok(exit_code) => exit_code,
+        Err(e) => {
+            eprintln!("Doctor error: {}", e);
+            2
+        }
+    }
 }

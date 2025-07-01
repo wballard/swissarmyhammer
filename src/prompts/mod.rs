@@ -12,7 +12,7 @@ use notify::{Watcher, RecommendedWatcher, RecursiveMode, Event, EventKind};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 use serde_json::Value;
-use crate::template::{TemplateEngine, TemplateArgument as TemplateArg};
+use crate::template::{LiquidEngine, TemplateArgument as TemplateArg};
 
 #[derive(RustEmbed)]
 #[folder = "prompts/builtin/"]
@@ -155,7 +155,7 @@ impl Prompt {
     
     /// Process the prompt template with the given arguments
     pub fn process_template(&self, arguments: &HashMap<String, Value>) -> Result<String> {
-        let engine = TemplateEngine::new();
+        let engine = LiquidEngine::new();
         
         // Convert our PromptArgument to template::TemplateArgument
         let template_args: Vec<TemplateArg> = self.arguments.iter()

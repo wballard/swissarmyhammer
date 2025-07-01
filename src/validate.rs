@@ -6,6 +6,7 @@ use std::fs;
 
 use crate::cli::ValidateFormat;
 use crate::prompts::{PromptLoader, PromptStorage};
+use crate::template::LiquidEngine;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValidationLevel {
@@ -391,16 +392,74 @@ impl Validator {
     }
 
     fn validate_template_variables(&self, content: &str, arguments: &[crate::prompts::PromptArgument], file_path: &Path, result: &mut ValidationResult) {
+        // First validate the Liquid template syntax
+        self.validate_liquid_syntax(content, file_path, result);
+        
+        // Then validate variable usage
+        self.validate_variable_usage(content, arguments, file_path, result);
+    }
+
+    fn validate_liquid_syntax(&self, content: &str, file_path: &Path, result: &mut ValidationResult) {
+        let engine = LiquidEngine::new();
+        
+        // Try to parse the template with strict mode (no backward compatibility)
+        // to catch Liquid syntax errors
+        let empty_args = std::collections::HashMap::new();
+        if let Err(e) = engine.process_with_compatibility(content, &empty_args, false) {
+            let error_msg = e.to_string();
+            
+            // Only report actual syntax errors, not unknown variable errors
+            if !error_msg.contains("Unknown variable") {
+                result.add_issue(ValidationIssue {
+                    level: ValidationLevel::Error,
+                    file_path: file_path.to_path_buf(),
+                    line: None,
+                    column: None,
+                    message: format!("Liquid template syntax error: {}", error_msg),
+                    suggestion: Some("Check Liquid template syntax and fix any errors".to_string()),
+                });
+            }
+        }
+    }
+
+    fn validate_variable_usage(&self, content: &str, arguments: &[crate::prompts::PromptArgument], file_path: &Path, result: &mut ValidationResult) {
         use regex::Regex;
         
-        // Find all template variables in content
-        let var_regex = Regex::new(r"\{\{(\s*\w+\s*)\}\}").unwrap();
+        // Enhanced regex to match various Liquid variable patterns
+        let patterns = [
+            // Simple variables: {{ variable }}
+            r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}",
+            // Variables with filters: {{ variable | filter }}
+            r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\|",
+            // Object properties: {{ object.property }}
+            r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\.[a-zA-Z_][a-zA-Z0-9_]*",
+            // Array access: {{ array[0] }}
+            r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\[",
+        ];
+        
         let mut used_variables = std::collections::HashSet::new();
         
-        for captures in var_regex.captures_iter(content) {
-            if let Some(var_match) = captures.get(1) {
-                let var_name = var_match.as_str().trim();
-                used_variables.insert(var_name.to_string());
+        for pattern in &patterns {
+            if let Ok(regex) = Regex::new(pattern) {
+                for captures in regex.captures_iter(content) {
+                    if let Some(var_match) = captures.get(1) {
+                        let var_name = var_match.as_str().trim();
+                        // Skip 'env' as it's a special built-in object
+                        if var_name != "env" {
+                            used_variables.insert(var_name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Also check for loop variables in {% for %} statements
+        let for_regex = Regex::new(r"\{\%\s*for\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+in\s+([a-zA-Z_][a-zA-Z0-9_]*)")
+            .unwrap();
+        for captures in for_regex.captures_iter(content) {
+            if let Some(collection_match) = captures.get(2) {
+                let collection_name = collection_match.as_str().trim();
+                used_variables.insert(collection_name.to_string());
             }
         }
 

@@ -165,6 +165,62 @@ Examples:
         #[arg(long, value_enum, default_value = "text")]
         format: ValidateFormat,
     },
+    /// Test prompts interactively with sample arguments
+    #[command(long_about = "
+Test prompts interactively to see how they render with different arguments.
+Helps debug template errors and refine prompt content before using in Claude Code.
+
+Usage modes:
+  swissarmyhammer test prompt-name                    # Test by name (interactive)
+  swissarmyhammer test -f path/to/prompt.md          # Test from file
+  swissarmyhammer test prompt-name --arg key=value   # Non-interactive mode
+
+Interactive features:
+- Prompts for each argument with descriptions
+- Shows default values (press Enter to accept)
+- Validates required arguments
+- Supports multi-line input
+
+Output options:
+  --raw     Show rendered prompt without formatting
+  --copy    Copy rendered prompt to clipboard
+  --save    Save rendered prompt to file
+  --debug   Show template processing details
+
+Examples:
+  swissarmyhammer test code-review                           # Interactive test
+  swissarmyhammer test -f my-prompt.md                       # Test file
+  swissarmyhammer test help --arg topic=git                  # Non-interactive
+  swissarmyhammer test plan --debug --save output.md         # Debug + save
+")]
+    Test {
+        /// Prompt name to test (alternative to --file)
+        prompt_name: Option<String>,
+        
+        /// Path to prompt file to test
+        #[arg(short, long)]
+        file: Option<String>,
+        
+        /// Non-interactive mode: specify arguments as key=value pairs
+        #[arg(long = "arg", value_name = "KEY=VALUE")]
+        arguments: Vec<String>,
+        
+        /// Show raw output without formatting
+        #[arg(long)]
+        raw: bool,
+        
+        /// Copy rendered prompt to clipboard
+        #[arg(long)]
+        copy: bool,
+        
+        /// Save rendered prompt to file
+        #[arg(long, value_name = "FILE")]
+        save: Option<String>,
+        
+        /// Show debug information (template, args, processing steps)
+        #[arg(long)]
+        debug: bool,
+    },
     /// Generate shell completion scripts
     #[command(long_about = "
 Generates shell completion scripts for various shells. Supports:
@@ -402,5 +458,88 @@ mod tests {
 
         let error = result.unwrap_err();
         assert_eq!(error.kind(), clap::error::ErrorKind::InvalidSubcommand);
+    }
+
+    #[test]
+    fn test_cli_test_subcommand_with_prompt_name() {
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "test", "help"]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Test { prompt_name, file, arguments, raw, copy, save, debug }) = cli.command {
+            assert_eq!(prompt_name, Some("help".to_string()));
+            assert_eq!(file, None);
+            assert!(arguments.is_empty());
+            assert!(!raw);
+            assert!(!copy);
+            assert_eq!(save, None);
+            assert!(!debug);
+        } else {
+            panic!("Expected Test command");
+        }
+    }
+
+    #[test]
+    fn test_cli_test_subcommand_with_file() {
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "test", "-f", "test.md"]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Test { prompt_name, file, arguments, raw, copy, save, debug }) = cli.command {
+            assert_eq!(prompt_name, None);
+            assert_eq!(file, Some("test.md".to_string()));
+            assert!(arguments.is_empty());
+            assert!(!raw);
+            assert!(!copy);
+            assert_eq!(save, None);
+            assert!(!debug);
+        } else {
+            panic!("Expected Test command");
+        }
+    }
+
+    #[test]
+    fn test_cli_test_subcommand_with_arguments() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer", "test", "help", 
+            "--arg", "topic=git", 
+            "--arg", "format=markdown"
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Test { prompt_name, file, arguments, raw, copy, save, debug }) = cli.command {
+            assert_eq!(prompt_name, Some("help".to_string()));
+            assert_eq!(file, None);
+            assert_eq!(arguments, vec!["topic=git", "format=markdown"]);
+            assert!(!raw);
+            assert!(!copy);
+            assert_eq!(save, None);
+            assert!(!debug);
+        } else {
+            panic!("Expected Test command");
+        }
+    }
+
+    #[test]
+    fn test_cli_test_subcommand_with_all_flags() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer", "test", "help", 
+            "--raw", "--copy", "--debug", "--save", "output.md"
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Test { prompt_name, file, arguments, raw, copy, save, debug }) = cli.command {
+            assert_eq!(prompt_name, Some("help".to_string()));
+            assert_eq!(file, None);
+            assert!(arguments.is_empty());
+            assert!(raw);
+            assert!(copy);
+            assert_eq!(save, Some("output.md".to_string()));
+            assert!(debug);
+        } else {
+            panic!("Expected Test command");
+        }
     }
 }

@@ -39,6 +39,18 @@ async fn main() {
             tracing::info!("Validating prompts");
             run_validate(path, all, quiet, format)
         }
+        Some(Commands::Test { prompt_name, file, arguments, raw, copy, save, debug }) => {
+            tracing::info!("Testing prompt");
+            run_test(&Commands::Test { 
+                prompt_name: prompt_name.clone(), 
+                file: file.clone(), 
+                arguments: arguments.clone(), 
+                raw, 
+                copy, 
+                save: save.clone(), 
+                debug 
+            }).await
+        }
         Some(Commands::Completion { shell }) => {
             tracing::info!("Generating completion for {:?}", shell);
             run_completion(shell)
@@ -132,6 +144,19 @@ fn run_validate(
         Err(e) => {
             eprintln!("Validation error: {}", e);
             2
+        }
+    }
+}
+
+async fn run_test(command: &Commands) -> i32 {
+    use swissarmyhammer::test::TestRunner;
+    
+    let mut runner = TestRunner::new();
+    match runner.run(command).await {
+        Ok(exit_code) => exit_code,
+        Err(e) => {
+            eprintln!("Test error: {}", e);
+            1
         }
     }
 }

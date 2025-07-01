@@ -1,0 +1,272 @@
+use assert_cmd::Command;
+use predicates::prelude::*;
+use std::fs;
+use tempfile::TempDir;
+
+#[test]
+fn test_command_help() {
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test").arg("--help");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Test prompts interactively"))
+        .stdout(predicate::str::contains("--raw"))
+        .stdout(predicate::str::contains("--copy"))
+        .stdout(predicate::str::contains("--debug"));
+}
+
+#[test]
+fn test_command_with_nonexistent_prompt() {
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test").arg("nonexistent-prompt");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("not found"));
+}
+
+#[test]
+fn test_command_with_invalid_file() {
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test").arg("-f").arg("nonexistent.md");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("Failed to read"));
+}
+
+#[test]
+fn test_command_with_invalid_arguments() {
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test").arg("help").arg("--arg").arg("invalid");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("Invalid argument format"));
+}
+
+#[test]
+fn test_command_with_both_name_and_file() {
+    // Create a temporary file
+    let temp_dir = TempDir::new().unwrap();
+    let temp_file = temp_dir.path().join("test.md");
+    fs::write(&temp_file, "# Test\nHello").unwrap();
+
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test")
+        .arg("help")
+        .arg("-f")
+        .arg(temp_file.to_str().unwrap());
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("Cannot specify both"));
+}
+
+#[test]
+fn test_command_with_neither_name_nor_file() {
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("Must specify either"));
+}
+
+#[test]
+fn test_command_with_builtin_prompt_non_interactive() {
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test")
+        .arg("help")
+        .arg("--arg")
+        .arg("topic=testing")
+        .arg("--raw");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("testing"));
+}
+
+#[test]
+fn test_command_with_simple_file() {
+    // Create a temporary file with a simple prompt
+    let temp_dir = TempDir::new().unwrap();
+    let temp_file = temp_dir.path().join("simple.md");
+    fs::write(&temp_file, r#"---
+title: Simple Test
+description: A simple test prompt
+arguments:
+  - name: name
+    description: Your name
+    required: true
+---
+
+Hello, {{name}}! This is a test."#).unwrap();
+
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test")
+        .arg("-f")
+        .arg(temp_file.to_str().unwrap())
+        .arg("--arg")
+        .arg("name=World")
+        .arg("--raw");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Hello, World!"));
+}
+
+#[test]
+fn test_command_with_debug_flag() {
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test")
+        .arg("help")
+        .arg("--arg")
+        .arg("topic=debugging")
+        .arg("--debug")
+        .arg("--raw");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Debug Information"))
+        .stdout(predicate::str::contains("Prompt Details"))
+        .stdout(predicate::str::contains("Template Content"))
+        .stdout(predicate::str::contains("Arguments Provided"));
+}
+
+#[test]
+fn test_command_with_save_flag() {
+    let temp_dir = TempDir::new().unwrap();
+    let output_file = temp_dir.path().join("output.md");
+
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test")
+        .arg("help")
+        .arg("--arg")
+        .arg("topic=save-test")
+        .arg("--save")
+        .arg(output_file.to_str().unwrap())
+        .arg("--raw");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Saved to"));
+
+    // Verify the file was created and contains expected content
+    let content = fs::read_to_string(&output_file).unwrap();
+    assert!(content.contains("save-test"));
+}
+
+#[test]
+fn test_command_with_liquid_features() {
+    // Create a temporary file with Liquid template features
+    let temp_dir = TempDir::new().unwrap();
+    let temp_file = temp_dir.path().join("liquid.md");
+    fs::write(&temp_file, r#"---
+title: Liquid Test
+description: Test Liquid template features
+arguments:
+  - name: items
+    description: Comma-separated items
+    required: true
+  - name: prefix
+    description: Prefix for each item
+    default: "- "
+---
+
+{% assign item_list = items | split: "," %}
+{% for item in item_list %}
+{{ prefix }}{{ item | strip | capitalize }}
+{% endfor %}"#).unwrap();
+
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test")
+        .arg("-f")
+        .arg(temp_file.to_str().unwrap())
+        .arg("--arg")
+        .arg("items=apple,banana,cherry")
+        .arg("--arg")
+        .arg("prefix=* ")
+        .arg("--raw");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("* Apple"))
+        .stdout(predicate::str::contains("* Banana"))
+        .stdout(predicate::str::contains("* Cherry"));
+}
+
+#[test]
+fn test_command_with_environment_variables() {
+    // Create a temporary file that uses environment variables
+    let temp_dir = TempDir::new().unwrap();
+    let temp_file = temp_dir.path().join("env.md");
+    fs::write(&temp_file, r#"---
+title: Environment Test
+description: Test environment variable access
+---
+
+Current user: {{ env.USER | default: "unknown" }}
+Test variable: {{ env.TEST_VAR | default: "not_set" }}"#).unwrap();
+
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.env("TEST_VAR", "test_value");
+    cmd.arg("test")
+        .arg("-f")
+        .arg(temp_file.to_str().unwrap())
+        .arg("--raw");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("test_value"));
+}
+
+#[test]
+fn test_command_with_missing_required_argument() {
+    // Create a temporary file with required argument
+    let temp_dir = TempDir::new().unwrap();
+    let temp_file = temp_dir.path().join("required.md");
+    fs::write(&temp_file, r#"---
+title: Required Test
+description: Test required argument validation
+arguments:
+  - name: required_arg
+    description: This is required
+    required: true
+---
+
+Value: {{required_arg}}"#).unwrap();
+
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test")
+        .arg("-f")
+        .arg(temp_file.to_str().unwrap())
+        .arg("--raw");
+    
+    // In non-interactive mode with missing required args, backward compatibility 
+    // preserves undefined variables as-is
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Value: {{ required_arg }}"));
+}
+
+#[test]
+fn test_command_output_formatting() {
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test")
+        .arg("help")
+        .arg("--arg")
+        .arg("topic=formatting");
+    
+    // Without --raw, should include formatting
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Rendered Prompt"))
+        .stdout(predicate::str::contains("─"));
+}
+
+#[test]
+fn test_command_raw_output() {
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test")
+        .arg("help")
+        .arg("--arg")
+        .arg("topic=formatting")
+        .arg("--raw");
+    
+    // With --raw, should not include formatting headers
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("formatting").and(
+            predicate::str::contains("Rendered Prompt").not()
+        ));
+}

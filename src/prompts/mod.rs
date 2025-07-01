@@ -897,8 +897,9 @@ This is the markdown content."#;
         assert!(final_example.content.contains("Local Override"));
         assert_eq!(final_example.relative_path, "example.md");
         
-        // Verify that only one "example" prompt exists (the local one)
-        assert_eq!(loader.storage.len(), 5); // example, help, plan, code-review, refactor
+        // Verify that only one "example" prompt exists (the local one) 
+        // We now have many more prompts in the library
+        assert!(loader.storage.len() >= 15); // At least 15 prompts as per requirements
         assert_eq!(
             loader.storage.iter()
                 .filter(|(_, p)| p.relative_path == "example.md")
@@ -1024,10 +1025,10 @@ This is the markdown content."#;
         assert!(code_review.arguments.iter().any(|a| a.name == "context" && !a.required));
         
         // Check that refactor prompt is loaded
-        let refactor = loader.storage.get("refactor");
-        assert!(refactor.is_some(), "refactor prompt should be loaded");
+        let refactor = loader.storage.get("refactor-patterns");
+        assert!(refactor.is_some(), "refactor-patterns prompt should be loaded");
         let refactor = refactor.unwrap();
-        assert_eq!(refactor.name, "refactor");
+        assert_eq!(refactor.name, "refactor-patterns");
         assert!(refactor.description.is_some());
         assert_eq!(refactor.arguments.len(), 2);
         assert!(refactor.arguments.iter().all(|a| a.required));

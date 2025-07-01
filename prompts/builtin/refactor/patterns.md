@@ -1,6 +1,6 @@
 ---
-name: refactor
-title: Code Refactoring
+name: refactor-patterns
+title: Refactor to Design Patterns
 description: Refactor code to match a target pattern or improve structure
 arguments:
   - name: code

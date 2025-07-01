@@ -31,6 +31,10 @@ async fn main() {
             tracing::info!("Running diagnostics");
             run_doctor()
         }
+        Some(Commands::Completion { shell }) => {
+            tracing::info!("Generating completion for {:?}", shell);
+            run_completion(shell)
+        }
         None => {
             // No subcommand provided
             if Cli::is_tty() {
@@ -85,6 +89,18 @@ fn run_doctor() -> i32 {
         Err(e) => {
             eprintln!("Doctor error: {}", e);
             2
+        }
+    }
+}
+
+fn run_completion(shell: clap_complete::Shell) -> i32 {
+    use swissarmyhammer::completions;
+    
+    match completions::print_completion(shell) {
+        Ok(_) => 0,
+        Err(e) => {
+            eprintln!("Completion error: {}", e);
+            1
         }
     }
 }

@@ -73,7 +73,7 @@ impl Doctor {
             self.checks.push(Check {
                 name: "swissarmyhammer in PATH".to_string(),
                 status: CheckStatus::Ok,
-                message: format!("Found at: {:?}", found_path.unwrap()),
+                message: format!("Found at: {:?}", found_path.expect("found_path should be Some when found is true")),
                 fix: None,
             });
         } else {
@@ -420,6 +420,95 @@ impl Default for Doctor {
     }
 }
 
+/// Get the Claude Code configuration file path based on the OS
+pub fn get_claude_config_path() -> PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("~"))
+            .join("Library")
+            .join("Application Support")
+            .join("Claude")
+            .join("claude_desktop_config.json")
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        dirs::config_dir()
+            .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from("~")).join(".config"))
+            .join("Claude")
+            .join("claude_desktop_config.json")
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from(env::var("APPDATA").unwrap_or_else(|_| "~".to_string())))
+            .join("Claude")
+            .join("claude_desktop_config.json")
+    }
+}
+
+/// Count markdown files in a directory
+fn count_markdown_files(path: &Path) -> usize {
+    use walkdir::WalkDir;
+    
+    WalkDir::new(path)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("md"))
+        .count()
+}
+
+/// Get the Claude config snippet
+fn get_claude_config_snippet() -> String {
+    r#"Add this to your Claude Code configuration:
+
+{
+  "mcpServers": {
+    "swissarmyhammer": {
+      "command": "swissarmyhammer",
+      "args": ["serve"]
+    }
+  }
+}"#.to_string()
+}
+
+/// Print a single check result
+fn print_check(check: &Check, use_color: bool) {
+    let (symbol, color_fn): (&str, fn(&str) -> ColoredString) = match check.status {
+        CheckStatus::Ok => ("✓", |s: &str| s.green()),
+        CheckStatus::Warning => ("⚠", |s: &str| s.yellow()),
+        CheckStatus::Error => ("✗", |s: &str| s.red()),
+    };
+    
+    if use_color {
+        print!("  {} {} - {}", 
+            color_fn(symbol),
+            check.name.bold(),
+            check.message
+        );
+    } else {
+        print!("  {} {} - {}", 
+            symbol,
+            check.name,
+            check.message
+        );
+    }
+    
+    if let Some(fix) = &check.fix {
+        println!();
+        if use_color {
+            println!("    {} {}", "→".dimmed(), fix.dimmed());
+        } else {
+            println!("    → {}", fix);
+        }
+    } else {
+        println!();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -517,94 +606,5 @@ mod tests {
         // Exit code should be 0, 1, or 2
         let exit_code = doctor.get_exit_code();
         assert!(exit_code <= 2);
-    }
-}
-
-/// Get the Claude Code configuration file path based on the OS
-pub fn get_claude_config_path() -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        dirs::home_dir()
-            .unwrap_or_else(|| PathBuf::from("~"))
-            .join("Library")
-            .join("Application Support")
-            .join("Claude")
-            .join("claude_desktop_config.json")
-    }
-    
-    #[cfg(target_os = "linux")]
-    {
-        dirs::config_dir()
-            .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from("~")).join(".config"))
-            .join("Claude")
-            .join("claude_desktop_config.json")
-    }
-    
-    #[cfg(target_os = "windows")]
-    {
-        dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from(env::var("APPDATA").unwrap_or_else(|_| "~".to_string())))
-            .join("Claude")
-            .join("claude_desktop_config.json")
-    }
-}
-
-/// Count markdown files in a directory
-fn count_markdown_files(path: &Path) -> usize {
-    use walkdir::WalkDir;
-    
-    WalkDir::new(path)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("md"))
-        .count()
-}
-
-/// Get the Claude config snippet
-fn get_claude_config_snippet() -> String {
-    r#"Add this to your Claude Code configuration:
-
-{
-  "mcpServers": {
-    "swissarmyhammer": {
-      "command": "swissarmyhammer",
-      "args": ["serve"]
-    }
-  }
-}"#.to_string()
-}
-
-/// Print a single check result
-fn print_check(check: &Check, use_color: bool) {
-    let (symbol, color_fn): (&str, fn(&str) -> ColoredString) = match check.status {
-        CheckStatus::Ok => ("✓", |s: &str| s.green()),
-        CheckStatus::Warning => ("⚠", |s: &str| s.yellow()),
-        CheckStatus::Error => ("✗", |s: &str| s.red()),
-    };
-    
-    if use_color {
-        print!("  {} {} - {}", 
-            color_fn(symbol),
-            check.name.bold(),
-            check.message
-        );
-    } else {
-        print!("  {} {} - {}", 
-            symbol,
-            check.name,
-            check.message
-        );
-    }
-    
-    if let Some(fix) = &check.fix {
-        println!();
-        if use_color {
-            println!("    {} {}", "→".dimmed(), fix.dimmed());
-        } else {
-            println!("    → {}", fix);
-        }
-    } else {
-        println!();
     }
 }

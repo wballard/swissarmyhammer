@@ -7,7 +7,16 @@ use std::io;
 #[command(name = "swissarmyhammer")]
 #[command(version)]
 #[command(about = "An MCP server for managing prompts as markdown files")]
-#[command(long_about = None)]
+#[command(long_about = "
+swissarmyhammer is an MCP (Model Context Protocol) server that manages
+prompts as markdown files. It supports file watching, template substitution,
+and seamless integration with Claude Code.
+
+Example usage:
+  swissarmyhammer serve     # Run as MCP server
+  swissarmyhammer doctor    # Check configuration and setup
+  swissarmyhammer completion bash > ~/.bashrc.d/swissarmyhammer  # Generate bash completions
+")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -24,9 +33,67 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Run as MCP server (default when invoked via stdio)
+    #[command(long_about = "
+Runs swissarmyhammer as an MCP server. This is the default mode when
+invoked via stdio (e.g., by Claude Code). The server will:
+
+- Load all prompts from builtin, user, and local directories
+- Watch for file changes and reload prompts automatically
+- Expose prompts via the MCP protocol
+- Support template substitution with {{variables}}
+
+Example:
+  swissarmyhammer serve
+  # Or configure in Claude Code's MCP settings
+")]
     Serve,
     /// Diagnose configuration and setup issues
+    #[command(long_about = "
+Runs comprehensive diagnostics to help troubleshoot setup issues.
+The doctor command will check:
+
+- If swissarmyhammer is in your PATH
+- Claude Code MCP configuration
+- Prompt directories and permissions
+- YAML syntax in prompt files
+- File watching capabilities
+
+Exit codes:
+  0 - All checks passed
+  1 - Warnings found
+  2 - Errors found
+
+Example:
+  swissarmyhammer doctor
+  swissarmyhammer doctor --verbose  # Show detailed diagnostics
+")]
     Doctor,
+    /// Generate shell completion scripts
+    #[command(long_about = "
+Generates shell completion scripts for various shells. Supports:
+- bash
+- zsh
+- fish
+- powershell
+
+Examples:
+  # Bash (add to ~/.bashrc or ~/.bash_profile)
+  swissarmyhammer completion bash > ~/.local/share/bash-completion/completions/swissarmyhammer
+  
+  # Zsh (add to ~/.zshrc or a file in fpath)
+  swissarmyhammer completion zsh > ~/.zfunc/_swissarmyhammer
+  
+  # Fish
+  swissarmyhammer completion fish > ~/.config/fish/completions/swissarmyhammer.fish
+  
+  # PowerShell
+  swissarmyhammer completion powershell >> $PROFILE
+")]
+    Completion {
+        /// Shell to generate completion for
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
 }
 
 impl Cli {
@@ -102,12 +169,50 @@ impl Cli {
             println!("{}", "Commands:".bold().green());
             println!("  {} - Run as MCP server", "serve".cyan());
             println!("  {} - Diagnose setup issues", "doctor".cyan());
-            println!("  {} - Show this help", "--help".cyan());
+            println!("  {} - Generate shell completions", "completion".cyan());
+            println!("  {} - Show detailed help", "--help".cyan());
+            println!();
+            println!("{}", "Quick Start:".bold().yellow());
+            println!("  1. Run {} to check your setup", "swissarmyhammer doctor".cyan());
+            println!("  2. Add the configuration above to Claude Code");
+            println!("  3. Create prompts in ~/.swissarmyhammer/prompts/");
+            println!();
+            println!("{}", "Example Prompt:".bold());
+            println!("  Create a file {} with:", "~/.swissarmyhammer/prompts/myhelper.md".dimmed());
+            println!("  ---");
+            println!("  title: My Helper");
+            println!("  description: A helpful prompt");
+            println!("  arguments:");
+            println!("    - name: topic");
+            println!("      description: What to help with");
+            println!("      required: true");
+            println!("  ---");
+            println!("  ");
+            println!("  Help me understand {{{{topic}}}}");
         } else {
             println!("Commands:");
             println!("  serve - Run as MCP server");
             println!("  doctor - Diagnose setup issues");
-            println!("  --help - Show this help");
+            println!("  completion - Generate shell completions");
+            println!("  --help - Show detailed help");
+            println!();
+            println!("Quick Start:");
+            println!("  1. Run 'swissarmyhammer doctor' to check your setup");
+            println!("  2. Add the configuration above to Claude Code");
+            println!("  3. Create prompts in ~/.swissarmyhammer/prompts/");
+            println!();
+            println!("Example Prompt:");
+            println!("  Create a file ~/.swissarmyhammer/prompts/myhelper.md with:");
+            println!("  ---");
+            println!("  title: My Helper");
+            println!("  description: A helpful prompt");
+            println!("  arguments:");
+            println!("    - name: topic");
+            println!("      description: What to help with");
+            println!("      required: true");
+            println!("  ---");
+            println!("  ");
+            println!("  Help me understand {{topic}}");
         }
     }
 }
@@ -118,7 +223,7 @@ mod tests {
 
     #[test]
     fn test_cli_help_works() {
-        let result = Cli::try_parse_from_args(&["swissarmyhammer", "--help"]);
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "--help"]);
         assert!(result.is_err()); // Help exits with error code but that's expected
 
         let error = result.unwrap_err();
@@ -127,7 +232,7 @@ mod tests {
 
     #[test]
     fn test_cli_version_works() {
-        let result = Cli::try_parse_from_args(&["swissarmyhammer", "--version"]);
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "--version"]);
         assert!(result.is_err()); // Version exits with error code but that's expected
 
         let error = result.unwrap_err();
@@ -136,7 +241,7 @@ mod tests {
 
     #[test]
     fn test_cli_no_subcommand() {
-        let result = Cli::try_parse_from_args(&["swissarmyhammer"]);
+        let result = Cli::try_parse_from_args(["swissarmyhammer"]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
@@ -147,7 +252,7 @@ mod tests {
 
     #[test]
     fn test_cli_serve_subcommand() {
-        let result = Cli::try_parse_from_args(&["swissarmyhammer", "serve"]);
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "serve"]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
@@ -156,7 +261,7 @@ mod tests {
 
     #[test]
     fn test_cli_doctor_subcommand() {
-        let result = Cli::try_parse_from_args(&["swissarmyhammer", "doctor"]);
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "doctor"]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
@@ -165,7 +270,7 @@ mod tests {
 
     #[test]
     fn test_cli_verbose_flag() {
-        let result = Cli::try_parse_from_args(&["swissarmyhammer", "--verbose"]);
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "--verbose"]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
@@ -175,7 +280,7 @@ mod tests {
 
     #[test]
     fn test_cli_quiet_flag() {
-        let result = Cli::try_parse_from_args(&["swissarmyhammer", "--quiet"]);
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "--quiet"]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
@@ -185,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_cli_serve_with_verbose() {
-        let result = Cli::try_parse_from_args(&["swissarmyhammer", "--verbose", "serve"]);
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "--verbose", "serve"]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
@@ -195,7 +300,7 @@ mod tests {
 
     #[test]
     fn test_cli_invalid_subcommand() {
-        let result = Cli::try_parse_from_args(&["swissarmyhammer", "invalid"]);
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "invalid"]);
         assert!(result.is_err());
 
         let error = result.unwrap_err();

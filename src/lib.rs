@@ -1,6 +1,8 @@
 pub mod cli;
 pub mod completions;
 pub mod doctor;
+pub mod export;
+pub mod import;
 pub mod list;
 pub mod mcp;
 pub mod prompts;

@@ -1,5 +1,5 @@
 use std::process;
-use swissarmyhammer::cli::{Cli, Commands, OutputFormat, PromptSource, ValidateFormat};
+use swissarmyhammer::cli::{Cli, Commands, ExportFormat, ImportStrategy, OutputFormat, PromptSource, ValidateFormat};
 use swissarmyhammer::mcp::MCPServer;
 use tokio::sync::oneshot;
 use tracing::Level;
@@ -54,6 +54,14 @@ async fn main() {
         Some(Commands::Search { query, r#in, regex, fuzzy, case_sensitive, source, has_arg, no_args, full, format, highlight, limit }) => {
             tracing::info!("Searching prompts");
             run_search(query, r#in, regex, fuzzy, case_sensitive, source, has_arg, no_args, full, format, highlight, limit)
+        }
+        Some(Commands::Export { prompt_name, all, category, source, format, output, metadata, exclude }) => {
+            tracing::info!("Exporting prompts");
+            run_export(prompt_name, all, category, source, format, output, metadata, exclude).await
+        }
+        Some(Commands::Import { source, dry_run, strategy, target, no_validate, no_backup, verbose }) => {
+            tracing::info!("Importing prompts");
+            run_import(source, dry_run, strategy, target, !no_validate, !no_backup, verbose).await
         }
         Some(Commands::Completion { shell }) => {
             tracing::info!("Generating completion for {:?}", shell);
@@ -188,6 +196,47 @@ fn run_search(
         Ok(_) => 0,
         Err(e) => {
             eprintln!("Search error: {}", e);
+            1
+        }
+    }
+}
+
+async fn run_export(
+    prompt_name: Option<String>,
+    all: bool,
+    category: Option<String>,
+    source: Option<PromptSource>,
+    format: ExportFormat,
+    output: Option<String>,
+    metadata: bool,
+    exclude: Vec<String>,
+) -> i32 {
+    use swissarmyhammer::export;
+    
+    match export::run_export_command(prompt_name, all, category, source, format, output, metadata, exclude).await {
+        Ok(_) => 0,
+        Err(e) => {
+            eprintln!("Export error: {}", e);
+            1
+        }
+    }
+}
+
+async fn run_import(
+    source: String,
+    dry_run: bool,
+    strategy: ImportStrategy,
+    target: Option<String>,
+    validate: bool,
+    backup: bool,
+    verbose: bool,
+) -> i32 {
+    use swissarmyhammer::import;
+    
+    match import::run_import_command(source, dry_run, strategy, target, validate, backup, verbose).await {
+        Ok(_) => 0,
+        Err(e) => {
+            eprintln!("Import error: {}", e);
             1
         }
     }

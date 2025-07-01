@@ -23,6 +23,21 @@ pub enum ValidateFormat {
     Json,
 }
 
+#[derive(ValueEnum, Clone, Debug)]
+pub enum ExportFormat {
+    TarGz,
+    Zip,
+    Directory,
+}
+
+#[derive(ValueEnum, Clone, Debug)]
+pub enum ImportStrategy {
+    Skip,
+    Overwrite,
+    Rename,
+    Merge,
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "swissarmyhammer")]
 #[command(version)]
@@ -295,6 +310,106 @@ Examples:
         /// Maximum number of results to show
         #[arg(short, long)]
         limit: Option<usize>,
+    },
+    /// Export prompts for sharing
+    #[command(long_about = "
+Export prompts to various formats for sharing with teams or the community.
+Supports exporting single prompts, categories, or entire collections.
+
+Export formats:
+  tar.gz    - Compressed tar archive (default)
+  zip       - ZIP archive for Windows compatibility
+  directory - Uncompressed directory structure
+
+Examples:
+  swissarmyhammer export my-prompt                    # Export single prompt
+  swissarmyhammer export --category debug             # Export category
+  swissarmyhammer export --all                        # Export everything
+  swissarmyhammer export --all --format zip           # Export as ZIP
+  swissarmyhammer export --source user --format dir   # Export user prompts to directory
+")]
+    Export {
+        /// Prompt name to export (alternative to --all or --category)
+        prompt_name: Option<String>,
+        
+        /// Export all prompts
+        #[arg(long)]
+        all: bool,
+        
+        /// Export prompts from specific category
+        #[arg(long)]
+        category: Option<String>,
+        
+        /// Filter by source
+        #[arg(long, value_enum)]
+        source: Option<PromptSource>,
+        
+        /// Output format
+        #[arg(long, value_enum, default_value = "tar-gz")]
+        format: ExportFormat,
+        
+        /// Output file/directory path
+        #[arg(short, long)]
+        output: Option<String>,
+        
+        /// Include author and licensing metadata
+        #[arg(long)]
+        metadata: bool,
+        
+        /// Exclude patterns (gitignore-style)
+        #[arg(long)]
+        exclude: Vec<String>,
+    },
+    /// Import prompts from archives, URLs, or Git repositories
+    #[command(long_about = "
+Import prompts from various sources including archives, URLs, and Git repositories.
+Provides safety features like validation, conflict resolution, and rollback.
+
+Import sources:
+  file      - Local archive (.tar.gz, .zip)
+  url       - Remote archive URL
+  git       - Git repository
+
+Conflict resolution strategies:
+  skip      - Skip conflicting prompts
+  overwrite - Replace existing prompts
+  rename    - Add suffix to conflicting prompts
+  merge     - Combine metadata intelligently
+
+Examples:
+  swissarmyhammer import prompts.tar.gz               # Import local archive
+  swissarmyhammer import https://example.com/prompts.tar.gz  # Import from URL
+  swissarmyhammer import git@github.com:user/prompts.git     # Import from Git
+  swissarmyhammer import --dry-run prompts.zip       # Preview import
+  swissarmyhammer import --strategy rename archive.tar.gz   # Handle conflicts
+")]
+    Import {
+        /// Source to import from (file path, URL, or Git repository)
+        source: String,
+        
+        /// Preview import without making changes
+        #[arg(long)]
+        dry_run: bool,
+        
+        /// Conflict resolution strategy
+        #[arg(long, value_enum, default_value = "skip")]
+        strategy: ImportStrategy,
+        
+        /// Target directory for import
+        #[arg(long)]
+        target: Option<String>,
+        
+        /// Skip validation of prompts before importing
+        #[arg(long = "no-validate")]
+        no_validate: bool,
+        
+        /// Skip creating backup before overwriting  
+        #[arg(long = "no-backup")]
+        no_backup: bool,
+        
+        /// Show detailed progress information
+        #[arg(short, long)]
+        verbose: bool,
     },
     /// Generate shell completion scripts
     #[command(long_about = "
@@ -685,6 +800,137 @@ mod tests {
             assert_eq!(r#in, Some(vec!["name".to_string(), "description".to_string(), "content".to_string()]));
         } else {
             panic!("Expected Search command");
+        }
+    }
+
+    #[test]
+    fn test_cli_export_subcommand_basic() {
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "export", "my-prompt"]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Export { prompt_name, all, category, source, format, output, metadata, exclude }) = cli.command {
+            assert_eq!(prompt_name, Some("my-prompt".to_string()));
+            assert!(!all);
+            assert_eq!(category, None);
+            assert_eq!(source, None);
+            assert!(matches!(format, ExportFormat::TarGz));
+            assert_eq!(output, None);
+            assert!(!metadata);
+            assert!(exclude.is_empty());
+        } else {
+            panic!("Expected Export command");
+        }
+    }
+
+    #[test]
+    fn test_cli_export_subcommand_all_with_options() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer", "export", "--all", "--format", "zip",
+            "--output", "prompts.zip", "--metadata", 
+            "--exclude", "*.tmp", "--exclude", "draft-*"
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Export { prompt_name, all, category, source, format, output, metadata, exclude }) = cli.command {
+            assert_eq!(prompt_name, None);
+            assert!(all);
+            assert_eq!(category, None);
+            assert_eq!(source, None);
+            assert!(matches!(format, ExportFormat::Zip));
+            assert_eq!(output, Some("prompts.zip".to_string()));
+            assert!(metadata);
+            assert_eq!(exclude, vec!["*.tmp", "draft-*"]);
+        } else {
+            panic!("Expected Export command");
+        }
+    }
+
+    #[test]
+    fn test_cli_export_subcommand_category() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer", "export", "--category", "debug", 
+            "--source", "user", "--format", "directory"
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Export { prompt_name, all, category, source, format, output, metadata, exclude }) = cli.command {
+            assert_eq!(prompt_name, None);
+            assert!(!all);
+            assert_eq!(category, Some("debug".to_string()));
+            assert!(matches!(source, Some(PromptSource::User)));
+            assert!(matches!(format, ExportFormat::Directory));
+            assert_eq!(output, None);
+            assert!(!metadata);
+            assert!(exclude.is_empty());
+        } else {
+            panic!("Expected Export command");
+        }
+    }
+
+    #[test]
+    fn test_cli_import_subcommand_basic() {
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "import", "prompts.tar.gz"]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Import { source, dry_run, strategy, target, no_validate, no_backup, verbose }) = cli.command {
+            assert_eq!(source, "prompts.tar.gz");
+            assert!(!dry_run);
+            assert!(matches!(strategy, ImportStrategy::Skip));
+            assert_eq!(target, None);
+            assert!(!no_validate);
+            assert!(!no_backup);
+            assert!(!verbose);
+        } else {
+            panic!("Expected Import command");
+        }
+    }
+
+    #[test]
+    fn test_cli_import_subcommand_with_options() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer", "import", "https://example.com/prompts.tar.gz",
+            "--dry-run", "--strategy", "overwrite", "--target", "/tmp/prompts",
+            "--no-validate", "--no-backup", "--verbose"
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Import { source, dry_run, strategy, target, no_validate, no_backup, verbose }) = cli.command {
+            assert_eq!(source, "https://example.com/prompts.tar.gz");
+            assert!(dry_run);
+            assert!(matches!(strategy, ImportStrategy::Overwrite));
+            assert_eq!(target, Some("/tmp/prompts".to_string()));
+            assert!(no_validate);
+            assert!(no_backup);
+            assert!(verbose);
+        } else {
+            panic!("Expected Import command");
+        }
+    }
+
+    #[test]
+    fn test_cli_import_subcommand_git_repository() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer", "import", "git@github.com:user/prompts.git",
+            "--strategy", "rename"
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Import { source, dry_run, strategy, target, no_validate, no_backup, verbose }) = cli.command {
+            assert_eq!(source, "git@github.com:user/prompts.git");
+            assert!(!dry_run);
+            assert!(matches!(strategy, ImportStrategy::Rename));
+            assert_eq!(target, None);
+            assert!(!no_validate);
+            assert!(!no_backup);
+            assert!(!verbose);
+        } else {
+            panic!("Expected Import command");
         }
     }
 }

@@ -1,7 +1,12 @@
 use anyhow::Result;
 use rmcp::{
-    model::{Implementation, ServerCapabilities, ServerInfo},
-    tool, ServerHandler, ServiceExt,
+    model::{
+        GetPromptRequestParam, GetPromptResult, Implementation, ListPromptsResult,
+        PaginatedRequestParam, Prompt, PromptArgument, PromptMessage, PromptMessageContent,
+        PromptMessageRole, ServerCapabilities, ServerInfo,
+    },
+    service::RequestContext,
+    tool, Error, RoleServer, ServerHandler, ServiceExt,
 };
 use serde_json::{json, Value};
 use tokio::sync::oneshot;
@@ -185,9 +190,80 @@ impl ServerHandler for MCPServer {
         }
     }
 
-    // Note: These prompt methods are not implemented yet
-    // The rmcp framework will provide default implementations that return "not implemented" errors
-    // We'll implement these properly once we understand the correct error type
+    async fn list_prompts(
+        &self,
+        _request: PaginatedRequestParam,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListPromptsResult, Error> {
+        // Convert our internal prompts to MCP format
+        let mut prompts = Vec::new();
+        
+        for (name, prompt) in self.storage.iter() {
+            let arguments: Vec<PromptArgument> = prompt.arguments
+                .iter()
+                .map(|arg| PromptArgument {
+                    name: arg.name.clone(),
+                    description: Some(arg.description.clone()),
+                    required: Some(arg.required),
+                })
+                .collect();
+            
+            prompts.push(Prompt {
+                name: name.clone(),
+                description: prompt.description.clone(),
+                arguments: if arguments.is_empty() { None } else { Some(arguments) },
+            });
+        }
+        
+        // Sort prompts by name for consistent ordering
+        prompts.sort_by(|a, b| a.name.cmp(&b.name));
+        
+        Ok(ListPromptsResult {
+            prompts,
+            next_cursor: None, // We don't implement pagination yet
+        })
+    }
+
+    async fn get_prompt(
+        &self,
+        request: GetPromptRequestParam,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<GetPromptResult, Error> {
+        match self.storage.get(&request.name) {
+            Some(prompt) => {
+                // Convert JSON arguments to HashMap for the template engine
+                let args_map = if let Some(args) = request.arguments {
+                    args.into_iter().collect()
+                } else {
+                    HashMap::new()
+                };
+                
+                // Process the template with the provided arguments
+                let processed_content = prompt.process_template(&args_map)
+                    .map_err(|e| Error::invalid_params(
+                        format!("Failed to process template: {}", e),
+                        None
+                    ))?;
+                
+                // Create the prompt message
+                let message = PromptMessage {
+                    role: PromptMessageRole::User,
+                    content: PromptMessageContent::Text {
+                        text: processed_content,
+                    },
+                };
+                
+                Ok(GetPromptResult {
+                    description: prompt.description.clone(),
+                    messages: vec![message],
+                })
+            }
+            None => Err(Error::resource_not_found(
+                format!("Prompt '{}' not found", request.name),
+                None
+            )),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -293,4 +369,5 @@ mod tests {
                 "Template substitution should replace {{topic}} with the provided value");
         }
     }
+
 }

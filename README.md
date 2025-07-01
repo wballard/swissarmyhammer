@@ -62,17 +62,10 @@ cargo install --git https://github.com/wballard/swissarmyhammer.git
 
 ### Configure Claude Code
 
-Add to your Claude Code MCP configuration:
+Add to your Claude Code [MCP configuration](https://docs.anthropic.com/en/docs/claude-code/mcp)
 
-```json
-{
-  "mcpServers": {
-    "swissarmyhammer": {
-      "command": "swissarmyhammer",
-      "args": ["serve"]
-    }
-  }
-}
+```bash
+claude mcp add sah_server -e  -- swissarmyhammer serve
 ```
 
 ### Create Your First Prompt

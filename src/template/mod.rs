@@ -5,6 +5,8 @@ use regex::Regex;
 use liquid::{ParserBuilder, Template};
 use std::sync::Arc;
 
+pub mod custom_filters;
+
 pub struct TemplateEngine {
     // For future extensibility
     placeholder_regex: Regex,

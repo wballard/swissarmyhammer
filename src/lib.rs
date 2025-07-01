@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod completions;
 pub mod doctor;
 pub mod mcp;
 pub mod prompts;

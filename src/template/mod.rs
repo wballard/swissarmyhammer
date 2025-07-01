@@ -11,7 +11,8 @@ pub struct TemplateEngine {
 impl Default for TemplateEngine {
     fn default() -> Self {
         Self {
-            placeholder_regex: Regex::new(r"\{\{([^}]+)\}\}").unwrap(),
+            placeholder_regex: Regex::new(r"\{\{([^}]+)\}\}")
+                .expect("placeholder regex should be valid"),
         }
     }
 }
@@ -26,10 +27,16 @@ impl TemplateEngine {
         let mut result = template.to_string();
         
         // Handle triple braces specially - {{{var}}} becomes {value}
-        let triple_brace_regex = Regex::new(r"\{\{\{([^}]+)\}\}\}").unwrap();
+        let triple_brace_regex = Regex::new(r"\{\{\{([^}]+)\}\}\}")
+            .expect("triple brace regex should be valid");
         for cap in triple_brace_regex.captures_iter(template) {
-            let full_match = cap.get(0).unwrap().as_str();
-            let var_name = cap.get(1).unwrap().as_str().trim();
+            let full_match = cap.get(0)
+                .ok_or_else(|| anyhow!("regex capture should have full match"))?
+                .as_str();
+            let var_name = cap.get(1)
+                .ok_or_else(|| anyhow!("regex capture should have group 1"))?
+                .as_str()
+                .trim();
             
             if let Some(value) = arguments.get(var_name) {
                 let replacement = format!("{{{}}}", self.value_to_string(value));
@@ -39,8 +46,13 @@ impl TemplateEngine {
         
         // Now handle regular double braces
         for cap in self.placeholder_regex.captures_iter(&result.clone()) {
-            let full_match = cap.get(0).unwrap().as_str();
-            let var_name = cap.get(1).unwrap().as_str().trim();
+            let full_match = cap.get(0)
+                .ok_or_else(|| anyhow!("regex capture should have full match"))?
+                .as_str();
+            let var_name = cap.get(1)
+                .ok_or_else(|| anyhow!("regex capture should have group 1"))?
+                .as_str()
+                .trim();
             
             if let Some(value) = arguments.get(var_name) {
                 let replacement = self.value_to_string(value);

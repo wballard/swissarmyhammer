@@ -270,3 +270,128 @@ fn test_command_raw_output() {
             predicate::str::contains("Rendered Prompt").not()
         ));
 }
+
+// Tests for new Liquid template example prompts
+
+#[test]
+fn test_array_processor_with_break_continue() {
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test")
+        .arg("data/array-processor")
+        .arg("--arg")
+        .arg("items=one,skip_me,two,stop_here,three")
+        .arg("--arg")
+        .arg("skip_pattern=skip")
+        .arg("--arg")
+        .arg("stop_pattern=stop")
+        .arg("--arg")
+        .arg("show_skipped=true")
+        .arg("--raw");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains(". one")) // Will match "1. one"
+        .stdout(predicate::str::contains(". two")) // Will match "4. two" (after skipping)
+        .stdout(predicate::str::contains("Processing stopped at: \"stop_here\""))
+        .stdout(predicate::str::contains("skip_me (matched pattern:"))
+        .stdout(predicate::str::contains("three").not()); // Should not process after stop
+}
+
+#[test]
+fn test_table_generator_with_cycle() {
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test")
+        .arg("formatting/table-generator")
+        .arg("--arg")
+        .arg("headers=Name,Age,City")
+        .arg("--arg")
+        .arg("rows=Alice,25,NYC;Bob,30,LA;Carol,28,Chicago")
+        .arg("--arg")
+        .arg("style=html")
+        .arg("--arg")
+        .arg("zebra=true")
+        .arg("--raw");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("class=\"even\""))
+        .stdout(predicate::str::contains("class=\"odd\""))
+        .stdout(predicate::str::contains("<table>"))
+        .stdout(predicate::str::contains("Primary Type"))
+        .stdout(predicate::str::contains("Secondary Type"));
+}
+
+#[test]
+fn test_email_composer_with_capture() {
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test")
+        .arg("communication/email-composer")
+        .arg("--arg")
+        .arg("recipient_name=John")
+        .arg("--arg")
+        .arg("sender_name=Jane")
+        .arg("--arg")
+        .arg("email_type=welcome")
+        .arg("--arg")
+        .arg("formal=true")
+        .arg("--arg")
+        .arg("time_of_day=morning")
+        .arg("--raw");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Good morning John,"))
+        .stdout(predicate::str::contains("Warmest regards,"))
+        .stdout(predicate::str::contains("**Subject:** Welcome to our community, John!"))
+        .stdout(predicate::str::contains("Plain Text Version"));
+}
+
+#[test]
+fn test_statistics_calculator_with_math() {
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test")
+        .arg("analysis/statistics-calculator")
+        .arg("--arg")
+        .arg("numbers=5,10,15,20,25")
+        .arg("--arg")
+        .arg("precision=1")
+        .arg("--arg")
+        .arg("show_outliers=false")
+        .arg("--arg")
+        .arg("visualization=false")
+        .arg("--raw");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("**Count**: 5 values"))
+        .stdout(predicate::str::contains("**Range**: 10 to 5"))  // Note: sorted as strings
+        .stdout(predicate::str::contains("**First Value**: 10"))
+        .stdout(predicate::str::contains("**Last Value**: 5"))
+        .stdout(predicate::str::contains("**Data Points**: 5"));
+}
+
+#[test]
+fn test_liquid_backward_compatibility() {
+    // Test that old {{variable}} syntax still works
+    let temp_dir = TempDir::new().unwrap();
+    let temp_file = temp_dir.path().join("old_syntax.md");
+    fs::write(&temp_file, r#"---
+title: Old Syntax Test
+description: Test backward compatibility
+arguments:
+  - name: name
+    description: Name
+    required: false
+---
+
+Hello {{name}}, this uses old syntax.
+But {{undefined}} should remain as-is."#).unwrap();
+
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("test")
+        .arg("-f")
+        .arg(temp_file.to_str().unwrap())
+        .arg("--arg")
+        .arg("name=World")
+        .arg("--raw");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Hello World, this uses old syntax."))
+        .stdout(predicate::str::contains("But {{ undefined }} should remain as-is."));
+}

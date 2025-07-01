@@ -44,7 +44,7 @@ Please review this code for:
 
 - **📁 File-based Management** - Store prompts as markdown files with YAML front matter
 - **🔄 Live Reloading** - Changes are automatically detected and reloaded
-- **🎨 Template Variables** - Use `{{variable}}` syntax for dynamic prompts
+- **🎨 Liquid Templates** - Use Liquid templating with variables, conditionals, loops, and filters
 - **⚡ MCP Integration** - Works seamlessly with Claude Code
 - **🗂️ Organized Hierarchy** - Built-in, user, and local prompt directories
 - **🛠️ Developer Tools** - Rich CLI with diagnostics and completions
@@ -111,16 +111,34 @@ arguments:
   - name: language
     description: Programming language
     default: "auto-detect"
+  - name: include_examples
+    description: Include code examples
+    default: "true"
 ---
 
-Help me debug this {{language}} issue:
+Help me debug this {{ language | capitalize }} issue:
 
-{{error}}
+{{ error }}
+
+{% if language == "python" %}
+Focus on common Python issues like:
+- Indentation errors
+- Import problems
+- Type mismatches
+{% elsif language == "javascript" %}
+Focus on common JavaScript issues like:
+- Undefined variables
+- Async/await problems
+- Scoping issues
+{% endif %}
 
 Please provide:
 1. Likely causes
 2. Step-by-step debugging approach
 3. Potential solutions
+{% if include_examples == "true" %}
+4. Code examples showing the fix
+{% endif %}
 ```
 
 ### Documentation Generator

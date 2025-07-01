@@ -58,6 +58,14 @@ fn test_comprehensive_prompt_library() {
         // Prompts category
         "prompts-create",
         "prompts-improve",
+        
+        // New Liquid example prompts
+        "data/array-processor",
+        "formatting/table-generator", 
+        "communication/email-composer",
+        "analysis/statistics-calculator",
+        "review/code-dynamic",
+        "productivity/task-formatter",
     ];
     
     // Check each expected prompt exists

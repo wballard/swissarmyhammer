@@ -10,7 +10,7 @@ pub enum OutputFormat {
     Yaml,
 }
 
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(ValueEnum, Clone, Debug, PartialEq)]
 pub enum PromptSource {
     Builtin,
     User,
@@ -220,6 +220,81 @@ Examples:
         /// Show debug information (template, args, processing steps)
         #[arg(long)]
         debug: bool,
+    },
+    /// Search for prompts with advanced filtering and ranking
+    #[command(long_about = "
+Search for prompts using powerful full-text search with fuzzy matching.
+Searches prompt names, titles, descriptions, content, and arguments.
+
+Basic usage:
+  swissarmyhammer search \"code review\"        # Basic search
+  swissarmyhammer search \"debug.*error\" -r   # Regex search
+  swissarmyhammer search help --fuzzy          # Fuzzy matching
+
+Search scope:
+  --in name,description,content               # Search specific fields
+  --source builtin                           # Search only builtin prompts
+  --has-arg language                         # Find prompts with 'language' argument
+
+Output options:
+  --full                                     # Show complete prompt details
+  --json                                     # JSON output for tooling
+  --limit 10                                 # Limit number of results
+  --highlight                                # Highlight matching terms
+
+Examples:
+  swissarmyhammer search \"python code\"        # Find Python-related prompts
+  swissarmyhammer search \"review\" --full       # Detailed results for review prompts
+  swissarmyhammer search \".*test.*\" --regex     # Regex pattern matching
+  swissarmyhammer search help --fuzzy --limit 5  # Fuzzy search, max 5 results
+")]
+    Search {
+        /// Search query
+        query: String,
+        
+        /// Search in specific fields (name, title, description, content, arguments)
+        #[arg(long, value_delimiter = ',')]
+        r#in: Option<Vec<String>>,
+        
+        /// Use regular expressions
+        #[arg(short, long)]
+        regex: bool,
+        
+        /// Enable fuzzy matching for typo tolerance
+        #[arg(short, long)]
+        fuzzy: bool,
+        
+        /// Case-sensitive search
+        #[arg(long)]
+        case_sensitive: bool,
+        
+        /// Filter by source
+        #[arg(long, value_enum)]
+        source: Option<PromptSource>,
+        
+        /// Find prompts with specific argument name
+        #[arg(long)]
+        has_arg: Option<String>,
+        
+        /// Find prompts without any arguments
+        #[arg(long)]
+        no_args: bool,
+        
+        /// Show complete prompt details
+        #[arg(long)]
+        full: bool,
+        
+        /// Output format
+        #[arg(long, value_enum, default_value = "table")]
+        format: OutputFormat,
+        
+        /// Highlight matching terms in output
+        #[arg(long)]
+        highlight: bool,
+        
+        /// Maximum number of results to show
+        #[arg(short, long)]
+        limit: Option<usize>,
     },
     /// Generate shell completion scripts
     #[command(long_about = "
@@ -540,6 +615,76 @@ mod tests {
             assert!(debug);
         } else {
             panic!("Expected Test command");
+        }
+    }
+
+    #[test]
+    fn test_cli_search_subcommand_basic() {
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "search", "code review"]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Search { query, r#in, regex, fuzzy, case_sensitive, source, has_arg, no_args, full, format, highlight, limit }) = cli.command {
+            assert_eq!(query, "code review");
+            assert_eq!(r#in, None);
+            assert!(!regex);
+            assert!(!fuzzy);
+            assert!(!case_sensitive);
+            assert_eq!(source, None);
+            assert_eq!(has_arg, None);
+            assert!(!no_args);
+            assert!(!full);
+            assert!(matches!(format, OutputFormat::Table));
+            assert!(!highlight);
+            assert_eq!(limit, None);
+        } else {
+            panic!("Expected Search command");
+        }
+    }
+
+    #[test]
+    fn test_cli_search_subcommand_with_flags() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer", "search", "debug.*error",
+            "--regex", "--fuzzy", "--case-sensitive",
+            "--source", "builtin", "--has-arg", "language",
+            "--full", "--format", "json", "--highlight", "--limit", "5"
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Search { query, r#in, regex, fuzzy, case_sensitive, source, has_arg, no_args, full, format, highlight, limit }) = cli.command {
+            assert_eq!(query, "debug.*error");
+            assert_eq!(r#in, None);
+            assert!(regex);
+            assert!(fuzzy);
+            assert!(case_sensitive);
+            assert!(matches!(source, Some(PromptSource::Builtin)));
+            assert_eq!(has_arg, Some("language".to_string()));
+            assert!(!no_args);
+            assert!(full);
+            assert!(matches!(format, OutputFormat::Json));
+            assert!(highlight);
+            assert_eq!(limit, Some(5));
+        } else {
+            panic!("Expected Search command");
+        }
+    }
+
+    #[test]
+    fn test_cli_search_subcommand_with_fields() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer", "search", "python",
+            "--in", "name,description,content"
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Search { query, r#in, .. }) = cli.command {
+            assert_eq!(query, "python");
+            assert_eq!(r#in, Some(vec!["name".to_string(), "description".to_string(), "content".to_string()]));
+        } else {
+            panic!("Expected Search command");
         }
     }
 }

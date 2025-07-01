@@ -4,6 +4,7 @@ pub mod doctor;
 pub mod list;
 pub mod mcp;
 pub mod prompts;
+pub mod search;
 pub mod signal_handler;
 pub mod template;
 pub mod test;

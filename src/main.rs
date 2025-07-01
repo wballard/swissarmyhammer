@@ -51,6 +51,10 @@ async fn main() {
                 debug 
             }).await
         }
+        Some(Commands::Search { query, r#in, regex, fuzzy, case_sensitive, source, has_arg, no_args, full, format, highlight, limit }) => {
+            tracing::info!("Searching prompts");
+            run_search(query, r#in, regex, fuzzy, case_sensitive, source, has_arg, no_args, full, format, highlight, limit)
+        }
         Some(Commands::Completion { shell }) => {
             tracing::info!("Generating completion for {:?}", shell);
             run_completion(shell)
@@ -156,6 +160,34 @@ async fn run_test(command: &Commands) -> i32 {
         Ok(exit_code) => exit_code,
         Err(e) => {
             eprintln!("Test error: {}", e);
+            1
+        }
+    }
+}
+
+fn run_search(
+    query: String,
+    fields: Option<Vec<String>>,
+    regex: bool,
+    fuzzy: bool,
+    case_sensitive: bool,
+    source: Option<PromptSource>,
+    has_arg: Option<String>,
+    no_args: bool,
+    full: bool,
+    format: OutputFormat,
+    highlight: bool,
+    limit: Option<usize>,
+) -> i32 {
+    use swissarmyhammer::search;
+    
+    match search::run_search_command(
+        query, fields, regex, fuzzy, case_sensitive, source, 
+        has_arg, no_args, full, format, highlight, limit
+    ) {
+        Ok(_) => 0,
+        Err(e) => {
+            eprintln!("Search error: {}", e);
             1
         }
     }

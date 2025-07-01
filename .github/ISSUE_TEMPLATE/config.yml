@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Documentation
+    url: https://wballard.github.io/swissarmyhammer
+    about: Check out our comprehensive documentation
+  - name: 💬 GitHub Discussions
+    url: https://github.com/wballard/swissarmyhammer/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: 🔍 Search Issues
+    url: https://github.com/wballard/swissarmyhammer/issues?q=is%3Aissue
+    about: Search existing issues before creating a new one
+  - name: 🚀 Quick Start Guide
+    url: https://wballard.github.io/swissarmyhammer/quick-start.html
+    about: Get started with SwissArmyHammer in just a few minutes

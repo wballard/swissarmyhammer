@@ -1,5 +1,5 @@
 use std::process;
-use swissarmyhammer::cli::{Cli, Commands, OutputFormat, PromptSource};
+use swissarmyhammer::cli::{Cli, Commands, OutputFormat, PromptSource, ValidateFormat};
 use swissarmyhammer::mcp::MCPServer;
 use tokio::sync::oneshot;
 use tracing::Level;
@@ -34,6 +34,10 @@ async fn main() {
         Some(Commands::List { format, verbose, source, category, search }) => {
             tracing::info!("Listing prompts");
             run_list(format, verbose, source, category, search)
+        }
+        Some(Commands::Validate { path, all, quiet, format }) => {
+            tracing::info!("Validating prompts");
+            run_validate(path, all, quiet, format)
         }
         Some(Commands::Completion { shell }) => {
             tracing::info!("Generating completion for {:?}", shell);
@@ -111,6 +115,23 @@ fn run_list(
         Err(e) => {
             eprintln!("List error: {}", e);
             1
+        }
+    }
+}
+
+fn run_validate(
+    path: Option<String>,
+    all: bool,
+    quiet: bool,
+    format: ValidateFormat,
+) -> i32 {
+    use swissarmyhammer::validate;
+    
+    match validate::run_validate_command(path, all, quiet, format) {
+        Ok(exit_code) => exit_code,
+        Err(e) => {
+            eprintln!("Validation error: {}", e);
+            2
         }
     }
 }

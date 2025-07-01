@@ -17,6 +17,12 @@ pub enum PromptSource {
     Local,
 }
 
+#[derive(ValueEnum, Clone, Debug)]
+pub enum ValidateFormat {
+    Text,
+    Json,
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "swissarmyhammer")]
 #[command(version)]
@@ -119,6 +125,45 @@ Examples:
         /// Search prompts by name or description
         #[arg(long)]
         search: Option<String>,
+    },
+    /// Validate prompt files for syntax and best practices
+    #[command(long_about = "
+Validates prompt files for syntax errors and best practices.
+Checks YAML front matter, template variables, and suggests improvements.
+
+Usage modes:
+  swissarmyhammer validate file.md      # Validate single file
+  swissarmyhammer validate dir/         # Validate directory
+  swissarmyhammer validate --all        # Validate all prompt directories
+
+Validation checks:
+- YAML front matter syntax
+- Required fields (title, description)
+- Template variables match arguments
+- File encoding and line endings
+- Best practice recommendations
+
+Examples:
+  swissarmyhammer validate prompts/my-prompt.md    # Validate one file
+  swissarmyhammer validate --all                   # Validate all prompts
+  swissarmyhammer validate --quiet --all           # CI/CD mode (exit code only)
+  swissarmyhammer validate --format json --all     # JSON output for tooling
+")]
+    Validate {
+        /// Path to file or directory to validate
+        path: Option<String>,
+        
+        /// Validate all prompt directories (builtin, user, local)
+        #[arg(long)]
+        all: bool,
+        
+        /// Only show errors, no warnings or info
+        #[arg(short, long)]
+        quiet: bool,
+        
+        /// Output format
+        #[arg(long, value_enum, default_value = "text")]
+        format: ValidateFormat,
     },
     /// Generate shell completion scripts
     #[command(long_about = "

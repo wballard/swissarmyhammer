@@ -55,11 +55,9 @@ Please review this code for:
 ### Install
 
 ```bash
-# One-liner installer (macOS/Linux)
-curl -fsSL https://raw.githubusercontent.com/wballard/swissarmyhammer/main/dist/install.sh | bash
+# Install from Git repository (requires Rust)
+cargo install --git https://github.com/wballard/swissarmyhammer.git
 
-# Or download from releases
-# See installation guide for all options
 ```
 
 ### Configure Claude Code

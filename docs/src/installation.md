@@ -4,6 +4,14 @@ SwissArmyHammer is available through multiple installation methods. Choose the o
 
 ## Quick Install (Recommended)
 
+### Cargo Install from Git
+
+```bash
+cargo install --git https://github.com/wballard/swissarmyhammer.git
+```
+
+This requires Rust to be installed on your system. If you don't have Rust, install it from [rustup.rs](https://rustup.rs/).
+
 ### One-liner install script
 
 ```bash
@@ -103,11 +111,11 @@ cp target/release/swissarmyhammer /usr/local/bin/
 ### Using Cargo
 
 ```bash
+# Install from the git repository (recommended)
+cargo install --git https://github.com/wballard/swissarmyhammer.git
+
 # Install directly from crates.io (once published)
 cargo install swissarmyhammer
-
-# Or install from the git repository
-cargo install --git https://github.com/wballard/swissarmyhammer.git
 ```
 
 ## Verification

@@ -33,3 +33,15 @@ criterion = "0.5"
 [[bench]]
 name = "benchmarks"
 harness = false
+
+[profile.release]
+# Enable Link Time Optimization for smaller binaries
+lto = true
+# Strip debug symbols
+strip = true
+# Enable all optimizations
+opt-level = 3
+# Reduce code generation units for better optimization
+codegen-units = 1
+# Abort on panic for smaller binary size
+panic = "abort"

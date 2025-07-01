@@ -1,7 +1,21 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use colored::*;
 use is_terminal::IsTerminal;
 use std::io;
+
+#[derive(ValueEnum, Clone, Debug)]
+pub enum OutputFormat {
+    Table,
+    Json,
+    Yaml,
+}
+
+#[derive(ValueEnum, Clone, Debug)]
+pub enum PromptSource {
+    Builtin,
+    User,
+    Local,
+}
 
 #[derive(Parser, Debug)]
 #[command(name = "swissarmyhammer")]
@@ -68,6 +82,44 @@ Example:
   swissarmyhammer doctor --verbose  # Show detailed diagnostics
 ")]
     Doctor,
+    /// List all available prompts
+    #[command(long_about = "
+Lists all available prompts from all sources (built-in, user, local).
+Shows prompt names, titles, descriptions, and source information.
+
+Output formats:
+  table  - Formatted table (default)
+  json   - JSON output for scripting
+  yaml   - YAML output for scripting
+
+Examples:
+  swissarmyhammer list                        # Show all prompts in table format
+  swissarmyhammer list --format json         # Output as JSON
+  swissarmyhammer list --verbose             # Show full details including arguments
+  swissarmyhammer list --source builtin      # Show only built-in prompts
+  swissarmyhammer list --search debug        # Search for prompts containing 'debug'
+")]
+    List {
+        /// Output format
+        #[arg(long, value_enum, default_value = "table")]
+        format: OutputFormat,
+        
+        /// Show verbose output including arguments
+        #[arg(short, long)]
+        verbose: bool,
+        
+        /// Filter by source
+        #[arg(long, value_enum)]
+        source: Option<PromptSource>,
+        
+        /// Filter by category
+        #[arg(long)]
+        category: Option<String>,
+        
+        /// Search prompts by name or description
+        #[arg(long)]
+        search: Option<String>,
+    },
     /// Generate shell completion scripts
     #[command(long_about = "
 Generates shell completion scripts for various shells. Supports:

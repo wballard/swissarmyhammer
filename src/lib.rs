@@ -1,6 +1,7 @@
 pub mod cli;
 pub mod completions;
 pub mod doctor;
+pub mod list;
 pub mod mcp;
 pub mod prompts;
 pub mod signal_handler;

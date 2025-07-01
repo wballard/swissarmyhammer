@@ -1,5 +1,5 @@
 use std::process;
-use swissarmyhammer::cli::{Cli, Commands};
+use swissarmyhammer::cli::{Cli, Commands, OutputFormat, PromptSource};
 use swissarmyhammer::mcp::MCPServer;
 use tokio::sync::oneshot;
 use tracing::Level;
@@ -30,6 +30,10 @@ async fn main() {
         Some(Commands::Doctor) => {
             tracing::info!("Running diagnostics");
             run_doctor()
+        }
+        Some(Commands::List { format, verbose, source, category, search }) => {
+            tracing::info!("Listing prompts");
+            run_list(format, verbose, source, category, search)
         }
         Some(Commands::Completion { shell }) => {
             tracing::info!("Generating completion for {:?}", shell);
@@ -89,6 +93,24 @@ fn run_doctor() -> i32 {
         Err(e) => {
             eprintln!("Doctor error: {}", e);
             2
+        }
+    }
+}
+
+fn run_list(
+    format: OutputFormat,
+    verbose: bool,
+    source: Option<PromptSource>,
+    category: Option<String>,
+    search: Option<String>,
+) -> i32 {
+    use swissarmyhammer::list;
+    
+    match list::run_list_command(format, verbose, source, category, search) {
+        Ok(_) => 0,
+        Err(e) => {
+            eprintln!("List error: {}", e);
+            1
         }
     }
 }

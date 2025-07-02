@@ -1,0 +1,1 @@
+It looks like you forgot to clean up the exising src when you went to a workspace.

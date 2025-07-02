@@ -1,0 +1,696 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Rust Library Guide - SwissArmyHammer Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Complete guide to using SwissArmyHammer - the MCP server for managing prompts">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">SwissArmyHammer Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/docs/src/src/library-usage.md" title="Suggest an edit" aria-label="Suggest an edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="rust-library-guide"><a class="header" href="#rust-library-guide">Rust Library Guide</a></h1>
+<p>SwissArmyHammer is available as a Rust library (<code>swissarmyhammer</code>) that you can integrate into your own applications. This guide covers installation, basic usage, and advanced integration patterns.</p>
+<h2 id="installation"><a class="header" href="#installation">Installation</a></h2>
+<p>Add SwissArmyHammer to your <code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[dependencies]
+swissarmyhammer = { git = "https://github.com/wballard/swissarmyhammer", features = ["full"] }
+</code></pre>
+<h3 id="feature-flags"><a class="header" href="#feature-flags">Feature Flags</a></h3>
+<p>Control which functionality to include:</p>
+<pre><code class="language-toml">[dependencies]
+swissarmyhammer = { 
+  git = "https://github.com/wballard/swissarmyhammer", 
+  features = ["prompts", "templates", "search", "mcp"] 
+}
+</code></pre>
+<p>Available features:</p>
+<ul>
+<li><code>prompts</code> - Core prompt management (always enabled)</li>
+<li><code>templates</code> - Liquid template engine with custom filters</li>
+<li><code>search</code> - Full-text search capabilities</li>
+<li><code>mcp</code> - Model Context Protocol server support</li>
+<li><code>storage</code> - Advanced storage backends</li>
+<li><code>full</code> - All features enabled</li>
+</ul>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="basic-prompt-library"><a class="header" href="#basic-prompt-library">Basic Prompt Library</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::{PromptLibrary, ArgumentSpec};
+use std::collections::HashMap;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Create a new prompt library
+    let mut library = PromptLibrary::new();
+    
+    // Add prompts from a directory
+    library.add_directory("./prompts").await?;
+    
+    // List available prompts
+    for prompt_id in library.list_prompts() {
+        println!("Available prompt: {}", prompt_id);
+    }
+    
+    // Get a specific prompt
+    let prompt = library.get("code-review")?;
+    println!("Title: {}", prompt.title());
+    println!("Description: {}", prompt.description());
+    
+    // Prepare arguments
+    let mut args = HashMap::new();
+    args.insert("code".to_string(), "fn main() { println!(\"Hello\"); }".to_string());
+    args.insert("language".to_string(), "rust".to_string());
+    
+    // Render the prompt
+    let rendered = prompt.render(&amp;args)?;
+    println!("Rendered prompt:\n{}", rendered);
+    
+    Ok(())
+}</code></pre>
+<h3 id="custom-prompt-creation"><a class="header" href="#custom-prompt-creation">Custom Prompt Creation</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::{Prompt, ArgumentSpec, PromptMetadata};
+
+fn create_custom_prompt() -&gt; Result&lt;Prompt, Box&lt;dyn std::error::Error&gt;&gt; {
+    let metadata = PromptMetadata {
+        title: "Custom Code Review".to_string(),
+        description: "A custom code review prompt".to_string(),
+        arguments: vec![
+            ArgumentSpec {
+                name: "code".to_string(),
+                description: "Code to review".to_string(),
+                required: true,
+                default: None,
+            },
+            ArgumentSpec {
+                name: "focus".to_string(),
+                description: "Review focus area".to_string(),
+                required: false,
+                default: Some("general".to_string()),
+            },
+        ],
+    };
+    
+    let template = r#"
+<span class="boring">Code Review: {{ focus | capitalize }}
+</span>
+Please review this code:
+</code></pre>
+<p>{{ code }}</p>
+<pre><code>
+{% if focus == "security" %}
+Focus specifically on security vulnerabilities and best practices.
+{% elsif focus == "performance" %}
+Focus on performance optimizations and efficiency.
+{% else %}
+Perform a general code review covering style, bugs, and maintainability.
+{% endif %}
+"#;
+    
+    Prompt::from_parts(metadata, template)
+}
+</code></pre>
+<h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
+<h3 id="promptlibrary"><a class="header" href="#promptlibrary">PromptLibrary</a></h3>
+<p>The main interface for managing collections of prompts.</p>
+<pre><code class="language-rust">use swissarmyhammer::PromptLibrary;
+
+let mut library = PromptLibrary::new();
+
+// Add prompts from various sources
+library.add_directory("./prompts").await?;
+library.add_file("./special-prompt.md").await?;
+library.add_builtin_prompts();
+
+// Query prompts
+let prompts = library.list_prompts();
+let prompt = library.get("prompt-id")?;
+let filtered = library.filter_by_category("review");
+
+// Search prompts
+let results = library.search("code review")?;</code></pre>
+<h3 id="prompt"><a class="header" href="#prompt">Prompt</a></h3>
+<p>Individual prompt with metadata and template.</p>
+<pre><code class="language-rust">use swissarmyhammer::Prompt;
+
+// Load from file
+let prompt = Prompt::from_file("./prompts/review.md").await?;
+
+// Access metadata
+println!("Title: {}", prompt.title());
+println!("Description: {}", prompt.description());
+for arg in prompt.arguments() {
+    println!("Argument: {} (required: {})", arg.name, arg.required);
+}
+
+// Render with arguments
+let mut args = HashMap::new();
+args.insert("code".to_string(), "example code".to_string());
+let rendered = prompt.render(&amp;args)?;</code></pre>
+<h3 id="template-engine"><a class="header" href="#template-engine">Template Engine</a></h3>
+<p>Advanced template processing with custom filters.</p>
+<pre><code class="language-rust">use swissarmyhammer::template::{TemplateEngine, TemplateContext};
+
+let engine = TemplateEngine::new();
+
+let template = "Hello {{ name | capitalize }}! Today is {{ 'now' | format_date: '%Y-%m-%d' }}.";
+
+let mut context = TemplateContext::new();
+context.insert("name", "alice");
+
+let result = engine.render(template, &amp;context)?;
+println!("{}", result); // "Hello Alice! Today is 2024-01-15."</code></pre>
+<h2 id="advanced-usage"><a class="header" href="#advanced-usage">Advanced Usage</a></h2>
+<h3 id="custom-storage-backend"><a class="header" href="#custom-storage-backend">Custom Storage Backend</a></h3>
+<p>Implement your own storage for prompts:</p>
+<pre><code class="language-rust">use swissarmyhammer::storage::{StorageBackend, PromptSource};
+use async_trait::async_trait;
+
+struct DatabaseStorage {
+    // Your database connection
+    db: Database,
+}
+
+#[async_trait]
+impl StorageBackend for DatabaseStorage {
+    async fn list_prompts(&amp;self) -&gt; Result&lt;Vec&lt;String&gt;, StorageError&gt; {
+        // Implement database query
+        todo!()
+    }
+    
+    async fn get_prompt(&amp;self, id: &amp;str) -&gt; Result&lt;PromptSource, StorageError&gt; {
+        // Implement database retrieval
+        todo!()
+    }
+    
+    async fn save_prompt(&amp;mut self, id: &amp;str, source: &amp;PromptSource) -&gt; Result&lt;(), StorageError&gt; {
+        // Implement database storage
+        todo!()
+    }
+}
+
+// Use custom storage
+let storage = DatabaseStorage::new(db);
+let mut library = PromptLibrary::with_storage(storage);</code></pre>
+<h3 id="search-integration"><a class="header" href="#search-integration">Search Integration</a></h3>
+<p>Advanced search capabilities:</p>
+<pre><code class="language-rust">use swissarmyhammer::search::{SearchEngine, SearchQuery, SearchResult};
+
+let mut search_engine = SearchEngine::new();
+
+// Index prompts
+search_engine.index_prompt("code-review", &amp;prompt).await?;
+
+// Perform searches
+let query = SearchQuery::new("code review")
+    .with_field("title")
+    .with_limit(10)
+    .case_sensitive(false);
+
+let results: Vec&lt;SearchResult&gt; = search_engine.search(&amp;query)?;
+
+for result in results {
+    println!("Found: {} (score: {:.2})", result.id, result.score);
+}</code></pre>
+<h3 id="mcp-server-integration"><a class="header" href="#mcp-server-integration">MCP Server Integration</a></h3>
+<p>Embed MCP server functionality:</p>
+<pre><code class="language-rust">use swissarmyhammer::mcp::{McpServer, McpConfig};
+
+let config = McpConfig {
+    name: "my-prompt-server".to_string(),
+    version: "1.0.0".to_string(),
+    // ... other config
+};
+
+let mut library = PromptLibrary::new();
+library.add_directory("./prompts").await?;
+
+let server = McpServer::new(config, library);
+
+// Run MCP server
+server.serve().await?;</code></pre>
+<h3 id="event-system"><a class="header" href="#event-system">Event System</a></h3>
+<p>React to library events:</p>
+<pre><code class="language-rust">use swissarmyhammer::events::{EventHandler, PromptEvent};
+
+struct MyEventHandler;
+
+impl EventHandler for MyEventHandler {
+    fn handle_prompt_added(&amp;self, id: &amp;str) {
+        println!("Prompt added: {}", id);
+    }
+    
+    fn handle_prompt_updated(&amp;self, id: &amp;str) {
+        println!("Prompt updated: {}", id);
+    }
+    
+    fn handle_prompt_removed(&amp;self, id: &amp;str) {
+        println!("Prompt removed: {}", id);
+    }
+}
+
+let mut library = PromptLibrary::new();
+library.add_event_handler(Box::new(MyEventHandler));</code></pre>
+<h3 id="file-watching"><a class="header" href="#file-watching">File Watching</a></h3>
+<p>Automatically reload prompts when files change:</p>
+<pre><code class="language-rust">use swissarmyhammer::watcher::FileWatcher;
+
+let mut library = PromptLibrary::new();
+library.add_directory("./prompts").await?;
+
+// Start watching for file changes
+let _watcher = FileWatcher::new("./prompts", move |event| {
+    match event {
+        FileEvent::Created(path) =&gt; {
+            if let Err(e) = library.reload_file(&amp;path) {
+                eprintln!("Failed to load {}: {}", path.display(), e);
+            }
+        }
+        FileEvent::Modified(path) =&gt; {
+            if let Err(e) = library.reload_file(&amp;path) {
+                eprintln!("Failed to reload {}: {}", path.display(), e);
+            }
+        }
+        FileEvent::Deleted(path) =&gt; {
+            library.remove_file(&amp;path);
+        }
+    }
+});
+
+// Keep the watcher alive
+std::thread::sleep(std::time::Duration::from_secs(60));</code></pre>
+<h2 id="integration-examples"><a class="header" href="#integration-examples">Integration Examples</a></h2>
+<h3 id="web-server-integration"><a class="header" href="#web-server-integration">Web Server Integration</a></h3>
+<pre><code class="language-rust">use axum::{extract::Path, http::StatusCode, response::Json, routing::get, Router};
+use swissarmyhammer::PromptLibrary;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+type SharedLibrary = Arc&lt;RwLock&lt;PromptLibrary&gt;&gt;;
+
+async fn list_prompts(library: SharedLibrary) -&gt; Json&lt;Vec&lt;String&gt;&gt; {
+    let lib = library.read().await;
+    Json(lib.list_prompts())
+}
+
+async fn get_prompt(
+    Path(id): Path&lt;String&gt;,
+    library: SharedLibrary,
+) -&gt; Result&lt;Json&lt;String&gt;, StatusCode&gt; {
+    let lib = library.read().await;
+    match lib.get(&amp;id) {
+        Ok(prompt) =&gt; Ok(Json(prompt.title().to_string())),
+        Err(_) =&gt; Err(StatusCode::NOT_FOUND),
+    }
+}
+
+#[tokio::main]
+async fn main() {
+    let mut library = PromptLibrary::new();
+    library.add_directory("./prompts").await.unwrap();
+    let shared_library = Arc::new(RwLock::new(library));
+
+    let app = Router::new()
+        .route("/prompts", get({
+            let lib = shared_library.clone();
+            move || list_prompts(lib)
+        }))
+        .route("/prompts/:id", get({
+            let lib = shared_library.clone();
+            move |path| get_prompt(path, lib)
+        }));
+
+    axum::Server::bind(&amp;"0.0.0.0:3000".parse().unwrap())
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
+}</code></pre>
+<h3 id="cli-tool-integration"><a class="header" href="#cli-tool-integration">CLI Tool Integration</a></h3>
+<pre><code class="language-rust">use clap::{Arg, Command};
+use swissarmyhammer::PromptLibrary;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let matches = Command::new("my-prompt-tool")
+        .arg(Arg::new("prompt")
+            .help("Prompt ID to render")
+            .required(true)
+            .index(1))
+        .arg(Arg::new("args")
+            .help("Template arguments as key=value pairs")
+            .multiple_values(true)
+            .short('a')
+            .long("arg"))
+        .get_matches();
+
+    let mut library = PromptLibrary::new();
+    library.add_directory("./prompts").await?;
+
+    let prompt_id = matches.value_of("prompt").unwrap();
+    let prompt = library.get(prompt_id)?;
+
+    let mut args = std::collections::HashMap::new();
+    if let Some(arg_values) = matches.values_of("args") {
+        for arg in arg_values {
+            if let Some((key, value)) = arg.split_once('=') {
+                args.insert(key.to_string(), value.to_string());
+            }
+        }
+    }
+
+    let rendered = prompt.render(&amp;args)?;
+    println!("{}", rendered);
+
+    Ok(())
+}</code></pre>
+<h3 id="configuration-management"><a class="header" href="#configuration-management">Configuration Management</a></h3>
+<pre><code class="language-rust">use serde::{Deserialize, Serialize};
+use swissarmyhammer::{PromptLibrary, storage::FileSystemStorage};
+
+#[derive(Serialize, Deserialize)]
+struct AppConfig {
+    prompt_directories: Vec&lt;String&gt;,
+    default_arguments: std::collections::HashMap&lt;String, String&gt;,
+    search_enabled: bool,
+}
+
+impl Default for AppConfig {
+    fn default() -&gt; Self {
+        Self {
+            prompt_directories: vec!["./prompts".to_string()],
+            default_arguments: std::collections::HashMap::new(),
+            search_enabled: true,
+        }
+    }
+}
+
+async fn setup_library(config: &amp;AppConfig) -&gt; Result&lt;PromptLibrary, Box&lt;dyn std::error::Error&gt;&gt; {
+    let mut library = PromptLibrary::new();
+    
+    for dir in &amp;config.prompt_directories {
+        library.add_directory(dir).await?;
+    }
+    
+    if config.search_enabled {
+        library.enable_search()?;
+    }
+    
+    Ok(library)
+}</code></pre>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<p>SwissArmyHammer uses comprehensive error types:</p>
+<pre><code class="language-rust">use swissarmyhammer::error::{SwissArmyHammerError, PromptError, TemplateError};
+
+match library.get("nonexistent") {
+    Ok(prompt) =&gt; {
+        // Handle success
+    }
+    Err(SwissArmyHammerError::PromptNotFound(id)) =&gt; {
+        eprintln!("Prompt '{}' not found", id);
+    }
+    Err(SwissArmyHammerError::Template(TemplateError::RenderError(msg))) =&gt; {
+        eprintln!("Template rendering failed: {}", msg);
+    }
+    Err(SwissArmyHammerError::Io(io_err)) =&gt; {
+        eprintln!("I/O error: {}", io_err);
+    }
+    Err(e) =&gt; {
+        eprintln!("Unexpected error: {}", e);
+    }
+}</code></pre>
+<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
+<p>SwissArmyHammer provides testing utilities:</p>
+<pre><code class="language-rust">use swissarmyhammer::testing::{MockPromptLibrary, PromptTestCase};
+
+#[tokio::test]
+async fn test_prompt_rendering() {
+    let mut library = MockPromptLibrary::new();
+    
+    let test_case = PromptTestCase::new("test-prompt")
+        .with_template("Hello {{ name }}!")
+        .with_argument("name", "World")
+        .expect_output("Hello World!");
+    
+    library.add_test_prompt(test_case);
+    
+    let prompt = library.get("test-prompt").unwrap();
+    let mut args = std::collections::HashMap::new();
+    args.insert("name".to_string(), "World".to_string());
+    
+    let result = prompt.render(&amp;args).unwrap();
+    assert_eq!(result, "Hello World!");
+}</code></pre>
+<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<h3 id="memory-usage"><a class="header" href="#memory-usage">Memory Usage</a></h3>
+<ul>
+<li>Prompt libraries cache parsed templates in memory</li>
+<li>Large collections may require custom storage backends</li>
+<li>Use lazy loading for better memory efficiency</li>
+</ul>
+<h3 id="concurrency"><a class="header" href="#concurrency">Concurrency</a></h3>
+<ul>
+<li><code>PromptLibrary</code> is <code>Send + Sync</code> when used with appropriate storage</li>
+<li>Template rendering is thread-safe</li>
+<li>Consider using <code>Arc&lt;RwLock&lt;PromptLibrary&gt;&gt;</code> for shared access</li>
+</ul>
+<h3 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h3>
+<ul>
+<li>Prefer batch operations for multiple prompts</li>
+<li>Cache rendered templates when arguments don’t change</li>
+<li>Use feature flags to include only needed functionality</li>
+<li>Implement proper error handling for production use</li>
+</ul>
+<h2 id="migration-from-cli"><a class="header" href="#migration-from-cli">Migration from CLI</a></h2>
+<p>If you’re migrating from using the CLI to the library:</p>
+<pre><code class="language-rust">// CLI equivalent: swissarmyhammer search "code review"
+let results = library.search("code review")?;
+
+// CLI equivalent: swissarmyhammer test prompt-id --arg key=value
+let prompt = library.get("prompt-id")?;
+let mut args = HashMap::new();
+args.insert("key".to_string(), "value".to_string());
+let rendered = prompt.render(&amp;args)?;
+
+// CLI equivalent: swissarmyhammer export --all output.tar.gz
+library.export_all("output.tar.gz", ExportFormat::TarGz)?;</code></pre>
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="./library-api.html">Library API Reference</a> - Complete API documentation</li>
+<li><a href="./library-examples.html">Integration Examples</a> - More integration patterns</li>
+<li><a href="./custom-filters.html">Custom Filters</a> - Template customization</li>
+<li><a href="./advanced-prompts.html">Advanced Prompts</a> - Complex template patterns</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="cli-completion.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="library-api.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="cli-completion.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="library-api.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

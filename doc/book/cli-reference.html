@@ -173,6 +173,87 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="command-line-interface"><a class="header" href="#command-line-interface">Command Line Interface</a></h1>
+<p>SwissArmyHammer provides a comprehensive command-line interface for managing prompts, running the MCP server, and integrating with your development workflow.</p>
+<h2 id="installation"><a class="header" href="#installation">Installation</a></h2>
+<pre><code class="language-bash"># Install from Git repository (requires Rust)
+cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
+
+# Ensure ~/.cargo/bin is in your PATH
+export PATH="$HOME/.cargo/bin:$PATH"
+</code></pre>
+<h2 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h2>
+<pre><code class="language-bash">swissarmyhammer [COMMAND] [OPTIONS]
+</code></pre>
+<h2 id="global-options"><a class="header" href="#global-options">Global Options</a></h2>
+<ul>
+<li><code>--help, -h</code> - Display help information</li>
+<li><code>--version, -V</code> - Display version information</li>
+</ul>
+<h2 id="commands-overview"><a class="header" href="#commands-overview">Commands Overview</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
+<tr><td><a href="./cli-serve.html"><code>serve</code></a></td><td>Run as MCP server for Claude Code integration</td></tr>
+<tr><td><a href="./cli-search.html"><code>search</code></a></td><td>Search and discover prompts with powerful filtering</td></tr>
+<tr><td><a href="./cli-test.html"><code>test</code></a></td><td>Interactively test prompts with arguments</td></tr>
+<tr><td><a href="./cli-export.html"><code>export</code></a></td><td>Export prompts for sharing and backup</td></tr>
+<tr><td><a href="./cli-import.html"><code>import</code></a></td><td>Import prompts from various sources</td></tr>
+<tr><td><a href="./cli-doctor.html"><code>doctor</code></a></td><td>Diagnose configuration and setup issues</td></tr>
+<tr><td><a href="./cli-completion.html"><code>completion</code></a></td><td>Generate shell completion scripts</td></tr>
+</tbody></table>
+</div>
+<h2 id="quick-examples"><a class="header" href="#quick-examples">Quick Examples</a></h2>
+<h3 id="start-mcp-server"><a class="header" href="#start-mcp-server">Start MCP Server</a></h3>
+<pre><code class="language-bash"># Run as MCP server (for Claude Code)
+swissarmyhammer serve
+</code></pre>
+<h3 id="search-for-prompts"><a class="header" href="#search-for-prompts">Search for Prompts</a></h3>
+<pre><code class="language-bash"># Search for code-related prompts
+swissarmyhammer search code
+
+# Search with regex in descriptions
+swissarmyhammer search --regex "test.*unit" --in description
+</code></pre>
+<h3 id="test-a-prompt"><a class="header" href="#test-a-prompt">Test a Prompt</a></h3>
+<pre><code class="language-bash"># Interactively test a prompt
+swissarmyhammer test code-review
+
+# Test with predefined arguments
+swissarmyhammer test code-review --arg code="fn main() { println!(\"Hello\"); }"
+</code></pre>
+<h3 id="export-and-import-prompts"><a class="header" href="#export-and-import-prompts">Export and Import Prompts</a></h3>
+<pre><code class="language-bash"># Export all prompts to a tar.gz file
+swissarmyhammer export --all --format tar.gz my-prompts.tar.gz
+
+# Import prompts from URL
+swissarmyhammer import https://example.com/prompts.tar.gz
+</code></pre>
+<h3 id="check-setup"><a class="header" href="#check-setup">Check Setup</a></h3>
+<pre><code class="language-bash"># Diagnose any configuration issues
+swissarmyhammer doctor
+</code></pre>
+<h3 id="generate-shell-completions"><a class="header" href="#generate-shell-completions">Generate Shell Completions</a></h3>
+<pre><code class="language-bash"># Generate Bash completions
+swissarmyhammer completion bash &gt; ~/.bash_completion.d/swissarmyhammer
+
+# Generate Zsh completions
+swissarmyhammer completion zsh &gt; ~/.zfunc/_swissarmyhammer
+</code></pre>
+<h2 id="exit-codes"><a class="header" href="#exit-codes">Exit Codes</a></h2>
+<ul>
+<li><code>0</code> - Success</li>
+<li><code>1</code> - General error</li>
+<li><code>2</code> - Command line usage error</li>
+<li><code>3</code> - Configuration error</li>
+<li><code>4</code> - Prompt not found</li>
+<li><code>5</code> - Template rendering error</li>
+</ul>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p>SwissArmyHammer looks for prompts in these directories (in order):</p>
+<ol>
+<li>Built-in prompts (embedded in the binary)</li>
+<li>User prompts: <code>~/.swissarmyhammer/prompts/</code></li>
+<li>Local prompts: <code>./prompts/</code> (current directory)</li>
+</ol>
+<p>For detailed command documentation, see the individual command pages linked in the table above.</p>
 
                     </main>
 

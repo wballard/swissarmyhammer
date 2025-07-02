@@ -475,12 +475,57 @@ If you're familiar with Handlebars or Mustache templating:
 5. **Test edge cases**: Empty arrays, nil values, missing variables
 6. **Keep it readable**: Break complex templates into sections
 
+## Custom Filters
+
+SwissArmyHammer includes specialized custom filters designed for prompt engineering:
+
+### Code Filters
+```liquid
+{{ code | format_lang: "rust" }}      # Format code with language
+{{ code | extract_functions }}        # Extract function signatures
+{{ path | basename }}                 # Get filename from path
+{{ path | dirname }}                  # Get directory from path
+{{ text | count_lines }}              # Count number of lines
+{{ code | dedent }}                   # Remove common indentation
+```
+
+### Text Processing Filters
+```liquid
+{{ text | extract_urls }}             # Extract URLs from text
+{{ title | slugify }}                 # Convert to URL-friendly slug
+{{ text | word_wrap: 80 }}            # Wrap text at 80 characters
+{{ text | indent: 2 }}                # Indent all lines by 2 spaces
+{{ items | bullet_list }}             # Convert array to bullet list
+{{ text | highlight: "keyword" }}     # Highlight specific terms
+```
+
+### Data Transformation Filters
+```liquid
+{{ json_string | from_json }}         # Parse JSON string
+{{ data | to_json }}                  # Convert to JSON string
+{{ csv_string | from_csv }}           # Parse CSV string
+{{ array | to_csv }}                  # Convert to CSV string
+{{ yaml_string | from_yaml }}         # Parse YAML string
+{{ data | to_yaml }}                  # Convert to YAML string
+```
+
+### Utility Filters
+```liquid
+{{ text | md5 }}                      # Generate MD5 hash
+{{ text | sha1 }}                     # Generate SHA1 hash
+{{ text | sha256 }}                   # Generate SHA256 hash
+{{ number | ordinal }}                # Convert to ordinal (1st, 2nd, 3rd)
+{{ 100 | lorem_words }}               # Generate lorem ipsum words
+{{ date | format_date: "%Y-%m-%d" }}  # Advanced date formatting
+```
+
+For complete documentation of custom filters, see the [Custom Filters Reference](./custom-filters.md).
+
 ## Limitations
 
-1. **No custom filters**: Only built-in Liquid filters are available
-2. **No includes**: Cannot include other template files
-3. **No custom tags**: Only standard Liquid tags are supported
-4. **Performance**: Very large loops may impact performance
+1. **No includes**: Cannot include other template files
+2. **No custom tags**: Only standard Liquid tags are supported
+3. **Performance**: Very large loops may impact performance
 
 ## Further Reading
 

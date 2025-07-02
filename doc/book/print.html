@@ -185,9 +185,10 @@
 </ul>
 <h2 id="key-features"><a class="header" href="#key-features">Key Features</a></h2>
 <h3 id="-quick-setup"><a class="header" href="#-quick-setup">🚀 Quick Setup</a></h3>
-<p>Get started in seconds with our one-liner installer:</p>
-<pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/wballard/swissarmyhammer/main/dist/install.sh | bash
+<p>Get started by installing with Cargo:</p>
+<pre><code class="language-bash">cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
 </code></pre>
+<p>This requires Rust 1.70+ to be installed. Get Rust from <a href="https://rustup.rs/">rustup.rs</a>.</p>
 <h3 id="-simple-prompt-format"><a class="header" href="#-simple-prompt-format">📝 Simple Prompt Format</a></h3>
 <p>Create prompts using familiar markdown with YAML front matter:</p>
 <pre><code class="language-markdown">---
@@ -262,89 +263,62 @@ Focus on:
 <h2 id="license"><a class="header" href="#license">License</a></h2>
 <p>SwissArmyHammer is open source software licensed under the MIT License. See the <a href="./license.html">License</a> page for details.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
-<p>SwissArmyHammer is available through multiple installation methods. Choose the one that works best for your system.</p>
+<p>SwissArmyHammer can be installed from source using Cargo. Pre-built binaries will be available in future releases.</p>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<p>Before installing SwissArmyHammer, you need:</p>
+<ul>
+<li><strong>Rust 1.70 or later</strong> - Install from <a href="https://rustup.rs/">rustup.rs</a></li>
+<li><strong>Git</strong> - For cloning the repository</li>
+</ul>
 <h2 id="quick-install-recommended"><a class="header" href="#quick-install-recommended">Quick Install (Recommended)</a></h2>
-<h3 id="one-liner-install-script"><a class="header" href="#one-liner-install-script">One-liner install script</a></h3>
-<pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/wballard/swissarmyhammer/main/dist/install.sh | bash
+<h3 id="install-from-git-repository"><a class="header" href="#install-from-git-repository">Install from Git Repository</a></h3>
+<pre><code class="language-bash">cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
 </code></pre>
-<p>This script will:</p>
+<p>This command will:</p>
 <ul>
-<li>Detect your platform automatically</li>
-<li>Download the appropriate binary</li>
-<li>Install it to <code>~/.local/bin</code> (or <code>$INSTALL_DIR</code> if set)</li>
-<li>Add the binary to your PATH</li>
-<li>Verify the installation</li>
+<li>Clone the repository</li>
+<li>Build the CLI in release mode</li>
+<li>Install the <code>swissarmyhammer</code> binary to <code>~/.cargo/bin</code></li>
+<li>Make it available in your PATH (if <code>~/.cargo/bin</code> is in your PATH)</li>
 </ul>
-<h2 id="platform-specific-installation"><a class="header" href="#platform-specific-installation">Platform-Specific Installation</a></h2>
-<h3 id="macos"><a class="header" href="#macos">macOS</a></h3>
-<h4 id="option-1-homebrew-recommended"><a class="header" href="#option-1-homebrew-recommended">Option 1: Homebrew (Recommended)</a></h4>
-<pre><code class="language-bash"># Add the tap (once the formula is published)
-brew tap wballard/swissarmyhammer
-brew install swissarmyhammer
-</code></pre>
-<h4 id="option-2-direct-download"><a class="header" href="#option-2-direct-download">Option 2: Direct Download</a></h4>
-<pre><code class="language-bash"># Intel Macs
-curl -L https://github.com/wballard/swissarmyhammer/releases/latest/download/swissarmyhammer-x86_64-apple-darwin -o swissarmyhammer
-chmod +x swissarmyhammer
-sudo mv swissarmyhammer /usr/local/bin/
+<h3 id="add-to-path"><a class="header" href="#add-to-path">Add to PATH</a></h3>
+<p>Make sure <code>~/.cargo/bin</code> is in your PATH. Add this to your shell configuration file:</p>
+<pre><code class="language-bash"># For bash (~/.bashrc or ~/.bash_profile)
+export PATH="$HOME/.cargo/bin:$PATH"
 
-# Apple Silicon Macs
-curl -L https://github.com/wballard/swissarmyhammer/releases/latest/download/swissarmyhammer-aarch64-apple-darwin -o swissarmyhammer
-chmod +x swissarmyhammer
-sudo mv swissarmyhammer /usr/local/bin/
-</code></pre>
-<h3 id="linux"><a class="header" href="#linux">Linux</a></h3>
-<h4 id="direct-download"><a class="header" href="#direct-download">Direct Download</a></h4>
-<pre><code class="language-bash"># x86_64 (most common)
-curl -L https://github.com/wballard/swissarmyhammer/releases/latest/download/swissarmyhammer-x86_64-unknown-linux-gnu -o swissarmyhammer
-chmod +x swissarmyhammer
-sudo mv swissarmyhammer /usr/local/bin/
+# For zsh (~/.zshrc)
+export PATH="$HOME/.cargo/bin:$PATH"
 
-# x86_64 (static binary, works on any Linux distribution)
-curl -L https://github.com/wballard/swissarmyhammer/releases/latest/download/swissarmyhammer-x86_64-unknown-linux-musl -o swissarmyhammer
-chmod +x swissarmyhammer
-sudo mv swissarmyhammer /usr/local/bin/
-
-# ARM64 (for ARM-based servers/systems)
-curl -L https://github.com/wballard/swissarmyhammer/releases/latest/download/swissarmyhammer-aarch64-unknown-linux-gnu -o swissarmyhammer
-chmod +x swissarmyhammer
-sudo mv swissarmyhammer /usr/local/bin/
+# For fish (~/.config/fish/config.fish)
+set -gx PATH $HOME/.cargo/bin $PATH
 </code></pre>
-<h3 id="windows"><a class="header" href="#windows">Windows</a></h3>
-<h4 id="direct-download-1"><a class="header" href="#direct-download-1">Direct Download</a></h4>
-<pre><code class="language-powershell"># Download the latest release
-Invoke-WebRequest https://github.com/wballard/swissarmyhammer/releases/latest/download/swissarmyhammer-x86_64-pc-windows-msvc.exe -OutFile swissarmyhammer.exe
-
-# Move to a directory in your PATH (optional)
-Move-Item swissarmyhammer.exe $env:USERPROFILE\bin\
-</code></pre>
-<h2 id="install-from-source"><a class="header" href="#install-from-source">Install from Source</a></h2>
-<h3 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h3>
-<ul>
-<li>Rust 1.70 or later</li>
-<li>Git</li>
-</ul>
-<h3 id="build-and-install"><a class="header" href="#build-and-install">Build and Install</a></h3>
+<h2 id="alternative-clone-and-build"><a class="header" href="#alternative-clone-and-build">Alternative: Clone and Build</a></h2>
+<p>If you want to build from source or contribute to development:</p>
 <pre><code class="language-bash"># Clone the repository
 git clone https://github.com/wballard/swissarmyhammer.git
 cd swissarmyhammer
 
-# Build the release binary
+# Build the CLI (debug mode for development)
+cargo build
+
+# Build optimized release version
 cargo build --release
 
-# Install to ~/.cargo/bin (make sure it's in your PATH)
-cargo install --path .
+# Install from the local source
+cargo install --path swissarmyhammer-cli
 
-# Or copy the binary manually
-cp target/release/swissarmyhammer /usr/local/bin/
+# Or run directly without installing
+cargo run --bin swissarmyhammer -- --help
 </code></pre>
-<h3 id="using-cargo"><a class="header" href="#using-cargo">Using Cargo</a></h3>
-<pre><code class="language-bash"># Install directly from crates.io (once published)
-cargo install swissarmyhammer
-
-# Or install from the git repository
-cargo install --git https://github.com/wballard/swissarmyhammer.git
-</code></pre>
+<h2 id="future-installation-methods"><a class="header" href="#future-installation-methods">Future Installation Methods</a></h2>
+<p>Pre-built binaries and package manager support are planned for future releases:</p>
+<ul>
+<li><strong>macOS</strong>: Homebrew formula</li>
+<li><strong>Linux</strong>: DEB and RPM packages</li>
+<li><strong>Windows</strong>: MSI installer and Chocolatey package</li>
+<li><strong>crates.io</strong>: Published crate for <code>cargo install swissarmyhammer-cli</code></li>
+</ul>
+<p>Check the <a href="https://github.com/wballard/swissarmyhammer/releases">releases page</a> for updates.</p>
 <h2 id="verification"><a class="header" href="#verification">Verification</a></h2>
 <p>After installation, verify that SwissArmyHammer is working correctly:</p>
 <pre><code class="language-bash"># Check version
@@ -353,8 +327,11 @@ swissarmyhammer --version
 # Run diagnostics
 swissarmyhammer doctor
 
-# Test basic functionality
+# Show help
 swissarmyhammer --help
+
+# List available commands
+swissarmyhammer list
 </code></pre>
 <p>The <code>doctor</code> command will check your installation and provide helpful diagnostics if anything needs attention.</p>
 <h2 id="shell-completions"><a class="header" href="#shell-completions">Shell Completions</a></h2>
@@ -371,13 +348,25 @@ swissarmyhammer completion fish &gt; ~/.config/fish/completions/swissarmyhammer.
 # PowerShell
 swissarmyhammer completion powershell &gt;&gt; $PROFILE
 </code></pre>
+<p>Remember to reload your shell or start a new terminal session for completions to take effect.</p>
+<h2 id="updating"><a class="header" href="#updating">Updating</a></h2>
+<p>To update SwissArmyHammer to the latest version:</p>
+<pre><code class="language-bash"># Update from git repository
+cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli --force
+</code></pre>
+<p>The <code>--force</code> flag will overwrite the existing installation.</p>
 <h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
 <p>Once installed, continue to the <a href="./quick-start.html">Quick Start</a> guide to set up SwissArmyHammer with Claude Code and create your first prompt.</p>
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
-<p>If you encounter any issues during installation, check the <a href="./troubleshooting.html">Troubleshooting</a> guide or run:</p>
+<h3 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h3>
+<p><strong>Command not found</strong>: Make sure <code>~/.cargo/bin</code> is in your PATH.</p>
+<p><strong>Build failures</strong>: Ensure you have Rust 1.70+ installed and try updating Rust:</p>
+<pre><code class="language-bash">rustup update
+</code></pre>
+<p><strong>Permission errors</strong>: Don’t use <code>sudo</code> with cargo install - it installs to your user directory.</p>
+<p>For more help, check the <a href="./troubleshooting.html">Troubleshooting</a> guide or run:</p>
 <pre><code class="language-bash">swissarmyhammer doctor
 </code></pre>
-<p>This will diagnose common setup problems and provide solutions.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h1>
 <p>Get up and running with SwissArmyHammer in just a few minutes.</p>
 <h2 id="prerequisites-1"><a class="header" href="#prerequisites-1">Prerequisites</a></h2>
@@ -775,24 +764,2805 @@ swissarmyhammer doctor
 <div style="break-before: page; page-break-before: always;"></div><h1 id="creating-prompts"><a class="header" href="#creating-prompts">Creating Prompts</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="yaml-front-matter"><a class="header" href="#yaml-front-matter">YAML Front Matter</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="template-variables"><a class="header" href="#template-variables">Template Variables</a></h1>
+<p>SwissArmyHammer uses the <a href="https://shopify.github.io/liquid/">Liquid template engine</a> for processing prompts. This provides powerful templating features including variables, conditionals, loops, and filters.</p>
+<h2 id="basic-variable-substitution"><a class="header" href="#basic-variable-substitution">Basic Variable Substitution</a></h2>
+<p>Variables are inserted using double curly braces:</p>
+<pre><code class="language-liquid">Hello {{ name }}!
+Your email is {{ email }}.
+</code></pre>
+<p>For backward compatibility, variables without spaces also work:</p>
+<pre><code class="language-liquid">Hello {{name}}!
+</code></pre>
+<h2 id="conditionals"><a class="header" href="#conditionals">Conditionals</a></h2>
+<h3 id="if-statements"><a class="header" href="#if-statements">If Statements</a></h3>
+<p>Use <code>if</code> statements to conditionally include content:</p>
+<pre><code class="language-liquid">{% if user_type == "admin" %}
+  Welcome, administrator!
+{% elsif user_type == "moderator" %}
+  Welcome, moderator!
+{% else %}
+  Welcome, user!
+{% endif %}
+</code></pre>
+<h3 id="unless-statements"><a class="header" href="#unless-statements">Unless Statements</a></h3>
+<p><code>unless</code> is the opposite of <code>if</code>:</p>
+<pre><code class="language-liquid">{% unless error_count == 0 %}
+  Warning: {{ error_count }} errors found.
+{% endunless %}
+</code></pre>
+<h3 id="comparison-operators"><a class="header" href="#comparison-operators">Comparison Operators</a></h3>
+<ul>
+<li><code>==</code> - equals</li>
+<li><code>!=</code> - not equals</li>
+<li><code>&gt;</code> - greater than</li>
+<li><code>&lt;</code> - less than</li>
+<li><code>&gt;=</code> - greater or equal</li>
+<li><code>&lt;=</code> - less or equal</li>
+<li><code>contains</code> - string/array contains</li>
+<li><code>and</code> - logical AND</li>
+<li><code>or</code> - logical OR</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-liquid">{% if age &gt;= 18 and country == "US" %}
+  You are eligible to vote.
+{% endif %}
+
+{% if tags contains "urgent" %}
+  🚨 This is urgent!
+{% endif %}
+</code></pre>
+<h2 id="case-statements"><a class="header" href="#case-statements">Case Statements</a></h2>
+<p>For multiple conditions, use <code>case</code>:</p>
+<pre><code class="language-liquid">{% case status %}
+  {% when "pending" %}
+    ⏳ Waiting for approval
+  {% when "approved" %}
+    ✅ Approved and ready
+  {% when "rejected" %}
+    ❌ Rejected
+  {% else %}
+    ❓ Unknown status
+{% endcase %}
+</code></pre>
+<h2 id="loops"><a class="header" href="#loops">Loops</a></h2>
+<h3 id="basic-for-loops"><a class="header" href="#basic-for-loops">Basic For Loops</a></h3>
+<p>Iterate over arrays:</p>
+<pre><code class="language-liquid">{% for item in items %}
+  - {{ item }}
+{% endfor %}
+</code></pre>
+<h3 id="range-loops"><a class="header" href="#range-loops">Range Loops</a></h3>
+<p>Loop over a range of numbers:</p>
+<pre><code class="language-liquid">{% for i in (1..5) %}
+  Step {{ i }} of 5
+{% endfor %}
+</code></pre>
+<h3 id="loop-variables"><a class="header" href="#loop-variables">Loop Variables</a></h3>
+<p>Inside loops, you have access to special variables:</p>
+<pre><code class="language-liquid">{% for item in items %}
+  {% if forloop.first %}First item: {% endif %}
+  {{ forloop.index }}. {{ item }}
+  {% if forloop.last %}(last item){% endif %}
+{% endfor %}
+</code></pre>
+<p>Available loop variables:</p>
+<ul>
+<li><code>forloop.index</code> - current iteration (1-based)</li>
+<li><code>forloop.index0</code> - current iteration (0-based)</li>
+<li><code>forloop.first</code> - true on first iteration</li>
+<li><code>forloop.last</code> - true on last iteration</li>
+<li><code>forloop.length</code> - total number of items</li>
+</ul>
+<h3 id="loop-control"><a class="header" href="#loop-control">Loop Control</a></h3>
+<p>Use <code>break</code> and <code>continue</code> for flow control:</p>
+<pre><code class="language-liquid">{% for item in items %}
+  {% if item == "skip" %}
+    {% continue %}
+  {% endif %}
+  {% if item == "stop" %}
+    {% break %}
+  {% endif %}
+  Processing: {{ item }}
+{% endfor %}
+</code></pre>
+<h3 id="cycle"><a class="header" href="#cycle">Cycle</a></h3>
+<p>Alternate between values:</p>
+<pre><code class="language-liquid">{% for row in data %}
+  &lt;tr class="{% cycle 'odd', 'even' %}"&gt;
+    &lt;td&gt;{{ row }}&lt;/td&gt;
+  &lt;/tr&gt;
+{% endfor %}
+</code></pre>
+<h2 id="filters"><a class="header" href="#filters">Filters</a></h2>
+<p>Filters modify variables using the pipe (<code>|</code>) character:</p>
+<h3 id="string-filters"><a class="header" href="#string-filters">String Filters</a></h3>
+<pre><code class="language-liquid">{{ name | upcase }}           # ALICE
+{{ name | downcase }}         # alice
+{{ name | capitalize }}       # Alice
+{{ text | strip }}            # removes whitespace
+{{ text | truncate: 20 }}     # truncates to 20 chars
+{{ text | truncate: 20, "..." }} # custom ellipsis
+{{ text | append: "!" }}      # adds to end
+{{ text | prepend: "Hello " }} # adds to beginning
+{{ text | remove: "bad" }}    # removes all occurrences
+{{ text | replace: "old", "new" }} # replaces all
+{{ text | split: "," }}       # splits into array
+</code></pre>
+<h3 id="array-filters"><a class="header" href="#array-filters">Array Filters</a></h3>
+<pre><code class="language-liquid">{{ array | first }}           # first element
+{{ array | last }}            # last element
+{{ array | join: ", " }}      # joins with delimiter
+{{ array | sort }}            # sorts array
+{{ array | reverse }}         # reverses array
+{{ array | size }}            # number of elements
+{{ array | uniq }}            # removes duplicates
+</code></pre>
+<h3 id="math-filters"><a class="header" href="#math-filters">Math Filters</a></h3>
+<pre><code class="language-liquid">{{ number | plus: 5 }}        # addition
+{{ number | minus: 3 }}       # subtraction
+{{ number | times: 2 }}       # multiplication
+{{ number | divided_by: 4 }}  # division
+{{ number | modulo: 3 }}      # remainder
+{{ number | ceil }}           # round up
+{{ number | floor }}          # round down
+{{ number | round }}          # round to nearest
+{{ number | round: 2 }}       # round to 2 decimals
+{{ number | abs }}            # absolute value
+</code></pre>
+<h3 id="default-filter"><a class="header" href="#default-filter">Default Filter</a></h3>
+<p>Provide fallback values:</p>
+<pre><code class="language-liquid">Hello {{ name | default: "Guest" }}!
+Score: {{ score | default: 0 }}
+</code></pre>
+<h3 id="date-filters"><a class="header" href="#date-filters">Date Filters</a></h3>
+<pre><code class="language-liquid">{{ date | date: "%Y-%m-%d" }}         # 2024-01-15
+{{ date | date: "%B %d, %Y" }}        # January 15, 2024
+{{ "now" | date: "%Y" }}              # current year
+</code></pre>
+<h2 id="advanced-features"><a class="header" href="#advanced-features">Advanced Features</a></h2>
+<h3 id="comments"><a class="header" href="#comments">Comments</a></h3>
+<p>Comments are not rendered in output:</p>
+<pre><code class="language-liquid">{% comment %}
+  This is a comment that won't appear in the output.
+  Useful for documentation or temporarily disabling code.
+{% endcomment %}
+</code></pre>
+<h3 id="raw-blocks"><a class="header" href="#raw-blocks">Raw Blocks</a></h3>
+<p>Prevent Liquid processing:</p>
+<pre><code class="language-liquid">{% raw %}
+  This {{ variable }} won't be processed.
+  Useful for showing Liquid syntax examples.
+{% endraw %}
+</code></pre>
+<h3 id="assign-variables"><a class="header" href="#assign-variables">Assign Variables</a></h3>
+<p>Create new variables:</p>
+<pre><code class="language-liquid">{% assign full_name = first_name | append: " " | append: last_name %}
+Welcome, {{ full_name }}!
+
+{% assign item_count = items | size %}
+You have {{ item_count }} items.
+</code></pre>
+<h3 id="capture-blocks"><a class="header" href="#capture-blocks">Capture Blocks</a></h3>
+<p>Capture content into a variable:</p>
+<pre><code class="language-liquid">{% capture greeting %}
+  {% if time_of_day == "morning" %}
+    Good morning
+  {% elsif time_of_day == "evening" %}
+    Good evening
+  {% else %}
+    Hello
+  {% endif %}
+{% endcapture %}
+
+{{ greeting }}, {{ name }}!
+</code></pre>
+<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h2>
+<p>Access environment variables through the <code>env</code> object:</p>
+<pre><code class="language-liquid">Current user: {{ env.USER }}
+Home directory: {{ env.HOME }}
+Custom setting: {{ env.MY_APP_CONFIG | default: "not set" }}
+</code></pre>
+<h2 id="object-access"><a class="header" href="#object-access">Object Access</a></h2>
+<p>Access nested objects and arrays:</p>
+<pre><code class="language-liquid">{{ user.name }}
+{{ user.address.city }}
+{{ items[0] }}
+{{ items[index] }}
+{{ data["dynamic_key"] }}
+</code></pre>
+<h2 id="truthy-and-falsy-values"><a class="header" href="#truthy-and-falsy-values">Truthy and Falsy Values</a></h2>
+<p>In Liquid conditions:</p>
+<ul>
+<li><strong>Falsy</strong>: <code>false</code>, <code>nil</code></li>
+<li><strong>Truthy</strong>: everything else (including <code>0</code>, <code>""</code>, <code>[]</code>)</li>
+</ul>
+<pre><code class="language-liquid">{% if value %}
+  This shows unless value is false or nil
+{% endif %}
+</code></pre>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<p>When a variable is undefined:</p>
+<ul>
+<li>In backward-compatible mode: <code>{{ undefined }}</code> renders as <code>{{ undefined }}</code></li>
+<li>With validation: An error is raised for missing required arguments</li>
+</ul>
+<p>Use the <code>default</code> filter to handle missing values gracefully:</p>
+<pre><code class="language-liquid">{{ optional_var | default: "fallback value" }}
+</code></pre>
+<h2 id="migration-from-basic-templates"><a class="header" href="#migration-from-basic-templates">Migration from Basic Templates</a></h2>
+<p>If you’re migrating from basic <code>{{variable}}</code> syntax:</p>
+<ol>
+<li><strong>Your existing templates still work</strong> - backward compatibility is maintained</li>
+<li><strong>Add spaces for clarity</strong>: <code>{{var}}</code> → <code>{{ var }}</code></li>
+<li><strong>Use filters for transformation</strong>: <code>{{ name | upcase }}</code> instead of post-processing</li>
+<li><strong>Add conditions for dynamic content</strong>: Use <code>{% if %}</code> blocks</li>
+<li><strong>Use loops for repetitive content</strong>: Replace manual duplication with <code>{% for %}</code></li>
+</ol>
+<h3 id="migration-examples"><a class="header" href="#migration-examples">Migration Examples</a></h3>
+<h4 id="before-basic-variable-substitution"><a class="header" href="#before-basic-variable-substitution">Before: Basic Variable Substitution</a></h4>
+<pre><code>Please review the {{language}} code in {{file}}.
+Focus on {{focus_area}}.
+</code></pre>
+<h4 id="after-enhanced-with-liquid-features"><a class="header" href="#after-enhanced-with-liquid-features">After: Enhanced with Liquid Features</a></h4>
+<pre><code class="language-liquid">Please review the {{ language | capitalize }} code in {{ file }}.
+
+{% if focus_area %}
+Focus on {{ focus_area }}.
+{% else %}
+Perform a general code review.
+{% endif %}
+
+{% if language == "python" %}
+Pay special attention to PEP 8 compliance.
+{% elsif language == "javascript" %}
+Check for ESLint rule violations.
+{% endif %}
+</code></pre>
+<h4 id="before-manual-list-creation"><a class="header" href="#before-manual-list-creation">Before: Manual List Creation</a></h4>
+<pre><code>Files to review:
+- {{file1}}
+- {{file2}}
+- {{file3}}
+</code></pre>
+<h4 id="after-dynamic-lists-with-loops"><a class="header" href="#after-dynamic-lists-with-loops">After: Dynamic Lists with Loops</a></h4>
+<pre><code class="language-liquid">Files to review:
+{% for file in files %}
+- {{ file }}{% if forloop.last %} (final file){% endif %}
+{% endfor %}
+
+Total: {{ files | size }} files
+</code></pre>
+<h4 id="before-fixed-templates"><a class="header" href="#before-fixed-templates">Before: Fixed Templates</a></h4>
+<pre><code>Status: {{status}}
+</code></pre>
+<h4 id="after-conditional-formatting"><a class="header" href="#after-conditional-formatting">After: Conditional Formatting</a></h4>
+<pre><code class="language-liquid">Status: {% case status %}
+  {% when "success" %}✅ {{ status | upcase }}
+  {% when "error" %}❌ {{ status | upcase }}
+  {% when "warning" %}⚠️ {{ status | capitalize }}
+  {% else %}{{ status }}
+{% endcase %}
+</code></pre>
+<h3 id="differences-from-handlebarsmustache"><a class="header" href="#differences-from-handlebarsmustache">Differences from Handlebars/Mustache</a></h3>
+<p>If you’re familiar with Handlebars or Mustache templating:</p>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Handlebars/Mustache</th><th>Liquid</th></tr></thead><tbody>
+<tr><td>Variables</td><td><code>{{variable}}</code></td><td><code>{{ variable }}</code></td></tr>
+<tr><td>Conditionals</td><td><code>{{#if}}...{{/if}}</code></td><td><code>{% if %}...{% endif %}</code></td></tr>
+<tr><td>Loops</td><td><code>{{#each}}...{{/each}}</code></td><td><code>{% for %}...{% endfor %}</code></td></tr>
+<tr><td>Comments</td><td><code>{{! comment }}</code></td><td><code>{% comment %}...{% endcomment %}</code></td></tr>
+<tr><td>Filters</td><td>Limited</td><td>Extensive built-in filters</td></tr>
+<tr><td>Logic</td><td>Minimal</td><td>Full comparison operators</td></tr>
+</tbody></table>
+</div>
+<h3 id="common-migration-patterns"><a class="header" href="#common-migration-patterns">Common Migration Patterns</a></h3>
+<ol>
+<li>
+<p><strong>Variable with Default</strong></p>
+<ul>
+<li>Before: Handle missing variables in code</li>
+<li>After: <code>{{ variable | default: "fallback" }}</code></li>
+</ul>
+</li>
+<li>
+<p><strong>Conditional Sections</strong></p>
+<ul>
+<li>Before: Generate different templates</li>
+<li>After: Single template with <code>{% if %}</code> blocks</li>
+</ul>
+</li>
+<li>
+<p><strong>Repeated Content</strong></p>
+<ul>
+<li>Before: Manual duplication</li>
+<li>After: <code>{% for %}</code> loops with <code>forloop</code> variables</li>
+</ul>
+</li>
+<li>
+<p><strong>String Transformation</strong></p>
+<ul>
+<li>Before: Transform in application code</li>
+<li>After: Use Liquid filters directly</li>
+</ul>
+</li>
+</ol>
+<h3 id="backward-compatibility-notes"><a class="header" href="#backward-compatibility-notes">Backward Compatibility Notes</a></h3>
+<ul>
+<li>Simple <code>{{variable}}</code> syntax continues to work</li>
+<li>Undefined variables are preserved as <code>{{ variable }}</code> in output</li>
+<li>No breaking changes to existing templates</li>
+<li>Gradual migration is supported - mix old and new syntax</li>
+</ul>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<h3 id="dynamic-code-review"><a class="header" href="#dynamic-code-review">Dynamic Code Review</a></h3>
+<pre><code class="language-liquid">{% if language == "python" %}
+  Please review this Python code for PEP 8 compliance.
+{% elsif language == "javascript" %}
+  Please review this JavaScript code for ESLint rules.
+{% else %}
+  Please review this {{ language }} code for best practices.
+{% endif %}
+
+{% if include_security %}
+  Also check for security vulnerabilities.
+{% endif %}
+</code></pre>
+<h3 id="formatted-list"><a class="header" href="#formatted-list">Formatted List</a></h3>
+<pre><code class="language-liquid">{% for item in tasks %}
+  {{ forloop.index }}. {{ item.title }}
+  {% if item.completed %}✓{% else %}○{% endif %}
+  Priority: {{ item.priority | default: "normal" }}
+  {% unless item.completed %}
+    Due: {{ item.due_date | date: "%B %d" }}
+  {% endunless %}
+{% endfor %}
+</code></pre>
+<h3 id="conditional-debugging"><a class="header" href="#conditional-debugging">Conditional Debugging</a></h3>
+<pre><code class="language-liquid">{% if debug_mode %}
+  === Debug Information ===
+  Variables: {{ arguments | json }}
+  Environment: {{ env.NODE_ENV | default: "development" }}
+  {% for key in api_keys %}
+    {{ key }}: {{ key | truncate: 8 }}...
+  {% endfor %}
+{% endif %}
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Use meaningful variable names</strong>: <code>{{ user_email }}</code> instead of <code>{{ ue }}</code></li>
+<li><strong>Provide defaults</strong>: <code>{{ value | default: "N/A" }}</code> for optional values</li>
+<li><strong>Format output</strong>: Use filters to ensure consistent formatting</li>
+<li><strong>Comment complex logic</strong>: Use <code>{% comment %}</code> blocks</li>
+<li><strong>Test edge cases</strong>: Empty arrays, nil values, missing variables</li>
+<li><strong>Keep it readable</strong>: Break complex templates into sections</li>
+</ol>
+<h2 id="custom-filters"><a class="header" href="#custom-filters">Custom Filters</a></h2>
+<p>SwissArmyHammer includes specialized custom filters designed for prompt engineering:</p>
+<h3 id="code-filters"><a class="header" href="#code-filters">Code Filters</a></h3>
+<pre><code class="language-liquid">{{ code | format_lang: "rust" }}      # Format code with language
+{{ code | extract_functions }}        # Extract function signatures
+{{ path | basename }}                 # Get filename from path
+{{ path | dirname }}                  # Get directory from path
+{{ text | count_lines }}              # Count number of lines
+{{ code | dedent }}                   # Remove common indentation
+</code></pre>
+<h3 id="text-processing-filters"><a class="header" href="#text-processing-filters">Text Processing Filters</a></h3>
+<pre><code class="language-liquid">{{ text | extract_urls }}             # Extract URLs from text
+{{ title | slugify }}                 # Convert to URL-friendly slug
+{{ text | word_wrap: 80 }}            # Wrap text at 80 characters
+{{ text | indent: 2 }}                # Indent all lines by 2 spaces
+{{ items | bullet_list }}             # Convert array to bullet list
+{{ text | highlight: "keyword" }}     # Highlight specific terms
+</code></pre>
+<h3 id="data-transformation-filters"><a class="header" href="#data-transformation-filters">Data Transformation Filters</a></h3>
+<pre><code class="language-liquid">{{ json_string | from_json }}         # Parse JSON string
+{{ data | to_json }}                  # Convert to JSON string
+{{ csv_string | from_csv }}           # Parse CSV string
+{{ array | to_csv }}                  # Convert to CSV string
+{{ yaml_string | from_yaml }}         # Parse YAML string
+{{ data | to_yaml }}                  # Convert to YAML string
+</code></pre>
+<h3 id="utility-filters"><a class="header" href="#utility-filters">Utility Filters</a></h3>
+<pre><code class="language-liquid">{{ text | md5 }}                      # Generate MD5 hash
+{{ text | sha1 }}                     # Generate SHA1 hash
+{{ text | sha256 }}                   # Generate SHA256 hash
+{{ number | ordinal }}                # Convert to ordinal (1st, 2nd, 3rd)
+{{ 100 | lorem_words }}               # Generate lorem ipsum words
+{{ date | format_date: "%Y-%m-%d" }}  # Advanced date formatting
+</code></pre>
+<p>For complete documentation of custom filters, see the <a href="./custom-filters.html">Custom Filters Reference</a>.</p>
+<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
+<ol>
+<li><strong>No includes</strong>: Cannot include other template files</li>
+<li><strong>No custom tags</strong>: Only standard Liquid tags are supported</li>
+<li><strong>Performance</strong>: Very large loops may impact performance</li>
+</ol>
+<h2 id="further-reading"><a class="header" href="#further-reading">Further Reading</a></h2>
+<ul>
+<li><a href="https://shopify.github.io/liquid/">Official Liquid Documentation</a></li>
+<li><a href="https://liquidjs.com/playground.html">Liquid Playground</a> - Test templates online</li>
+<li><a href="https://github.com/Shopify/liquid/wiki/Liquid-for-Designers">Liquid Cheat Sheet</a></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="custom-filters-reference"><a class="header" href="#custom-filters-reference">Custom Filters Reference</a></h1>
+<p>SwissArmyHammer includes a comprehensive set of custom Liquid filters designed specifically for prompt engineering and content processing.</p>
+<h2 id="code-filters-1"><a class="header" href="#code-filters-1">Code Filters</a></h2>
+<h3 id="format_lang"><a class="header" href="#format_lang">format_lang</a></h3>
+<p>Formats code with language-specific syntax highlighting hints.</p>
+<pre><code class="language-liquid">{{ code | format_lang: "rust" }}
+{{ code | format_lang: language_var }}
+</code></pre>
+<p><strong>Arguments:</strong></p>
+<ul>
+<li><code>language</code> - Programming language identifier (e.g., “rust”, “python”, “javascript”)</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ "fn main() { println!(\"Hello\"); }" | format_lang: "rust" }}
+
+&lt;!-- Output --&gt;
+```rust
+fn main() { println!("Hello"); }
+</code></pre>
+<pre><code>
+### extract_functions
+
+Extracts function signatures and definitions from code.
+
+```liquid
+{{ code | extract_functions }}
+{{ code | extract_functions: "detailed" }}
+</code></pre>
+<p><strong>Arguments:</strong></p>
+<ul>
+<li><code>mode</code> (optional) - “signatures” (default) or “detailed” for full function bodies</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ rust_code | extract_functions }}
+
+&lt;!-- Output --&gt;
+- fn main()
+- fn calculate(x: i32, y: i32) -&gt; i32
+- fn process_data(data: &amp;Vec&lt;String&gt;) -&gt; Result&lt;(), Error&gt;
+</code></pre>
+<h3 id="basename"><a class="header" href="#basename">basename</a></h3>
+<p>Extracts the filename from a file path.</p>
+<pre><code class="language-liquid">{{ path | basename }}
+</code></pre>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ "/usr/local/bin/swissarmyhammer" | basename }}
+
+&lt;!-- Output --&gt;
+swissarmyhammer
+</code></pre>
+<h3 id="dirname"><a class="header" href="#dirname">dirname</a></h3>
+<p>Extracts the directory path from a file path.</p>
+<pre><code class="language-liquid">{{ path | dirname }}
+</code></pre>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ "/usr/local/bin/swissarmyhammer" | dirname }}
+
+&lt;!-- Output --&gt;
+/usr/local/bin
+</code></pre>
+<h3 id="count_lines"><a class="header" href="#count_lines">count_lines</a></h3>
+<p>Counts the number of lines in text.</p>
+<pre><code class="language-liquid">{{ text | count_lines }}
+</code></pre>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ "line 1\nline 2\nline 3" | count_lines }}
+
+&lt;!-- Output --&gt;
+3
+</code></pre>
+<h3 id="dedent"><a class="header" href="#dedent">dedent</a></h3>
+<p>Removes common leading whitespace from all lines.</p>
+<pre><code class="language-liquid">{{ code | dedent }}
+</code></pre>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ "    fn main() {\n        println!(\"Hello\");\n    }" | dedent }}
+
+&lt;!-- Output --&gt;
+fn main() {
+    println!("Hello");
+}
+</code></pre>
+<h2 id="text-processing-filters-1"><a class="header" href="#text-processing-filters-1">Text Processing Filters</a></h2>
+<h3 id="extract_urls"><a class="header" href="#extract_urls">extract_urls</a></h3>
+<p>Extracts all URLs from text.</p>
+<pre><code class="language-liquid">{{ text | extract_urls }}
+{{ text | extract_urls: "list" }}
+</code></pre>
+<p><strong>Arguments:</strong></p>
+<ul>
+<li><code>format</code> (optional) - “array” (default) or “list” for bullet point list</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ "Visit https://example.com and https://github.com" | extract_urls }}
+
+&lt;!-- Output --&gt;
+["https://example.com", "https://github.com"]
+
+&lt;!-- With list format --&gt;
+{{ "Visit https://example.com and https://github.com" | extract_urls: "list" }}
+
+&lt;!-- Output --&gt;
+- https://example.com
+- https://github.com
+</code></pre>
+<h3 id="slugify"><a class="header" href="#slugify">slugify</a></h3>
+<p>Converts text to a URL-friendly slug.</p>
+<pre><code class="language-liquid">{{ title | slugify }}
+</code></pre>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ "Advanced Code Review Helper!" | slugify }}
+
+&lt;!-- Output --&gt;
+advanced-code-review-helper
+</code></pre>
+<h3 id="word_wrap"><a class="header" href="#word_wrap">word_wrap</a></h3>
+<p>Wraps text at specified column width.</p>
+<pre><code class="language-liquid">{{ text | word_wrap: 80 }}
+{{ text | word_wrap: width_var }}
+</code></pre>
+<p><strong>Arguments:</strong></p>
+<ul>
+<li><code>width</code> - Column width for wrapping (default: 80)</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ "This is a very long line that should be wrapped at a specific column width to ensure readability." | word_wrap: 30 }}
+
+&lt;!-- Output --&gt;
+This is a very long line that
+should be wrapped at a specific
+column width to ensure
+readability.
+</code></pre>
+<h3 id="indent"><a class="header" href="#indent">indent</a></h3>
+<p>Indents all lines by specified number of spaces.</p>
+<pre><code class="language-liquid">{{ text | indent: 4 }}
+{{ text | indent: spaces_var }}
+</code></pre>
+<p><strong>Arguments:</strong></p>
+<ul>
+<li><code>spaces</code> - Number of spaces to indent (default: 2)</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ "line 1\nline 2" | indent: 4 }}
+
+&lt;!-- Output --&gt;
+    line 1
+    line 2
+</code></pre>
+<h3 id="bullet_list"><a class="header" href="#bullet_list">bullet_list</a></h3>
+<p>Converts an array to a bullet point list.</p>
+<pre><code class="language-liquid">{{ array | bullet_list }}
+{{ array | bullet_list: "*" }}
+</code></pre>
+<p><strong>Arguments:</strong></p>
+<ul>
+<li><code>bullet</code> (optional) - Bullet character (default: “-”)</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ ["Item 1", "Item 2", "Item 3"] | bullet_list }}
+
+&lt;!-- Output --&gt;
+- Item 1
+- Item 2
+- Item 3
+
+&lt;!-- With custom bullet --&gt;
+{{ ["Item 1", "Item 2"] | bullet_list: "*" }}
+
+&lt;!-- Output --&gt;
+* Item 1
+* Item 2
+</code></pre>
+<h3 id="highlight"><a class="header" href="#highlight">highlight</a></h3>
+<p>Highlights specific terms in text.</p>
+<pre><code class="language-liquid">{{ text | highlight: "keyword" }}
+{{ text | highlight: term_var }}
+</code></pre>
+<p><strong>Arguments:</strong></p>
+<ul>
+<li><code>term</code> - Term to highlight</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ "This is important text with keywords" | highlight: "important" }}
+
+&lt;!-- Output --&gt;
+This is **important** text with keywords
+</code></pre>
+<h2 id="data-transformation-filters-1"><a class="header" href="#data-transformation-filters-1">Data Transformation Filters</a></h2>
+<h3 id="from_json"><a class="header" href="#from_json">from_json</a></h3>
+<p>Parses JSON string into object/array.</p>
+<pre><code class="language-liquid">{{ json_string | from_json }}
+</code></pre>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{% assign data = '{"name": "John", "age": 30}' | from_json %}
+Name: {{ data.name }}
+Age: {{ data.age }}
+
+&lt;!-- Output --&gt;
+Name: John
+Age: 30
+</code></pre>
+<h3 id="to_json"><a class="header" href="#to_json">to_json</a></h3>
+<p>Converts object/array to JSON string.</p>
+<pre><code class="language-liquid">{{ data | to_json }}
+{{ data | to_json: "pretty" }}
+</code></pre>
+<p><strong>Arguments:</strong></p>
+<ul>
+<li><code>format</code> (optional) - “compact” (default) or “pretty” for formatted output</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{% assign user = { "name": "John", "age": 30 } %}
+{{ user | to_json: "pretty" }}
+
+&lt;!-- Output --&gt;
+{
+  "name": "John",
+  "age": 30
+}
+</code></pre>
+<h3 id="from_csv"><a class="header" href="#from_csv">from_csv</a></h3>
+<p>Parses CSV string into array of objects.</p>
+<pre><code class="language-liquid">{{ csv_string | from_csv }}
+{{ csv_string | from_csv: ";" }}
+</code></pre>
+<p><strong>Arguments:</strong></p>
+<ul>
+<li><code>delimiter</code> (optional) - Field delimiter (default: “,”)</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{% assign data = "name,age\nJohn,30\nJane,25" | from_csv %}
+{% for row in data %}
+- {{ row.name }} is {{ row.age }} years old
+{% endfor %}
+
+&lt;!-- Output --&gt;
+- John is 30 years old
+- Jane is 25 years old
+</code></pre>
+<h3 id="to_csv"><a class="header" href="#to_csv">to_csv</a></h3>
+<p>Converts array of objects to CSV string.</p>
+<pre><code class="language-liquid">{{ array | to_csv }}
+{{ array | to_csv: ";" }}
+</code></pre>
+<p><strong>Arguments:</strong></p>
+<ul>
+<li><code>delimiter</code> (optional) - Field delimiter (default: “,”)</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{% assign users = [{"name": "John", "age": 30}, {"name": "Jane", "age": 25}] %}
+{{ users | to_csv }}
+
+&lt;!-- Output --&gt;
+name,age
+John,30
+Jane,25
+</code></pre>
+<h3 id="from_yaml"><a class="header" href="#from_yaml">from_yaml</a></h3>
+<p>Parses YAML string into object/array.</p>
+<pre><code class="language-liquid">{{ yaml_string | from_yaml }}
+</code></pre>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{% assign config = "database:\n  host: localhost\n  port: 5432" | from_yaml %}
+Host: {{ config.database.host }}
+Port: {{ config.database.port }}
+
+&lt;!-- Output --&gt;
+Host: localhost
+Port: 5432
+</code></pre>
+<h3 id="to_yaml"><a class="header" href="#to_yaml">to_yaml</a></h3>
+<p>Converts object/array to YAML string.</p>
+<pre><code class="language-liquid">{{ data | to_yaml }}
+</code></pre>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{% assign config = {"database": {"host": "localhost", "port": 5432}} %}
+{{ config | to_yaml }}
+
+&lt;!-- Output --&gt;
+database:
+  host: localhost
+  port: 5432
+</code></pre>
+<h2 id="hash-filters"><a class="header" href="#hash-filters">Hash Filters</a></h2>
+<h3 id="md5"><a class="header" href="#md5">md5</a></h3>
+<p>Generates MD5 hash of input text.</p>
+<pre><code class="language-liquid">{{ text | md5 }}
+</code></pre>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ "hello world" | md5 }}
+
+&lt;!-- Output --&gt;
+5d41402abc4b2a76b9719d911017c592
+</code></pre>
+<h3 id="sha1"><a class="header" href="#sha1">sha1</a></h3>
+<p>Generates SHA1 hash of input text.</p>
+<pre><code class="language-liquid">{{ text | sha1 }}
+</code></pre>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ "hello world" | sha1 }}
+
+&lt;!-- Output --&gt;
+2aae6c35c94fcfb415dbe95f408b9ce91ee846ed
+</code></pre>
+<h3 id="sha256"><a class="header" href="#sha256">sha256</a></h3>
+<p>Generates SHA256 hash of input text.</p>
+<pre><code class="language-liquid">{{ text | sha256 }}
+</code></pre>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ "hello world" | sha256 }}
+
+&lt;!-- Output --&gt;
+b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
+</code></pre>
+<h2 id="utility-filters-1"><a class="header" href="#utility-filters-1">Utility Filters</a></h2>
+<h3 id="ordinal"><a class="header" href="#ordinal">ordinal</a></h3>
+<p>Converts number to ordinal format (1st, 2nd, 3rd, etc.).</p>
+<pre><code class="language-liquid">{{ number | ordinal }}
+</code></pre>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ 1 | ordinal }} item
+{{ 22 | ordinal }} place
+{{ 103 | ordinal }} attempt
+
+&lt;!-- Output --&gt;
+1st item
+22nd place
+103rd attempt
+</code></pre>
+<h3 id="lorem_words"><a class="header" href="#lorem_words">lorem_words</a></h3>
+<p>Generates lorem ipsum text with specified number of words.</p>
+<pre><code class="language-liquid">{{ count | lorem_words }}
+</code></pre>
+<p><strong>Arguments:</strong></p>
+<ul>
+<li><code>count</code> - Number of words to generate</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ 10 | lorem_words }}
+
+&lt;!-- Output --&gt;
+Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod
+</code></pre>
+<h3 id="format_date"><a class="header" href="#format_date">format_date</a></h3>
+<p>Advanced date formatting with custom format strings.</p>
+<pre><code class="language-liquid">{{ date | format_date: "%Y-%m-%d %H:%M:%S" }}
+{{ "now" | format_date: "%B %d, %Y" }}
+</code></pre>
+<p><strong>Arguments:</strong></p>
+<ul>
+<li><code>format</code> - Date format string (uses strftime format)</li>
+</ul>
+<p><strong>Common format codes:</strong></p>
+<ul>
+<li><code>%Y</code> - 4-digit year (2024)</li>
+<li><code>%m</code> - Month as number (01-12)</li>
+<li><code>%d</code> - Day of month (01-31)</li>
+<li><code>%H</code> - Hour (00-23)</li>
+<li><code>%M</code> - Minute (00-59)</li>
+<li><code>%S</code> - Second (00-59)</li>
+<li><code>%B</code> - Full month name (January)</li>
+<li><code>%b</code> - Abbreviated month (Jan)</li>
+<li><code>%A</code> - Full weekday name (Monday)</li>
+<li><code>%a</code> - Abbreviated weekday (Mon)</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-liquid">&lt;!-- Input --&gt;
+{{ "2024-01-15T10:30:00Z" | format_date: "%B %d, %Y at %I:%M %p" }}
+{{ "now" | format_date: "%A, %Y-%m-%d" }}
+
+&lt;!-- Output --&gt;
+January 15, 2024 at 10:30 AM
+Monday, 2024-01-15
+</code></pre>
+<h2 id="filter-chaining"><a class="header" href="#filter-chaining">Filter Chaining</a></h2>
+<p>Filters can be chained together for complex transformations:</p>
+<pre><code class="language-liquid">{{ code | dedent | format_lang: "python" | highlight: "def" }}
+
+{{ user_input | strip | truncate: 100 | capitalize }}
+
+{{ data | to_json | indent: 2 }}
+
+{{ filename | basename | slugify | append: ".md" }}
+</code></pre>
+<h2 id="error-handling-1"><a class="header" href="#error-handling-1">Error Handling</a></h2>
+<p>Custom filters handle errors gracefully:</p>
+<ul>
+<li><strong>Invalid input</strong>: Returns original value or empty string</li>
+<li><strong>Missing arguments</strong>: Uses sensible defaults</li>
+<li><strong>Type mismatches</strong>: Attempts conversion or returns original value</li>
+</ul>
+<h2 id="performance-notes"><a class="header" href="#performance-notes">Performance Notes</a></h2>
+<ul>
+<li><strong>Hash filters</strong> (md5, sha1, sha256) are computationally expensive for large inputs</li>
+<li><strong>Data transformation filters</strong> (JSON, CSV, YAML) may consume memory for large datasets</li>
+<li><strong>Text processing filters</strong> are optimized for typical prompt content sizes</li>
+<li><strong>Code filters</strong> use efficient parsing algorithms</li>
+</ul>
+<h2 id="integration-examples"><a class="header" href="#integration-examples">Integration Examples</a></h2>
+<h3 id="code-review-prompt"><a class="header" href="#code-review-prompt">Code Review Prompt</a></h3>
+<pre><code class="language-liquid"># Code Review: {{ filename | basename }}
+
+## File Information
+- **Path**: {{ filepath }}
+- **Lines**: {{ code | count_lines }}
+- **Language**: {{ language | capitalize }}
+
+## Code to Review
+{{ code | dedent | format_lang: language }}
+
+## Functions Found
+{{ code | extract_functions | bullet_list }}
+
+## Review Checklist
+{% assign hash = code | sha256 | truncate: 8 %}
+- [ ] Security review (ID: {{ hash }})
+- [ ] Performance analysis
+- [ ] Style compliance
+</code></pre>
+<h3 id="data-analysis-prompt"><a class="header" href="#data-analysis-prompt">Data Analysis Prompt</a></h3>
+<pre><code class="language-liquid"># Data Analysis Report
+
+## Dataset Summary
+{% assign data = csv_data | from_csv %}
+- **Records**: {{ data | size }}
+- **Generated**: {{ "now" | format_date: "%Y-%m-%d %H:%M" }}
+
+## Sample Data
+{% for row in data limit:3 %}
+{{ forloop.index | ordinal }} record: {{ row | to_json }}
+{% endfor %}
+
+## Field Analysis
+{% assign fields = data[0] | keys %}
+Available fields: {{ fields | bullet_list }}
+</code></pre>
+<h3 id="documentation-generator"><a class="header" href="#documentation-generator">Documentation Generator</a></h3>
+<pre><code class="language-liquid"># API Documentation
+
+## Endpoints
+{% for endpoint in api_endpoints %}
+### {{ endpoint.method | upcase }} {{ endpoint.path }}
+
+{{ endpoint.description | word_wrap: 80 }}
+
+{% if endpoint.parameters %}
+**Parameters:**
+{{ endpoint.parameters | to_yaml | indent: 2 }}
+{% endif %}
+
+**Example:**
+```{{ endpoint.language | default: "bash" }}
+{{ endpoint.example | dedent }}
+</code></pre>
+<p>{% endfor %}</p>
+<hr />
+<p><em>Generated on {{ “now” | format_date: “%B %d, %Y” }}</em></p>
+<pre><code>
+## See Also
+
+- [Template Variables](./template-variables.md) - Basic Liquid syntax
+- [Advanced Prompts](./advanced-prompts.md) - Using filters in complex templates
+- [Testing Guide](./testing-guide.md) - Testing templates with custom filters</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="prompt-organization"><a class="header" href="#prompt-organization">Prompt Organization</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="using-with-claude-code"><a class="header" href="#using-with-claude-code">Using with Claude Code</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="command-line-interface"><a class="header" href="#command-line-interface">Command Line Interface</a></h1>
+<p>SwissArmyHammer provides a comprehensive command-line interface for managing prompts, running the MCP server, and integrating with your development workflow.</p>
+<h2 id="installation-1"><a class="header" href="#installation-1">Installation</a></h2>
+<pre><code class="language-bash"># Install from Git repository (requires Rust)
+cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
+
+# Ensure ~/.cargo/bin is in your PATH
+export PATH="$HOME/.cargo/bin:$PATH"
+</code></pre>
+<h2 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h2>
+<pre><code class="language-bash">swissarmyhammer [COMMAND] [OPTIONS]
+</code></pre>
+<h2 id="global-options"><a class="header" href="#global-options">Global Options</a></h2>
+<ul>
+<li><code>--help, -h</code> - Display help information</li>
+<li><code>--version, -V</code> - Display version information</li>
+</ul>
+<h2 id="commands-overview"><a class="header" href="#commands-overview">Commands Overview</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
+<tr><td><a href="./cli-serve.html"><code>serve</code></a></td><td>Run as MCP server for Claude Code integration</td></tr>
+<tr><td><a href="./cli-search.html"><code>search</code></a></td><td>Search and discover prompts with powerful filtering</td></tr>
+<tr><td><a href="./cli-test.html"><code>test</code></a></td><td>Interactively test prompts with arguments</td></tr>
+<tr><td><a href="./cli-export.html"><code>export</code></a></td><td>Export prompts for sharing and backup</td></tr>
+<tr><td><a href="./cli-import.html"><code>import</code></a></td><td>Import prompts from various sources</td></tr>
+<tr><td><a href="./cli-doctor.html"><code>doctor</code></a></td><td>Diagnose configuration and setup issues</td></tr>
+<tr><td><a href="./cli-completion.html"><code>completion</code></a></td><td>Generate shell completion scripts</td></tr>
+</tbody></table>
+</div>
+<h2 id="quick-examples"><a class="header" href="#quick-examples">Quick Examples</a></h2>
+<h3 id="start-mcp-server"><a class="header" href="#start-mcp-server">Start MCP Server</a></h3>
+<pre><code class="language-bash"># Run as MCP server (for Claude Code)
+swissarmyhammer serve
+</code></pre>
+<h3 id="search-for-prompts"><a class="header" href="#search-for-prompts">Search for Prompts</a></h3>
+<pre><code class="language-bash"># Search for code-related prompts
+swissarmyhammer search code
+
+# Search with regex in descriptions
+swissarmyhammer search --regex "test.*unit" --in description
+</code></pre>
+<h3 id="test-a-prompt"><a class="header" href="#test-a-prompt">Test a Prompt</a></h3>
+<pre><code class="language-bash"># Interactively test a prompt
+swissarmyhammer test code-review
+
+# Test with predefined arguments
+swissarmyhammer test code-review --arg code="fn main() { println!(\"Hello\"); }"
+</code></pre>
+<h3 id="export-and-import-prompts"><a class="header" href="#export-and-import-prompts">Export and Import Prompts</a></h3>
+<pre><code class="language-bash"># Export all prompts to a tar.gz file
+swissarmyhammer export --all --format tar.gz my-prompts.tar.gz
+
+# Import prompts from URL
+swissarmyhammer import https://example.com/prompts.tar.gz
+</code></pre>
+<h3 id="check-setup"><a class="header" href="#check-setup">Check Setup</a></h3>
+<pre><code class="language-bash"># Diagnose any configuration issues
+swissarmyhammer doctor
+</code></pre>
+<h3 id="generate-shell-completions"><a class="header" href="#generate-shell-completions">Generate Shell Completions</a></h3>
+<pre><code class="language-bash"># Generate Bash completions
+swissarmyhammer completion bash &gt; ~/.bash_completion.d/swissarmyhammer
+
+# Generate Zsh completions
+swissarmyhammer completion zsh &gt; ~/.zfunc/_swissarmyhammer
+</code></pre>
+<h2 id="exit-codes"><a class="header" href="#exit-codes">Exit Codes</a></h2>
+<ul>
+<li><code>0</code> - Success</li>
+<li><code>1</code> - General error</li>
+<li><code>2</code> - Command line usage error</li>
+<li><code>3</code> - Configuration error</li>
+<li><code>4</code> - Prompt not found</li>
+<li><code>5</code> - Template rendering error</li>
+</ul>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p>SwissArmyHammer looks for prompts in these directories (in order):</p>
+<ol>
+<li>Built-in prompts (embedded in the binary)</li>
+<li>User prompts: <code>~/.swissarmyhammer/prompts/</code></li>
+<li>Local prompts: <code>./prompts/</code> (current directory)</li>
+</ol>
+<p>For detailed command documentation, see the individual command pages linked in the table above.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="serve"><a class="header" href="#serve">serve</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="search---search-and-discover-prompts"><a class="header" href="#search---search-and-discover-prompts">search - Search and Discover Prompts</a></h1>
+<p>The <code>search</code> command provides powerful functionality to find prompts in your collection using various search strategies and filters.</p>
+<h2 id="synopsis"><a class="header" href="#synopsis">Synopsis</a></h2>
+<pre><code class="language-bash">swissarmyhammer search [OPTIONS] [QUERY]
+</code></pre>
+<h2 id="description"><a class="header" href="#description">Description</a></h2>
+<p>Search through your prompt collection using fuzzy matching, regular expressions, or exact text matching. The search can target specific fields and provides relevance-ranked results.</p>
+<h2 id="arguments"><a class="header" href="#arguments">Arguments</a></h2>
+<ul>
+<li><code>QUERY</code> - Search term or pattern (optional if using filters)</li>
+</ul>
+<h2 id="options"><a class="header" href="#options">Options</a></h2>
+<h3 id="search-strategy"><a class="header" href="#search-strategy">Search Strategy</a></h3>
+<ul>
+<li><code>--case-sensitive, -c</code> - Enable case-sensitive matching</li>
+<li><code>--regex, -r</code> - Use regular expressions instead of fuzzy matching</li>
+<li><code>--full, -f</code> - Show full prompt content in results</li>
+</ul>
+<h3 id="field-targeting"><a class="header" href="#field-targeting">Field Targeting</a></h3>
+<ul>
+<li><code>--in FIELD</code> - Search in specific field (title, description, content, all)
+<ul>
+<li><code>title</code> - Search only in prompt titles</li>
+<li><code>description</code> - Search only in prompt descriptions</li>
+<li><code>content</code> - Search only in prompt content/body</li>
+<li><code>all</code> - Search in all fields (default)</li>
+</ul>
+</li>
+</ul>
+<h3 id="filtering"><a class="header" href="#filtering">Filtering</a></h3>
+<ul>
+<li><code>--source SOURCE</code> - Filter by prompt source (builtin, user, local)</li>
+<li><code>--has-arg ARG</code> - Show prompts that have a specific argument</li>
+<li><code>--no-args</code> - Show prompts with no arguments</li>
+</ul>
+<h3 id="output-control"><a class="header" href="#output-control">Output Control</a></h3>
+<ul>
+<li><code>--limit, -l N</code> - Limit results to N prompts (default: 20)</li>
+<li><code>--json</code> - Output results in JSON format</li>
+</ul>
+<h2 id="examples-1"><a class="header" href="#examples-1">Examples</a></h2>
+<h3 id="basic-search"><a class="header" href="#basic-search">Basic Search</a></h3>
+<pre><code class="language-bash"># Find prompts containing "code"
+swissarmyhammer search code
+
+# Case-sensitive search
+swissarmyhammer search --case-sensitive "Code Review"
+</code></pre>
+<h3 id="field-specific-search"><a class="header" href="#field-specific-search">Field-Specific Search</a></h3>
+<pre><code class="language-bash"># Search only in titles
+swissarmyhammer search --in title "review"
+
+# Search only in descriptions
+swissarmyhammer search --in description "debugging"
+
+# Search in content/body
+swissarmyhammer search --in content "TODO"
+</code></pre>
+<h3 id="regular-expression-search"><a class="header" href="#regular-expression-search">Regular Expression Search</a></h3>
+<pre><code class="language-bash"># Find prompts with "test" followed by any word
+swissarmyhammer search --regex "test\s+\w+"
+
+# Find prompts starting with specific pattern
+swissarmyhammer search --regex "^(debug|fix|analyze)"
+</code></pre>
+<h3 id="advanced-filtering"><a class="header" href="#advanced-filtering">Advanced Filtering</a></h3>
+<pre><code class="language-bash"># Find built-in prompts only
+swissarmyhammer search --source builtin
+
+# Find prompts with "code" argument
+swissarmyhammer search --has-arg code
+
+# Find prompts without any arguments
+swissarmyhammer search --no-args
+
+# Combine filters
+swissarmyhammer search review --source user --has-arg language
+</code></pre>
+<h3 id="output-options"><a class="header" href="#output-options">Output Options</a></h3>
+<pre><code class="language-bash"># Show full content of matching prompts
+swissarmyhammer search code --full
+
+# Limit to 5 results
+swissarmyhammer search --limit 5 test
+
+# Get JSON output for scripting
+swissarmyhammer search --json "data analysis"
+</code></pre>
+<h2 id="output-format-2"><a class="header" href="#output-format-2">Output Format</a></h2>
+<h3 id="default-output"><a class="header" href="#default-output">Default Output</a></h3>
+<pre><code>Found 3 prompts matching "code":
+
+📝 code-review (builtin)
+   Review code for best practices and potential issues
+   Arguments: code, language (optional)
+
+🔧 debug-code (user)
+   Help debug programming issues and errors
+   Arguments: error, context (optional)
+
+📊 analyze-performance (local)
+   Analyze code performance and suggest optimizations
+   Arguments: code, language, metrics (optional)
+</code></pre>
+<h3 id="json-output"><a class="header" href="#json-output">JSON Output</a></h3>
+<pre><code class="language-json">{
+  "query": "code",
+  "results": [
+    {
+      "id": "code-review",
+      "title": "Code Review Helper",
+      "description": "Review code for best practices and potential issues",
+      "source": "builtin",
+      "path": "/builtin/review/code.md",
+      "arguments": [
+        {"name": "code", "required": true},
+        {"name": "language", "required": false, "default": "auto-detect"}
+      ],
+      "score": 0.95
+    }
+  ],
+  "total_found": 3
+}
+</code></pre>
+<h2 id="search-scoring"><a class="header" href="#search-scoring">Search Scoring</a></h2>
+<p>Results are ranked by relevance using these factors:</p>
+<ol>
+<li><strong>Exact matches</strong> score higher than partial matches</li>
+<li><strong>Title matches</strong> score higher than description or content matches</li>
+<li><strong>Multiple field matches</strong> increase the overall score</li>
+<li><strong>Argument name matches</strong> are considered for relevance</li>
+</ol>
+<h2 id="performance"><a class="header" href="#performance">Performance</a></h2>
+<ul>
+<li>Search is optimized with an in-memory index</li>
+<li>Fuzzy matching uses efficient algorithms</li>
+<li>Results are cached for repeated queries</li>
+<li>Large prompt collections are handled efficiently</li>
+</ul>
+<h2 id="integration-with-other-commands"><a class="header" href="#integration-with-other-commands">Integration with Other Commands</a></h2>
+<p>Search integrates well with other SwissArmyHammer commands:</p>
+<pre><code class="language-bash"># Find and test a prompt
+PROMPT=$(swissarmyhammer search --json code | jq -r '.results[0].id')
+swissarmyhammer test "$PROMPT"
+
+# Export search results
+swissarmyhammer search debug --limit 5 | \
+  grep -o '\w\+-\w\+' | \
+  xargs swissarmyhammer export
+</code></pre>
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="./cli-test.html"><code>test</code></a> - Test prompts found through search</li>
+<li><a href="./cli-export.html"><code>export</code></a> - Export specific prompts</li>
+<li><a href="./search-guide.html">Search Guide</a> - Advanced search strategies</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="test---interactive-prompt-testing"><a class="header" href="#test---interactive-prompt-testing">test - Interactive Prompt Testing</a></h1>
+<p>The <code>test</code> command allows you to test prompts interactively, providing argument values and seeing the rendered output before using them with AI models.</p>
+<h2 id="synopsis-1"><a class="header" href="#synopsis-1">Synopsis</a></h2>
+<pre><code class="language-bash">swissarmyhammer test [OPTIONS] &lt;PROMPT_ID&gt;
+</code></pre>
+<h2 id="description-1"><a class="header" href="#description-1">Description</a></h2>
+<p>Test prompts interactively by providing arguments and viewing the rendered output. This is essential for debugging template issues, validating arguments, and refining prompts before deployment.</p>
+<h2 id="arguments-1"><a class="header" href="#arguments-1">Arguments</a></h2>
+<ul>
+<li><code>PROMPT_ID</code> - The ID of the prompt to test (required)</li>
+</ul>
+<h2 id="options-1"><a class="header" href="#options-1">Options</a></h2>
+<h3 id="argument-specification"><a class="header" href="#argument-specification">Argument Specification</a></h3>
+<ul>
+<li><code>--arg KEY=VALUE</code> - Provide argument values directly (can be used multiple times)</li>
+</ul>
+<h3 id="output-control-1"><a class="header" href="#output-control-1">Output Control</a></h3>
+<ul>
+<li><code>--raw</code> - Show raw template without rendering</li>
+<li><code>--copy</code> - Copy rendered result to clipboard</li>
+<li><code>--save FILE</code> - Save rendered result to file</li>
+<li><code>--debug</code> - Show detailed debug information including variable resolution</li>
+</ul>
+<h2 id="interactive-mode"><a class="header" href="#interactive-mode">Interactive Mode</a></h2>
+<p>When no <code>--arg</code> options are provided, the command enters interactive mode:</p>
+<ol>
+<li><strong>Prompt Selection</strong>: If prompt ID is ambiguous, presents a fuzzy selector</li>
+<li><strong>Argument Collection</strong>: Prompts for each required and optional argument</li>
+<li><strong>Template Rendering</strong>: Shows the rendered output</li>
+<li><strong>Actions</strong>: Offers to copy to clipboard or save to file</li>
+</ol>
+<h2 id="examples-2"><a class="header" href="#examples-2">Examples</a></h2>
+<h3 id="interactive-testing"><a class="header" href="#interactive-testing">Interactive Testing</a></h3>
+<pre><code class="language-bash"># Test a prompt interactively
+swissarmyhammer test code-review
+
+# The command will prompt for arguments:
+# ? Enter value for 'code' (required): fn main() { println!("Hello"); }
+# ? Enter value for 'language' (optional, default: auto-detect): rust
+# 
+# [Rendered output shows here]
+# 
+# ? What would you like to do?
+#   &gt; View output
+#     Copy to clipboard
+#     Save to file
+#     Test with different arguments
+#     Exit
+</code></pre>
+<h3 id="non-interactive-testing"><a class="header" href="#non-interactive-testing">Non-Interactive Testing</a></h3>
+<pre><code class="language-bash"># Test with predefined arguments
+swissarmyhammer test code-review \
+  --arg code="fn main() { println!(\"Hello\"); }" \
+  --arg language="rust"
+
+# Test and copy to clipboard
+swissarmyhammer test debug-helper \
+  --arg error="compiler error" \
+  --copy
+
+# Test and save output
+swissarmyhammer test api-docs \
+  --arg code="$(cat src/api.rs)" \
+  --save generated-docs.md
+</code></pre>
+<h3 id="debug-mode"><a class="header" href="#debug-mode">Debug Mode</a></h3>
+<pre><code class="language-bash"># Show debug information
+swissarmyhammer test template-complex --debug
+
+# Output includes:
+# Variables resolved:
+#   user_input: "example text"
+#   timestamp: "2024-01-15T10:30:00Z"
+#   
+# Template processing:
+#   Line 5: Variable 'user_input' resolved to "example text"
+#   Line 12: Filter 'capitalize' applied
+#   Line 18: Conditional block evaluated to true
+#
+# Final output:
+# [rendered template]
+</code></pre>
+<h3 id="raw-template-view"><a class="header" href="#raw-template-view">Raw Template View</a></h3>
+<pre><code class="language-bash"># View the raw template without rendering
+swissarmyhammer test email-template --raw
+
+# Shows:
+# ---
+# title: Email Template
+# arguments:
+#   - name: recipient
+#     required: true
+# ---
+# 
+# Dear {{recipient | capitalize}},
+# 
+# {% if urgent %}
+# **URGENT:** 
+# {% endif %}
+# {{message}}
+</code></pre>
+<h2 id="output-format-3"><a class="header" href="#output-format-3">Output Format</a></h2>
+<h3 id="default-output-1"><a class="header" href="#default-output-1">Default Output</a></h3>
+<pre><code>Testing prompt: code-review
+
+Arguments:
+  code: "fn main() { println!(\"Hello\"); }"
+  language: "rust" (default: auto-detect)
+
+Rendered Output:
+┌─────────────────────────────────────────────────────────────┐
+│ # Code Review                                               │
+│                                                             │
+│ Please review the following rust code:                     │
+│                                                             │
+│ ```rust                                                     │
+│ fn main() { println!("Hello"); }                           │
+│ ```                                                         │
+│                                                             │
+│ Focus on:                                                   │
+│ - Code quality and readability                             │
+│ - Potential bugs or security issues                        │
+│ - Performance considerations                                │
+│ - Best practices adherence                                  │
+└─────────────────────────────────────────────────────────────┘
+
+✓ Template rendered successfully (247 characters)
+</code></pre>
+<h3 id="debug-output"><a class="header" href="#debug-output">Debug Output</a></h3>
+<pre><code>Testing prompt: code-review (debug mode)
+
+Prompt loaded from: ~/.swissarmyhammer/prompts/review/code.md
+Arguments defined: 2 (1 required, 1 optional)
+
+Argument Resolution:
+✓ code: "fn main() { println!(\"Hello\"); }" [user provided]
+✓ language: "rust" [user provided, overrides default "auto-detect"]
+
+Template Processing:
+→ Line 8: Variable 'language' resolved and capitalized
+→ Line 12-14: Code block with 'code' variable substitution
+→ Line 16-20: Static bullet list rendered
+
+Filters Applied:
+- capitalize: "rust" → "Rust"
+
+Rendered Output:
+[... same as above ...]
+
+Performance:
+- Template parsing: 2ms
+- Variable resolution: 1ms
+- Rendering: 3ms
+- Total: 6ms
+</code></pre>
+<h2 id="error-handling-2"><a class="header" href="#error-handling-2">Error Handling</a></h2>
+<p>The test command provides helpful error messages for common issues:</p>
+<h3 id="missing-arguments"><a class="header" href="#missing-arguments">Missing Arguments</a></h3>
+<pre><code class="language-bash">$ swissarmyhammer test code-review
+Error: Missing required argument 'code'
+
+Available arguments:
+  code (required) - The code to review
+  language (optional) - Programming language (default: auto-detect)
+
+Use --arg KEY=VALUE to provide arguments, or run without --arg for interactive mode.
+</code></pre>
+<h3 id="template-errors"><a class="header" href="#template-errors">Template Errors</a></h3>
+<pre><code class="language-bash">$ swissarmyhammer test broken-template --arg data="test"
+Error: Template rendering failed at line 15
+
+  13 | {% for item in items %}
+  14 |   - {{item.name}}
+&gt; 15 |   - {{item.invalid_field | unknown_filter}}
+     |                           ^^^^^^^^^^^^^^
+  16 | {% endfor %}
+
+Unknown filter: unknown_filter
+Available filters: capitalize, lower, upper, truncate, ...
+
+Fix the template and try again.
+</code></pre>
+<h2 id="integration-with-development-workflow"><a class="header" href="#integration-with-development-workflow">Integration with Development Workflow</a></h2>
+<h3 id="testing-before-deployment"><a class="header" href="#testing-before-deployment">Testing Before Deployment</a></h3>
+<pre><code class="language-bash"># Test a prompt before adding to Claude Code
+swissarmyhammer test new-prompt --debug
+
+# Validate all prompts in a directory
+for prompt in $(ls prompts/*.md); do
+  swissarmyhammer test "${prompt%.md}" --arg placeholder="test"
+done
+</code></pre>
+<h3 id="clipboard-integration"><a class="header" href="#clipboard-integration">Clipboard Integration</a></h3>
+<pre><code class="language-bash"># Test and copy for immediate use
+swissarmyhammer test quick-note \
+  --arg content="Meeting notes" \
+  --copy
+
+# Now paste into your editor or Claude Code
+</code></pre>
+<h3 id="script-integration"><a class="header" href="#script-integration">Script Integration</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# test-and-deploy.sh
+
+PROMPT_ID="$1"
+if swissarmyhammer test "$PROMPT_ID" --arg test="validation"; then
+  echo "✓ Prompt test passed, deploying..."
+  swissarmyhammer export "$PROMPT_ID" --format directory deployment/
+else
+  echo "✗ Prompt test failed, fix issues before deploying"
+  exit 1
+fi
+</code></pre>
+<h2 id="see-also-1"><a class="header" href="#see-also-1">See Also</a></h2>
+<ul>
+<li><a href="./cli-search.html"><code>search</code></a> - Find prompts to test</li>
+<li><a href="./template-variables.html">Template Variables</a> - Template syntax reference</li>
+<li><a href="./testing-guide.html">Testing Guide</a> - Advanced testing strategies</li>
+<li><a href="./custom-filters.html">Custom Filters</a> - Available template filters</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="export---export-prompts-for-sharing"><a class="header" href="#export---export-prompts-for-sharing">export - Export Prompts for Sharing</a></h1>
+<p>The <code>export</code> command allows you to package and share prompts in various formats for backup, distribution, or collaboration.</p>
+<h2 id="synopsis-2"><a class="header" href="#synopsis-2">Synopsis</a></h2>
+<pre><code class="language-bash">swissarmyhammer export [OPTIONS] [PROMPTS...] &lt;OUTPUT&gt;
+</code></pre>
+<h2 id="description-2"><a class="header" href="#description-2">Description</a></h2>
+<p>Export prompts to archives, directories, or other formats for sharing, backup, or deployment. Supports exporting individual prompts, categories, or entire collections.</p>
+<h2 id="arguments-2"><a class="header" href="#arguments-2">Arguments</a></h2>
+<ul>
+<li><code>PROMPTS...</code> - Specific prompt IDs to export (optional if using <code>--all</code> or <code>--category</code>)</li>
+<li><code>OUTPUT</code> - Output path (file for archives, directory for directory format)</li>
+</ul>
+<h2 id="options-2"><a class="header" href="#options-2">Options</a></h2>
+<h3 id="selection"><a class="header" href="#selection">Selection</a></h3>
+<ul>
+<li><code>--all, -a</code> - Export all prompts</li>
+<li><code>--category, -c CATEGORY</code> - Export prompts from specific category</li>
+<li><code>--source SOURCE</code> - Export prompts from specific source (builtin, user, local)</li>
+</ul>
+<h3 id="format"><a class="header" href="#format">Format</a></h3>
+<ul>
+<li><code>--format, -f FORMAT</code> - Output format (tar.gz, zip, directory)
+<ul>
+<li><code>tar.gz</code> - Compressed tar archive (default)</li>
+<li><code>zip</code> - ZIP archive</li>
+<li><code>directory</code> - Plain directory structure</li>
+</ul>
+</li>
+</ul>
+<h3 id="content-control"><a class="header" href="#content-control">Content Control</a></h3>
+<ul>
+<li><code>--include-metadata</code> - Include metadata files (manifest, checksums)</li>
+<li><code>--no-validation</code> - Skip prompt validation before export</li>
+<li><code>--exclude-builtin</code> - Exclude built-in prompts from export</li>
+</ul>
+<h3 id="output-control-2"><a class="header" href="#output-control-2">Output Control</a></h3>
+<ul>
+<li><code>--dry-run</code> - Show what would be exported without creating files</li>
+<li><code>--quiet, -q</code> - Suppress progress output</li>
+<li><code>--verbose, -v</code> - Show detailed export progress</li>
+</ul>
+<h2 id="examples-3"><a class="header" href="#examples-3">Examples</a></h2>
+<h3 id="basic-export"><a class="header" href="#basic-export">Basic Export</a></h3>
+<pre><code class="language-bash"># Export specific prompts to tar.gz
+swissarmyhammer export code-review debug-helper exported-prompts.tar.gz
+
+# Export all prompts
+swissarmyhammer export --all my-prompts.tar.gz
+
+# Export to directory
+swissarmyhammer export --all --format directory ./prompt-backup/
+</code></pre>
+<h3 id="category-and-source-export"><a class="header" href="#category-and-source-export">Category and Source Export</a></h3>
+<pre><code class="language-bash"># Export all review-related prompts
+swissarmyhammer export --category review review-prompts.zip
+
+# Export only user-created prompts
+swissarmyhammer export --source user --format tar.gz user-prompts.tar.gz
+
+# Export local project prompts
+swissarmyhammer export --source local project-prompts.tar.gz
+</code></pre>
+<h3 id="advanced-options"><a class="header" href="#advanced-options">Advanced Options</a></h3>
+<pre><code class="language-bash"># Dry run to see what would be exported
+swissarmyhammer export --all --dry-run backup.tar.gz
+
+# Export with metadata and validation
+swissarmyhammer export --all --include-metadata --verbose complete-backup.tar.gz
+
+# Export excluding built-ins
+swissarmyhammer export --all --exclude-builtin custom-prompts.tar.gz
+</code></pre>
+<h2 id="export-formats"><a class="header" href="#export-formats">Export Formats</a></h2>
+<h3 id="targz-default"><a class="header" href="#targz-default">tar.gz (Default)</a></h3>
+<ul>
+<li><strong>Benefits</strong>: Widely supported, good compression, preserves permissions</li>
+<li><strong>Use case</strong>: Sharing collections, backup, CI/CD pipelines</li>
+<li><strong>File structure</strong>: Flat or hierarchical based on source organization</li>
+</ul>
+<h3 id="zip"><a class="header" href="#zip">zip</a></h3>
+<ul>
+<li><strong>Benefits</strong>: Native support on Windows, good tool ecosystem</li>
+<li><strong>Use case</strong>: Sharing with Windows users, web distribution</li>
+<li><strong>File structure</strong>: Same as tar.gz but in ZIP format</li>
+</ul>
+<h3 id="directory"><a class="header" href="#directory">directory</a></h3>
+<ul>
+<li><strong>Benefits</strong>: Easy to browse, no extraction needed, version control friendly</li>
+<li><strong>Use case</strong>: Local backup, development, manual inspection</li>
+<li><strong>File structure</strong>: Mirrors the original prompt directory organization</li>
+</ul>
+<h2 id="output-structure"><a class="header" href="#output-structure">Output Structure</a></h2>
+<h3 id="archive-formats-targz-zip"><a class="header" href="#archive-formats-targz-zip">Archive Formats (tar.gz, zip)</a></h3>
+<pre><code>exported-prompts.tar.gz/
+├── manifest.json                 # Export metadata
+├── checksums.sha256             # File integrity checks
+├── prompts/
+│   ├── review/
+│   │   ├── code.md
+│   │   └── security.md
+│   ├── debug/
+│   │   └── error.md
+│   └── docs/
+│       └── api.md
+└── README.md                    # Export information
+</code></pre>
+<h3 id="directory-format"><a class="header" href="#directory-format">Directory Format</a></h3>
+<pre><code>prompt-backup/
+├── .swissarmyhammer/
+│   ├── manifest.json           # Export metadata
+│   └── checksums.sha256        # File integrity
+├── prompts/
+│   ├── review/
+│   │   ├── code.md
+│   │   └── security.md
+│   └── debug/
+│       └── error.md
+└── README.md                   # Export information
+</code></pre>
+<h2 id="metadata-files"><a class="header" href="#metadata-files">Metadata Files</a></h2>
+<h3 id="manifestjson"><a class="header" href="#manifestjson">manifest.json</a></h3>
+<pre><code class="language-json">{
+  "exported_at": "2024-01-15T10:30:00Z",
+  "swissarmyhammer_version": "0.1.0",
+  "export_options": {
+    "format": "tar.gz",
+    "include_builtin": false,
+    "sources": ["user", "local"]
+  },
+  "prompts": [
+    {
+      "id": "code-review",
+      "title": "Code Review Helper",
+      "source": "user",
+      "path": "prompts/review/code.md",
+      "checksum": "sha256:abc123...",
+      "arguments": ["code", "language"]
+    }
+  ],
+  "statistics": {
+    "total_prompts": 15,
+    "total_size": "45.2KB",
+    "categories": ["review", "debug", "docs"]
+  }
+}
+</code></pre>
+<h3 id="checksumssha256"><a class="header" href="#checksumssha256">checksums.sha256</a></h3>
+<pre><code>abc123... prompts/review/code.md
+def456... prompts/debug/error.md
+ghi789... prompts/docs/api.md
+</code></pre>
+<h2 id="export-validation"><a class="header" href="#export-validation">Export Validation</a></h2>
+<p>Before export, prompts are validated for:</p>
+<ul>
+<li><strong>Syntax</strong>: Valid YAML front matter and Markdown structure</li>
+<li><strong>Templates</strong>: Liquid template syntax correctness</li>
+<li><strong>Arguments</strong>: Argument definitions match template usage</li>
+<li><strong>References</strong>: No broken internal references or includes</li>
+</ul>
+<p>Skip validation with <code>--no-validation</code> for faster exports or when dealing with known issues.</p>
+<h2 id="performance-and-size"><a class="header" href="#performance-and-size">Performance and Size</a></h2>
+<h3 id="compression-ratios"><a class="header" href="#compression-ratios">Compression Ratios</a></h3>
+<ul>
+<li><strong>tar.gz</strong>: 70-80% size reduction for typical prompt collections</li>
+<li><strong>zip</strong>: 65-75% size reduction, faster compression</li>
+<li><strong>directory</strong>: No compression, fastest export</li>
+</ul>
+<h3 id="performance-tips"><a class="header" href="#performance-tips">Performance Tips</a></h3>
+<pre><code class="language-bash"># For large collections, use parallel processing
+export RAYON_NUM_THREADS=4
+swissarmyhammer export --all large-collection.tar.gz
+
+# For frequent exports, skip validation
+swissarmyhammer export --all --no-validation quick-backup.tar.gz
+</code></pre>
+<h2 id="integration-examples-1"><a class="header" href="#integration-examples-1">Integration Examples</a></h2>
+<h3 id="backup-script"><a class="header" href="#backup-script">Backup Script</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# backup-prompts.sh
+
+DATE=$(date +%Y%m%d)
+BACKUP_DIR="$HOME/prompt-backups"
+mkdir -p "$BACKUP_DIR"
+
+echo "Creating daily prompt backup..."
+swissarmyhammer export --all \
+  --include-metadata \
+  --format tar.gz \
+  "$BACKUP_DIR/prompts-$DATE.tar.gz"
+
+# Keep only last 30 days
+find "$BACKUP_DIR" -name "prompts-*.tar.gz" -mtime +30 -delete
+
+echo "Backup complete: $BACKUP_DIR/prompts-$DATE.tar.gz"
+</code></pre>
+<h3 id="cicd-pipeline"><a class="header" href="#cicd-pipeline">CI/CD Pipeline</a></h3>
+<pre><code class="language-yaml"># .github/workflows/export-prompts.yml
+name: Export Prompts
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install SwissArmyHammer
+        run: cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
+      - name: Export prompts
+        run: |
+          swissarmyhammer export --all \
+            --exclude-builtin \
+            --format tar.gz \
+            prompts-${GITHUB_REF#refs/tags/}.tar.gz
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./prompts-*.tar.gz
+          asset_name: prompts-${{ github.ref }}.tar.gz
+          asset_content_type: application/gzip
+</code></pre>
+<h3 id="team-sharing"><a class="header" href="#team-sharing">Team Sharing</a></h3>
+<pre><code class="language-bash"># Export team prompts for sharing
+swissarmyhammer export \
+  --category "team" \
+  --include-metadata \
+  team-prompts-$(date +%Y%m%d).tar.gz
+
+# Upload to shared location
+scp team-prompts-*.tar.gz team@shared-server:/shared/prompts/
+</code></pre>
+<h2 id="see-also-2"><a class="header" href="#see-also-2">See Also</a></h2>
+<ul>
+<li><a href="./cli-import.html"><code>import</code></a> - Import exported prompts</li>
+<li><a href="./sharing-guide.html">Sharing Guide</a> - Collaboration workflows</li>
+<li><a href="./cli-search.html"><code>search</code></a> - Find prompts to export</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="import---import-prompts-from-various-sources"><a class="header" href="#import---import-prompts-from-various-sources">import - Import Prompts from Various Sources</a></h1>
+<p>The <code>import</code> command allows you to import prompts from archives, URLs, Git repositories, and other sources into your local prompt collection.</p>
+<h2 id="synopsis-3"><a class="header" href="#synopsis-3">Synopsis</a></h2>
+<pre><code class="language-bash">swissarmyhammer import [OPTIONS] &lt;SOURCE&gt;
+</code></pre>
+<h2 id="description-3"><a class="header" href="#description-3">Description</a></h2>
+<p>Import prompts from various sources including local files, URLs, Git repositories, and other SwissArmyHammer installations. Supports conflict resolution, validation, and backup creation.</p>
+<h2 id="arguments-3"><a class="header" href="#arguments-3">Arguments</a></h2>
+<ul>
+<li><code>SOURCE</code> - Import source (file path, URL, Git repository, or directory)</li>
+</ul>
+<h2 id="options-3"><a class="header" href="#options-3">Options</a></h2>
+<h3 id="conflict-resolution"><a class="header" href="#conflict-resolution">Conflict Resolution</a></h3>
+<ul>
+<li><code>--strategy STRATEGY</code> - Conflict resolution strategy
+<ul>
+<li><code>ask</code> - Prompt for each conflict (default)</li>
+<li><code>overwrite</code> - Overwrite existing prompts</li>
+<li><code>skip</code> - Skip conflicting prompts</li>
+<li><code>rename</code> - Rename conflicting prompts</li>
+<li><code>abort</code> - Abort on first conflict</li>
+</ul>
+</li>
+</ul>
+<h3 id="source-options"><a class="header" href="#source-options">Source Options</a></h3>
+<ul>
+<li><code>--git-branch BRANCH</code> - Git branch to import from (for Git sources)</li>
+<li><code>--git-path PATH</code> - Path within Git repository to import</li>
+<li><code>--extract-to DIR</code> - Extract archives to specific directory first</li>
+</ul>
+<h3 id="validation-and-safety"><a class="header" href="#validation-and-safety">Validation and Safety</a></h3>
+<ul>
+<li><code>--dry-run</code> - Show what would be imported without making changes</li>
+<li><code>--no-backup</code> - Skip creating backup before import</li>
+<li><code>--no-validation</code> - Skip prompt validation during import</li>
+<li><code>--force</code> - Force import even with validation errors</li>
+</ul>
+<h3 id="output-control-3"><a class="header" href="#output-control-3">Output Control</a></h3>
+<ul>
+<li><code>--quiet, -q</code> - Suppress progress output</li>
+<li><code>--verbose, -v</code> - Show detailed import progress</li>
+<li><code>--json</code> - Output results in JSON format</li>
+</ul>
+<h2 id="examples-4"><a class="header" href="#examples-4">Examples</a></h2>
+<h3 id="file-import"><a class="header" href="#file-import">File Import</a></h3>
+<pre><code class="language-bash"># Import from local archive
+swissarmyhammer import prompts-backup.tar.gz
+
+# Import from directory
+swissarmyhammer import ./shared-prompts/
+
+# Import with specific conflict strategy
+swissarmyhammer import --strategy overwrite team-prompts.zip
+</code></pre>
+<h3 id="url-import"><a class="header" href="#url-import">URL Import</a></h3>
+<pre><code class="language-bash"># Import from URL
+swissarmyhammer import https://example.com/prompts.tar.gz
+
+# Import from GitHub release
+swissarmyhammer import https://github.com/team/prompts/releases/download/v1.0/prompts.tar.gz
+</code></pre>
+<h3 id="git-repository-import"><a class="header" href="#git-repository-import">Git Repository Import</a></h3>
+<pre><code class="language-bash"># Import from Git repository
+swissarmyhammer import https://github.com/team/prompt-library.git
+
+# Import specific branch
+swissarmyhammer import --git-branch develop https://github.com/team/prompts.git
+
+# Import specific path within repository
+swissarmyhammer import --git-path prompts/ https://github.com/team/project.git
+</code></pre>
+<h3 id="advanced-import"><a class="header" href="#advanced-import">Advanced Import</a></h3>
+<pre><code class="language-bash"># Dry run to preview import
+swissarmyhammer import --dry-run team-prompts.tar.gz
+
+# Import with validation and backup
+swissarmyhammer import --verbose --strategy ask prompts.tar.gz
+
+# Force import with errors
+swissarmyhammer import --force --no-validation broken-prompts.tar.gz
+</code></pre>
+<h2 id="import-sources"><a class="header" href="#import-sources">Import Sources</a></h2>
+<h3 id="supported-formats"><a class="header" href="#supported-formats">Supported Formats</a></h3>
+<ul>
+<li><strong>tar.gz</strong> - Compressed tar archives</li>
+<li><strong>zip</strong> - ZIP archives</li>
+<li><strong>directory</strong> - Local directories</li>
+<li><strong>Git repositories</strong> - Remote Git repositories</li>
+<li><strong>URLs</strong> - HTTP/HTTPS downloads</li>
+</ul>
+<h3 id="auto-detection"><a class="header" href="#auto-detection">Auto-Detection</a></h3>
+<p>SwissArmyHammer automatically detects source types:</p>
+<pre><code class="language-bash"># These are all detected automatically
+swissarmyhammer import prompts.tar.gz           # Archive
+swissarmyhammer import ./prompts/               # Directory
+swissarmyhammer import https://example.com/prompts.tar.gz  # URL
+swissarmyhammer import git@github.com:team/prompts.git     # Git SSH
+swissarmyhammer import https://github.com/team/prompts.git # Git HTTPS
+</code></pre>
+<h2 id="conflict-resolution-1"><a class="header" href="#conflict-resolution-1">Conflict Resolution</a></h2>
+<h3 id="interactive-mode-ask"><a class="header" href="#interactive-mode-ask">Interactive Mode (ask)</a></h3>
+<pre><code class="language-bash">$ swissarmyhammer import team-prompts.tar.gz
+Found 3 prompts to import, 1 conflict detected.
+
+Conflict: 'code-review' already exists
+Existing: User prompt from ~/.swissarmyhammer/prompts/review/code.md
+Incoming: Team prompt "Advanced Code Review Helper"
+
+? How should this conflict be resolved?
+  &gt; View differences
+    Overwrite existing
+    Skip this prompt  
+    Rename to 'code-review-team'
+    Rename to 'code-review-2'
+    Abort import
+</code></pre>
+<h3 id="automatic-strategies"><a class="header" href="#automatic-strategies">Automatic Strategies</a></h3>
+<pre><code class="language-bash"># Overwrite all conflicts
+swissarmyhammer import --strategy overwrite prompts.tar.gz
+
+# Skip all conflicts
+swissarmyhammer import --strategy skip prompts.tar.gz
+
+# Rename all conflicts
+swissarmyhammer import --strategy rename prompts.tar.gz
+</code></pre>
+<h2 id="validation-and-safety-1"><a class="header" href="#validation-and-safety-1">Validation and Safety</a></h2>
+<h3 id="pre-import-validation"><a class="header" href="#pre-import-validation">Pre-Import Validation</a></h3>
+<pre><code class="language-bash">$ swissarmyhammer import --dry-run prompts.tar.gz
+Import Analysis:
+✓ Archive format: tar.gz (valid)
+✓ Manifest present and valid
+✓ Checksums verified
+
+Prompts to import:
+  ✓ code-review (valid template)
+  ✓ debug-helper (valid template)  
+  ⚠ broken-prompt (warning: unused argument 'old_arg')
+  ✗ invalid-prompt (error: invalid YAML front matter)
+
+Conflicts:
+  ! code-review - conflicts with existing user prompt
+
+Summary: 2 valid, 1 warning, 1 error, 1 conflict
+Would import 3 prompts (excluding invalid)
+</code></pre>
+<h3 id="backup-creation"><a class="header" href="#backup-creation">Backup Creation</a></h3>
+<pre><code class="language-bash"># Automatic backup before import
+$ swissarmyhammer import prompts.tar.gz
+Creating backup: ~/.swissarmyhammer/backups/pre-import-20240115-103000.tar.gz
+Importing 3 prompts...
+✓ Import completed successfully
+
+# Restore from backup if needed
+swissarmyhammer import ~/.swissarmyhammer/backups/pre-import-20240115-103000.tar.gz --strategy overwrite
+</code></pre>
+<h2 id="import-structure"><a class="header" href="#import-structure">Import Structure</a></h2>
+<h3 id="expected-directory-structure"><a class="header" href="#expected-directory-structure">Expected Directory Structure</a></h3>
+<pre><code>prompts-archive.tar.gz/
+├── manifest.json              # Optional metadata
+├── prompts/                   # Prompt files
+│   ├── review/
+│   │   └── code.md
+│   └── debug/
+│       └── error.md
+└── README.md                  # Optional documentation
+</code></pre>
+<h3 id="flexible-structure-support"><a class="header" href="#flexible-structure-support">Flexible Structure Support</a></h3>
+<p>SwissArmyHammer handles various directory structures:</p>
+<pre><code class="language-bash"># All these structures are supported:
+./prompts/*.md                 # Flat structure
+./category/*/prompt.md         # Nested categories
+./src/prompts/**/*.md         # Deep nesting
+./random-structure/**/*.md     # Any structure with .md files
+</code></pre>
+<h2 id="git-integration"><a class="header" href="#git-integration">Git Integration</a></h2>
+<h3 id="authentication"><a class="header" href="#authentication">Authentication</a></h3>
+<pre><code class="language-bash"># SSH key authentication (recommended)
+swissarmyhammer import git@github.com:team/prompts.git
+
+# HTTPS with credentials
+export GIT_USERNAME=user
+export GIT_PASSWORD=token
+swissarmyhammer import https://github.com/team/prompts.git
+
+# GitHub CLI integration
+gh auth login
+swissarmyhammer import https://github.com/private/prompts.git
+</code></pre>
+<h3 id="branch-and-path-selection"><a class="header" href="#branch-and-path-selection">Branch and Path Selection</a></h3>
+<pre><code class="language-bash"># Import from specific branch
+swissarmyhammer import --git-branch feature/new-prompts \
+  https://github.com/team/prompts.git
+
+# Import only specific directory
+swissarmyhammer import --git-path specialized-prompts/ \
+  https://github.com/team/monorepo.git
+
+# Combine branch and path
+swissarmyhammer import \
+  --git-branch develop \
+  --git-path prompts/production/ \
+  https://github.com/team/project.git
+</code></pre>
+<h2 id="output-and-logging"><a class="header" href="#output-and-logging">Output and Logging</a></h2>
+<h3 id="progress-output"><a class="header" href="#progress-output">Progress Output</a></h3>
+<pre><code class="language-bash">$ swissarmyhammer import --verbose prompts.tar.gz
+Downloading: prompts.tar.gz (1.2MB) [████████████████████] 100%
+Extracting archive...
+Validating 5 prompts...
+  ✓ code-review (valid)
+  ✓ debug-helper (valid)
+  ✓ api-docs (valid)
+  ⚠ legacy-prompt (deprecated syntax)
+  ✗ broken-template (invalid liquid syntax)
+
+Importing valid prompts:
+  → code-review (new)
+  → debug-helper (conflict: renamed to debug-helper-imported)
+  → api-docs (new)
+  → legacy-prompt (new, with warnings)
+
+Skipped: 1 invalid prompt
+Imported: 4 prompts
+Conflicts resolved: 1
+</code></pre>
+<h3 id="json-output-1"><a class="header" href="#json-output-1">JSON Output</a></h3>
+<pre><code class="language-bash">$ swissarmyhammer import --json prompts.tar.gz
+{
+  "success": true,
+  "imported": 4,
+  "skipped": 1,
+  "conflicts": 1,
+  "backup_created": "~/.swissarmyhammer/backups/pre-import-20240115-103000.tar.gz",
+  "prompts": [
+    {
+      "id": "code-review",
+      "action": "imported",
+      "source_path": "prompts/review/code.md",
+      "target_path": "~/.swissarmyhammer/prompts/review/code.md"
+    },
+    {
+      "id": "debug-helper", 
+      "action": "renamed",
+      "original_id": "debug-helper",
+      "new_id": "debug-helper-imported",
+      "reason": "conflict_resolution"
+    }
+  ],
+  "errors": [
+    {
+      "prompt": "broken-template",
+      "error": "Invalid Liquid syntax at line 15",
+      "action": "skipped"
+    }
+  ]
+}
+</code></pre>
+<h2 id="integration-examples-2"><a class="header" href="#integration-examples-2">Integration Examples</a></h2>
+<h3 id="team-onboarding"><a class="header" href="#team-onboarding">Team Onboarding</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# onboard-developer.sh
+
+echo "Setting up SwissArmyHammer with team prompts..."
+
+# Import base team prompts
+swissarmyhammer import \
+  --strategy ask \
+  https://github.com/company/team-prompts.git
+
+# Import project-specific prompts  
+swissarmyhammer import \
+  --strategy skip \
+  https://github.com/company/project-prompts/releases/latest/download/prompts.tar.gz
+
+echo "✓ Prompt setup complete"
+echo "Use 'swissarmyhammer doctor' to verify installation"
+</code></pre>
+<h3 id="continuous-integration"><a class="header" href="#continuous-integration">Continuous Integration</a></h3>
+<pre><code class="language-yaml"># .github/workflows/sync-prompts.yml
+name: Sync Team Prompts
+on:
+  schedule:
+    - cron: '0 9 * * MON'  # Weekly sync
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install SwissArmyHammer
+        run: cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
+      
+      - name: Import latest team prompts
+        run: |
+          swissarmyhammer import \
+            --strategy overwrite \
+            --no-backup \
+            https://github.com/company/team-prompts.git
+      
+      - name: Validate imported prompts
+        run: swissarmyhammer doctor
+</code></pre>
+<h3 id="migration-script"><a class="header" href="#migration-script">Migration Script</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# migrate-from-old-system.sh
+
+OLD_PROMPTS="/old-system/prompts"
+BACKUP_DIR="/backup/prompts-$(date +%Y%m%d)"
+
+echo "Migrating prompts from old system..."
+
+# Create backup
+mkdir -p "$BACKUP_DIR"
+cp -r "$OLD_PROMPTS" "$BACKUP_DIR/"
+
+# Convert and import
+for file in "$OLD_PROMPTS"/*.txt; do
+  # Convert old format to SwissArmyHammer format
+  ./convert-prompt.py "$file" &gt; "converted/$(basename "$file" .txt).md"
+done
+
+# Import converted prompts
+swissarmyhammer import converted/ --strategy ask
+
+echo "Migration complete. Backup at: $BACKUP_DIR"
+</code></pre>
+<h2 id="see-also-3"><a class="header" href="#see-also-3">See Also</a></h2>
+<ul>
+<li><a href="./cli-export.html"><code>export</code></a> - Export prompts for sharing</li>
+<li><a href="./sharing-guide.html">Sharing Guide</a> - Collaboration workflows</li>
+<li><a href="./cli-doctor.html"><code>doctor</code></a> - Validate installation after import</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="doctor"><a class="header" href="#doctor">doctor</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="completion"><a class="header" href="#completion">completion</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="rust-library-guide"><a class="header" href="#rust-library-guide">Rust Library Guide</a></h1>
+<p>SwissArmyHammer is available as a Rust library (<code>swissarmyhammer</code>) that you can integrate into your own applications. This guide covers installation, basic usage, and advanced integration patterns.</p>
+<h2 id="installation-2"><a class="header" href="#installation-2">Installation</a></h2>
+<p>Add SwissArmyHammer to your <code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[dependencies]
+swissarmyhammer = { git = "https://github.com/wballard/swissarmyhammer", features = ["full"] }
+</code></pre>
+<h3 id="feature-flags"><a class="header" href="#feature-flags">Feature Flags</a></h3>
+<p>Control which functionality to include:</p>
+<pre><code class="language-toml">[dependencies]
+swissarmyhammer = { 
+  git = "https://github.com/wballard/swissarmyhammer", 
+  features = ["prompts", "templates", "search", "mcp"] 
+}
+</code></pre>
+<p>Available features:</p>
+<ul>
+<li><code>prompts</code> - Core prompt management (always enabled)</li>
+<li><code>templates</code> - Liquid template engine with custom filters</li>
+<li><code>search</code> - Full-text search capabilities</li>
+<li><code>mcp</code> - Model Context Protocol server support</li>
+<li><code>storage</code> - Advanced storage backends</li>
+<li><code>full</code> - All features enabled</li>
+</ul>
+<h2 id="quick-start-1"><a class="header" href="#quick-start-1">Quick Start</a></h2>
+<h3 id="basic-prompt-library"><a class="header" href="#basic-prompt-library">Basic Prompt Library</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::{PromptLibrary, ArgumentSpec};
+use std::collections::HashMap;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Create a new prompt library
+    let mut library = PromptLibrary::new();
+    
+    // Add prompts from a directory
+    library.add_directory("./prompts").await?;
+    
+    // List available prompts
+    for prompt_id in library.list_prompts() {
+        println!("Available prompt: {}", prompt_id);
+    }
+    
+    // Get a specific prompt
+    let prompt = library.get("code-review")?;
+    println!("Title: {}", prompt.title());
+    println!("Description: {}", prompt.description());
+    
+    // Prepare arguments
+    let mut args = HashMap::new();
+    args.insert("code".to_string(), "fn main() { println!(\"Hello\"); }".to_string());
+    args.insert("language".to_string(), "rust".to_string());
+    
+    // Render the prompt
+    let rendered = prompt.render(&amp;args)?;
+    println!("Rendered prompt:\n{}", rendered);
+    
+    Ok(())
+}</code></pre>
+<h3 id="custom-prompt-creation"><a class="header" href="#custom-prompt-creation">Custom Prompt Creation</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::{Prompt, ArgumentSpec, PromptMetadata};
+
+fn create_custom_prompt() -&gt; Result&lt;Prompt, Box&lt;dyn std::error::Error&gt;&gt; {
+    let metadata = PromptMetadata {
+        title: "Custom Code Review".to_string(),
+        description: "A custom code review prompt".to_string(),
+        arguments: vec![
+            ArgumentSpec {
+                name: "code".to_string(),
+                description: "Code to review".to_string(),
+                required: true,
+                default: None,
+            },
+            ArgumentSpec {
+                name: "focus".to_string(),
+                description: "Review focus area".to_string(),
+                required: false,
+                default: Some("general".to_string()),
+            },
+        ],
+    };
+    
+    let template = r#"
+<span class="boring">Code Review: {{ focus | capitalize }}
+</span>
+Please review this code:
+</code></pre>
+<p>{{ code }}</p>
+<pre><code>
+{% if focus == "security" %}
+Focus specifically on security vulnerabilities and best practices.
+{% elsif focus == "performance" %}
+Focus on performance optimizations and efficiency.
+{% else %}
+Perform a general code review covering style, bugs, and maintainability.
+{% endif %}
+"#;
+    
+    Prompt::from_parts(metadata, template)
+}
+</code></pre>
+<h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
+<h3 id="promptlibrary"><a class="header" href="#promptlibrary">PromptLibrary</a></h3>
+<p>The main interface for managing collections of prompts.</p>
+<pre><code class="language-rust">use swissarmyhammer::PromptLibrary;
+
+let mut library = PromptLibrary::new();
+
+// Add prompts from various sources
+library.add_directory("./prompts").await?;
+library.add_file("./special-prompt.md").await?;
+library.add_builtin_prompts();
+
+// Query prompts
+let prompts = library.list_prompts();
+let prompt = library.get("prompt-id")?;
+let filtered = library.filter_by_category("review");
+
+// Search prompts
+let results = library.search("code review")?;</code></pre>
+<h3 id="prompt"><a class="header" href="#prompt">Prompt</a></h3>
+<p>Individual prompt with metadata and template.</p>
+<pre><code class="language-rust">use swissarmyhammer::Prompt;
+
+// Load from file
+let prompt = Prompt::from_file("./prompts/review.md").await?;
+
+// Access metadata
+println!("Title: {}", prompt.title());
+println!("Description: {}", prompt.description());
+for arg in prompt.arguments() {
+    println!("Argument: {} (required: {})", arg.name, arg.required);
+}
+
+// Render with arguments
+let mut args = HashMap::new();
+args.insert("code".to_string(), "example code".to_string());
+let rendered = prompt.render(&amp;args)?;</code></pre>
+<h3 id="template-engine"><a class="header" href="#template-engine">Template Engine</a></h3>
+<p>Advanced template processing with custom filters.</p>
+<pre><code class="language-rust">use swissarmyhammer::template::{TemplateEngine, TemplateContext};
+
+let engine = TemplateEngine::new();
+
+let template = "Hello {{ name | capitalize }}! Today is {{ 'now' | format_date: '%Y-%m-%d' }}.";
+
+let mut context = TemplateContext::new();
+context.insert("name", "alice");
+
+let result = engine.render(template, &amp;context)?;
+println!("{}", result); // "Hello Alice! Today is 2024-01-15."</code></pre>
+<h2 id="advanced-usage"><a class="header" href="#advanced-usage">Advanced Usage</a></h2>
+<h3 id="custom-storage-backend"><a class="header" href="#custom-storage-backend">Custom Storage Backend</a></h3>
+<p>Implement your own storage for prompts:</p>
+<pre><code class="language-rust">use swissarmyhammer::storage::{StorageBackend, PromptSource};
+use async_trait::async_trait;
+
+struct DatabaseStorage {
+    // Your database connection
+    db: Database,
+}
+
+#[async_trait]
+impl StorageBackend for DatabaseStorage {
+    async fn list_prompts(&amp;self) -&gt; Result&lt;Vec&lt;String&gt;, StorageError&gt; {
+        // Implement database query
+        todo!()
+    }
+    
+    async fn get_prompt(&amp;self, id: &amp;str) -&gt; Result&lt;PromptSource, StorageError&gt; {
+        // Implement database retrieval
+        todo!()
+    }
+    
+    async fn save_prompt(&amp;mut self, id: &amp;str, source: &amp;PromptSource) -&gt; Result&lt;(), StorageError&gt; {
+        // Implement database storage
+        todo!()
+    }
+}
+
+// Use custom storage
+let storage = DatabaseStorage::new(db);
+let mut library = PromptLibrary::with_storage(storage);</code></pre>
+<h3 id="search-integration"><a class="header" href="#search-integration">Search Integration</a></h3>
+<p>Advanced search capabilities:</p>
+<pre><code class="language-rust">use swissarmyhammer::search::{SearchEngine, SearchQuery, SearchResult};
+
+let mut search_engine = SearchEngine::new();
+
+// Index prompts
+search_engine.index_prompt("code-review", &amp;prompt).await?;
+
+// Perform searches
+let query = SearchQuery::new("code review")
+    .with_field("title")
+    .with_limit(10)
+    .case_sensitive(false);
+
+let results: Vec&lt;SearchResult&gt; = search_engine.search(&amp;query)?;
+
+for result in results {
+    println!("Found: {} (score: {:.2})", result.id, result.score);
+}</code></pre>
+<h3 id="mcp-server-integration"><a class="header" href="#mcp-server-integration">MCP Server Integration</a></h3>
+<p>Embed MCP server functionality:</p>
+<pre><code class="language-rust">use swissarmyhammer::mcp::{McpServer, McpConfig};
+
+let config = McpConfig {
+    name: "my-prompt-server".to_string(),
+    version: "1.0.0".to_string(),
+    // ... other config
+};
+
+let mut library = PromptLibrary::new();
+library.add_directory("./prompts").await?;
+
+let server = McpServer::new(config, library);
+
+// Run MCP server
+server.serve().await?;</code></pre>
+<h3 id="event-system"><a class="header" href="#event-system">Event System</a></h3>
+<p>React to library events:</p>
+<pre><code class="language-rust">use swissarmyhammer::events::{EventHandler, PromptEvent};
+
+struct MyEventHandler;
+
+impl EventHandler for MyEventHandler {
+    fn handle_prompt_added(&amp;self, id: &amp;str) {
+        println!("Prompt added: {}", id);
+    }
+    
+    fn handle_prompt_updated(&amp;self, id: &amp;str) {
+        println!("Prompt updated: {}", id);
+    }
+    
+    fn handle_prompt_removed(&amp;self, id: &amp;str) {
+        println!("Prompt removed: {}", id);
+    }
+}
+
+let mut library = PromptLibrary::new();
+library.add_event_handler(Box::new(MyEventHandler));</code></pre>
+<h3 id="file-watching"><a class="header" href="#file-watching">File Watching</a></h3>
+<p>Automatically reload prompts when files change:</p>
+<pre><code class="language-rust">use swissarmyhammer::watcher::FileWatcher;
+
+let mut library = PromptLibrary::new();
+library.add_directory("./prompts").await?;
+
+// Start watching for file changes
+let _watcher = FileWatcher::new("./prompts", move |event| {
+    match event {
+        FileEvent::Created(path) =&gt; {
+            if let Err(e) = library.reload_file(&amp;path) {
+                eprintln!("Failed to load {}: {}", path.display(), e);
+            }
+        }
+        FileEvent::Modified(path) =&gt; {
+            if let Err(e) = library.reload_file(&amp;path) {
+                eprintln!("Failed to reload {}: {}", path.display(), e);
+            }
+        }
+        FileEvent::Deleted(path) =&gt; {
+            library.remove_file(&amp;path);
+        }
+    }
+});
+
+// Keep the watcher alive
+std::thread::sleep(std::time::Duration::from_secs(60));</code></pre>
+<h2 id="integration-examples-3"><a class="header" href="#integration-examples-3">Integration Examples</a></h2>
+<h3 id="web-server-integration"><a class="header" href="#web-server-integration">Web Server Integration</a></h3>
+<pre><code class="language-rust">use axum::{extract::Path, http::StatusCode, response::Json, routing::get, Router};
+use swissarmyhammer::PromptLibrary;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+type SharedLibrary = Arc&lt;RwLock&lt;PromptLibrary&gt;&gt;;
+
+async fn list_prompts(library: SharedLibrary) -&gt; Json&lt;Vec&lt;String&gt;&gt; {
+    let lib = library.read().await;
+    Json(lib.list_prompts())
+}
+
+async fn get_prompt(
+    Path(id): Path&lt;String&gt;,
+    library: SharedLibrary,
+) -&gt; Result&lt;Json&lt;String&gt;, StatusCode&gt; {
+    let lib = library.read().await;
+    match lib.get(&amp;id) {
+        Ok(prompt) =&gt; Ok(Json(prompt.title().to_string())),
+        Err(_) =&gt; Err(StatusCode::NOT_FOUND),
+    }
+}
+
+#[tokio::main]
+async fn main() {
+    let mut library = PromptLibrary::new();
+    library.add_directory("./prompts").await.unwrap();
+    let shared_library = Arc::new(RwLock::new(library));
+
+    let app = Router::new()
+        .route("/prompts", get({
+            let lib = shared_library.clone();
+            move || list_prompts(lib)
+        }))
+        .route("/prompts/:id", get({
+            let lib = shared_library.clone();
+            move |path| get_prompt(path, lib)
+        }));
+
+    axum::Server::bind(&amp;"0.0.0.0:3000".parse().unwrap())
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
+}</code></pre>
+<h3 id="cli-tool-integration"><a class="header" href="#cli-tool-integration">CLI Tool Integration</a></h3>
+<pre><code class="language-rust">use clap::{Arg, Command};
+use swissarmyhammer::PromptLibrary;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let matches = Command::new("my-prompt-tool")
+        .arg(Arg::new("prompt")
+            .help("Prompt ID to render")
+            .required(true)
+            .index(1))
+        .arg(Arg::new("args")
+            .help("Template arguments as key=value pairs")
+            .multiple_values(true)
+            .short('a')
+            .long("arg"))
+        .get_matches();
+
+    let mut library = PromptLibrary::new();
+    library.add_directory("./prompts").await?;
+
+    let prompt_id = matches.value_of("prompt").unwrap();
+    let prompt = library.get(prompt_id)?;
+
+    let mut args = std::collections::HashMap::new();
+    if let Some(arg_values) = matches.values_of("args") {
+        for arg in arg_values {
+            if let Some((key, value)) = arg.split_once('=') {
+                args.insert(key.to_string(), value.to_string());
+            }
+        }
+    }
+
+    let rendered = prompt.render(&amp;args)?;
+    println!("{}", rendered);
+
+    Ok(())
+}</code></pre>
+<h3 id="configuration-management"><a class="header" href="#configuration-management">Configuration Management</a></h3>
+<pre><code class="language-rust">use serde::{Deserialize, Serialize};
+use swissarmyhammer::{PromptLibrary, storage::FileSystemStorage};
+
+#[derive(Serialize, Deserialize)]
+struct AppConfig {
+    prompt_directories: Vec&lt;String&gt;,
+    default_arguments: std::collections::HashMap&lt;String, String&gt;,
+    search_enabled: bool,
+}
+
+impl Default for AppConfig {
+    fn default() -&gt; Self {
+        Self {
+            prompt_directories: vec!["./prompts".to_string()],
+            default_arguments: std::collections::HashMap::new(),
+            search_enabled: true,
+        }
+    }
+}
+
+async fn setup_library(config: &amp;AppConfig) -&gt; Result&lt;PromptLibrary, Box&lt;dyn std::error::Error&gt;&gt; {
+    let mut library = PromptLibrary::new();
+    
+    for dir in &amp;config.prompt_directories {
+        library.add_directory(dir).await?;
+    }
+    
+    if config.search_enabled {
+        library.enable_search()?;
+    }
+    
+    Ok(library)
+}</code></pre>
+<h2 id="error-handling-3"><a class="header" href="#error-handling-3">Error Handling</a></h2>
+<p>SwissArmyHammer uses comprehensive error types:</p>
+<pre><code class="language-rust">use swissarmyhammer::error::{SwissArmyHammerError, PromptError, TemplateError};
+
+match library.get("nonexistent") {
+    Ok(prompt) =&gt; {
+        // Handle success
+    }
+    Err(SwissArmyHammerError::PromptNotFound(id)) =&gt; {
+        eprintln!("Prompt '{}' not found", id);
+    }
+    Err(SwissArmyHammerError::Template(TemplateError::RenderError(msg))) =&gt; {
+        eprintln!("Template rendering failed: {}", msg);
+    }
+    Err(SwissArmyHammerError::Io(io_err)) =&gt; {
+        eprintln!("I/O error: {}", io_err);
+    }
+    Err(e) =&gt; {
+        eprintln!("Unexpected error: {}", e);
+    }
+}</code></pre>
+<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
+<p>SwissArmyHammer provides testing utilities:</p>
+<pre><code class="language-rust">use swissarmyhammer::testing::{MockPromptLibrary, PromptTestCase};
+
+#[tokio::test]
+async fn test_prompt_rendering() {
+    let mut library = MockPromptLibrary::new();
+    
+    let test_case = PromptTestCase::new("test-prompt")
+        .with_template("Hello {{ name }}!")
+        .with_argument("name", "World")
+        .expect_output("Hello World!");
+    
+    library.add_test_prompt(test_case);
+    
+    let prompt = library.get("test-prompt").unwrap();
+    let mut args = std::collections::HashMap::new();
+    args.insert("name".to_string(), "World".to_string());
+    
+    let result = prompt.render(&amp;args).unwrap();
+    assert_eq!(result, "Hello World!");
+}</code></pre>
+<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<h3 id="memory-usage"><a class="header" href="#memory-usage">Memory Usage</a></h3>
+<ul>
+<li>Prompt libraries cache parsed templates in memory</li>
+<li>Large collections may require custom storage backends</li>
+<li>Use lazy loading for better memory efficiency</li>
+</ul>
+<h3 id="concurrency"><a class="header" href="#concurrency">Concurrency</a></h3>
+<ul>
+<li><code>PromptLibrary</code> is <code>Send + Sync</code> when used with appropriate storage</li>
+<li>Template rendering is thread-safe</li>
+<li>Consider using <code>Arc&lt;RwLock&lt;PromptLibrary&gt;&gt;</code> for shared access</li>
+</ul>
+<h3 id="best-practices-1"><a class="header" href="#best-practices-1">Best Practices</a></h3>
+<ul>
+<li>Prefer batch operations for multiple prompts</li>
+<li>Cache rendered templates when arguments don’t change</li>
+<li>Use feature flags to include only needed functionality</li>
+<li>Implement proper error handling for production use</li>
+</ul>
+<h2 id="migration-from-cli"><a class="header" href="#migration-from-cli">Migration from CLI</a></h2>
+<p>If you’re migrating from using the CLI to the library:</p>
+<pre><code class="language-rust">// CLI equivalent: swissarmyhammer search "code review"
+let results = library.search("code review")?;
+
+// CLI equivalent: swissarmyhammer test prompt-id --arg key=value
+let prompt = library.get("prompt-id")?;
+let mut args = HashMap::new();
+args.insert("key".to_string(), "value".to_string());
+let rendered = prompt.render(&amp;args)?;
+
+// CLI equivalent: swissarmyhammer export --all output.tar.gz
+library.export_all("output.tar.gz", ExportFormat::TarGz)?;</code></pre>
+<h2 id="see-also-4"><a class="header" href="#see-also-4">See Also</a></h2>
+<ul>
+<li><a href="./library-api.html">Library API Reference</a> - Complete API documentation</li>
+<li><a href="./library-examples.html">Integration Examples</a> - More integration patterns</li>
+<li><a href="./custom-filters.html">Custom Filters</a> - Template customization</li>
+<li><a href="./advanced-prompts.html">Advanced Prompts</a> - Complex template patterns</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="library-api-reference"><a class="header" href="#library-api-reference">Library API Reference</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="integration-examples-4"><a class="header" href="#integration-examples-4">Integration Examples</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="advanced-prompt-techniques"><a class="header" href="#advanced-prompt-techniques">Advanced Prompt Techniques</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="search-and-discovery-guide"><a class="header" href="#search-and-discovery-guide">Search and Discovery Guide</a></h1>
+<p>SwissArmyHammer provides powerful search capabilities to help you discover and find prompts in your collection. This guide covers search strategies, advanced filtering, and integration workflows.</p>
+<h2 id="basic-search-1"><a class="header" href="#basic-search-1">Basic Search</a></h2>
+<h3 id="simple-text-search"><a class="header" href="#simple-text-search">Simple Text Search</a></h3>
+<p>The most basic way to search is with a simple text query:</p>
+<pre><code class="language-bash"># Search for prompts containing "code"
+swissarmyhammer search code
+
+# Search for multiple terms
+swissarmyhammer search "code review"
+
+# Search with partial matches
+swissarmyhammer search debug
+</code></pre>
+<h3 id="search-results-format"><a class="header" href="#search-results-format">Search Results Format</a></h3>
+<pre><code>Found 3 prompts matching "code":
+
+📝 code-review (builtin)
+   Review code for best practices and potential issues
+   Arguments: code, language (optional)
+
+🔧 debug-helper (user)
+   Help debug programming issues and errors
+   Arguments: error, context (optional)
+
+📊 analyze-performance (local)
+   Analyze code performance and suggest optimizations
+   Arguments: code, language, metrics (optional)
+</code></pre>
+<p>Each result shows:</p>
+<ul>
+<li><strong>Icon</strong>: Indicates prompt type (📝 builtin, 🔧 user, 📊 local)</li>
+<li><strong>Name</strong>: Prompt identifier</li>
+<li><strong>Source</strong>: Where the prompt is stored</li>
+<li><strong>Description</strong>: Brief description of the prompt’s purpose</li>
+<li><strong>Arguments</strong>: Required and optional parameters</li>
+</ul>
+<h2 id="field-specific-search-1"><a class="header" href="#field-specific-search-1">Field-Specific Search</a></h2>
+<h3 id="search-in-titles-only"><a class="header" href="#search-in-titles-only">Search in Titles Only</a></h3>
+<pre><code class="language-bash"># Find prompts with "review" in the title
+swissarmyhammer search --in title review
+
+# Case-sensitive title search
+swissarmyhammer search --in title --case-sensitive "Code Review"
+</code></pre>
+<h3 id="search-in-descriptions"><a class="header" href="#search-in-descriptions">Search in Descriptions</a></h3>
+<pre><code class="language-bash"># Find prompts about debugging in descriptions
+swissarmyhammer search --in description debug
+
+# Find prompts mentioning specific technologies
+swissarmyhammer search --in description "python javascript"
+</code></pre>
+<h3 id="search-in-content"><a class="header" href="#search-in-content">Search in Content</a></h3>
+<pre><code class="language-bash"># Find prompts that use specific template variables
+swissarmyhammer search --in content "{{code}}"
+
+# Find prompts with specific instructions
+swissarmyhammer search --in content "best practices"
+</code></pre>
+<h3 id="search-all-fields"><a class="header" href="#search-all-fields">Search All Fields</a></h3>
+<pre><code class="language-bash"># Search across titles, descriptions, and content (default)
+swissarmyhammer search --in all "security"
+
+# Explicit all-field search
+swissarmyhammer search "API documentation"
+</code></pre>
+<h2 id="advanced-search-techniques"><a class="header" href="#advanced-search-techniques">Advanced Search Techniques</a></h2>
+<h3 id="regular-expression-search-1"><a class="header" href="#regular-expression-search-1">Regular Expression Search</a></h3>
+<p>Use regex patterns for powerful pattern matching:</p>
+<pre><code class="language-bash"># Find prompts with "test" followed by any word
+swissarmyhammer search --regex "test\s+\w+"
+
+# Find prompts starting with specific words
+swissarmyhammer search --regex "^(debug|fix|analyze)"
+
+# Find prompts with email patterns
+swissarmyhammer search --regex "\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"
+
+# Case-sensitive regex
+swissarmyhammer search --regex --case-sensitive "^Code"
+</code></pre>
+<h3 id="search-by-source"><a class="header" href="#search-by-source">Search by Source</a></h3>
+<p>Filter prompts by their source location:</p>
+<pre><code class="language-bash"># Find only built-in prompts
+swissarmyhammer search --source builtin
+
+# Find only user-created prompts
+swissarmyhammer search --source user
+
+# Find only local project prompts
+swissarmyhammer search --source local
+
+# Combine with text search
+swissarmyhammer search review --source user
+</code></pre>
+<h3 id="search-by-arguments"><a class="header" href="#search-by-arguments">Search by Arguments</a></h3>
+<p>Find prompts based on their argument requirements:</p>
+<pre><code class="language-bash"># Find prompts that accept a "code" argument
+swissarmyhammer search --has-arg code
+
+# Find prompts with no arguments (simple prompts)
+swissarmyhammer search --no-args
+
+# Find prompts with specific argument combinations
+swissarmyhammer search --has-arg code --has-arg language
+
+# Combine with text search
+swissarmyhammer search debug --has-arg error
+</code></pre>
+<h2 id="search-strategies"><a class="header" href="#search-strategies">Search Strategies</a></h2>
+<h3 id="discovery-workflows"><a class="header" href="#discovery-workflows">Discovery Workflows</a></h3>
+<h4 id="finding-prompts-for-a-task"><a class="header" href="#finding-prompts-for-a-task">Finding Prompts for a Task</a></h4>
+<pre><code class="language-bash"># 1. Start broad
+swissarmyhammer search "code review"
+
+# 2. Narrow down by context
+swissarmyhammer search "code review" --source user
+
+# 3. Check argument requirements
+swissarmyhammer search "code review" --has-arg language
+
+# 4. Examine specific matches
+swissarmyhammer search --in title "Advanced Code Review"
+</code></pre>
+<h4 id="exploring-available-prompts"><a class="header" href="#exploring-available-prompts">Exploring Available Prompts</a></h4>
+<pre><code class="language-bash"># See all available prompts
+swissarmyhammer search --limit 50 ""
+
+# Browse by category/topic
+swissarmyhammer search documentation
+swissarmyhammer search testing
+swissarmyhammer search refactoring
+
+# Find simple prompts (no arguments)
+swissarmyhammer search --no-args
+</code></pre>
+<h4 id="finding-template-examples"><a class="header" href="#finding-template-examples">Finding Template Examples</a></h4>
+<pre><code class="language-bash"># Find prompts using loops
+swissarmyhammer search --in content "{% for"
+
+# Find prompts with conditionals
+swissarmyhammer search --in content "{% if"
+
+# Find prompts using specific filters
+swissarmyhammer search --in content "| capitalize"
+</code></pre>
+<h3 id="search-optimization"><a class="header" href="#search-optimization">Search Optimization</a></h3>
+<h4 id="performance-tips-1"><a class="header" href="#performance-tips-1">Performance Tips</a></h4>
+<pre><code class="language-bash"># Limit results for faster response
+swissarmyhammer search --limit 10 query
+
+# Use specific fields to reduce search scope
+swissarmyhammer search --in title query  # faster than all fields
+
+# Use source filtering to narrow search space
+swissarmyhammer search --source user query
+</code></pre>
+<h4 id="precision-vs-recall"><a class="header" href="#precision-vs-recall">Precision vs. Recall</a></h4>
+<pre><code class="language-bash"># High precision (exact matches)
+swissarmyhammer search --case-sensitive --regex "^exact pattern$"
+
+# High recall (find everything related)
+swissarmyhammer search --in all "broad topic"
+
+# Balanced approach
+swissarmyhammer search "specific terms" --limit 20
+</code></pre>
+<h2 id="integration-with-other-commands-1"><a class="header" href="#integration-with-other-commands-1">Integration with Other Commands</a></h2>
+<h3 id="search-and-test-workflow"><a class="header" href="#search-and-test-workflow">Search and Test Workflow</a></h3>
+<pre><code class="language-bash"># Find debugging prompts
+swissarmyhammer search debug
+
+# Test a specific one
+swissarmyhammer test debug-helper
+
+# Test with specific arguments
+swissarmyhammer test debug-helper --arg error="TypeError: undefined"
+</code></pre>
+<h3 id="search-and-export-workflow"><a class="header" href="#search-and-export-workflow">Search and Export Workflow</a></h3>
+<pre><code class="language-bash"># Find all review-related prompts
+swissarmyhammer search review --limit 20
+
+# Export specific ones found
+swissarmyhammer export code-review security-review design-review output.tar.gz
+
+# Or export all matching a pattern
+# (manual selection based on search results)
+</code></pre>
+<h3 id="scripted-search"><a class="header" href="#scripted-search">Scripted Search</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# find-and-test.sh
+
+QUERY="$1"
+if [ -z "$QUERY" ]; then
+    echo "Usage: $0 &lt;search-query&gt;"
+    exit 1
+fi
+
+echo "Searching for: $QUERY"
+PROMPTS=$(swissarmyhammer search --json "$QUERY" | jq -r '.results[].id')
+
+if [ -z "$PROMPTS" ]; then
+    echo "No prompts found"
+    exit 1
+fi
+
+echo "Found prompts:"
+echo "$PROMPTS"
+
+echo "Select a prompt to test:"
+select PROMPT in $PROMPTS; do
+    if [ -n "$PROMPT" ]; then
+        swissarmyhammer test "$PROMPT"
+        break
+    fi
+done
+</code></pre>
+<h2 id="json-output-for-scripting"><a class="header" href="#json-output-for-scripting">JSON Output for Scripting</a></h2>
+<h3 id="basic-json-search"><a class="header" href="#basic-json-search">Basic JSON Search</a></h3>
+<pre><code class="language-bash">swissarmyhammer search --json "code review"
+</code></pre>
+<pre><code class="language-json">{
+  "query": "code review",
+  "total_found": 3,
+  "results": [
+    {
+      "id": "code-review",
+      "title": "Code Review Helper",
+      "description": "Review code for best practices and potential issues",
+      "source": "builtin",
+      "path": "/builtin/review/code.md",
+      "arguments": [
+        {"name": "code", "required": true},
+        {"name": "language", "required": false, "default": "auto-detect"}
+      ],
+      "score": 0.95
+    }
+  ]
+}
+</code></pre>
+<h3 id="processing-json-results"><a class="header" href="#processing-json-results">Processing JSON Results</a></h3>
+<pre><code class="language-bash"># Extract prompt IDs
+swissarmyhammer search --json query | jq -r '.results[].id'
+
+# Get highest scoring result
+swissarmyhammer search --json query | jq -r '.results[0].id'
+
+# Filter by score threshold
+swissarmyhammer search --json query | jq '.results[] | select(.score &gt; 0.8)'
+
+# Count results by source
+swissarmyhammer search --json "" --limit 100 | jq '.results | group_by(.source) | map({source: .[0].source, count: length})'
+</code></pre>
+<h2 id="search-index-management"><a class="header" href="#search-index-management">Search Index Management</a></h2>
+<h3 id="understanding-the-search-index"><a class="header" href="#understanding-the-search-index">Understanding the Search Index</a></h3>
+<p>SwissArmyHammer automatically maintains a search index that includes:</p>
+<ul>
+<li><strong>Prompt titles</strong> - Weighted heavily in scoring</li>
+<li><strong>Descriptions</strong> - Medium weight</li>
+<li><strong>Content text</strong> - Lower weight</li>
+<li><strong>Argument names</strong> - Considered for relevance</li>
+<li><strong>File paths</strong> - Used for source filtering</li>
+</ul>
+<h3 id="index-updates"><a class="header" href="#index-updates">Index Updates</a></h3>
+<p>The search index is automatically updated when:</p>
+<ul>
+<li>Prompts are added to the library</li>
+<li>Existing prompts are modified</li>
+<li>The <code>serve</code> command starts (full rebuild)</li>
+<li>File watching detects changes</li>
+</ul>
+<h3 id="performance-characteristics"><a class="header" href="#performance-characteristics">Performance Characteristics</a></h3>
+<ul>
+<li><strong>Index size</strong>: Proportional to prompt collection size</li>
+<li><strong>Search speed</strong>: Sub-second for collections up to 10,000 prompts</li>
+<li><strong>Memory usage</strong>: Moderate (index kept in memory)</li>
+<li><strong>Update speed</strong>: Fast incremental updates</li>
+</ul>
+<h2 id="troubleshooting-search-issues"><a class="header" href="#troubleshooting-search-issues">Troubleshooting Search Issues</a></h2>
+<h3 id="no-results-found"><a class="header" href="#no-results-found">No Results Found</a></h3>
+<pre><code class="language-bash"># Check if prompts exist
+swissarmyhammer search --limit 100 ""
+
+# Verify prompt sources
+swissarmyhammer search --source builtin
+swissarmyhammer search --source user
+swissarmyhammer search --source local
+
+# Try broader search
+swissarmyhammer search --in all "partial terms"
+</code></pre>
+<h3 id="too-many-results"><a class="header" href="#too-many-results">Too Many Results</a></h3>
+<pre><code class="language-bash"># Use more specific terms
+swissarmyhammer search "specific exact phrase"
+
+# Limit by source
+swissarmyhammer search broad-term --source user
+
+# Use field-specific search
+swissarmyhammer search --in title specific-title
+
+# Limit result count
+swissarmyhammer search broad-term --limit 5
+</code></pre>
+<h3 id="unexpected-results"><a class="header" href="#unexpected-results">Unexpected Results</a></h3>
+<pre><code class="language-bash"># Check what's being matched
+swissarmyhammer search --full query
+
+# Use exact matching
+swissarmyhammer search --regex "^exact term$"
+
+# Search in specific field
+swissarmyhammer search --in description query
+</code></pre>
+<h2 id="best-practices-2"><a class="header" href="#best-practices-2">Best Practices</a></h2>
+<h3 id="effective-search-terms"><a class="header" href="#effective-search-terms">Effective Search Terms</a></h3>
+<ol>
+<li><strong>Use specific terms</strong>: “REST API documentation” vs. “API”</li>
+<li><strong>Include context</strong>: “Python debugging” vs. “debugging”</li>
+<li><strong>Try synonyms</strong>: “review”, “analyze”, “examine”</li>
+<li><strong>Use argument names</strong>: Search for “code”, “error”, “data” to find relevant prompts</li>
+</ol>
+<h3 id="search-workflow-patterns"><a class="header" href="#search-workflow-patterns">Search Workflow Patterns</a></h3>
+<ol>
+<li><strong>Start broad, narrow down</strong>: Begin with general terms, add filters</li>
+<li><strong>Use multiple strategies</strong>: Try both fuzzy and regex search</li>
+<li><strong>Check all sources</strong>: Don’t assume prompts are only in one location</li>
+<li><strong>Combine with testing</strong>: Always test prompts before using</li>
+</ol>
+<h3 id="organization-for-searchability"><a class="header" href="#organization-for-searchability">Organization for Searchability</a></h3>
+<ol>
+<li><strong>Clear titles</strong>: Use descriptive, searchable titles</li>
+<li><strong>Good descriptions</strong>: Include keywords and use cases</li>
+<li><strong>Consistent naming</strong>: Use standard terms across prompts</li>
+<li><strong>Tag with arguments</strong>: Use predictable argument names</li>
+</ol>
+<h2 id="advanced-examples"><a class="header" href="#advanced-examples">Advanced Examples</a></h2>
+<h3 id="finding-template-patterns"><a class="header" href="#finding-template-patterns">Finding Template Patterns</a></h3>
+<pre><code class="language-bash"># Find prompts using custom filters
+swissarmyhammer search --in content "format_lang"
+
+# Find prompts with error handling
+swissarmyhammer search --in content "default:"
+
+# Find prompts with loops
+swissarmyhammer search --in content "{% for"
+</code></pre>
+<h3 id="building-prompt-collections"><a class="header" href="#building-prompt-collections">Building Prompt Collections</a></h3>
+<pre><code class="language-bash"># Find all code-related prompts
+swissarmyhammer search --regex "(code|programming|software)" --limit 50
+
+# Find all documentation prompts
+swissarmyhammer search --regex "(doc|documentation|readme|guide)" --limit 30
+
+# Find all analysis prompts
+swissarmyhammer search --regex "(analy|review|audit|inspect)" --limit 20
+</code></pre>
+<h3 id="quality-assurance"><a class="header" href="#quality-assurance">Quality Assurance</a></h3>
+<pre><code class="language-bash"># Find prompts without descriptions
+swissarmyhammer search --in description "^$" --regex
+
+# Find prompts with no arguments (might need descriptions)
+swissarmyhammer search --no-args --limit 50
+
+# Find prompts with many arguments (might be complex)
+swissarmyhammer search --json "" --limit 100 | \
+  jq '.results[] | select(.arguments | length &gt; 5)'
+</code></pre>
+<h2 id="see-also-5"><a class="header" href="#see-also-5">See Also</a></h2>
+<ul>
+<li><a href="./cli-search.html"><code>search</code> command</a> - Command reference</li>
+<li><a href="./cli-test.html"><code>test</code> command</a> - Testing found prompts</li>
+<li><a href="./prompt-organization.html">Prompt Organization</a> - Organizing for discoverability</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="testing-and-debugging"><a class="header" href="#testing-and-debugging">Testing and Debugging</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="sharing-and-collaboration"><a class="header" href="#sharing-and-collaboration">Sharing and Collaboration</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="mcp-protocol"><a class="header" href="#mcp-protocol">MCP Protocol</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="configuration"><a class="header" href="#configuration">Configuration</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="file-watching"><a class="header" href="#file-watching">File Watching</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="configuration-1"><a class="header" href="#configuration-1">Configuration</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="file-watching-1"><a class="header" href="#file-watching-1">File Watching</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="prompt-overrides"><a class="header" href="#prompt-overrides">Prompt Overrides</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="built-in-prompts"><a class="header" href="#built-in-prompts">Built-in Prompts</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="api-reference"><a class="header" href="#api-reference">API Reference</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="examples"><a class="header" href="#examples">Examples</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="custom-filters-reference-1"><a class="header" href="#custom-filters-reference-1">Custom Filters Reference</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="examples-5"><a class="header" href="#examples-5">Examples</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="troubleshooting-3"><a class="header" href="#troubleshooting-3">Troubleshooting</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="contributing"><a class="header" href="#contributing">Contributing</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="development-setup"><a class="header" href="#development-setup">Development Setup</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="testing"><a class="header" href="#testing">Testing</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="testing-1"><a class="header" href="#testing-1">Testing</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="release-process"><a class="header" href="#release-process">Release Process</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="changelog"><a class="header" href="#changelog">Changelog</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="license-1"><a class="header" href="#license-1">License</a></h1>

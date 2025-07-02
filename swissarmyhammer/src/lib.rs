@@ -55,7 +55,7 @@ pub mod storage;
 pub mod search;
 
 // Re-export core types
-pub use prompts::{Prompt, PromptLibrary, PromptLoader, ArgumentSpec};
+pub use prompts::{ArgumentSpec, Prompt, PromptLibrary, PromptLoader};
 pub use storage::{PromptStorage, StorageBackend};
 pub use template::{Template, TemplateEngine};
 
@@ -72,32 +72,32 @@ pub mod error {
         /// IO operation failed
         #[error("IO error: {0}")]
         Io(#[from] std::io::Error),
-        
+
         /// Template parsing or rendering failed
         #[error("Template error: {0}")]
         Template(String),
-        
+
         /// Prompt not found
         #[error("Prompt not found: {0}")]
         PromptNotFound(String),
-        
+
         /// Invalid configuration
         #[error("Configuration error: {0}")]
         Config(String),
-        
+
         /// Storage backend error
         #[error("Storage error: {0}")]
         Storage(String),
-        
+
         /// Serialization/deserialization error
         #[error("Serialization error: {0}")]
         Serialization(#[from] serde_yaml::Error),
-        
+
         /// Other errors
         #[error("{0}")]
         Other(String),
     }
-    
+
     /// Result type alias
     pub type Result<T> = std::result::Result<T, SwissArmyHammerError>;
 }
@@ -107,14 +107,13 @@ pub use error::{Result, SwissArmyHammerError};
 /// Prelude module for convenient imports
 pub mod prelude {
     pub use crate::{
-        Prompt, PromptLibrary, PromptLoader, PromptStorage,
-        Result, StorageBackend, SwissArmyHammerError,
-        Template, TemplateEngine,
+        Prompt, PromptLibrary, PromptLoader, PromptStorage, Result, StorageBackend,
+        SwissArmyHammerError, Template, TemplateEngine,
     };
-    
+
     #[cfg(feature = "mcp")]
     pub use crate::mcp::McpServer;
-    
+
     #[cfg(feature = "search")]
     pub use crate::search::{SearchEngine, SearchResult};
 }

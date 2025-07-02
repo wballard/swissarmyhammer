@@ -11,7 +11,9 @@ mod signal_handler;
 mod test;
 mod validate;
 
-use cli::{Cli, Commands, ExportFormat, ImportStrategy, OutputFormat, PromptSource, ValidateFormat};
+use cli::{
+    Cli, Commands, ExportFormat, ImportStrategy, OutputFormat, PromptSource, ValidateFormat,
+};
 use mcp::MCPServer;
 use tokio::sync::oneshot;
 use tracing::Level;
@@ -43,37 +45,119 @@ async fn main() {
             tracing::info!("Running diagnostics");
             run_doctor()
         }
-        Some(Commands::List { format, verbose, source, category, search }) => {
+        Some(Commands::List {
+            format,
+            verbose,
+            source,
+            category,
+            search,
+        }) => {
             tracing::info!("Listing prompts");
             run_list(format, verbose, source, category, search)
         }
-        Some(Commands::Validate { path, all, quiet, format }) => {
+        Some(Commands::Validate {
+            path,
+            all,
+            quiet,
+            format,
+        }) => {
             tracing::info!("Validating prompts");
             run_validate(path, all, quiet, format)
         }
-        Some(Commands::Test { prompt_name, file, arguments, raw, copy, save, debug }) => {
+        Some(Commands::Test {
+            prompt_name,
+            file,
+            arguments,
+            raw,
+            copy,
+            save,
+            debug,
+        }) => {
             tracing::info!("Testing prompt");
-            run_test(&Commands::Test { 
-                prompt_name: prompt_name.clone(), 
-                file: file.clone(), 
-                arguments: arguments.clone(), 
-                raw, 
-                copy, 
-                save: save.clone(), 
-                debug 
-            }).await
+            run_test(&Commands::Test {
+                prompt_name: prompt_name.clone(),
+                file: file.clone(),
+                arguments: arguments.clone(),
+                raw,
+                copy,
+                save: save.clone(),
+                debug,
+            })
+            .await
         }
-        Some(Commands::Search { query, r#in, regex, fuzzy, case_sensitive, source, has_arg, no_args, full, format, highlight, limit }) => {
+        Some(Commands::Search {
+            query,
+            r#in,
+            regex,
+            fuzzy,
+            case_sensitive,
+            source,
+            has_arg,
+            no_args,
+            full,
+            format,
+            highlight,
+            limit,
+        }) => {
             tracing::info!("Searching prompts");
-            run_search(query, r#in, regex, fuzzy, case_sensitive, source, has_arg, no_args, full, format, highlight, limit)
+            run_search(
+                query,
+                r#in,
+                regex,
+                fuzzy,
+                case_sensitive,
+                source,
+                has_arg,
+                no_args,
+                full,
+                format,
+                highlight,
+                limit,
+            )
         }
-        Some(Commands::Export { prompt_name, all, category, source, format, output, metadata, exclude }) => {
+        Some(Commands::Export {
+            prompt_name,
+            all,
+            category,
+            source,
+            format,
+            output,
+            metadata,
+            exclude,
+        }) => {
             tracing::info!("Exporting prompts");
-            run_export(prompt_name, all, category, source, format, output, metadata, exclude).await
+            run_export(
+                prompt_name,
+                all,
+                category,
+                source,
+                format,
+                output,
+                metadata,
+                exclude,
+            )
+            .await
         }
-        Some(Commands::Import { source, dry_run, strategy, target, no_validate, no_backup, verbose }) => {
+        Some(Commands::Import {
+            source,
+            dry_run,
+            strategy,
+            target,
+            no_validate,
+            no_backup,
+            verbose,
+        }) => {
             tracing::info!("Importing prompts");
-            run_import(source, dry_run, strategy, target, !no_validate, !no_backup, verbose).await
+            run_import(
+                source,
+                dry_run,
+                strategy,
+                target,
+                !no_validate,
+                !no_backup,
+                verbose,
+            )
+            .await
         }
         Some(Commands::Completion { shell }) => {
             tracing::info!("Generating completion for {:?}", shell);
@@ -126,7 +210,7 @@ async fn run_server() -> i32 {
 
 fn run_doctor() -> i32 {
     use doctor::Doctor;
-    
+
     let mut doctor = Doctor::new();
     match doctor.run_diagnostics() {
         Ok(exit_code) => exit_code,
@@ -145,7 +229,7 @@ fn run_list(
     search: Option<String>,
 ) -> i32 {
     use list;
-    
+
     match list::run_list_command(format, verbose, source, category, search) {
         Ok(_) => 0,
         Err(e) => {
@@ -155,14 +239,9 @@ fn run_list(
     }
 }
 
-fn run_validate(
-    path: Option<String>,
-    all: bool,
-    quiet: bool,
-    format: ValidateFormat,
-) -> i32 {
+fn run_validate(path: Option<String>, all: bool, quiet: bool, format: ValidateFormat) -> i32 {
     use validate;
-    
+
     match validate::run_validate_command(path, all, quiet, format) {
         Ok(exit_code) => exit_code,
         Err(e) => {
@@ -174,7 +253,7 @@ fn run_validate(
 
 async fn run_test(command: &Commands) -> i32 {
     use test::TestRunner;
-    
+
     let mut runner = TestRunner::new();
     match runner.run(command).await {
         Ok(exit_code) => exit_code,
@@ -185,6 +264,7 @@ async fn run_test(command: &Commands) -> i32 {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_search(
     query: String,
     fields: Option<Vec<String>>,
@@ -200,10 +280,20 @@ fn run_search(
     limit: Option<usize>,
 ) -> i32 {
     use search;
-    
+
     match search::run_search_command(
-        query, fields, regex, fuzzy, case_sensitive, source, 
-        has_arg, no_args, full, format, highlight, limit
+        query,
+        fields,
+        regex,
+        fuzzy,
+        case_sensitive,
+        source,
+        has_arg,
+        no_args,
+        full,
+        format,
+        highlight,
+        limit,
     ) {
         Ok(_) => 0,
         Err(e) => {
@@ -213,6 +303,7 @@ fn run_search(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_export(
     prompt_name: Option<String>,
     all: bool,
@@ -224,8 +315,19 @@ async fn run_export(
     exclude: Vec<String>,
 ) -> i32 {
     use export;
-    
-    match export::run_export_command(prompt_name, all, category, source, format, output, metadata, exclude).await {
+
+    match export::run_export_command(
+        prompt_name,
+        all,
+        category,
+        source,
+        format,
+        output,
+        metadata,
+        exclude,
+    )
+    .await
+    {
         Ok(_) => 0,
         Err(e) => {
             eprintln!("Export error: {}", e);
@@ -244,8 +346,10 @@ async fn run_import(
     verbose: bool,
 ) -> i32 {
     use import;
-    
-    match import::run_import_command(source, dry_run, strategy, target, validate, backup, verbose).await {
+
+    match import::run_import_command(source, dry_run, strategy, target, validate, backup, verbose)
+        .await
+    {
         Ok(_) => 0,
         Err(e) => {
             eprintln!("Import error: {}", e);
@@ -256,7 +360,7 @@ async fn run_import(
 
 fn run_completions(shell: clap_complete::Shell) -> i32 {
     use completions;
-    
+
     match completions::print_completion(shell) {
         Ok(_) => 0,
         Err(e) => {

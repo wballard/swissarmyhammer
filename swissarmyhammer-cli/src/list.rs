@@ -1,7 +1,6 @@
 use anyhow::Result;
 use colored::*;
 use is_terminal::IsTerminal;
-use serde_json;
 use std::io;
 use tabled::{
     settings::{object::Rows, Alignment, Color, Modify, Style},
@@ -9,7 +8,7 @@ use tabled::{
 };
 
 use crate::cli::{OutputFormat, PromptSource};
-use swissarmyhammer::{PromptLibrary, Prompt};
+use swissarmyhammer::PromptLibrary;
 
 #[derive(Tabled)]
 struct PromptRow {
@@ -52,25 +51,25 @@ pub fn run_list_command(
 ) -> Result<()> {
     // Load all prompts from all sources
     let mut library = PromptLibrary::new();
-    
+
     // Load builtin prompts
     let builtin_dir = dirs::data_dir()
         .map(|d| d.join("swissarmyhammer").join("prompts"))
         .filter(|p| p.exists());
-    
+
     if let Some(dir) = builtin_dir {
         library.add_directory(&dir)?;
     }
-    
+
     // Load user prompts
     let user_dir = dirs::home_dir()
         .map(|d| d.join(".prompts"))
         .filter(|p| p.exists());
-    
+
     if let Some(dir) = user_dir {
         library.add_directory(&dir)?;
     }
-    
+
     // Load local prompts
     let local_dir = std::path::Path::new("prompts");
     if local_dir.exists() {
@@ -82,7 +81,7 @@ pub fn run_list_command(
 
     // Collect prompt information
     let mut prompt_infos = Vec::new();
-    
+
     for prompt in all_prompts {
         // Determine source based on path
         let source_str = if let Some(source_path) = &prompt.source {
@@ -121,24 +120,28 @@ pub fn run_list_command(
         if let Some(ref search) = search_term {
             let search_lower = search.to_lowercase();
             let name_matches = prompt.name.to_lowercase().contains(&search_lower);
-            let desc_matches = prompt.description
+            let desc_matches = prompt
+                .description
                 .as_ref()
                 .map(|d| d.to_lowercase().contains(&search_lower))
                 .unwrap_or(false);
-            let category_matches = prompt.category
+            let category_matches = prompt
+                .category
                 .as_ref()
                 .map(|c| c.to_lowercase().contains(&search_lower))
                 .unwrap_or(false);
-            let tag_matches = prompt.tags
+            let tag_matches = prompt
+                .tags
                 .iter()
                 .any(|t| t.to_lowercase().contains(&search_lower));
-                
+
             if !(name_matches || desc_matches || category_matches || tag_matches) {
                 continue;
             }
         }
 
-        let arguments = prompt.arguments
+        let arguments = prompt
+            .arguments
             .iter()
             .map(|arg| PromptArgument {
                 name: arg.name.clone(),
@@ -185,7 +188,7 @@ fn display_table(prompt_infos: &[PromptInfo], verbose: bool) -> Result<()> {
     }
 
     let is_tty = io::stderr().is_terminal();
-    
+
     let rows: Vec<PromptRow> = prompt_infos
         .iter()
         .map(|info| {
@@ -201,7 +204,7 @@ fn display_table(prompt_infos: &[PromptInfo], verbose: bool) -> Result<()> {
                     desc
                 }
             };
-            
+
             let arguments = if verbose {
                 info.arguments
                     .iter()
@@ -233,32 +236,20 @@ fn display_table(prompt_infos: &[PromptInfo], verbose: bool) -> Result<()> {
 
     if is_tty {
         // Add colors for better readability in terminal
-        table.with(
-            Modify::new(Rows::single(0))
-                .with(Color::FG_BRIGHT_CYAN)
-        );
-        
+        table.with(Modify::new(Rows::single(0)).with(Color::FG_BRIGHT_CYAN));
+
         // Color code sources
         for (i, info) in prompt_infos.iter().enumerate() {
             let row_index = i + 1; // +1 because row 0 is header
             match info.source.as_str() {
                 "builtin" => {
-                    table.with(
-                        Modify::new(Rows::single(row_index))
-                            .with(Color::FG_GREEN)
-                    );
+                    table.with(Modify::new(Rows::single(row_index)).with(Color::FG_GREEN));
                 }
                 "user" => {
-                    table.with(
-                        Modify::new(Rows::single(row_index))
-                            .with(Color::FG_BLUE)
-                    );
+                    table.with(Modify::new(Rows::single(row_index)).with(Color::FG_BLUE));
                 }
                 "local" => {
-                    table.with(
-                        Modify::new(Rows::single(row_index))
-                            .with(Color::FG_YELLOW)
-                    );
+                    table.with(Modify::new(Rows::single(row_index)).with(Color::FG_YELLOW));
                 }
                 _ => {}
             }
@@ -266,14 +257,17 @@ fn display_table(prompt_infos: &[PromptInfo], verbose: bool) -> Result<()> {
     }
 
     table.with(Modify::new(Rows::new(1..)).with(Alignment::left()));
-    
+
     println!("{}", table);
 
     if is_tty && !prompt_infos.is_empty() {
         println!();
         println!("{}", "Legend:".bright_white());
         println!("  {} Built-in prompts", "●".green());
-        println!("  {} User prompts (~/.swissarmyhammer/prompts/)", "●".blue());
+        println!(
+            "  {} User prompts (~/.swissarmyhammer/prompts/)",
+            "●".blue()
+        );
         println!("  {} Local prompts (./prompts/)", "●".yellow());
         if verbose {
             println!("  {} Required argument", "*".red());
@@ -292,13 +286,7 @@ mod tests {
     #[test]
     fn test_list_command_with_no_prompts() {
         // This test will fail initially, driving the implementation
-        let result = run_list_command(
-            OutputFormat::Table,
-            false,
-            None,
-            None,
-            None,
-        );
+        let result = run_list_command(OutputFormat::Table, false, None, None, None);
         assert!(result.is_ok());
     }
 
@@ -316,25 +304,13 @@ mod tests {
 
     #[test]
     fn test_list_command_json_format() {
-        let result = run_list_command(
-            OutputFormat::Json,
-            false,
-            None,
-            None,
-            None,
-        );
+        let result = run_list_command(OutputFormat::Json, false, None, None, None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_list_command_yaml_format() {
-        let result = run_list_command(
-            OutputFormat::Yaml,
-            false,
-            None,
-            None,
-            None,
-        );
+        let result = run_list_command(OutputFormat::Yaml, false, None, None, None);
         assert!(result.is_ok());
     }
 
@@ -359,7 +335,7 @@ mod tests {
             source: "builtin".to_string(),
             arguments: "1".to_string(),
         };
-        
+
         assert_eq!(row.name, "test");
         assert_eq!(row.source, "builtin");
     }

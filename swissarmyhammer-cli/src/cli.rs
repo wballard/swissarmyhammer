@@ -124,19 +124,19 @@ Examples:
         /// Output format
         #[arg(long, value_enum, default_value = "table")]
         format: OutputFormat,
-        
+
         /// Show verbose output including arguments
         #[arg(short, long)]
         verbose: bool,
-        
+
         /// Filter by source
         #[arg(long, value_enum)]
         source: Option<PromptSource>,
-        
+
         /// Filter by category
         #[arg(long)]
         category: Option<String>,
-        
+
         /// Search prompts by name or description
         #[arg(long)]
         search: Option<String>,
@@ -167,15 +167,15 @@ Examples:
     Validate {
         /// Path to file or directory to validate
         path: Option<String>,
-        
+
         /// Validate all prompt directories (builtin, user, local)
         #[arg(long)]
         all: bool,
-        
+
         /// Only show errors, no warnings or info
         #[arg(short, long)]
         quiet: bool,
-        
+
         /// Output format
         #[arg(long, value_enum, default_value = "text")]
         format: ValidateFormat,
@@ -211,27 +211,27 @@ Examples:
     Test {
         /// Prompt name to test (alternative to --file)
         prompt_name: Option<String>,
-        
+
         /// Path to prompt file to test
         #[arg(short, long)]
         file: Option<String>,
-        
+
         /// Non-interactive mode: specify arguments as key=value pairs
         #[arg(long = "arg", value_name = "KEY=VALUE")]
         arguments: Vec<String>,
-        
+
         /// Show raw output without formatting
         #[arg(long)]
         raw: bool,
-        
+
         /// Copy rendered prompt to clipboard
         #[arg(long)]
         copy: bool,
-        
+
         /// Save rendered prompt to file
         #[arg(long, value_name = "FILE")]
         save: Option<String>,
-        
+
         /// Show debug information (template, args, processing steps)
         #[arg(long)]
         debug: bool,
@@ -266,47 +266,47 @@ Examples:
     Search {
         /// Search query
         query: String,
-        
+
         /// Search in specific fields (name, title, description, content, arguments)
         #[arg(long, value_delimiter = ',')]
         r#in: Option<Vec<String>>,
-        
+
         /// Use regular expressions
         #[arg(short, long)]
         regex: bool,
-        
+
         /// Enable fuzzy matching for typo tolerance
         #[arg(short, long)]
         fuzzy: bool,
-        
+
         /// Case-sensitive search
         #[arg(long)]
         case_sensitive: bool,
-        
+
         /// Filter by source
         #[arg(long, value_enum)]
         source: Option<PromptSource>,
-        
+
         /// Find prompts with specific argument name
         #[arg(long)]
         has_arg: Option<String>,
-        
+
         /// Find prompts without any arguments
         #[arg(long)]
         no_args: bool,
-        
+
         /// Show complete prompt details
         #[arg(long)]
         full: bool,
-        
+
         /// Output format
         #[arg(long, value_enum, default_value = "table")]
         format: OutputFormat,
-        
+
         /// Highlight matching terms in output
         #[arg(long)]
         highlight: bool,
-        
+
         /// Maximum number of results to show
         #[arg(short, long)]
         limit: Option<usize>,
@@ -331,31 +331,31 @@ Examples:
     Export {
         /// Prompt name to export (alternative to --all or --category)
         prompt_name: Option<String>,
-        
+
         /// Export all prompts
         #[arg(long)]
         all: bool,
-        
+
         /// Export prompts from specific category
         #[arg(long)]
         category: Option<String>,
-        
+
         /// Filter by source
         #[arg(long, value_enum)]
         source: Option<PromptSource>,
-        
+
         /// Output format
         #[arg(long, value_enum, default_value = "tar-gz")]
         format: ExportFormat,
-        
+
         /// Output file/directory path
         #[arg(short, long)]
         output: Option<String>,
-        
+
         /// Include author and licensing metadata
         #[arg(long)]
         metadata: bool,
-        
+
         /// Exclude patterns (gitignore-style)
         #[arg(long)]
         exclude: Vec<String>,
@@ -386,27 +386,27 @@ Examples:
     Import {
         /// Source to import from (file path, URL, or Git repository)
         source: String,
-        
+
         /// Preview import without making changes
         #[arg(long)]
         dry_run: bool,
-        
+
         /// Conflict resolution strategy
         #[arg(long, value_enum, default_value = "skip")]
         strategy: ImportStrategy,
-        
+
         /// Target directory for import
         #[arg(long)]
         target: Option<String>,
-        
+
         /// Skip validation of prompts before importing
         #[arg(long = "no-validate")]
         no_validate: bool,
-        
+
         /// Skip creating backup before overwriting  
         #[arg(long = "no-backup")]
         no_backup: bool,
-        
+
         /// Show detailed progress information
         #[arg(short, long)]
         verbose: bool,
@@ -444,6 +444,7 @@ impl Cli {
         Self::parse()
     }
 
+    #[allow(dead_code)]
     pub fn try_parse_from_args<I, T>(args: I) -> Result<Self, clap::Error>
     where
         I: IntoIterator<Item = T>,
@@ -516,12 +517,18 @@ impl Cli {
             println!("  {} - Show detailed help", "--help".cyan());
             println!();
             println!("{}", "Quick Start:".bold().yellow());
-            println!("  1. Run {} to check your setup", "swissarmyhammer doctor".cyan());
+            println!(
+                "  1. Run {} to check your setup",
+                "swissarmyhammer doctor".cyan()
+            );
             println!("  2. Add the configuration above to Claude Code");
             println!("  3. Create prompts in ~/.swissarmyhammer/prompts/");
             println!();
             println!("{}", "Example Prompt:".bold());
-            println!("  Create a file {} with:", "~/.swissarmyhammer/prompts/myhelper.md".dimmed());
+            println!(
+                "  Create a file {} with:",
+                "~/.swissarmyhammer/prompts/myhelper.md".dimmed()
+            );
             println!("  ---");
             println!("  title: My Helper");
             println!("  description: A helpful prompt");
@@ -656,7 +663,16 @@ mod tests {
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Test { prompt_name, file, arguments, raw, copy, save, debug }) = cli.command {
+        if let Some(Commands::Test {
+            prompt_name,
+            file,
+            arguments,
+            raw,
+            copy,
+            save,
+            debug,
+        }) = cli.command
+        {
             assert_eq!(prompt_name, Some("help".to_string()));
             assert_eq!(file, None);
             assert!(arguments.is_empty());
@@ -675,7 +691,16 @@ mod tests {
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Test { prompt_name, file, arguments, raw, copy, save, debug }) = cli.command {
+        if let Some(Commands::Test {
+            prompt_name,
+            file,
+            arguments,
+            raw,
+            copy,
+            save,
+            debug,
+        }) = cli.command
+        {
             assert_eq!(prompt_name, None);
             assert_eq!(file, Some("test.md".to_string()));
             assert!(arguments.is_empty());
@@ -691,14 +716,27 @@ mod tests {
     #[test]
     fn test_cli_test_subcommand_with_arguments() {
         let result = Cli::try_parse_from_args([
-            "swissarmyhammer", "test", "help", 
-            "--arg", "topic=git", 
-            "--arg", "format=markdown"
+            "swissarmyhammer",
+            "test",
+            "help",
+            "--arg",
+            "topic=git",
+            "--arg",
+            "format=markdown",
         ]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Test { prompt_name, file, arguments, raw, copy, save, debug }) = cli.command {
+        if let Some(Commands::Test {
+            prompt_name,
+            file,
+            arguments,
+            raw,
+            copy,
+            save,
+            debug,
+        }) = cli.command
+        {
             assert_eq!(prompt_name, Some("help".to_string()));
             assert_eq!(file, None);
             assert_eq!(arguments, vec!["topic=git", "format=markdown"]);
@@ -714,13 +752,28 @@ mod tests {
     #[test]
     fn test_cli_test_subcommand_with_all_flags() {
         let result = Cli::try_parse_from_args([
-            "swissarmyhammer", "test", "help", 
-            "--raw", "--copy", "--debug", "--save", "output.md"
+            "swissarmyhammer",
+            "test",
+            "help",
+            "--raw",
+            "--copy",
+            "--debug",
+            "--save",
+            "output.md",
         ]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Test { prompt_name, file, arguments, raw, copy, save, debug }) = cli.command {
+        if let Some(Commands::Test {
+            prompt_name,
+            file,
+            arguments,
+            raw,
+            copy,
+            save,
+            debug,
+        }) = cli.command
+        {
             assert_eq!(prompt_name, Some("help".to_string()));
             assert_eq!(file, None);
             assert!(arguments.is_empty());
@@ -739,7 +792,21 @@ mod tests {
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Search { query, r#in, regex, fuzzy, case_sensitive, source, has_arg, no_args, full, format, highlight, limit }) = cli.command {
+        if let Some(Commands::Search {
+            query,
+            r#in,
+            regex,
+            fuzzy,
+            case_sensitive,
+            source,
+            has_arg,
+            no_args,
+            full,
+            format,
+            highlight,
+            limit,
+        }) = cli.command
+        {
             assert_eq!(query, "code review");
             assert_eq!(r#in, None);
             assert!(!regex);
@@ -760,15 +827,41 @@ mod tests {
     #[test]
     fn test_cli_search_subcommand_with_flags() {
         let result = Cli::try_parse_from_args([
-            "swissarmyhammer", "search", "debug.*error",
-            "--regex", "--fuzzy", "--case-sensitive",
-            "--source", "builtin", "--has-arg", "language",
-            "--full", "--format", "json", "--highlight", "--limit", "5"
+            "swissarmyhammer",
+            "search",
+            "debug.*error",
+            "--regex",
+            "--fuzzy",
+            "--case-sensitive",
+            "--source",
+            "builtin",
+            "--has-arg",
+            "language",
+            "--full",
+            "--format",
+            "json",
+            "--highlight",
+            "--limit",
+            "5",
         ]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Search { query, r#in, regex, fuzzy, case_sensitive, source, has_arg, no_args, full, format, highlight, limit }) = cli.command {
+        if let Some(Commands::Search {
+            query,
+            r#in,
+            regex,
+            fuzzy,
+            case_sensitive,
+            source,
+            has_arg,
+            no_args,
+            full,
+            format,
+            highlight,
+            limit,
+        }) = cli.command
+        {
             assert_eq!(query, "debug.*error");
             assert_eq!(r#in, None);
             assert!(regex);
@@ -789,15 +882,25 @@ mod tests {
     #[test]
     fn test_cli_search_subcommand_with_fields() {
         let result = Cli::try_parse_from_args([
-            "swissarmyhammer", "search", "python",
-            "--in", "name,description,content"
+            "swissarmyhammer",
+            "search",
+            "python",
+            "--in",
+            "name,description,content",
         ]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
         if let Some(Commands::Search { query, r#in, .. }) = cli.command {
             assert_eq!(query, "python");
-            assert_eq!(r#in, Some(vec!["name".to_string(), "description".to_string(), "content".to_string()]));
+            assert_eq!(
+                r#in,
+                Some(vec![
+                    "name".to_string(),
+                    "description".to_string(),
+                    "content".to_string()
+                ])
+            );
         } else {
             panic!("Expected Search command");
         }
@@ -809,7 +912,17 @@ mod tests {
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Export { prompt_name, all, category, source, format, output, metadata, exclude }) = cli.command {
+        if let Some(Commands::Export {
+            prompt_name,
+            all,
+            category,
+            source,
+            format,
+            output,
+            metadata,
+            exclude,
+        }) = cli.command
+        {
             assert_eq!(prompt_name, Some("my-prompt".to_string()));
             assert!(!all);
             assert_eq!(category, None);
@@ -826,14 +939,33 @@ mod tests {
     #[test]
     fn test_cli_export_subcommand_all_with_options() {
         let result = Cli::try_parse_from_args([
-            "swissarmyhammer", "export", "--all", "--format", "zip",
-            "--output", "prompts.zip", "--metadata", 
-            "--exclude", "*.tmp", "--exclude", "draft-*"
+            "swissarmyhammer",
+            "export",
+            "--all",
+            "--format",
+            "zip",
+            "--output",
+            "prompts.zip",
+            "--metadata",
+            "--exclude",
+            "*.tmp",
+            "--exclude",
+            "draft-*",
         ]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Export { prompt_name, all, category, source, format, output, metadata, exclude }) = cli.command {
+        if let Some(Commands::Export {
+            prompt_name,
+            all,
+            category,
+            source,
+            format,
+            output,
+            metadata,
+            exclude,
+        }) = cli.command
+        {
             assert_eq!(prompt_name, None);
             assert!(all);
             assert_eq!(category, None);
@@ -850,13 +982,29 @@ mod tests {
     #[test]
     fn test_cli_export_subcommand_category() {
         let result = Cli::try_parse_from_args([
-            "swissarmyhammer", "export", "--category", "debug", 
-            "--source", "user", "--format", "directory"
+            "swissarmyhammer",
+            "export",
+            "--category",
+            "debug",
+            "--source",
+            "user",
+            "--format",
+            "directory",
         ]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Export { prompt_name, all, category, source, format, output, metadata, exclude }) = cli.command {
+        if let Some(Commands::Export {
+            prompt_name,
+            all,
+            category,
+            source,
+            format,
+            output,
+            metadata,
+            exclude,
+        }) = cli.command
+        {
             assert_eq!(prompt_name, None);
             assert!(!all);
             assert_eq!(category, Some("debug".to_string()));
@@ -876,7 +1024,16 @@ mod tests {
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Import { source, dry_run, strategy, target, no_validate, no_backup, verbose }) = cli.command {
+        if let Some(Commands::Import {
+            source,
+            dry_run,
+            strategy,
+            target,
+            no_validate,
+            no_backup,
+            verbose,
+        }) = cli.command
+        {
             assert_eq!(source, "prompts.tar.gz");
             assert!(!dry_run);
             assert!(matches!(strategy, ImportStrategy::Skip));
@@ -892,14 +1049,31 @@ mod tests {
     #[test]
     fn test_cli_import_subcommand_with_options() {
         let result = Cli::try_parse_from_args([
-            "swissarmyhammer", "import", "https://example.com/prompts.tar.gz",
-            "--dry-run", "--strategy", "overwrite", "--target", "/tmp/prompts",
-            "--no-validate", "--no-backup", "--verbose"
+            "swissarmyhammer",
+            "import",
+            "https://example.com/prompts.tar.gz",
+            "--dry-run",
+            "--strategy",
+            "overwrite",
+            "--target",
+            "/tmp/prompts",
+            "--no-validate",
+            "--no-backup",
+            "--verbose",
         ]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Import { source, dry_run, strategy, target, no_validate, no_backup, verbose }) = cli.command {
+        if let Some(Commands::Import {
+            source,
+            dry_run,
+            strategy,
+            target,
+            no_validate,
+            no_backup,
+            verbose,
+        }) = cli.command
+        {
             assert_eq!(source, "https://example.com/prompts.tar.gz");
             assert!(dry_run);
             assert!(matches!(strategy, ImportStrategy::Overwrite));
@@ -915,13 +1089,25 @@ mod tests {
     #[test]
     fn test_cli_import_subcommand_git_repository() {
         let result = Cli::try_parse_from_args([
-            "swissarmyhammer", "import", "git@github.com:user/prompts.git",
-            "--strategy", "rename"
+            "swissarmyhammer",
+            "import",
+            "git@github.com:user/prompts.git",
+            "--strategy",
+            "rename",
         ]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Import { source, dry_run, strategy, target, no_validate, no_backup, verbose }) = cli.command {
+        if let Some(Commands::Import {
+            source,
+            dry_run,
+            strategy,
+            target,
+            no_validate,
+            no_backup,
+            verbose,
+        }) = cli.command
+        {
             assert_eq!(source, "git@github.com:user/prompts.git");
             assert!(!dry_run);
             assert!(matches!(strategy, ImportStrategy::Rename));

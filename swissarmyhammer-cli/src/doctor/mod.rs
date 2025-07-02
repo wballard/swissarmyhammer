@@ -1,9 +1,9 @@
 use anyhow::Result;
 use colored::*;
-use std::path::{Path, PathBuf};
+use serde_json::Value;
 use std::env;
 use std::fs;
-use serde_json::Value;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum CheckStatus {
@@ -26,9 +26,7 @@ pub struct Doctor {
 
 impl Doctor {
     pub fn new() -> Self {
-        Self {
-            checks: Vec::new(),
-        }
+        Self { checks: Vec::new() }
     }
 
     /// Run all diagnostic checks
@@ -36,17 +34,17 @@ impl Doctor {
         println!("{}", "🔨 SwissArmyHammer Doctor".bold().blue());
         println!("{}", "Running diagnostics...".dimmed());
         println!();
-        
+
         // Run all checks
         self.check_in_path()?;
         self.check_claude_config()?;
         self.check_prompt_directories()?;
         self.check_yaml_parsing()?;
         self.check_file_permissions()?;
-        
+
         // Print results
         self.print_results();
-        
+
         // Return exit code
         Ok(self.get_exit_code())
     }
@@ -55,11 +53,11 @@ impl Doctor {
     pub fn check_in_path(&mut self) -> Result<()> {
         let path_var = env::var("PATH").unwrap_or_default();
         let paths: Vec<&str> = path_var.split(':').collect();
-        
+
         let exe_name = "swissarmyhammer";
         let mut found = false;
         let mut found_path = None;
-        
+
         for path in paths {
             let exe_path = Path::new(path).join(exe_name);
             if exe_path.exists() {
@@ -68,12 +66,15 @@ impl Doctor {
                 break;
             }
         }
-        
+
         if found {
             self.checks.push(Check {
                 name: "swissarmyhammer in PATH".to_string(),
                 status: CheckStatus::Ok,
-                message: format!("Found at: {:?}", found_path.expect("found_path should be Some when found is true")),
+                message: format!(
+                    "Found at: {:?}",
+                    found_path.expect("found_path should be Some when found is true")
+                ),
                 fix: None,
             });
         } else {
@@ -81,27 +82,33 @@ impl Doctor {
                 name: "swissarmyhammer in PATH".to_string(),
                 status: CheckStatus::Warning,
                 message: "swissarmyhammer not found in PATH".to_string(),
-                fix: Some("Add swissarmyhammer to your PATH or use the full path in Claude Code config".to_string()),
+                fix: Some(
+                    "Add swissarmyhammer to your PATH or use the full path in Claude Code config"
+                        .to_string(),
+                ),
             });
         }
-        
+
         Ok(())
     }
 
     /// Check Claude Code MCP configuration
     pub fn check_claude_config(&mut self) -> Result<()> {
         let config_path = get_claude_config_path();
-        
+
         if !config_path.exists() {
             self.checks.push(Check {
                 name: "Claude Code config file".to_string(),
                 status: CheckStatus::Warning,
                 message: format!("Config file not found: {:?}", config_path),
-                fix: Some(format!("Create the config file at {:?} with MCP server configuration", config_path)),
+                fix: Some(format!(
+                    "Create the config file at {:?} with MCP server configuration",
+                    config_path
+                )),
             });
             return Ok(());
         }
-        
+
         // Try to parse the config
         match fs::read_to_string(&config_path) {
             Ok(content) => {
@@ -112,7 +119,7 @@ impl Doctor {
                             .get("mcpServers")
                             .and_then(|servers| servers.get("swissarmyhammer"))
                             .is_some();
-                        
+
                         if has_swissarmyhammer {
                             self.checks.push(Check {
                                 name: "Claude Code MCP configuration".to_string(),
@@ -124,7 +131,8 @@ impl Doctor {
                             self.checks.push(Check {
                                 name: "Claude Code MCP configuration".to_string(),
                                 status: CheckStatus::Warning,
-                                message: "swissarmyhammer not found in MCP configuration".to_string(),
+                                message: "swissarmyhammer not found in MCP configuration"
+                                    .to_string(),
                                 fix: Some(get_claude_config_snippet()),
                             });
                         }
@@ -134,7 +142,9 @@ impl Doctor {
                             name: "Claude Code config parsing".to_string(),
                             status: CheckStatus::Error,
                             message: format!("Failed to parse config: {}", e),
-                            fix: Some("Fix the JSON syntax in your Claude Code config file".to_string()),
+                            fix: Some(
+                                "Fix the JSON syntax in your Claude Code config file".to_string(),
+                            ),
                         });
                     }
                 }
@@ -148,13 +158,12 @@ impl Doctor {
                 });
             }
         }
-        
+
         Ok(())
     }
 
     /// Check prompt directories
     pub fn check_prompt_directories(&mut self) -> Result<()> {
-        
         // Check builtin prompts (embedded in binary)
         self.checks.push(Check {
             name: "Built-in prompts".to_string(),
@@ -162,7 +171,7 @@ impl Doctor {
             message: "Built-in prompts are embedded in the binary".to_string(),
             fix: None,
         });
-        
+
         // Check user prompts directory
         if let Some(home) = dirs::home_dir() {
             let user_prompts = home.join(".swissarmyhammer").join("prompts");
@@ -178,12 +187,15 @@ impl Doctor {
                 self.checks.push(Check {
                     name: "User prompts directory".to_string(),
                     status: CheckStatus::Ok,
-                    message: format!("User prompts directory not found (optional): {:?}", user_prompts),
+                    message: format!(
+                        "User prompts directory not found (optional): {:?}",
+                        user_prompts
+                    ),
                     fix: Some(format!("Create directory: mkdir -p {:?}", user_prompts)),
                 });
             }
         }
-        
+
         // Check local prompts directory
         let local_prompts = PathBuf::from(".swissarmyhammer").join("prompts");
         if local_prompts.exists() {
@@ -198,35 +210,36 @@ impl Doctor {
             self.checks.push(Check {
                 name: "Local prompts directory".to_string(),
                 status: CheckStatus::Ok,
-                message: format!("Local prompts directory not found (optional): {:?}", local_prompts),
+                message: format!(
+                    "Local prompts directory not found (optional): {:?}",
+                    local_prompts
+                ),
                 fix: Some(format!("Create directory: mkdir -p {:?}", local_prompts)),
             });
         }
-        
+
         Ok(())
     }
 
     /// Check for YAML parsing errors
     pub fn check_yaml_parsing(&mut self) -> Result<()> {
         use walkdir::WalkDir;
-        
+
         let mut yaml_errors = Vec::new();
-        
+
         // Check all prompt directories
-        let mut dirs_to_check = vec![
-            PathBuf::from(".swissarmyhammer").join("prompts"),
-        ];
-        
+        let mut dirs_to_check = vec![PathBuf::from(".swissarmyhammer").join("prompts")];
+
         // Add user directory if it exists
         if let Some(home) = dirs::home_dir() {
             dirs_to_check.push(home.join(".swissarmyhammer").join("prompts"));
         }
-        
+
         for dir in dirs_to_check {
             if !dir.exists() {
                 continue;
             }
-            
+
             for entry in WalkDir::new(&dir)
                 .into_iter()
                 .filter_map(|e| e.ok())
@@ -240,19 +253,24 @@ impl Doctor {
                             let parts: Vec<&str> = content.splitn(3, "---").collect();
                             if parts.len() >= 3 {
                                 let yaml_content = parts[1];
-                                if let Err(e) = serde_yaml::from_str::<serde_yaml::Value>(yaml_content) {
+                                if let Err(e) =
+                                    serde_yaml::from_str::<serde_yaml::Value>(yaml_content)
+                                {
                                     yaml_errors.push((entry.path().to_path_buf(), e.to_string()));
                                 }
                             }
                         }
                     }
                     Err(e) => {
-                        yaml_errors.push((entry.path().to_path_buf(), format!("Failed to read file: {}", e)));
+                        yaml_errors.push((
+                            entry.path().to_path_buf(),
+                            format!("Failed to read file: {}", e),
+                        ));
                     }
                 }
             }
         }
-        
+
         if yaml_errors.is_empty() {
             self.checks.push(Check {
                 name: "YAML parsing".to_string(),
@@ -270,7 +288,7 @@ impl Doctor {
                 });
             }
         }
-        
+
         Ok(())
     }
 
@@ -295,27 +313,33 @@ impl Doctor {
                 });
             }
         }
-        
+
         Ok(())
     }
 
     /// Print the results
     pub fn print_results(&self) {
         let use_color = crate::cli::Cli::should_use_color();
-        
+
         // Group checks by category
-        let system_checks: Vec<_> = self.checks.iter()
+        let system_checks: Vec<_> = self
+            .checks
+            .iter()
             .filter(|c| c.name.contains("PATH") || c.name.contains("permissions"))
             .collect();
-            
-        let config_checks: Vec<_> = self.checks.iter()
+
+        let config_checks: Vec<_> = self
+            .checks
+            .iter()
             .filter(|c| c.name.contains("Claude") || c.name.contains("config"))
             .collect();
-            
-        let prompt_checks: Vec<_> = self.checks.iter()
+
+        let prompt_checks: Vec<_> = self
+            .checks
+            .iter()
             .filter(|c| c.name.contains("prompt") || c.name.contains("YAML"))
             .collect();
-        
+
         // Print system checks
         if !system_checks.is_empty() {
             if use_color {
@@ -328,7 +352,7 @@ impl Doctor {
             }
             println!();
         }
-        
+
         // Print configuration checks
         if !config_checks.is_empty() {
             if use_color {
@@ -341,7 +365,7 @@ impl Doctor {
             }
             println!();
         }
-        
+
         // Print prompt checks
         if !prompt_checks.is_empty() {
             if use_color {
@@ -354,43 +378,53 @@ impl Doctor {
             }
             println!();
         }
-        
+
         // Print summary
-        let ok_count = self.checks.iter().filter(|c| c.status == CheckStatus::Ok).count();
-        let warning_count = self.checks.iter().filter(|c| c.status == CheckStatus::Warning).count();
-        let error_count = self.checks.iter().filter(|c| c.status == CheckStatus::Error).count();
-        
+        let ok_count = self
+            .checks
+            .iter()
+            .filter(|c| c.status == CheckStatus::Ok)
+            .count();
+        let warning_count = self
+            .checks
+            .iter()
+            .filter(|c| c.status == CheckStatus::Warning)
+            .count();
+        let error_count = self
+            .checks
+            .iter()
+            .filter(|c| c.status == CheckStatus::Error)
+            .count();
+
         if use_color {
             println!("{}", "Summary:".bold().green());
         } else {
             println!("Summary:");
         }
-        
+
         if error_count > 0 {
             if use_color {
-                println!("  {} checks passed, {} warnings, {} errors", 
+                println!(
+                    "  {} checks passed, {} warnings, {} errors",
                     ok_count.to_string().green(),
                     warning_count.to_string().yellow(),
                     error_count.to_string().red()
                 );
             } else {
-                println!("  {} checks passed, {} warnings, {} errors", 
-                    ok_count,
-                    warning_count,
-                    error_count
+                println!(
+                    "  {} checks passed, {} warnings, {} errors",
+                    ok_count, warning_count, error_count
                 );
             }
         } else if warning_count > 0 {
             if use_color {
-                println!("  {} checks passed, {} warnings", 
+                println!(
+                    "  {} checks passed, {} warnings",
                     ok_count.to_string().green(),
                     warning_count.to_string().yellow()
                 );
             } else {
-                println!("  {} checks passed, {} warnings", 
-                    ok_count,
-                    warning_count
-                );
+                println!("  {} checks passed, {} warnings", ok_count, warning_count);
             }
         } else if use_color {
             println!("  ✨ All checks passed!");
@@ -403,7 +437,7 @@ impl Doctor {
     pub fn get_exit_code(&self) -> i32 {
         let has_error = self.checks.iter().any(|c| c.status == CheckStatus::Error);
         let has_warning = self.checks.iter().any(|c| c.status == CheckStatus::Warning);
-        
+
         if has_error {
             2
         } else if has_warning {
@@ -431,19 +465,25 @@ pub fn get_claude_config_path() -> PathBuf {
             .join("Claude")
             .join("claude_desktop_config.json")
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         dirs::config_dir()
-            .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from("~")).join(".config"))
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .unwrap_or_else(|| PathBuf::from("~"))
+                    .join(".config")
+            })
             .join("Claude")
             .join("claude_desktop_config.json")
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from(env::var("APPDATA").unwrap_or_else(|_| "~".to_string())))
+            .unwrap_or_else(|| {
+                PathBuf::from(env::var("APPDATA").unwrap_or_else(|_| "~".to_string()))
+            })
             .join("Claude")
             .join("claude_desktop_config.json")
     }
@@ -452,7 +492,7 @@ pub fn get_claude_config_path() -> PathBuf {
 /// Count markdown files in a directory
 fn count_markdown_files(path: &Path) -> usize {
     use walkdir::WalkDir;
-    
+
     WalkDir::new(path)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -472,7 +512,8 @@ fn get_claude_config_snippet() -> String {
       "args": ["serve"]
     }
   }
-}"#.to_string()
+}"#
+    .to_string()
 }
 
 /// Print a single check result
@@ -482,21 +523,18 @@ fn print_check(check: &Check, use_color: bool) {
         CheckStatus::Warning => ("⚠", |s: &str| s.yellow()),
         CheckStatus::Error => ("✗", |s: &str| s.red()),
     };
-    
+
     if use_color {
-        print!("  {} {} - {}", 
+        print!(
+            "  {} {} - {}",
             color_fn(symbol),
             check.name.bold(),
             check.message
         );
     } else {
-        print!("  {} {} - {}", 
-            symbol,
-            check.name,
-            check.message
-        );
+        print!("  {} {} - {}", symbol, check.name, check.message);
     }
-    
+
     if let Some(fix) = &check.fix {
         println!();
         if use_color {
@@ -522,7 +560,7 @@ mod tests {
     #[test]
     fn test_check_status_exit_codes() {
         let mut doctor = Doctor::new();
-        
+
         // All OK should return 0
         doctor.checks.push(Check {
             name: "Test OK".to_string(),
@@ -554,14 +592,14 @@ mod tests {
     #[test]
     fn test_check_in_path() {
         let mut doctor = Doctor::new();
-        
+
         // Set up a mock PATH
         let original_path = env::var("PATH").unwrap_or_default();
         env::set_var("PATH", format!("/usr/local/bin:{}", original_path));
-        
+
         let result = doctor.check_in_path();
         assert!(result.is_ok());
-        
+
         // Restore original PATH
         env::set_var("PATH", original_path);
     }
@@ -571,9 +609,11 @@ mod tests {
         let mut doctor = Doctor::new();
         let result = doctor.check_prompt_directories();
         assert!(result.is_ok());
-        
+
         // Should have checks for builtin, user, and local directories
-        let prompt_checks: Vec<_> = doctor.checks.iter()
+        let prompt_checks: Vec<_> = doctor
+            .checks
+            .iter()
             .filter(|c| c.name.contains("prompt"))
             .collect();
         assert!(prompt_checks.len() >= 3);
@@ -583,26 +623,26 @@ mod tests {
     fn test_get_claude_config_path() {
         // This is a helper function we'll implement
         let config_path = get_claude_config_path();
-        
+
         #[cfg(target_os = "macos")]
         assert!(config_path.ends_with("claude_desktop_config.json"));
-        
+
         #[cfg(target_os = "linux")]
         assert!(config_path.ends_with("claude_desktop_config.json"));
-        
+
         #[cfg(target_os = "windows")]
         assert!(config_path.ends_with("claude_desktop_config.json"));
     }
-    
+
     #[test]
     fn test_run_diagnostics() {
         let mut doctor = Doctor::new();
         let result = doctor.run_diagnostics();
         assert!(result.is_ok());
-        
+
         // Should have at least some checks
         assert!(!doctor.checks.is_empty());
-        
+
         // Exit code should be 0, 1, or 2
         let exit_code = doctor.get_exit_code();
         assert!(exit_code <= 2);

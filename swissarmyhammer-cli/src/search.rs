@@ -1,9 +1,8 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use colored::*;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use is_terminal::IsTerminal;
 use regex::Regex;
-use serde_json;
 use std::io;
 use tabled::{
     settings::{object::Rows, Alignment, Color, Modify, Style},
@@ -45,9 +44,10 @@ struct SearchResultRow {
     score: String,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn run_search_command(
     query: String,
-    fields: Option<Vec<String>>,
+    _fields: Option<Vec<String>>,
     regex: bool,
     fuzzy: bool,
     case_sensitive: bool,
@@ -60,28 +60,28 @@ pub fn run_search_command(
     limit: Option<usize>,
 ) -> Result<()> {
     use swissarmyhammer::PromptLibrary;
-    
+
     // Load all prompts from all sources
     let mut library = PromptLibrary::new();
-    
+
     // Load builtin prompts
     let builtin_dir = dirs::data_dir()
         .map(|d| d.join("swissarmyhammer").join("prompts"))
         .filter(|p| p.exists());
-    
+
     if let Some(dir) = builtin_dir {
         library.add_directory(&dir)?;
     }
-    
+
     // Load user prompts
     let user_dir = dirs::home_dir()
         .map(|d| d.join(".prompts"))
         .filter(|p| p.exists());
-    
+
     if let Some(dir) = user_dir {
         library.add_directory(&dir)?;
     }
-    
+
     // Load local prompts
     let local_dir = std::path::Path::new("prompts");
     if local_dir.exists() {
@@ -90,10 +90,10 @@ pub fn run_search_command(
 
     // Get all prompts
     let all_prompts = library.list()?;
-    
+
     // Search and filter prompts
     let mut results = Vec::new();
-    
+
     for prompt in all_prompts {
         // Determine source based on path
         let source_str = if let Some(source_path) = &prompt.source {
@@ -135,12 +135,20 @@ pub fn run_search_command(
         // Perform search
         let mut score = 0.0;
         let mut matched = false;
-        let query_lower = if case_sensitive { query.clone() } else { query.to_lowercase() };
-        
+        let query_lower = if case_sensitive {
+            query.clone()
+        } else {
+            query.to_lowercase()
+        };
+
         if regex {
             let re = Regex::new(&query)?;
-            matched = re.is_match(&prompt.name) 
-                || prompt.description.as_ref().map(|d| re.is_match(d)).unwrap_or(false)
+            matched = re.is_match(&prompt.name)
+                || prompt
+                    .description
+                    .as_ref()
+                    .map(|d| re.is_match(d))
+                    .unwrap_or(false)
                 || prompt.template.contains(&query);
         } else if fuzzy {
             let matcher = SkimMatcherV2::default();
@@ -156,32 +164,48 @@ pub fn run_search_command(
             }
         } else {
             // Simple substring search
-            let name_check = if case_sensitive { &prompt.name } else { &prompt.name.to_lowercase() };
+            let name_check = if case_sensitive {
+                &prompt.name
+            } else {
+                &prompt.name.to_lowercase()
+            };
             matched = name_check.contains(&query_lower)
-                || prompt.description.as_ref()
-                    .map(|d| if case_sensitive { d.contains(&query) } else { d.to_lowercase().contains(&query_lower) })
+                || prompt
+                    .description
+                    .as_ref()
+                    .map(|d| {
+                        if case_sensitive {
+                            d.contains(&query)
+                        } else {
+                            d.to_lowercase().contains(&query_lower)
+                        }
+                    })
                     .unwrap_or(false)
                 || prompt.template.contains(&query);
-            
+
             if matched {
                 score = 100.0;
             }
         }
-        
+
         if matched {
             let excerpt = if highlight {
                 generate_excerpt(&prompt.template, &query, highlight)
             } else {
                 None
             };
-            
-            let arguments = prompt.arguments.iter().map(|arg| SearchArgument {
-                name: arg.name.clone(),
-                description: arg.description.clone(),
-                required: arg.required,
-                default: arg.default.clone(),
-            }).collect();
-            
+
+            let arguments = prompt
+                .arguments
+                .iter()
+                .map(|arg| SearchArgument {
+                    name: arg.name.clone(),
+                    description: arg.description.clone(),
+                    required: arg.required,
+                    default: arg.default.clone(),
+                })
+                .collect();
+
             results.push(SearchResult {
                 name: prompt.name.clone(),
                 title: None, // No title field in new API
@@ -193,15 +217,15 @@ pub fn run_search_command(
             });
         }
     }
-    
+
     // Sort by score (highest first)
     results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
-    
+
     // Apply limit
     if let Some(limit) = limit {
         results.truncate(limit);
     }
-    
+
     // Output results
     match format {
         OutputFormat::Json => {
@@ -216,7 +240,7 @@ pub fn run_search_command(
             display_table(&results, full)?;
         }
     }
-    
+
     Ok(())
 }
 
@@ -225,9 +249,9 @@ fn display_table(results: &[SearchResult], full: bool) -> Result<()> {
         println!("No prompts found matching the search criteria.");
         return Ok(());
     }
-    
+
     let is_tty = io::stderr().is_terminal();
-    
+
     let rows: Vec<SearchResultRow> = results
         .iter()
         .map(|result| {
@@ -243,7 +267,7 @@ fn display_table(results: &[SearchResult], full: bool) -> Result<()> {
                     exc
                 }
             };
-            
+
             SearchResultRow {
                 name: result.name.clone(),
                 title: title.to_string(),
@@ -253,66 +277,54 @@ fn display_table(results: &[SearchResult], full: bool) -> Result<()> {
             }
         })
         .collect();
-    
+
     let mut table = Table::new(rows);
     table.with(Style::modern());
-    
+
     if is_tty {
         // Add colors for better readability in terminal
-        table.with(
-            Modify::new(Rows::single(0))
-                .with(Color::FG_BRIGHT_CYAN)
-        );
-        
+        table.with(Modify::new(Rows::single(0)).with(Color::FG_BRIGHT_CYAN));
+
         // Color code sources
         for (i, result) in results.iter().enumerate() {
             let row_index = i + 1; // +1 because row 0 is header
             match result.source.as_str() {
                 "builtin" => {
-                    table.with(
-                        Modify::new(Rows::single(row_index))
-                            .with(Color::FG_GREEN)
-                    );
+                    table.with(Modify::new(Rows::single(row_index)).with(Color::FG_GREEN));
                 }
                 "user" => {
-                    table.with(
-                        Modify::new(Rows::single(row_index))
-                            .with(Color::FG_BLUE)
-                    );
+                    table.with(Modify::new(Rows::single(row_index)).with(Color::FG_BLUE));
                 }
                 "local" => {
-                    table.with(
-                        Modify::new(Rows::single(row_index))
-                            .with(Color::FG_YELLOW)
-                    );
+                    table.with(Modify::new(Rows::single(row_index)).with(Color::FG_YELLOW));
                 }
                 _ => {}
             }
         }
     }
-    
+
     table.with(Modify::new(Rows::new(1..)).with(Alignment::left()));
-    
+
     println!("{}", table);
-    
+
     if is_tty && !results.is_empty() {
         println!();
         println!("{} results found", results.len());
     }
-    
+
     Ok(())
 }
 
 pub fn generate_excerpt(content: &str, query: &str, highlight: bool) -> Option<String> {
     let query_lower = query.to_lowercase();
     let content_lower = content.to_lowercase();
-    
+
     if let Some(pos) = content_lower.find(&query_lower) {
         let start = pos.saturating_sub(30);
         let end = (pos + query.len() + 30).min(content.len());
-        
+
         let excerpt = &content[start..end];
-        
+
         if highlight {
             let highlighted = excerpt.replace(query, &format!("{}", query.bright_yellow()));
             Some(format!("...{}...", highlighted))
@@ -324,6 +336,7 @@ pub fn generate_excerpt(content: &str, query: &str, highlight: bool) -> Option<S
     }
 }
 
+#[allow(dead_code)]
 pub fn generate_excerpt_with_long_text(content: &str, query: &str, max_length: usize) -> String {
     let excerpt = generate_excerpt(content, query, false).unwrap_or_default();
     if excerpt.len() > max_length {
@@ -336,27 +349,27 @@ pub fn generate_excerpt_with_long_text(content: &str, query: &str, max_length: u
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_generate_excerpt() {
         let content = "This is a test content with some keywords in it";
         let query = "keywords";
-        
+
         let excerpt = generate_excerpt(content, query, false);
         assert!(excerpt.is_some());
         assert!(excerpt.unwrap().contains("keywords"));
     }
-    
+
     #[test]
     fn test_generate_excerpt_with_long_text() {
         let content = "This is a very long test content with some keywords that we want to find and excerpt properly";
         let query = "keywords";
-        
+
         let excerpt = generate_excerpt_with_long_text(content, query, 50);
         assert!(excerpt.len() <= 50);
         assert!(excerpt.contains("..."));
     }
-    
+
     #[test]
     fn test_search_result_creation() {
         let result = SearchResult {
@@ -368,7 +381,7 @@ mod tests {
             excerpt: None,
             arguments: vec![],
         };
-        
+
         assert_eq!(result.name, "test-prompt");
         assert_eq!(result.score, 100.0);
     }

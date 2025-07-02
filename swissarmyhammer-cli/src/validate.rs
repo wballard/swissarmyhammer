@@ -1,13 +1,14 @@
 use anyhow::Result;
 use colored::*;
 use serde::Serialize;
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use crate::cli::ValidateFormat;
 
 // Local structs for validation
 #[derive(Debug, Clone, serde::Deserialize)]
+#[allow(dead_code)]
 struct PromptArgument {
     name: String,
     description: Option<String>,
@@ -24,6 +25,7 @@ struct PromptFrontMatter {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct Prompt {
     name: String,
     title: Option<String>,
@@ -34,6 +36,7 @@ struct Prompt {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum ValidationLevel {
     Error,
     Warning,
@@ -124,21 +127,23 @@ impl Validator {
 
         // Load all prompts from all sources
         let mut library = swissarmyhammer::PromptLibrary::new();
-        
+
         // Load builtin prompts if available
         if let Some(builtin_dir) = dirs::data_dir()
             .map(|d| d.join("swissarmyhammer").join("prompts"))
-            .filter(|p| p.exists()) {
+            .filter(|p| p.exists())
+        {
             library.add_directory(&builtin_dir)?;
         }
-        
+
         // Load user prompts
         if let Some(user_dir) = dirs::home_dir()
             .map(|d| d.join(".swissarmyhammer").join("prompts"))
-            .filter(|p| p.exists()) {
+            .filter(|p| p.exists())
+        {
             library.add_directory(&user_dir)?;
         }
-        
+
         // Load local prompts
         let local_dir = PathBuf::from(".swissarmyhammer").join("prompts");
         if local_dir.exists() {
@@ -151,14 +156,22 @@ impl Validator {
                 name: prompt.name.clone(),
                 title: None,
                 description: prompt.description.clone(),
-                source_path: prompt.source.as_ref().map(|p| p.to_string_lossy().to_string()).unwrap_or_default(),
+                source_path: prompt
+                    .source
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default(),
                 content: prompt.template.clone(),
-                arguments: prompt.arguments.iter().map(|arg| PromptArgument {
-                    name: arg.name.clone(),
-                    description: arg.description.clone(),
-                    required: arg.required,
-                    default: arg.default.clone(),
-                }).collect(),
+                arguments: prompt
+                    .arguments
+                    .iter()
+                    .map(|arg| PromptArgument {
+                        name: arg.name.clone(),
+                        description: arg.description.clone(),
+                        required: arg.required,
+                        default: arg.default.clone(),
+                    })
+                    .collect(),
             };
             self.validate_prompt_data(&local_prompt, &mut result)?;
             result.files_checked += 1;
@@ -207,7 +220,7 @@ impl Validator {
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.is_file() {
                 if let Some(ext) = path.extension() {
                     if ext == "md" {
@@ -252,7 +265,7 @@ impl Validator {
                 // We successfully parsed the front matter, now validate template variables
                 let arguments = front_matter.arguments;
                 self.validate_template_variables(&prompt_content, &arguments, file_path, result);
-                
+
                 // Validate required fields
                 if front_matter.title.is_empty() {
                     result.add_issue(ValidationIssue {
@@ -264,7 +277,7 @@ impl Validator {
                         suggestion: Some("Add a title field to the YAML front matter".to_string()),
                     });
                 }
-                
+
                 if front_matter.description.is_empty() {
                     result.add_issue(ValidationIssue {
                         level: ValidationLevel::Error,
@@ -272,7 +285,9 @@ impl Validator {
                         line: None,
                         column: None,
                         message: "Missing required field: description".to_string(),
-                        suggestion: Some("Add a description field to the YAML front matter".to_string()),
+                        suggestion: Some(
+                            "Add a description field to the YAML front matter".to_string(),
+                        ),
                     });
                 }
             }
@@ -341,10 +356,15 @@ impl Validator {
         }
     }
 
-    fn validate_line_endings(&self, content: &str, file_path: &Path, result: &mut ValidationResult) {
+    fn validate_line_endings(
+        &self,
+        content: &str,
+        file_path: &Path,
+        result: &mut ValidationResult,
+    ) {
         let has_crlf = content.contains("\r\n");
         let has_lf_only = content.contains('\n') && !content.contains("\r\n");
-        
+
         if has_crlf && has_lf_only {
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Warning,
@@ -357,7 +377,12 @@ impl Validator {
         }
     }
 
-    fn parse_and_validate_prompt(&self, content: &str, file_path: &Path, result: &mut ValidationResult) -> Result<Option<(PromptFrontMatter, String)>> {
+    fn parse_and_validate_prompt(
+        &self,
+        content: &str,
+        file_path: &Path,
+        result: &mut ValidationResult,
+    ) -> Result<Option<(PromptFrontMatter, String)>> {
         if !content.starts_with("---") {
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Error,
@@ -373,7 +398,7 @@ impl Validator {
         // Find the end of front matter
         let lines: Vec<&str> = content.lines().collect();
         let mut end_line = None;
-        
+
         for (i, line) in lines.iter().enumerate().skip(1) {
             if line.trim() == "---" {
                 end_line = Some(i);
@@ -399,7 +424,7 @@ impl Validator {
         // Extract YAML and prompt content
         let yaml_content: String = lines[1..end_line].join("\n");
         let prompt_content: String = lines[end_line + 1..].join("\n");
-        
+
         match serde_yaml::from_str::<PromptFrontMatter>(&yaml_content) {
             Ok(front_matter) => {
                 // YAML is valid, now check for common typos
@@ -420,8 +445,12 @@ impl Validator {
         }
     }
 
-
-    fn validate_yaml_fields(&self, yaml_content: &str, file_path: &Path, result: &mut ValidationResult) {
+    fn validate_yaml_fields(
+        &self,
+        yaml_content: &str,
+        file_path: &Path,
+        result: &mut ValidationResult,
+    ) {
         // Check for common typos in field names
         let common_typos = [
             ("titel", "title"),
@@ -446,24 +475,35 @@ impl Validator {
         }
     }
 
-    fn validate_template_variables(&self, content: &str, arguments: &[PromptArgument], file_path: &Path, result: &mut ValidationResult) {
+    fn validate_template_variables(
+        &self,
+        content: &str,
+        arguments: &[PromptArgument],
+        file_path: &Path,
+        result: &mut ValidationResult,
+    ) {
         // First validate the Liquid template syntax
         self.validate_liquid_syntax(content, file_path, result);
-        
+
         // Then validate variable usage
         self.validate_variable_usage(content, arguments, file_path, result);
     }
 
-    fn validate_liquid_syntax(&self, content: &str, file_path: &Path, result: &mut ValidationResult) {
+    fn validate_liquid_syntax(
+        &self,
+        content: &str,
+        file_path: &Path,
+        result: &mut ValidationResult,
+    ) {
         use swissarmyhammer::TemplateEngine;
-        
+
         let engine = TemplateEngine::new();
-        
+
         // Try to parse the template to catch syntax errors
         let empty_args = std::collections::HashMap::new();
         if let Err(e) = engine.render(content, &empty_args) {
             let error_msg = e.to_string();
-            
+
             // Only report actual syntax errors, not unknown variable errors
             if !error_msg.contains("Unknown variable") {
                 result.add_issue(ValidationIssue {
@@ -478,9 +518,15 @@ impl Validator {
         }
     }
 
-    fn validate_variable_usage(&self, content: &str, arguments: &[PromptArgument], file_path: &Path, result: &mut ValidationResult) {
+    fn validate_variable_usage(
+        &self,
+        content: &str,
+        arguments: &[PromptArgument],
+        file_path: &Path,
+        result: &mut ValidationResult,
+    ) {
         use regex::Regex;
-        
+
         // Enhanced regex to match various Liquid variable patterns
         let patterns = [
             // Simple variables: {{ variable }}
@@ -492,9 +538,9 @@ impl Validator {
             // Array access: {{ array[0] }}
             r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\[",
         ];
-        
+
         let mut used_variables = std::collections::HashSet::new();
-        
+
         for pattern in &patterns {
             if let Ok(regex) = Regex::new(pattern) {
                 for captures in regex.captures_iter(content) {
@@ -508,10 +554,11 @@ impl Validator {
                 }
             }
         }
-        
+
         // Also check for loop variables in {% for %} statements
-        let for_regex = Regex::new(r"\{\%\s*for\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+in\s+([a-zA-Z_][a-zA-Z0-9_]*)")
-            .unwrap();
+        let for_regex =
+            Regex::new(r"\{\%\s*for\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+in\s+([a-zA-Z_][a-zA-Z0-9_]*)")
+                .unwrap();
         for captures in for_regex.captures_iter(content) {
             if let Some(collection_match) = captures.get(2) {
                 let collection_name = collection_match.as_str().trim();
@@ -520,9 +567,8 @@ impl Validator {
         }
 
         // Check if all used variables are defined in arguments
-        let defined_args: std::collections::HashSet<String> = arguments.iter()
-            .map(|arg| arg.name.clone())
-            .collect();
+        let defined_args: std::collections::HashSet<String> =
+            arguments.iter().map(|arg| arg.name.clone()).collect();
 
         for used_var in &used_variables {
             if !defined_args.contains(used_var) {
@@ -532,7 +578,10 @@ impl Validator {
                     line: None,
                     column: None,
                     message: format!("Undefined template variable: '{}'", used_var),
-                    suggestion: Some(format!("Add '{}' to the arguments list or remove the template variable", used_var)),
+                    suggestion: Some(format!(
+                        "Add '{}' to the arguments list or remove the template variable",
+                        used_var
+                    )),
                 });
             }
         }
@@ -546,7 +595,10 @@ impl Validator {
                     line: None,
                     column: None,
                     message: format!("Unused argument: '{}'", arg.name),
-                    suggestion: Some(format!("Remove '{}' from arguments or use it in the template", arg.name)),
+                    suggestion: Some(format!(
+                        "Remove '{}' from arguments or use it in the template",
+                        arg.name
+                    )),
                 });
             }
         }
@@ -575,16 +627,24 @@ impl Validator {
     fn print_text_results(&self, result: &ValidationResult) {
         if result.issues.is_empty() {
             if !self.quiet {
-                println!("{} All {} files validated successfully!", "✓".green(), result.files_checked);
+                println!(
+                    "{} All {} files validated successfully!",
+                    "✓".green(),
+                    result.files_checked
+                );
             }
             return;
         }
 
         // Group issues by file
-        let mut issues_by_file: std::collections::HashMap<PathBuf, Vec<&ValidationIssue>> = std::collections::HashMap::new();
-        
+        let mut issues_by_file: std::collections::HashMap<PathBuf, Vec<&ValidationIssue>> =
+            std::collections::HashMap::new();
+
         for issue in &result.issues {
-            issues_by_file.entry(issue.file_path.clone()).or_default().push(issue);
+            issues_by_file
+                .entry(issue.file_path.clone())
+                .or_default()
+                .push(issue);
         }
 
         // Print issues grouped by file
@@ -592,7 +652,7 @@ impl Validator {
             if !self.quiet {
                 println!("\n{}", file_path.display().to_string().bold());
             }
-            
+
             for issue in issues {
                 let level_str = match issue.level {
                     ValidationLevel::Error => "ERROR".red(),
@@ -613,7 +673,7 @@ impl Validator {
                 }
 
                 println!("  {} [{}] {}", level_str, location, issue.message);
-                
+
                 if !self.quiet {
                     if let Some(suggestion) = &issue.suggestion {
                         println!("    💡 {}", suggestion.dimmed());
@@ -631,7 +691,7 @@ impl Validator {
             if result.warnings > 0 {
                 println!("  Warnings: {}", result.warnings.to_string().yellow());
             }
-            
+
             if result.has_errors() {
                 println!("\n{} Validation failed with errors.", "✗".red());
             } else if result.has_warnings() {
@@ -643,8 +703,10 @@ impl Validator {
     }
 
     fn print_json_results(&self, result: &ValidationResult) -> Result<()> {
-        let json_issues: Vec<JsonValidationIssue> = result.issues.iter().map(|issue| {
-            JsonValidationIssue {
+        let json_issues: Vec<JsonValidationIssue> = result
+            .issues
+            .iter()
+            .map(|issue| JsonValidationIssue {
                 level: match issue.level {
                     ValidationLevel::Error => "error".to_string(),
                     ValidationLevel::Warning => "warning".to_string(),
@@ -655,8 +717,8 @@ impl Validator {
                 column: issue.column,
                 message: issue.message.clone(),
                 suggestion: issue.suggestion.clone(),
-            }
-        }).collect();
+            })
+            .collect();
 
         let json_result = JsonValidationResult {
             files_checked: result.files_checked,
@@ -677,7 +739,7 @@ pub fn run_validate_command(
     format: ValidateFormat,
 ) -> Result<i32> {
     let validator = Validator::new(quiet);
-    
+
     let result = if all {
         validator.validate_all()?
     } else if let Some(path) = path {
@@ -726,7 +788,7 @@ mod tests {
             message: "Test error".to_string(),
             suggestion: None,
         };
-        
+
         result.add_issue(issue);
         assert_eq!(result.errors, 1);
         assert_eq!(result.warnings, 0);
@@ -745,7 +807,7 @@ mod tests {
             message: "Test warning".to_string(),
             suggestion: None,
         };
-        
+
         result.add_issue(issue);
         assert_eq!(result.errors, 0);
         assert_eq!(result.warnings, 1);
@@ -766,7 +828,7 @@ mod tests {
     fn test_validate_nonexistent_path() {
         let validator = Validator::new(false);
         let result = validator.validate_path("/nonexistent/path").unwrap();
-        
+
         assert_eq!(result.files_checked, 0);
         assert!(result.has_errors());
         assert_eq!(result.errors, 1);
@@ -780,7 +842,7 @@ mod tests {
 
         let validator = Validator::new(false);
         let result = validator.validate_path(&file_path).unwrap();
-        
+
         assert_eq!(result.files_checked, 0);
         assert!(result.has_warnings());
         assert_eq!(result.warnings, 1);
@@ -807,7 +869,7 @@ Please discuss {{topic}} in detail.
 
         let validator = Validator::new(false);
         let result = validator.validate_path(&file_path).unwrap();
-        
+
         assert_eq!(result.files_checked, 1);
         assert!(!result.has_errors());
         assert!(!result.has_warnings());
@@ -822,7 +884,7 @@ Please discuss {{topic}} in detail.
 
         let validator = Validator::new(false);
         let result = validator.validate_path(&file_path).unwrap();
-        
+
         assert_eq!(result.files_checked, 1);
         assert!(result.has_errors());
         assert_eq!(result.errors, 1);
@@ -843,7 +905,7 @@ description: [invalid yaml
 
         let validator = Validator::new(false);
         let result = validator.validate_path(&file_path).unwrap();
-        
+
         assert_eq!(result.files_checked, 1);
         assert!(result.has_errors());
     }
@@ -869,12 +931,14 @@ Discuss {{topic}} and {{undefined_var}}.
 
         let validator = Validator::new(false);
         let result = validator.validate_path(&file_path).unwrap();
-        
+
         assert_eq!(result.files_checked, 1);
         assert!(result.has_errors());
-        
+
         // Should have error for undefined variable
-        let undefined_error = result.issues.iter()
+        let undefined_error = result
+            .issues
+            .iter()
             .find(|issue| issue.message.contains("undefined_var"));
         assert!(undefined_error.is_some());
     }
@@ -903,13 +967,15 @@ Discuss {{topic}}.
 
         let validator = Validator::new(false);
         let result = validator.validate_path(&file_path).unwrap();
-        
+
         assert_eq!(result.files_checked, 1);
         assert!(!result.has_errors());
         assert!(result.has_warnings());
-        
+
         // Should have warning for unused argument
-        let unused_warning = result.issues.iter()
+        let unused_warning = result
+            .issues
+            .iter()
             .find(|issue| issue.message.contains("unused_arg"));
         assert!(unused_warning.is_some());
     }
@@ -921,8 +987,9 @@ Discuss {{topic}}.
             false,
             true,
             ValidateFormat::Text,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert_eq!(exit_code, 2); // Should return error exit code
     }
 
@@ -950,8 +1017,9 @@ Discuss {{topic}}.
             false,
             true,
             ValidateFormat::Text,
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert_eq!(exit_code, 0); // Should return success exit code
     }
 }

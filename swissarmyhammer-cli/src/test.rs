@@ -1,13 +1,12 @@
 use anyhow::{anyhow, Result};
 use colored::*;
-use dialoguer::{Input, theme::ColorfulTheme};
+use dialoguer::{theme::ColorfulTheme, Input};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use serde_json::Value;
 
 use crate::cli::Commands;
-use swissarmyhammer::{PromptLibrary, Prompt};
+use swissarmyhammer::{Prompt, PromptLibrary};
 
 pub struct TestRunner {
     library: PromptLibrary,
@@ -21,21 +20,22 @@ impl TestRunner {
     }
 
     pub async fn run(&mut self, command: &Commands) -> Result<i32> {
-        if let Commands::Test { 
-            prompt_name, 
-            file, 
-            arguments, 
-            raw, 
-            copy, 
-            save, 
-            debug 
-        } = command {
+        if let Commands::Test {
+            prompt_name,
+            file,
+            arguments,
+            raw,
+            copy,
+            save,
+            debug,
+        } = command
+        {
             // Load all prompts first
             self.load_prompts()?;
 
             // Get the prompt to test
             let prompt = self.get_prompt(prompt_name.as_deref(), file.as_deref())?;
-            
+
             // Collect arguments
             let args = if arguments.is_empty() {
                 // Interactive mode - but only if we're in a terminal
@@ -72,26 +72,26 @@ impl TestRunner {
         let builtin_dir = dirs::data_dir()
             .map(|d| d.join("swissarmyhammer").join("prompts"))
             .filter(|p| p.exists());
-        
+
         if let Some(dir) = builtin_dir {
             self.library.add_directory(&dir)?;
         }
-        
+
         // Load user prompts
         let user_dir = dirs::home_dir()
             .map(|d| d.join(".prompts"))
             .filter(|p| p.exists());
-        
+
         if let Some(dir) = user_dir {
             self.library.add_directory(&dir)?;
         }
-        
+
         // Load local prompts
         let local_dir = Path::new("prompts");
         if local_dir.exists() {
             self.library.add_directory(local_dir)?;
         }
-        
+
         Ok(())
     }
 
@@ -99,7 +99,11 @@ impl TestRunner {
         match (prompt_name, file_path) {
             (Some(name), None) => {
                 // Test by name
-                self.library.list()?.into_iter().find(|p| p.name == name).ok_or_else(|| anyhow!("Prompt '{}' not found", name))
+                self.library
+                    .list()?
+                    .into_iter()
+                    .find(|p| p.name == name)
+                    .ok_or_else(|| anyhow!("Prompt '{}' not found", name))
             }
             (None, Some(path)) => {
                 // Test from file
@@ -109,26 +113,25 @@ impl TestRunner {
                 // For now, create a simple prompt from the content
                 Ok(swissarmyhammer::Prompt::new("test-prompt", content))
             }
-            (Some(_), Some(_)) => {
-                Err(anyhow!("Cannot specify both prompt name and file path"))
-            }
-            (None, None) => {
-                Err(anyhow!("Must specify either prompt name or file path"))
-            }
+            (Some(_), Some(_)) => Err(anyhow!("Cannot specify both prompt name and file path")),
+            (None, None) => Err(anyhow!("Must specify either prompt name or file path")),
         }
     }
 
     fn parse_arguments(&self, arguments: &[String]) -> Result<HashMap<String, String>> {
         let mut args = HashMap::new();
-        
+
         for arg in arguments {
             if let Some((key, value)) = arg.split_once('=') {
                 args.insert(key.to_string(), value.to_string());
             } else {
-                return Err(anyhow!("Invalid argument format: '{}'. Use key=value format", arg));
+                return Err(anyhow!(
+                    "Invalid argument format: '{}'. Use key=value format",
+                    arg
+                ));
             }
         }
-        
+
         Ok(args)
     }
 
@@ -141,21 +144,31 @@ impl TestRunner {
             return Ok(args);
         }
 
-        println!("{}", "📝 Please provide values for the following arguments:".bold().blue());
+        println!(
+            "{}",
+            "📝 Please provide values for the following arguments:"
+                .bold()
+                .blue()
+        );
         println!();
 
         for arg in &prompt.arguments {
             let prompt_text = if arg.required {
-                format!("{} (required): {}", arg.name.bold(), 
-                    arg.description.as_deref().unwrap_or(""))
+                format!(
+                    "{} (required): {}",
+                    arg.name.bold(),
+                    arg.description.as_deref().unwrap_or("")
+                )
             } else {
-                format!("{} (optional): {}", arg.name.bold(), 
-                    arg.description.as_deref().unwrap_or(""))
+                format!(
+                    "{} (optional): {}",
+                    arg.name.bold(),
+                    arg.description.as_deref().unwrap_or("")
+                )
             };
 
             loop {
-                let mut input = Input::<String>::with_theme(&theme)
-                    .with_prompt(&prompt_text);
+                let mut input = Input::<String>::with_theme(&theme).with_prompt(&prompt_text);
 
                 if let Some(default) = &arg.default {
                     input = input.default(default.clone()).show_default(true);
@@ -167,7 +180,7 @@ impl TestRunner {
                             println!("{}", "❌ This argument is required".red());
                             continue;
                         }
-                        
+
                         if !value.is_empty() {
                             args.insert(arg.name.clone(), value);
                         } else if let Some(default) = &arg.default {
@@ -186,7 +199,10 @@ impl TestRunner {
         Ok(args)
     }
 
-    fn collect_arguments_non_interactive(&self, prompt: &Prompt) -> Result<HashMap<String, String>> {
+    fn collect_arguments_non_interactive(
+        &self,
+        prompt: &Prompt,
+    ) -> Result<HashMap<String, String>> {
         let mut args = HashMap::new();
 
         if prompt.arguments.is_empty() {
@@ -207,7 +223,7 @@ impl TestRunner {
     fn show_debug_info(&self, prompt: &Prompt, args: &HashMap<String, String>) -> Result<()> {
         println!("{}", "🔍 Debug Information".bold().yellow());
         println!("{}", "─".repeat(50));
-        
+
         println!("{}", "📄 Prompt Details:".bold());
         println!("  Name: {}", prompt.name);
         if let Some(description) = &prompt.description {
@@ -248,19 +264,29 @@ impl TestRunner {
         Ok(())
     }
 
-    fn render_prompt_with_env(&self, prompt: &Prompt, args: &HashMap<String, String>) -> Result<String> {
+    fn render_prompt_with_env(
+        &self,
+        prompt: &Prompt,
+        args: &HashMap<String, String>,
+    ) -> Result<String> {
         // Merge environment variables with provided arguments
         let mut final_args = args.clone();
-        
+
         // Add environment variables as template variables
         for (key, value) in std::env::vars() {
             final_args.entry(key).or_insert(value);
         }
-        
+
         Ok(prompt.render(&final_args)?)
     }
 
-    fn output_result(&self, rendered: &str, raw: bool, copy: bool, save_path: Option<&str>) -> Result<()> {
+    fn output_result(
+        &self,
+        rendered: &str,
+        raw: bool,
+        copy: bool,
+        save_path: Option<&str>,
+    ) -> Result<()> {
         // Display the result
         if raw {
             print!("{}", rendered);
@@ -274,12 +300,13 @@ impl TestRunner {
         // Copy to clipboard if requested
         if copy {
             match arboard::Clipboard::new() {
-                Ok(mut clipboard) => {
-                    match clipboard.set_text(rendered) {
-                        Ok(_) => println!("{}", "📋 Copied to clipboard!".green()),
-                        Err(e) => println!("{}", format!("⚠️  Failed to copy to clipboard: {}", e).yellow()),
-                    }
-                }
+                Ok(mut clipboard) => match clipboard.set_text(rendered) {
+                    Ok(_) => println!("{}", "📋 Copied to clipboard!".green()),
+                    Err(e) => println!(
+                        "{}",
+                        format!("⚠️  Failed to copy to clipboard: {}", e).yellow()
+                    ),
+                },
                 Err(e) => {
                     println!("{}", format!("⚠️  Clipboard not available: {}", e).yellow());
                 }
@@ -296,6 +323,7 @@ impl TestRunner {
     }
 }
 
+#[allow(dead_code)]
 pub fn get_prompt_validation(prompt: &Prompt) -> (Vec<String>, Vec<String>) {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
@@ -303,7 +331,10 @@ pub fn get_prompt_validation(prompt: &Prompt) -> (Vec<String>, Vec<String>) {
     // Check for required arguments
     for arg in &prompt.arguments {
         if arg.required && arg.default.is_none() {
-            errors.push(format!("Required argument '{}' has no default value", arg.name));
+            errors.push(format!(
+                "Required argument '{}' has no default value",
+                arg.name
+            ));
         }
     }
 
@@ -311,20 +342,27 @@ pub fn get_prompt_validation(prompt: &Prompt) -> (Vec<String>, Vec<String>) {
     let template_vars = extract_template_variables(&prompt.template);
     for arg in &prompt.arguments {
         if !template_vars.contains(&arg.name) {
-            warnings.push(format!("Argument '{}' is defined but not used in template", arg.name));
+            warnings.push(format!(
+                "Argument '{}' is defined but not used in template",
+                arg.name
+            ));
         }
     }
 
     // Check for undefined variables in template
     for var in &template_vars {
         if !prompt.arguments.iter().any(|arg| &arg.name == var) {
-            errors.push(format!("Template variable '{{{{ {} }}}}' is not defined in arguments", var));
+            errors.push(format!(
+                "Template variable '{{{{ {} }}}}' is not defined in arguments",
+                var
+            ));
         }
     }
 
     (errors, warnings)
 }
 
+#[allow(dead_code)]
 fn extract_template_variables(template: &str) -> Vec<String> {
     let re = regex::Regex::new(r"\{\{\s*(\w+)\s*\}\}").unwrap();
     re.captures_iter(template)
@@ -350,7 +388,7 @@ mod tests {
         let runner = TestRunner::new();
         let args = vec!["name=test".to_string(), "value=123".to_string()];
         let parsed = runner.parse_arguments(&args).unwrap();
-        
+
         assert_eq!(parsed.get("name").unwrap(), "test");
         assert_eq!(parsed.get("value").unwrap(), "123");
     }
@@ -360,7 +398,7 @@ mod tests {
         let runner = TestRunner::new();
         let args = vec!["invalid".to_string()];
         let result = runner.parse_arguments(&args);
-        
+
         assert!(result.is_err());
     }
 
@@ -381,12 +419,12 @@ mod tests {
                 default: Some("default".to_string()),
                 type_hint: None,
             });
-        
+
         let (errors, warnings) = get_prompt_validation(&prompt);
-        
+
         assert_eq!(errors.len(), 1);
         assert!(errors[0].contains("Required argument 'name' has no default value"));
-        
+
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("Argument 'unused' is defined but not used"));
     }

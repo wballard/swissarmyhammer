@@ -1,6 +1,6 @@
 //! Model Context Protocol (MCP) server support
 
-use crate::{Prompt, PromptLibrary, Result, SwissArmyHammerError};
+use crate::PromptLibrary;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -16,12 +16,12 @@ impl McpServer {
             library: Arc::new(RwLock::new(library)),
         }
     }
-    
+
     /// Get the underlying library
     pub fn library(&self) -> &Arc<RwLock<PromptLibrary>> {
         &self.library
     }
-    
+
     /// Get server info
     pub fn info(&self) -> ServerInfo {
         ServerInfo {
@@ -46,12 +46,12 @@ pub struct ServerInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_mcp_server_creation() {
         let library = PromptLibrary::new();
         let server = McpServer::new(library);
-        
+
         let info = server.info();
         assert_eq!(info.name, "SwissArmyHammer");
     }

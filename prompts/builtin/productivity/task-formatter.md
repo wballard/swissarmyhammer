@@ -7,15 +7,19 @@ arguments:
     required: true
   - name: group_by
     description: How to group tasks (priority, status, category, none)
+    required: false
     default: "none"
   - name: show_index
     description: Show task numbers
+    required: false
     default: "true"
   - name: show_status
     description: Include status checkboxes
+    required: false
     default: "true"
   - name: date_format
     description: Date format for due dates
+    required: false
     default: "%B %d, %Y"
 ---
 

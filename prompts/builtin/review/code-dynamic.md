@@ -10,12 +10,15 @@ arguments:
     required: true
   - name: focus_areas
     description: Comma-separated list of areas to focus on
+    required: false
     default: "style,bugs,performance"
   - name: severity_level
     description: Minimum severity level to report (info, warning, error)
+    required: false
     default: "warning"
   - name: include_suggestions
     description: Include code improvement suggestions
+    required: false
     default: "true"
 ---
 

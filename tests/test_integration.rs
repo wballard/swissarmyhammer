@@ -395,3 +395,87 @@ But {{undefined}} should remain as-is."#).unwrap();
         .stdout(predicate::str::contains("Hello World, this uses old syntax."))
         .stdout(predicate::str::contains("But {{ undefined }} should remain as-is."));
 }
+
+#[test]
+fn test_validation_excludes_root_level_documentation_files() {
+    // Create a temporary directory with files that should be excluded from validation
+    let temp_dir = TempDir::new().unwrap();
+    let temp_path = temp_dir.path();
+
+    // Create files that should be excluded from validation
+    fs::write(temp_path.join("README.md"), "# Test Project\nThis is a readme file.").unwrap();
+    fs::write(temp_path.join("INSTALLATION.md"), "# Installation\nHow to install.").unwrap();
+    fs::write(temp_path.join("lint_todo.md"), "# Lint Todo\nLinting issues to fix.").unwrap();
+
+    // Create a subdirectory that should be excluded
+    let docs_dir = temp_path.join("docs");
+    fs::create_dir(&docs_dir).unwrap();
+    fs::write(docs_dir.join("api.md"), "# API Docs\nAPI documentation.").unwrap();
+
+    // Create a prompt file that should be validated
+    let prompts_dir = temp_path.join("prompts");
+    fs::create_dir(&prompts_dir).unwrap();
+    fs::write(prompts_dir.join("valid-prompt.md"), r#"---
+title: Valid Prompt
+description: A valid prompt for testing
+arguments:
+  - name: input
+    description: Some input
+    required: true
+---
+
+Hello {{input}}!"#).unwrap();
+
+    // Run validation on the temporary directory
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("validate")
+        .arg(temp_path.to_str().unwrap());
+    
+    // The validation should succeed and not report errors for excluded files
+    cmd.assert()
+        .success()
+        .stdout(
+            predicate::str::contains("README.md").not()
+                .and(predicate::str::contains("INSTALLATION.md").not())
+                .and(predicate::str::contains("lint_todo.md").not())
+                .and(predicate::str::contains("docs/api.md").not())
+        );
+}
+
+#[test]
+fn test_validation_processes_prompt_files() {
+    // Create a temporary directory with a prompt file that has validation errors
+    let temp_dir = TempDir::new().unwrap();
+    let temp_path = temp_dir.path();
+
+    // Create files that should be excluded (no errors expected)
+    fs::write(temp_path.join("README.md"), "# Test Project\nThis is a readme file.").unwrap();
+
+    // Create a prompt file with validation errors
+    let prompts_dir = temp_path.join("prompts");
+    fs::create_dir(&prompts_dir).unwrap();
+    fs::write(prompts_dir.join("invalid-prompt.md"), r#"---
+title: Invalid Prompt
+description: A prompt with validation errors
+arguments:
+  - name: input
+    description: Some input
+    # missing required field
+---
+
+Hello {{input}}!"#).unwrap();
+
+    // Run validation on the temporary directory
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("validate")
+        .arg(temp_path.to_str().unwrap());
+    
+    // The validation should fail due to the prompt file error, but not mention README.md
+    cmd.assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("invalid-prompt.md")
+                .and(predicate::str::contains("missing field `required`"))
+                .and(predicate::str::contains("README.md").not())
+        );
+}

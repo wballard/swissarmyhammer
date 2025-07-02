@@ -10,12 +10,15 @@ arguments:
     required: true
   - name: style
     description: Table style (markdown, html, ascii)
+    required: false
     default: "markdown"
   - name: zebra
     description: Enable zebra striping for rows
+    required: false
     default: "true"
   - name: row_numbers
     description: Add row numbers
+    required: false
     default: "false"
 ---
 

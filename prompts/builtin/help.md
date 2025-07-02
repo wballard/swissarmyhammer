@@ -15,4 +15,11 @@ arguments:
 
 # Help for {{topic}}
 
+{% case detail_level %}
+{% when "basic" %}
+Please provide basic help and information about {{topic}}.
+{% when "detailed" %}
+Please provide comprehensive, detailed help and information about {{topic}}.
+{% else %}
 Please provide help and information about {{topic}}.
+{% endcase %}

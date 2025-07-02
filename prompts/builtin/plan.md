@@ -18,4 +18,14 @@ arguments:
 
 # Planning for {{task}}
 
+{% if context and context != "" %}
+## Context
+{{context}}
+{% endif %}
+
+{% if constraints and constraints != "none" %}
+## Constraints
+{{constraints}}
+{% endif %}
+
 Create a detailed plan for: {{task}}

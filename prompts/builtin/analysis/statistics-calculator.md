@@ -7,15 +7,19 @@ arguments:
     required: true
   - name: precision
     description: Decimal precision for calculations
+    required: false
     default: "2"
   - name: show_outliers
     description: Identify outliers in the dataset
+    required: false
     default: "true"
   - name: percentiles
     description: Calculate percentiles (comma-separated, e.g., "25,50,75")
+    required: false
     default: "25,50,75"
   - name: visualization
     description: Show ASCII visualization
+    required: false
     default: "true"
 ---
 

@@ -13,15 +13,19 @@ arguments:
     required: true
   - name: context
     description: Additional context for the email
+    required: false
     default: ""
   - name: formal
     description: Use formal tone
+    required: false
     default: "false"
   - name: include_signature
     description: Include email signature
+    required: false
     default: "true"
   - name: time_of_day
     description: Current time of day (morning, afternoon, evening)
+    required: false
     default: "morning"
 ---
 

@@ -278,7 +278,7 @@ impl Validator {
 
             if path.is_file() {
                 if let Some(ext) = path.extension() {
-                    if ext == "md" {
+                    if ext == "md" && !self.should_exclude_file(&path) {
                         self.validate_file(&path, result)?;
                         result.files_checked += 1;
                     }
@@ -313,6 +313,38 @@ impl Validator {
                 // Test directories (only exclude if they don't contain prompts)
                 "test" | "tests" if !self.might_contain_prompts(dir) => true,
                 _ => false,
+            }
+        } else {
+            false
+        }
+    }
+
+    fn should_exclude_file(&self, file_path: &Path) -> bool {
+        if let Some(file_name) = file_path.file_name().and_then(|n| n.to_str()) {
+            // Exclude common documentation and configuration files
+            match file_name.to_lowercase().as_str() {
+                // Documentation files
+                "readme.md" | "readme.rst" | "readme.txt" => true,
+                "installation.md" | "install.md" | "setup.md" => true,
+                "changelog.md" | "changes.md" | "history.md" => true,
+                "contributing.md" | "contribute.md" => true,
+                "license.md" | "license.txt" | "license" => true,
+                "authors.md" | "authors.txt" | "credits.md" => true,
+                "todo.md" | "todos.md" | "lint_todo.md" => true,
+                // Configuration and project files
+                "cargo.toml" | "package.json" | "requirements.txt" => true,
+                "docker-compose.yml" | "dockerfile" => true,
+                ".gitignore" | ".dockerignore" => true,
+                // Build and CI files
+                "makefile" | "build.md" | "deployment.md" => true,
+                _ => {
+                    // Check for common documentation patterns
+                    file_name.to_lowercase().starts_with("readme") ||
+                    file_name.to_lowercase().starts_with("install") ||
+                    file_name.to_lowercase().starts_with("setup") ||
+                    file_name.to_lowercase().contains("changelog") ||
+                    file_name.to_lowercase().contains("todo")
+                }
             }
         } else {
             false

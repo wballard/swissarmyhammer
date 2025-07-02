@@ -83,7 +83,8 @@ Define boundaries and interactions:
 ### 4. Test Implementation
 
 #### Test Structure
-```
+{% if framework == "jest" or framework == "auto-detect" %}
+```javascript
 describe('Integration: {{system_description}}', () => {
   beforeAll(async () => {
     // Setup test environment
@@ -103,6 +104,57 @@ describe('Integration: {{system_description}}', () => {
   });
 });
 ```
+{% elsif framework == "mocha" %}
+```javascript
+describe('Integration: {{system_description}}', function() {
+  before(async function() {
+    // Setup test environment
+  });
+
+  after(async function() {
+    // Cleanup
+  });
+
+  it('should handle {{test_scenarios}}', async function() {
+    // Arrange
+    // Act
+    // Assert
+  });
+});
+```
+{% elsif framework == "pytest" %}
+```python
+import pytest
+
+class TestIntegration:
+    @pytest.fixture(scope="class")
+    def setup_environment(self):
+        # Setup test environment
+        yield
+        # Cleanup
+
+    def test_{{test_scenarios | replace: " ", "_" | replace: ",", "_" | downcase}}(self, setup_environment):
+        # Arrange
+        # Act
+        # Assert
+        pass
+```
+{% else %}
+```
+// {{framework}} test structure
+describe('Integration: {{system_description}}', () => {
+  beforeAll(async () => {
+    // Setup test environment
+  });
+
+  test('{{test_scenarios}}', async () => {
+    // Arrange
+    // Act  
+    // Assert
+  });
+});
+```
+{% endif %}
 
 #### Verification Points
 - Response validation

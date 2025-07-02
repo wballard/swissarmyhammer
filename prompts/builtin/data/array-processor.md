@@ -7,18 +7,23 @@ arguments:
     required: true
   - name: skip_pattern
     description: Pattern to skip items (items containing this will be skipped)
+    required: false
     default: ""
   - name: stop_pattern
     description: Pattern to stop processing (processing stops when this is found)
+    required: false
     default: ""
   - name: max_items
     description: Maximum number of items to process
+    required: false
     default: "100"
   - name: show_skipped
     description: Show skipped items in a separate section
+    required: false
     default: "false"
   - name: format
     description: Output format (list, table, json)
+    required: false
     default: "list"
 ---
 

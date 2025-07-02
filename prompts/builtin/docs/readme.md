@@ -30,9 +30,9 @@ arguments:
 - **Description**: {{project_description}}
 - **Language**: {{language}}
 - **Target Audience**: {{target_audience}}
-{{#if features}}
+{% if features %}
 - **Key Features**: {{features}}
-{{/if}}
+{% endif %}
 
 ## README Structure
 

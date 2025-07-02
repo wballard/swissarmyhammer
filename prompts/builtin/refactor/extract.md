@@ -23,7 +23,7 @@ arguments:
 
 ## Original Code
 ```
-{{{code}}}
+{{ code }}
 ```
 
 ## Extraction Goal

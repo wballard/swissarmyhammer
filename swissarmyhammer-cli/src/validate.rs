@@ -122,18 +122,74 @@ impl Validator {
         Self { quiet }
     }
 
+    pub fn validate_builtin_only(&self) -> Result<ValidationResult> {
+        let mut result = ValidationResult::new();
+
+        // Load only builtin prompts from the prompts/builtin directory
+        let mut library = swissarmyhammer::PromptLibrary::new();
+
+        // Try both relative paths to handle different working directories
+        let builtin_paths = [
+            std::path::Path::new("prompts/builtin"),    // From project root
+            std::path::Path::new("../prompts/builtin"), // From CLI crate
+        ];
+        
+        for builtin_dir in &builtin_paths {
+            if builtin_dir.exists() {
+                library.add_directory(builtin_dir)?;
+                break;
+            }
+        }
+
+        // Validate each loaded prompt
+        let prompts = library.list()?;
+        for prompt in prompts {
+            let local_prompt = Prompt {
+                name: prompt.name.clone(),
+                title: None,
+                description: prompt.description.clone(),
+                source_path: prompt
+                    .source
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default(),
+                content: prompt.template.clone(),
+                arguments: prompt
+                    .arguments
+                    .iter()
+                    .map(|arg| PromptArgument {
+                        name: arg.name.clone(),
+                        description: arg.description.clone(),
+                        required: arg.required,
+                        default: arg.default.clone(),
+                    })
+                    .collect(),
+            };
+            self.validate_prompt_data(&local_prompt, &mut result)?;
+            result.files_checked += 1;
+        }
+
+        Ok(result)
+    }
+
     pub fn validate_all(&self) -> Result<ValidationResult> {
         let mut result = ValidationResult::new();
 
         // Load all prompts from all sources
         let mut library = swissarmyhammer::PromptLibrary::new();
 
-        // Load builtin prompts if available
-        if let Some(builtin_dir) = dirs::data_dir()
-            .map(|d| d.join("swissarmyhammer").join("prompts"))
-            .filter(|p| p.exists())
-        {
-            library.add_directory(&builtin_dir)?;
+        // Load builtin prompts from the prompts/builtin directory
+        // Try both relative paths to handle different working directories
+        let builtin_paths = [
+            std::path::Path::new("prompts/builtin"),    // From project root
+            std::path::Path::new("../prompts/builtin"), // From CLI crate
+        ];
+        
+        for builtin_dir in &builtin_paths {
+            if builtin_dir.exists() {
+                library.add_directory(builtin_dir)?;
+                break;
+            }
         }
 
         // Load user prompts
@@ -151,7 +207,8 @@ impl Validator {
         }
 
         // Validate each loaded prompt
-        for prompt in library.list()? {
+        let prompts = library.list()?;
+        for prompt in prompts {
             let local_prompt = Prompt {
                 name: prompt.name.clone(),
                 title: None,
@@ -735,12 +792,15 @@ impl Validator {
 pub fn run_validate_command(
     path: Option<String>,
     all: bool,
+    builtin_only: bool,
     quiet: bool,
     format: ValidateFormat,
 ) -> Result<i32> {
     let validator = Validator::new(quiet);
 
-    let result = if all {
+    let result = if builtin_only {
+        validator.validate_builtin_only()?
+    } else if all {
         validator.validate_all()?
     } else if let Some(path) = path {
         validator.validate_path(&path)?
@@ -985,6 +1045,7 @@ Discuss {{topic}}.
         let exit_code = run_validate_command(
             Some("/nonexistent/path".to_string()),
             false,
+            false,
             true,
             ValidateFormat::Text,
         )
@@ -1015,11 +1076,32 @@ Discuss {{topic}}.
         let exit_code = run_validate_command(
             Some(file_path.to_string_lossy().to_string()),
             false,
+            false,
             true,
             ValidateFormat::Text,
         )
         .unwrap();
 
         assert_eq!(exit_code, 0); // Should return success exit code
+    }
+
+    #[test]
+    fn test_validate_all_builtin_templates() {
+        // This test ensures all built-in templates are found and validated
+        // It should find and validate templates in prompts/builtin/ only
+        
+        // We should have validated more than 0 files
+        let validator = Validator::new(true);
+        let result = validator.validate_builtin_only().unwrap();
+        assert!(result.files_checked > 0, "Should have found and validated built-in template files (found: {})", result.files_checked);
+        
+        // The result should be reasonable - we expect some issues but not catastrophic failures
+        assert!(result.files_checked >= 20, "Should find at least 20 builtin templates (found: {})", result.files_checked);
+        
+        // Templates should have some structure - we shouldn't have more errors than files * 5
+        // (This is a reasonable upper bound assuming max ~5 errors per template)
+        assert!(result.errors <= result.files_checked * 5, 
+            "Too many errors ({}) for {} files - suggests scanning wrong directories", 
+            result.errors, result.files_checked);
     }
 }

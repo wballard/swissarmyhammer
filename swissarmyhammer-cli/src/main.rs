@@ -59,11 +59,12 @@ async fn main() {
         Some(Commands::Validate {
             path,
             all,
+            builtin_only,
             quiet,
             format,
         }) => {
             tracing::info!("Validating prompts");
-            run_validate(path, all, quiet, format)
+            run_validate(path, all, builtin_only, quiet, format)
         }
         Some(Commands::Test {
             prompt_name,
@@ -233,10 +234,10 @@ fn run_list(
     }
 }
 
-fn run_validate(path: Option<String>, all: bool, quiet: bool, format: ValidateFormat) -> i32 {
+fn run_validate(path: Option<String>, all: bool, builtin_only: bool, quiet: bool, format: ValidateFormat) -> i32 {
     use validate;
 
-    match validate::run_validate_command(path, all, quiet, format) {
+    match validate::run_validate_command(path, all, builtin_only, quiet, format) {
         Ok(exit_code) => exit_code,
         Err(e) => {
             eprintln!("Validation error: {}", e);

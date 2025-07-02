@@ -24,7 +24,7 @@ arguments:
 
 ## Code to Document
 ```
-{{{code}}}
+{{ code }}
 ```
 
 ## Documentation Requirements
@@ -65,13 +65,13 @@ For each endpoint/method, document:
 - **Error Responses**: Common error scenarios
 - **Response Headers**: Important headers
 
-{{#if include_examples}}
+{% if include_examples %}
 #### Examples
 - **Request Example**: Complete request with headers
 - **Response Example**: Successful response
 - **Error Example**: Common error scenario
 - **Code Samples**: Multiple languages
-{{/if}}
+{% endif %}
 
 ### 4. Data Models
 - Detailed schema definitions

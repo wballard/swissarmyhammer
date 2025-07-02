@@ -24,7 +24,7 @@ arguments:
 
 ## Code Under Review
 ```
-{{{code}}}
+{{ code }}
 ```
 
 ## Review Parameters
@@ -62,28 +62,28 @@ arguments:
 
 ### 2. Component-Specific Issues
 
-{{#if (eq component_type "form")}}
+{% if component_type == "form" %}
 #### Form Accessibility
 - Label association
 - Error handling
 - Required field indicators
 - Fieldset/legend usage
 - Autocomplete attributes
-{{else if (eq component_type "navigation")}}
+{% elsif component_type == "navigation" %}
 #### Navigation Accessibility
 - Landmark roles
 - Menu structure
 - Breadcrumbs
 - Active state indication
 - Mobile navigation
-{{else if (eq component_type "interactive")}}
+{% elsif component_type == "interactive" %}
 #### Interactive Element Accessibility
 - Button vs link usage
 - State announcements
 - Loading indicators
 - Modal focus management
 - Tooltip accessibility
-{{/if}}
+{% endif %}
 
 ### 3. Assistive Technology Support
 

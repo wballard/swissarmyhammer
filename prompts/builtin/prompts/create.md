@@ -26,9 +26,9 @@ arguments:
 - **Purpose**: {{purpose}}
 - **Category**: {{category}}
 - **Complexity**: {{complexity}}
-{{#if inputs_needed}}
+{% if inputs_needed %}
 - **Required Inputs**: {{inputs_needed}}
-{{/if}}
+{% endif %}
 
 ## Prompt Design Guide
 
@@ -58,24 +58,24 @@ arguments:
 
 #### Input Integration
 - Use `{{{{variable}}}}` for simple substitution
-- Use `{{{{#if variable}}}}` for conditional content
+- Use `{{{% if variable %}}}` for conditional content
 - Use `{{{{{variable}}}}}` for triple-brace (preserves one set of braces)
 
 #### Structure Patterns
 For {{complexity}} complexity:
-{{#if (eq complexity "simple")}}
+{% if complexity == "simple" %}
 - Direct instruction format
 - Single-purpose focus
 - Minimal configuration
-{{else if (eq complexity "moderate")}}
+{% elsif complexity == "moderate" %}
 - Multi-step process
 - Clear sections
 - Flexible options
-{{else}}
+{% else %}
 - Comprehensive framework
 - Multiple pathways
 - Advanced features
-{{/if}}
+{% endif %}
 
 ### 3. Effective Prompt Techniques
 
@@ -107,14 +107,14 @@ arguments:
   - name: input
     description: The main input for {{purpose}}
     required: true
-{{#if inputs_needed}}
+{% if inputs_needed %}
 {{#each (split inputs_needed ",")}}
   - name: {{this | trim | slugify}}
     description: {{this | trim}}
     required: false
     default: ""
 {{/each}}
-{{/if}}
+{% endif %}
 ---
 
 # {{purpose}}
@@ -124,12 +124,12 @@ This prompt helps you {{purpose | lowercase}}.
 
 ## Input
 - **Main Input**: {{{{input}}}}
-{{#if inputs_needed}}
+{% if inputs_needed %}
 ## Additional Configuration
 {{#each (split inputs_needed ",")}}
 - **{{this | trim}}**: {{{{{{this | trim | slugify}}}}}}
 {{/each}}
-{{/if}}
+{% endif %}
 
 ## Process
 

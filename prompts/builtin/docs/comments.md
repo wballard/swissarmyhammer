@@ -24,7 +24,7 @@ arguments:
 
 ## Code to Document
 ```
-{{{code}}}
+{{ code }}
 ```
 
 ## Documentation Parameters
@@ -63,7 +63,7 @@ arguments:
 
 ### 2. Documentation Standards
 
-{{#if (eq comment_style "jsdoc")}}
+{% if comment_style == "jsdoc" %}
 #### JSDoc Format
 ```javascript
 /**
@@ -77,7 +77,7 @@ arguments:
  * functionName(args);
  */
 ```
-{{else if (eq comment_style "docstring")}}
+{% elsif comment_style == "docstring" %}
 #### Python Docstring Format
 ```python
 """Brief description of the function.
@@ -98,7 +98,7 @@ Examples:
     expected_output
 """
 ```
-{{else if (eq comment_style "rustdoc")}}
+{% elsif comment_style == "rustdoc" %}
 #### Rust Documentation Format
 ```rust
 /// Brief description of the function.
@@ -119,7 +119,7 @@ Examples:
 /// let result = function_name(args);
 /// ```
 ```
-{{/if}}
+{% endif %}
 
 ### 3. Best Practices
 
@@ -144,25 +144,25 @@ Examples:
 
 ### 4. {{detail_level}} Level Documentation
 
-{{#if (eq detail_level "minimal")}}
+{% if detail_level == "minimal" %}
 Focus on:
 - Public API documentation
 - Critical warnings
 - Non-obvious behavior
-{{else if (eq detail_level "comprehensive")}}
+{% elsif detail_level == "comprehensive" %}
 Include:
 - Detailed parameter descriptions
 - Multiple examples
 - Edge cases
 - Performance notes
 - Related references
-{{else}}
+{% else %}
 Balance between clarity and completeness:
 - Clear purpose statements
 - Parameter/return documentation
 - Key examples
 - Important notes
-{{/if}}
+{% endif %}
 
 ### 5. Generated Documentation
 Provide the code with appropriate comments added according to the specified style and detail level.

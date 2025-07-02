@@ -27,12 +27,12 @@ arguments:
 - **Metrics**: {{metrics}}
 - **Environment**: {{environment}}
 
-{{#if code_snippet}}
+{% if code_snippet %}
 ## Code Under Analysis
 ```
-{{{code_snippet}}}
+{{ code_snippet }}
 ```
-{{/if}}
+{% endif %}
 
 ## Performance Investigation Strategy
 

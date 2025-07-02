@@ -146,9 +146,10 @@ Validates prompt files for syntax errors and best practices.
 Checks YAML front matter, template variables, and suggests improvements.
 
 Usage modes:
-  swissarmyhammer validate file.md      # Validate single file
-  swissarmyhammer validate dir/         # Validate directory
-  swissarmyhammer validate --all        # Validate all prompt directories
+  swissarmyhammer validate file.md         # Validate single file
+  swissarmyhammer validate dir/            # Validate directory
+  swissarmyhammer validate --all           # Validate all prompt directories
+  swissarmyhammer validate --builtin-only  # Validate only builtin prompts
 
 Validation checks:
 - YAML front matter syntax
@@ -160,6 +161,7 @@ Validation checks:
 Examples:
   swissarmyhammer validate prompts/my-prompt.md    # Validate one file
   swissarmyhammer validate --all                   # Validate all prompts
+  swissarmyhammer validate --builtin-only          # Validate only builtin prompts
   swissarmyhammer validate --quiet --all           # CI/CD mode (exit code only)
   swissarmyhammer validate --format json --all     # JSON output for tooling
 ")]
@@ -170,6 +172,10 @@ Examples:
         /// Validate all prompt directories (builtin, user, local)
         #[arg(long)]
         all: bool,
+
+        /// Validate only builtin prompts (ignore user and local)
+        #[arg(long)]
+        builtin_only: bool,
 
         /// Only show errors, no warnings or info
         #[arg(short, long)]

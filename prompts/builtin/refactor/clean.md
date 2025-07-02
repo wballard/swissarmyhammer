@@ -24,7 +24,7 @@ arguments:
 
 ## Original Code
 ```{{language}}
-{{{code}}}
+{{ code }}
 ```
 
 ## Refactoring Focus

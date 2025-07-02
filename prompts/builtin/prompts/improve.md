@@ -20,16 +20,16 @@ arguments:
 
 ## Current Prompt
 ```
-{{{prompt_content}}}
+{{ prompt_content }}
 ```
 
 ## Improvement Goals
 {{improvement_goals}}
 
-{{#if user_feedback}}
+{% if user_feedback %}
 ## User Feedback
 {{user_feedback}}
-{{/if}}
+{% endif %}
 
 ## Improvement Analysis
 

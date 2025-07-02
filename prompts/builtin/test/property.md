@@ -24,7 +24,7 @@ arguments:
 
 ## Code Under Test
 ```
-{{{code}}}
+{{ code }}
 ```
 
 ## Test Configuration

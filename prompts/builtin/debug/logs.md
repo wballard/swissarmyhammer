@@ -24,7 +24,7 @@ arguments:
 
 ## Log Content
 ```
-{{{log_content}}}
+{{ log_content }}
 ```
 
 ## Analysis Parameters
@@ -42,9 +42,9 @@ Identify recurring patterns:
 - Unusual sequences
 
 ### 2. Timeline Analysis
-{{#if time_range}}
+{% if time_range %}
 Focusing on: {{time_range}}
-{{/if}}
+{% endif %}
 - Event sequence
 - Time gaps or clusters
 - Correlation with issues

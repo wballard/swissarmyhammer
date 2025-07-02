@@ -24,10 +24,10 @@ I'll help you debug this error in {{language}}.
 
 Let me analyze the error message: {{error_message}}
 
-{{#if context}}
+{% if context %}
 ### Additional Context
 {{context}}
-{{/if}}
+{% endif %}
 
 ## Steps to Debug
 

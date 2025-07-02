@@ -24,7 +24,7 @@ arguments:
 
 ## Code Under Review
 ```{{language}}
-{{{code}}}
+{{ code }}
 ```
 
 ## Security Analysis

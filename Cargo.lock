@@ -2999,6 +2999,31 @@ name = "swissarmyhammer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
+ "criterion",
+ "dashmap",
+ "fuzzy-matcher",
+ "liquid",
+ "notify",
+ "proptest",
+ "regex",
+ "rmcp",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tantivy",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "walkdir",
+]
+
+[[package]]
+name = "swissarmyhammer-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
  "arboard",
  "assert_cmd",
  "atty",
@@ -3006,9 +3031,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "colored",
- "criterion",
  "csv",
- "dashmap",
  "dialoguer",
  "dirs",
  "flate2",
@@ -3018,10 +3041,8 @@ dependencies = [
  "git2",
  "indicatif",
  "is-terminal",
- "liquid",
  "notify",
  "predicates",
- "proptest",
  "rand 0.8.5",
  "regex",
  "reqwest",
@@ -3031,8 +3052,8 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2",
+ "swissarmyhammer",
  "tabled",
- "tantivy",
  "tar",
  "tempfile",
  "textwrap",

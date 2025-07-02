@@ -1,0 +1,58 @@
+[package]
+name = "swissarmyhammer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A flexible prompt management library for AI assistants"
+documentation = "https://docs.rs/swissarmyhammer"
+readme = "../README.md"
+keywords = ["prompt", "template", "ai", "assistant", "liquid"]
+categories = ["template-engine", "development-tools"]
+
+[dependencies]
+# Core dependencies
+tokio = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+thiserror = "1.0"
+
+# Template engine
+liquid = { workspace = true }
+
+# File system
+walkdir = { workspace = true }
+notify = { workspace = true, optional = true }
+
+# Data structures
+dashmap = { workspace = true }
+regex = { workspace = true }
+chrono = { workspace = true }
+
+# Search functionality
+tantivy = { workspace = true, optional = true }
+fuzzy-matcher = { workspace = true, optional = true }
+
+# MCP support
+rmcp = { workspace = true, optional = true }
+
+[features]
+default = ["async", "search", "watch"]
+async = ["tokio"]
+search = ["tantivy", "fuzzy-matcher"]
+watch = ["notify", "async"]
+mcp = ["rmcp", "async"]
+full = ["async", "search", "watch", "mcp"]
+
+[dev-dependencies]
+tempfile = { workspace = true }
+proptest = { workspace = true }
+criterion = { workspace = true }
+
+[lib]
+name = "swissarmyhammer"
+path = "src/lib.rs"

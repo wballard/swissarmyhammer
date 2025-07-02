@@ -581,6 +581,10 @@ impl Validator {
         result: &mut ValidationResult,
     ) {
         use regex::Regex;
+        
+        // Remove {% raw %} blocks from content before validation
+        let raw_regex = Regex::new(r"(?s)\{%\s*raw\s*%\}.*?\{%\s*endraw\s*%\}").unwrap();
+        let content_without_raw = raw_regex.replace_all(content, "");
 
         // Enhanced regex to match various Liquid variable patterns
         let patterns = [
@@ -598,7 +602,7 @@ impl Validator {
 
         for pattern in &patterns {
             if let Ok(regex) = Regex::new(pattern) {
-                for captures in regex.captures_iter(content) {
+                for captures in regex.captures_iter(&content_without_raw) {
                     if let Some(var_match) = captures.get(1) {
                         let var_name = var_match.as_str().trim();
                         // Skip built-in Liquid objects and variables
@@ -614,7 +618,7 @@ impl Validator {
         // Find assigned variables with {% assign %} statements
         let assign_regex = Regex::new(r"\{\%\s*assign\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=").unwrap();
         let mut assigned_variables = std::collections::HashSet::new();
-        for captures in assign_regex.captures_iter(content) {
+        for captures in assign_regex.captures_iter(&content_without_raw) {
             if let Some(var_match) = captures.get(1) {
                 assigned_variables.insert(var_match.as_str().trim().to_string());
             }
@@ -624,7 +628,7 @@ impl Validator {
         let for_regex =
             Regex::new(r"\{\%\s*for\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+in\s+([a-zA-Z_][a-zA-Z0-9_]*)")
                 .unwrap();
-        for captures in for_regex.captures_iter(content) {
+        for captures in for_regex.captures_iter(&content_without_raw) {
             if let Some(loop_var) = captures.get(1) {
                 // The loop variable is defined by the for loop
                 assigned_variables.insert(loop_var.as_str().trim().to_string());
@@ -637,7 +641,7 @@ impl Validator {
 
         // Also find variables from {% capture %} blocks
         let capture_regex = Regex::new(r"\{\%\s*capture\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\%\}").unwrap();
-        for captures in capture_regex.captures_iter(content) {
+        for captures in capture_regex.captures_iter(&content_without_raw) {
             if let Some(var_match) = captures.get(1) {
                 assigned_variables.insert(var_match.as_str().trim().to_string());
             }

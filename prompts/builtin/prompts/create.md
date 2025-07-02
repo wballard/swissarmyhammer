@@ -57,9 +57,9 @@ arguments:
 - Mention any constraints
 
 #### Input Integration
-- Use {% raw %}`{{variable}}`{% endraw %} for simple substitution
-- Use {% raw %}`{% if variable %}`{% endraw %} for conditional content
-- Use triple braces if needed (though Liquid uses double braces)
+- Use double curly braces for variable substitution (e.g., name becomes {{ "{{" }}name{{ "}}" }})
+- Use Liquid tags for control flow (e.g., if/endif, for/endfor)
+- Use filters to transform variables (e.g., downcase, strip, replace)
 
 #### Structure Patterns
 For {{complexity}} complexity:

@@ -1,6 +1,5 @@
 use anyhow::Result;
 use colored::*;
-use serde_json::Value;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -94,68 +93,60 @@ impl Doctor {
 
     /// Check Claude Code MCP configuration
     pub fn check_claude_config(&mut self) -> Result<()> {
-        let config_path = get_claude_config_path();
+        use std::process::Command;
 
-        if !config_path.exists() {
-            self.checks.push(Check {
-                name: "Claude Code config file".to_string(),
-                status: CheckStatus::Warning,
-                message: format!("Config file not found: {:?}", config_path),
-                fix: Some(format!(
-                    "Create the config file at {:?} with MCP server configuration",
-                    config_path
-                )),
-            });
-            return Ok(());
-        }
+        // Run `claude mcp list` to check if swissarmyhammer is configured
+        match Command::new("claude").arg("mcp").arg("list").output() {
+            Ok(output) => {
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
 
-        // Try to parse the config
-        match fs::read_to_string(&config_path) {
-            Ok(content) => {
-                match serde_json::from_str::<Value>(&content) {
-                    Ok(config) => {
-                        // Check if swissarmyhammer is configured
-                        let has_swissarmyhammer = config
-                            .get("mcpServers")
-                            .and_then(|servers| servers.get("swissarmyhammer"))
-                            .is_some();
-
-                        if has_swissarmyhammer {
-                            self.checks.push(Check {
-                                name: "Claude Code MCP configuration".to_string(),
-                                status: CheckStatus::Ok,
-                                message: "swissarmyhammer is configured in Claude Code".to_string(),
-                                fix: None,
-                            });
-                        } else {
-                            self.checks.push(Check {
-                                name: "Claude Code MCP configuration".to_string(),
-                                status: CheckStatus::Warning,
-                                message: "swissarmyhammer not found in MCP configuration"
-                                    .to_string(),
-                                fix: Some(get_claude_config_snippet()),
-                            });
-                        }
-                    }
-                    Err(e) => {
+                    // Check if swissarmyhammer is in the list
+                    if stdout.contains("swissarmyhammer") {
                         self.checks.push(Check {
-                            name: "Claude Code config parsing".to_string(),
-                            status: CheckStatus::Error,
-                            message: format!("Failed to parse config: {}", e),
-                            fix: Some(
-                                "Fix the JSON syntax in your Claude Code config file".to_string(),
-                            ),
+                            name: "Claude Code MCP configuration".to_string(),
+                            status: CheckStatus::Ok,
+                            message: "swissarmyhammer is configured in Claude Code".to_string(),
+                            fix: None,
+                        });
+                    } else {
+                        self.checks.push(Check {
+                            name: "Claude Code MCP configuration".to_string(),
+                            status: CheckStatus::Warning,
+                            message: "swissarmyhammer not found in Claude Code MCP servers"
+                                .to_string(),
+                            fix: Some(get_claude_add_command()),
                         });
                     }
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    self.checks.push(Check {
+                        name: "Claude Code MCP configuration".to_string(),
+                        status: CheckStatus::Error,
+                        message: format!("Failed to run 'claude mcp list': {}", stderr.trim()),
+                        fix: Some(
+                            "Ensure Claude Code is installed and the 'claude' command is available"
+                                .to_string(),
+                        ),
+                    });
                 }
             }
             Err(e) => {
-                self.checks.push(Check {
-                    name: "Claude Code config reading".to_string(),
-                    status: CheckStatus::Error,
-                    message: format!("Failed to read config: {}", e),
-                    fix: Some("Check file permissions for the Claude Code config file".to_string()),
-                });
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    self.checks.push(Check {
+                        name: "Claude Code MCP configuration".to_string(),
+                        status: CheckStatus::Error,
+                        message: "Claude Code command not found".to_string(),
+                        fix: Some("Install Claude Code from https://claude.ai/code or ensure the 'claude' command is in your PATH".to_string()),
+                    });
+                } else {
+                    self.checks.push(Check {
+                        name: "Claude Code MCP configuration".to_string(),
+                        status: CheckStatus::Error,
+                        message: format!("Failed to run 'claude mcp list': {}", e),
+                        fix: Some("Check that Claude Code is properly installed".to_string()),
+                    });
+                }
             }
         }
 
@@ -455,6 +446,9 @@ impl Default for Doctor {
 }
 
 /// Get the Claude Code configuration file path based on the OS
+/// Note: This function is kept for backward compatibility but is no longer used
+/// The doctor command now uses `claude mcp list` instead
+#[allow(dead_code)]
 pub fn get_claude_config_path() -> PathBuf {
     #[cfg(target_os = "macos")]
     {
@@ -501,19 +495,16 @@ fn count_markdown_files(path: &Path) -> usize {
         .count()
 }
 
-/// Get the Claude config snippet
-fn get_claude_config_snippet() -> String {
-    r#"Add this to your Claude Code configuration:
+/// Get the Claude add command
+fn get_claude_add_command() -> String {
+    r#"Add swissarmyhammer to Claude Code using this command:
 
-{
-  "mcpServers": {
-    "swissarmyhammer": {
-      "command": "swissarmyhammer",
-      "args": ["serve"]
-    }
-  }
-}"#
-    .to_string()
+claude mcp add swissarmyhammer swissarmyhammer serve
+
+Or if swissarmyhammer is not in your PATH, use the full path:
+
+claude mcp add swissarmyhammer /path/to/swissarmyhammer serve"#
+        .to_string()
 }
 
 /// Print a single check result
@@ -646,5 +637,28 @@ mod tests {
         // Exit code should be 0, 1, or 2
         let exit_code = doctor.get_exit_code();
         assert!(exit_code <= 2);
+    }
+
+    #[test]
+    fn test_check_claude_config_should_use_mcp_list() {
+        let mut doctor = Doctor::new();
+        let result = doctor.check_claude_config();
+        assert!(result.is_ok());
+
+        // Check that we're NOT looking for a config file
+        let config_checks: Vec<_> = doctor
+            .checks
+            .iter()
+            .filter(|c| c.name.contains("Claude"))
+            .collect();
+
+        // The current implementation looks for a file, which is wrong
+        // This test should fail with the current implementation
+        for check in config_checks {
+            assert!(
+                !check.message.contains("Config file not found"),
+                "Doctor should use 'claude mcp list' instead of looking for config files"
+            );
+        }
     }
 }

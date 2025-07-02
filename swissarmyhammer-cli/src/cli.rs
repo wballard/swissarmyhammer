@@ -1,5 +1,4 @@
 use clap::{Parser, Subcommand, ValueEnum};
-use colored::*;
 use is_terminal::IsTerminal;
 use std::io;
 

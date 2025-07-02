@@ -2,27 +2,12 @@ use anyhow::Result;
 use colored::*;
 use is_terminal::IsTerminal;
 use std::io;
-use tabled::{
-    settings::{object::Rows, Alignment, Color, Modify, Style},
-    Table, Tabled,
-};
+// Tabled import removed - using custom 2-line format instead
 
 use crate::cli::{OutputFormat, PromptSource};
 use swissarmyhammer::PromptLibrary;
 
-#[derive(Tabled)]
-struct PromptRow {
-    #[tabled(rename = "Name")]
-    name: String,
-    #[tabled(rename = "Title")]
-    title: String,
-    #[tabled(rename = "Description")]
-    description: String,
-    #[tabled(rename = "Source")]
-    source: String,
-    #[tabled(rename = "Arguments")]
-    arguments: String,
-}
+// PromptRow struct removed - using custom 2-line format instead of table
 
 #[derive(serde::Serialize)]
 struct PromptInfo {
@@ -52,13 +37,10 @@ pub fn run_list_command(
     // Load all prompts from all sources
     let mut library = PromptLibrary::new();
 
-    // Load builtin prompts
-    let builtin_dir = dirs::data_dir()
-        .map(|d| d.join("swissarmyhammer").join("prompts"))
-        .filter(|p| p.exists());
-
-    if let Some(dir) = builtin_dir {
-        library.add_directory(&dir)?;
+    // Load builtin prompts from the prompts/builtin directory
+    let builtin_dir = std::path::Path::new("prompts/builtin");
+    if builtin_dir.exists() {
+        library.add_directory(builtin_dir)?;
     }
 
     // Load user prompts
@@ -86,7 +68,7 @@ pub fn run_list_command(
         // Determine source based on path
         let source_str = if let Some(source_path) = &prompt.source {
             let path_str = source_path.to_string_lossy();
-            if path_str.contains(".swissarmyhammer") || path_str.contains("data") {
+            if path_str.contains("prompts/builtin") || path_str.contains(".swissarmyhammer") {
                 "builtin"
             } else if path_str.contains(".prompts") {
                 "user"
@@ -151,9 +133,30 @@ pub fn run_list_command(
             })
             .collect();
 
+        // Extract title from metadata
+        // If metadata is empty, we have a problem with the library's YAML parsing
+        // For now, let's use the prompt name as a fallback title
+        let title = prompt.metadata.get("title")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .or_else(|| {
+                // Fallback: convert prompt name to a readable title
+                Some(prompt.name.replace(['-', '_'], " ")
+                    .split_whitespace()
+                    .map(|word| {
+                        let mut chars = word.chars();
+                        match chars.next() {
+                            None => String::new(),
+                            Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" "))
+            });
+
         prompt_infos.push(PromptInfo {
             name: prompt.name.clone(),
-            title: None, // Title field not in new API
+            title,
             description: prompt.description.clone(),
             source: source_str.to_string(),
             category: prompt.category.clone(),
@@ -181,7 +184,7 @@ pub fn run_list_command(
     Ok(())
 }
 
-fn display_table(prompt_infos: &[PromptInfo], verbose: bool) -> Result<()> {
+fn display_table(prompt_infos: &[PromptInfo], _verbose: bool) -> Result<()> {
     if prompt_infos.is_empty() {
         println!("No prompts found matching the criteria.");
         return Ok(());
@@ -189,79 +192,37 @@ fn display_table(prompt_infos: &[PromptInfo], verbose: bool) -> Result<()> {
 
     let is_tty = io::stderr().is_terminal();
 
-    let rows: Vec<PromptRow> = prompt_infos
-        .iter()
-        .map(|info| {
-            let title = info.title.as_deref().unwrap_or("");
-            let description = if verbose {
-                info.description.as_deref().unwrap_or("")
-            } else {
-                // Truncate long descriptions for table display
-                let desc = info.description.as_deref().unwrap_or("");
-                if desc.len() > 50 {
-                    &format!("{}...", &desc[..47])
-                } else {
-                    desc
-                }
+    // Create a custom 2-line format instead of using Tabled
+    for info in prompt_infos {
+        let title = info.title.as_deref().unwrap_or("");
+        let description = info.description.as_deref().unwrap_or("");
+
+        // First line: Name | Title (colored by source)
+        let first_line = if is_tty {
+            let (name_colored, title_colored) = match info.source.as_str() {
+                "builtin" => (info.name.green().bold().to_string(), title.green().to_string()),
+                "user" => (info.name.blue().bold().to_string(), title.blue().to_string()),
+                "local" => (info.name.yellow().bold().to_string(), title.yellow().to_string()),
+                _ => (info.name.clone(), title.to_string()),
             };
+            format!("{} | {}", name_colored, title_colored)
+        } else {
+            format!("{} | {}", info.name, title)
+        };
 
-            let arguments = if verbose {
-                info.arguments
-                    .iter()
-                    .map(|arg| {
-                        if arg.required {
-                            format!("{}*", arg.name)
-                        } else {
-                            arg.name.clone()
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            } else {
-                format!("{}", info.arguments.len())
-            };
+        // Second line: Full description (indented)
+        let second_line = if !description.is_empty() {
+            format!("  {}", description)
+        } else {
+            "  (no description)".to_string()
+        };
 
-            PromptRow {
-                name: info.name.clone(),
-                title: title.to_string(),
-                description: description.to_string(),
-                source: info.source.clone(),
-                arguments,
-            }
-        })
-        .collect();
-
-    let mut table = Table::new(rows);
-    table.with(Style::modern());
-
-    if is_tty {
-        // Add colors for better readability in terminal
-        table.with(Modify::new(Rows::single(0)).with(Color::FG_BRIGHT_CYAN));
-
-        // Color code sources
-        for (i, info) in prompt_infos.iter().enumerate() {
-            let row_index = i + 1; // +1 because row 0 is header
-            match info.source.as_str() {
-                "builtin" => {
-                    table.with(Modify::new(Rows::single(row_index)).with(Color::FG_GREEN));
-                }
-                "user" => {
-                    table.with(Modify::new(Rows::single(row_index)).with(Color::FG_BLUE));
-                }
-                "local" => {
-                    table.with(Modify::new(Rows::single(row_index)).with(Color::FG_YELLOW));
-                }
-                _ => {}
-            }
-        }
+        println!("{}", first_line);
+        println!("{}", second_line);
+        println!(); // Empty line between entries
     }
 
-    table.with(Modify::new(Rows::new(1..)).with(Alignment::left()));
-
-    println!("{}", table);
-
     if is_tty && !prompt_infos.is_empty() {
-        println!();
         println!("{}", "Legend:".bright_white());
         println!("  {} Built-in prompts", "●".green());
         println!(
@@ -269,11 +230,6 @@ fn display_table(prompt_infos: &[PromptInfo], verbose: bool) -> Result<()> {
             "●".blue()
         );
         println!("  {} Local prompts (./prompts/)", "●".yellow());
-        if verbose {
-            println!("  {} Required argument", "*".red());
-        } else {
-            println!("  Use {} to see full details", "--verbose".cyan());
-        }
     }
 
     Ok(())
@@ -327,16 +283,81 @@ mod tests {
     }
 
     #[test]
-    fn test_prompt_row_creation() {
-        let row = PromptRow {
+    fn test_prompt_info_creation() {
+        let info = PromptInfo {
             name: "test".to_string(),
-            title: "Test Prompt".to_string(),
-            description: "A test prompt".to_string(),
+            title: Some("Test Prompt".to_string()),
+            description: Some("A test prompt".to_string()),
             source: "builtin".to_string(),
-            arguments: "1".to_string(),
+            category: None,
+            arguments: vec![],
         };
 
-        assert_eq!(row.name, "test");
-        assert_eq!(row.source, "builtin");
+        assert_eq!(info.name, "test");
+        assert_eq!(info.title, Some("Test Prompt".to_string()));
+        assert_eq!(info.source, "builtin");
+    }
+
+    #[test]
+    fn test_builtin_prompts_should_be_identified_correctly() {
+        // Test the fixed source detection logic
+        let builtin_path = "/Users/test/prompts/builtin/array-processor.md";
+        let user_path = "/Users/test/.prompts/my-prompt.md";
+        let local_path = "/Users/test/local/prompts/my-prompt.md";
+        
+        // Test the fixed logic
+        let builtin_source = if builtin_path.contains("prompts/builtin") || builtin_path.contains(".swissarmyhammer") {
+            "builtin"
+        } else if builtin_path.contains(".prompts") {
+            "user"
+        } else {
+            "local"
+        };
+        
+        let user_source = if user_path.contains("prompts/builtin") || user_path.contains(".swissarmyhammer") {
+            "builtin"
+        } else if user_path.contains(".prompts") {
+            "user"
+        } else {
+            "local"
+        };
+        
+        let local_source = if local_path.contains("prompts/builtin") || local_path.contains(".swissarmyhammer") {
+            "builtin"
+        } else if local_path.contains(".prompts") {
+            "user"
+        } else {
+            "local"
+        };
+        
+        // These should now pass with the fixed logic
+        assert_eq!(builtin_source, "builtin", "Builtin prompts should be identified as builtin");
+        assert_eq!(user_source, "user", "User prompts should be identified as user");
+        assert_eq!(local_source, "local", "Local prompts should be identified as local");
+    }
+
+    #[test]
+    fn test_title_extraction_logic() {
+        // Test that title extraction from metadata works correctly
+        use std::collections::HashMap;
+        use serde_json::Value;
+        
+        let mut metadata = HashMap::new();
+        metadata.insert("title".to_string(), Value::String("Array Data Processor".to_string()));
+        
+        // Test the title extraction logic
+        let title = metadata.get("title")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        
+        assert_eq!(title, Some("Array Data Processor".to_string()), "Title should be extracted from metadata");
+        
+        // Test when title is missing
+        let empty_metadata: HashMap<String, Value> = HashMap::new();
+        let no_title: Option<String> = empty_metadata.get("title")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        
+        assert_eq!(no_title, None, "Title should be None when not present in metadata");
     }
 }

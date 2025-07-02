@@ -1,60 +1,248 @@
 //! Prompt management and loading functionality
+//!
+//! This module provides the core types and functionality for managing prompts,
+//! including loading from files, rendering with arguments, and organizing in libraries.
+//!
+//! # Examples
+//!
+//! Creating and rendering a simple prompt:
+//!
+//! ```
+//! use swissarmyhammer::{Prompt, ArgumentSpec};
+//! use std::collections::HashMap;
+//!
+//! let prompt = Prompt::new("greet", "Hello {{name}}!")
+//!     .with_description("A greeting prompt")
+//!     .add_argument(ArgumentSpec {
+//!         name: "name".to_string(),
+//!         description: Some("Name to greet".to_string()),
+//!         required: true,
+//!         default: None,
+//!         type_hint: Some("string".to_string()),
+//!     });
+//!
+//! let mut args = HashMap::new();
+//! args.insert("name".to_string(), "World".to_string());
+//! let result = prompt.render(&args).unwrap();
+//! assert_eq!(result, "Hello World!");
+//! ```
 
 use crate::{Result, SwissArmyHammerError, Template};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-/// Represents a single prompt with metadata and template
+/// Represents a single prompt with metadata and template content.
+///
+/// A [`Prompt`] encapsulates all the information needed to use a template, including
+/// its name, description, required arguments, and the template content itself.
+/// Prompts are typically loaded from markdown files with YAML front matter.
+///
+/// # Prompt File Format
+///
+/// ```markdown
+/// ---
+/// title: Code Review
+/// description: Reviews code for best practices
+/// category: development
+/// tags: ["code", "review", "quality"]
+/// arguments:
+///   - name: code
+///     description: The code to review
+///     required: true
+///   - name: language
+///     description: Programming language
+///     required: false
+///     default: "auto-detect"
+/// ---
+///
+/// Please review this {{language}} code:
+///
+/// \`\`\`
+/// {{code}}
+/// \`\`\`
+///
+/// Focus on best practices, potential bugs, and performance.
+/// ```
+///
+/// # Examples
+///
+/// ```
+/// use swissarmyhammer::{Prompt, ArgumentSpec};
+/// use std::collections::HashMap;
+///
+/// // Create a prompt programmatically
+/// let prompt = Prompt::new("debug", "Debug this {{language}} error: {{error}}")
+///     .with_description("Helps debug programming errors")
+///     .with_category("debugging")
+///     .add_argument(ArgumentSpec {
+///         name: "error".to_string(),
+///         description: Some("The error message".to_string()),
+///         required: true,
+///         default: None,
+///         type_hint: Some("string".to_string()),
+///     })
+///     .add_argument(ArgumentSpec {
+///         name: "language".to_string(),
+///         description: Some("Programming language".to_string()),
+///         required: false,
+///         default: Some("unknown".to_string()),
+///         type_hint: Some("string".to_string()),
+///     });
+///
+/// // Render with arguments
+/// let mut args = HashMap::new();
+/// args.insert("error".to_string(), "NullPointerException".to_string());
+/// args.insert("language".to_string(), "Java".to_string());
+///
+/// let rendered = prompt.render(&args).unwrap();
+/// assert!(rendered.contains("Java"));
+/// assert!(rendered.contains("NullPointerException"));
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Prompt {
-    /// Unique name of the prompt
+    /// Unique identifier for the prompt.
+    ///
+    /// This should be a valid filename without extension (e.g., "code-review", "debug-helper").
+    /// Used to reference the prompt from CLI and library code.
     pub name: String,
 
-    /// Description of what the prompt does
+    /// Human-readable description of what the prompt does.
+    ///
+    /// This appears in help text and prompt listings to help users understand
+    /// the prompt's purpose.
     pub description: Option<String>,
 
-    /// Category for organization
+    /// Category for organizing prompts into groups.
+    ///
+    /// Examples: "development", "writing", "analysis", "debugging".
+    /// Used for filtering and organizing prompt collections.
     pub category: Option<String>,
 
-    /// Tags for searching
+    /// Tags for improved searchability.
+    ///
+    /// Used by search functionality to find relevant prompts.
+    /// Should include relevant keywords and concepts.
     pub tags: Vec<String>,
 
-    /// Template content
+    /// The template content using Liquid syntax.
+    ///
+    /// This is the actual prompt template that gets rendered with user arguments.
+    /// Supports Liquid template syntax including variables (`{{var}}`), conditionals,
+    /// loops, and filters.
+    ///
+    /// # Template Syntax
+    ///
+    /// - Variables: `{{variable_name}}`
+    /// - Conditionals: `{% if condition %}...{% endif %}`
+    /// - Loops: `{% for item in items %}...{% endfor %}`
+    /// - Filters: `{{text | upper}}`
     pub template: String,
 
-    /// Required arguments
+    /// Specifications for template arguments.
+    ///
+    /// Defines what arguments the template expects, whether they're required,
+    /// default values, and documentation. Used for validation and help generation.
     pub arguments: Vec<ArgumentSpec>,
 
-    /// Source file path
+    /// Path to the source file (if loaded from file).
+    ///
+    /// Used for debugging and file watching functionality.
+    /// `None` for programmatically created prompts.
     pub source: Option<PathBuf>,
 
-    /// Additional metadata
+    /// Additional metadata from the prompt file.
+    ///
+    /// Contains any extra fields from the YAML front matter that aren't
+    /// part of the core prompt structure. Useful for custom metadata.
     #[serde(flatten)]
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-/// Specification for a template argument
+/// Specification for a template argument.
+///
+/// Defines metadata about an argument that a template expects, including
+/// whether it's required, default values, and documentation. Used for
+/// validation, help generation, and IDE support.
+///
+/// # Examples
+///
+/// ```
+/// use swissarmyhammer::ArgumentSpec;
+///
+/// // Required argument with no default
+/// let required_arg = ArgumentSpec {
+///     name: "filename".to_string(),
+///     description: Some("Path to the file to process".to_string()),
+///     required: true,
+///     default: None,
+///     type_hint: Some("path".to_string()),
+/// };
+///
+/// // Optional argument with default value
+/// let optional_arg = ArgumentSpec {
+///     name: "format".to_string(),
+///     description: Some("Output format".to_string()),
+///     required: false,
+///     default: Some("markdown".to_string()),
+///     type_hint: Some("string".to_string()),
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArgumentSpec {
-    /// Argument name
+    /// The name of the argument as used in templates.
+    ///
+    /// This is how the argument is referenced in the template (e.g., `{{filename}}`).
+    /// Should be a valid identifier using letters, numbers, and underscores.
     pub name: String,
 
-    /// Description of the argument
+    /// Human-readable description of the argument's purpose.
+    ///
+    /// Used in help text and documentation generation. Should explain
+    /// what the argument is for and any constraints or expected formats.
     pub description: Option<String>,
 
-    /// Whether the argument is required
+    /// Whether this argument must be provided.
+    ///
+    /// If `true`, template rendering will fail if this argument is not provided
+    /// and no default value is specified.
     pub required: bool,
 
-    /// Default value if not provided
+    /// Default value to use if the argument is not provided.
+    ///
+    /// Only used when `required` is `false` or when the user doesn't provide
+    /// a value for a required argument. The default is used as-is in the template.
     pub default: Option<String>,
 
-    /// Argument type hint
+    /// Type hint for the argument.
+    ///
+    /// Helps tools and users understand what kind of value is expected.
+    /// Common values: "string", "number", "boolean", "path", "url", "json".
+    /// This is primarily for documentation and tooling support.
     pub type_hint: Option<String>,
 }
 
 impl Prompt {
-    /// Create a new prompt
+    /// Creates a new prompt with the given name and template.
+    ///
+    /// This is the minimal constructor for a prompt. Additional metadata can be added
+    /// using the builder methods like [`with_description`](Self::with_description),
+    /// [`with_category`](Self::with_category), and [`add_argument`](Self::add_argument).
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Unique identifier for the prompt
+    /// * `template` - Template content using Liquid syntax
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swissarmyhammer::Prompt;
+    ///
+    /// let prompt = Prompt::new("hello", "Hello {{name}}!");
+    /// assert_eq!(prompt.name, "hello");
+    /// assert_eq!(prompt.template, "Hello {{name}}!");
+    /// ```
     pub fn new(name: impl Into<String>, template: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -68,7 +256,44 @@ impl Prompt {
         }
     }
 
-    /// Render the prompt with given arguments
+    /// Renders the prompt template with the provided arguments.
+    ///
+    /// This method validates that all required arguments are provided, applies
+    /// default values for missing optional arguments, and renders the template
+    /// using the Liquid template engine.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - Map of argument names to values
+    ///
+    /// # Returns
+    ///
+    /// The rendered template as a string, or an error if:
+    /// - Required arguments are missing
+    /// - Template syntax is invalid
+    /// - Template rendering fails
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swissarmyhammer::{Prompt, ArgumentSpec};
+    /// use std::collections::HashMap;
+    ///
+    /// let prompt = Prompt::new("greet", "Hello {{name}}!")
+    ///     .add_argument(ArgumentSpec {
+    ///         name: "name".to_string(),
+    ///         description: None,
+    ///         required: true,
+    ///         default: None,
+    ///         type_hint: None,
+    ///     });
+    ///
+    /// let mut args = HashMap::new();
+    /// args.insert("name".to_string(), "Alice".to_string());
+    ///
+    /// let result = prompt.render(&args).unwrap();
+    /// assert_eq!(result, "Hello Alice!");
+    /// ```
     pub fn render(&self, args: &HashMap<String, String>) -> Result<String> {
         let template = Template::new(&self.template)?;
 
@@ -97,50 +322,211 @@ impl Prompt {
         template.render(&render_args)
     }
 
-    /// Add an argument specification
+    /// Adds an argument specification to the prompt.
+    ///
+    /// Arguments define what inputs the template expects, whether they're required,
+    /// and provide documentation for users of the prompt.
+    ///
+    /// # Arguments
+    ///
+    /// * `arg` - The argument specification to add
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swissarmyhammer::{Prompt, ArgumentSpec};
+    ///
+    /// let prompt = Prompt::new("example", "Processing {{file}}")
+    ///     .add_argument(ArgumentSpec {
+    ///         name: "file".to_string(),
+    ///         description: Some("Path to input file".to_string()),
+    ///         required: true,
+    ///         default: None,
+    ///         type_hint: Some("path".to_string()),
+    ///     });
+    ///
+    /// assert_eq!(prompt.arguments.len(), 1);
+    /// assert_eq!(prompt.arguments[0].name, "file");
+    /// ```
     pub fn add_argument(mut self, arg: ArgumentSpec) -> Self {
         self.arguments.push(arg);
         self
     }
 
-    /// Set the description
+    /// Sets the description for the prompt.
+    ///
+    /// The description helps users understand what the prompt does and when to use it.
+    /// It appears in help text and prompt listings.
+    ///
+    /// # Arguments
+    ///
+    /// * `description` - Human-readable description of the prompt's purpose
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swissarmyhammer::Prompt;
+    ///
+    /// let prompt = Prompt::new("debug", "Debug this error: {{error}}")
+    ///     .with_description("Helps analyze and debug programming errors");
+    ///
+    /// assert_eq!(prompt.description, Some("Helps analyze and debug programming errors".to_string()));
+    /// ```
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
-    /// Set the category
+    /// Sets the category for the prompt.
+    ///
+    /// Categories help organize prompts into logical groups. Common categories
+    /// include "development", "writing", "analysis", and "debugging".
+    ///
+    /// # Arguments
+    ///
+    /// * `category` - Category name for organizing the prompt
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swissarmyhammer::Prompt;
+    ///
+    /// let prompt = Prompt::new("code-review", "Review this code: {{code}}")
+    ///     .with_category("development");
+    ///
+    /// assert_eq!(prompt.category, Some("development".to_string()));
+    /// ```
     pub fn with_category(mut self, category: impl Into<String>) -> Self {
         self.category = Some(category.into());
         self
     }
 
-    /// Add tags
+    /// Sets the tags for the prompt.
+    ///
+    /// Tags improve searchability by providing keywords that describe the prompt's
+    /// functionality and use cases. They're used by the search system to find
+    /// relevant prompts.
+    ///
+    /// # Arguments
+    ///
+    /// * `tags` - Vector of tag strings
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swissarmyhammer::Prompt;
+    ///
+    /// let prompt = Prompt::new("sql-gen", "Generate SQL: {{description}}")
+    ///     .with_tags(vec![
+    ///         "sql".to_string(),
+    ///         "database".to_string(),
+    ///         "generation".to_string()
+    ///     ]);
+    ///
+    /// assert_eq!(prompt.tags.len(), 3);
+    /// assert!(prompt.tags.contains(&"sql".to_string()));
+    /// ```
     pub fn with_tags(mut self, tags: Vec<String>) -> Self {
         self.tags = tags;
         self
     }
 }
 
-/// Manages a collection of prompts
+/// Manages a collection of prompts with storage and retrieval capabilities.
+///
+/// The [`PromptLibrary`] is the main interface for working with collections of prompts.
+/// It provides methods to load prompts from directories, search through them, and
+/// manage them programmatically. The library uses a pluggable storage backend
+/// system to support different storage strategies.
+///
+/// # Examples
+///
+/// ```no_run
+/// use swissarmyhammer::PromptLibrary;
+///
+/// // Create a new library with default in-memory storage
+/// let mut library = PromptLibrary::new();
+///
+/// // Load prompts from a directory
+/// let count = library.add_directory("./prompts").unwrap();
+/// println!("Loaded {} prompts", count);
+///
+/// // Get a specific prompt
+/// let prompt = library.get("code-review").unwrap();
+///
+/// // Search for prompts
+/// let debug_prompts = library.search("debug").unwrap();
+/// ```
 pub struct PromptLibrary {
     storage: Box<dyn crate::StorageBackend>,
 }
 
 impl PromptLibrary {
-    /// Create a new prompt library with default storage
+    /// Creates a new prompt library with default in-memory storage.
+    ///
+    /// The default storage backend stores prompts in memory, which is suitable
+    /// for testing and temporary use. For persistent storage, use
+    /// [`with_storage`](Self::with_storage) with a file-based backend.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swissarmyhammer::PromptLibrary;
+    ///
+    /// let library = PromptLibrary::new();
+    /// // Library is ready to use with in-memory storage
+    /// ```
     pub fn new() -> Self {
         Self {
             storage: Box::new(crate::storage::MemoryStorage::new()),
         }
     }
 
-    /// Create a prompt library with custom storage
+    /// Creates a prompt library with a custom storage backend.
+    ///
+    /// This allows you to use different storage strategies such as file-based
+    /// storage, database storage, or custom implementations.
+    ///
+    /// # Arguments
+    ///
+    /// * `storage` - The storage backend to use
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swissarmyhammer::{PromptLibrary, storage::MemoryStorage};
+    ///
+    /// let storage = Box::new(MemoryStorage::new());
+    /// let library = PromptLibrary::with_storage(storage);
+    /// ```
     pub fn with_storage(storage: Box<dyn crate::StorageBackend>) -> Self {
         Self { storage }
     }
 
-    /// Add prompts from a directory
+    /// Loads all prompts from a directory and adds them to the library.
+    ///
+    /// Recursively scans the directory for markdown files (`.md` and `.markdown`)
+    /// and loads them as prompts. Files should have YAML front matter with prompt
+    /// metadata.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the directory containing prompt files
+    ///
+    /// # Returns
+    ///
+    /// The number of prompts successfully loaded, or an error if the directory
+    /// cannot be read or prompts cannot be parsed.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use swissarmyhammer::PromptLibrary;
+    ///
+    /// let mut library = PromptLibrary::new();
+    /// let count = library.add_directory("./prompts").unwrap();
+    /// println!("Loaded {} prompts from directory", count);
+    /// ```
     pub fn add_directory(&mut self, path: impl AsRef<Path>) -> Result<usize> {
         let loader = PromptLoader::new();
         let prompts = loader.load_directory(path)?;
@@ -153,27 +539,133 @@ impl PromptLibrary {
         Ok(count)
     }
 
-    /// Get a prompt by name
+    /// Retrieves a prompt by its name.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The unique name of the prompt to retrieve
+    ///
+    /// # Returns
+    ///
+    /// The prompt if found, or a [`SwissArmyHammerError::PromptNotFound`] error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swissarmyhammer::{PromptLibrary, Prompt};
+    ///
+    /// let mut library = PromptLibrary::new();
+    ///
+    /// // Add a prompt first
+    /// let prompt = Prompt::new("test", "Hello {{name}}!");
+    /// library.add(prompt).unwrap();
+    ///
+    /// // Retrieve it
+    /// let retrieved = library.get("test").unwrap();
+    /// assert_eq!(retrieved.name, "test");
+    /// ```
     pub fn get(&self, name: &str) -> Result<Prompt> {
         self.storage.get(name)
     }
 
-    /// List all prompts
+    /// Lists all prompts in the library.
+    ///
+    /// # Returns
+    ///
+    /// A vector of all prompts currently stored in the library.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swissarmyhammer::{PromptLibrary, Prompt};
+    ///
+    /// let mut library = PromptLibrary::new();
+    /// library.add(Prompt::new("test1", "Template 1")).unwrap();
+    /// library.add(Prompt::new("test2", "Template 2")).unwrap();
+    ///
+    /// let prompts = library.list().unwrap();
+    /// assert_eq!(prompts.len(), 2);
+    /// ```
     pub fn list(&self) -> Result<Vec<Prompt>> {
         self.storage.list()
     }
 
-    /// Search prompts
+    /// Searches for prompts matching the given query.
+    ///
+    /// The search implementation depends on the storage backend. Basic implementations
+    /// search through prompt names, descriptions, and content. Advanced backends
+    /// may provide full-text search capabilities.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - Search query string
+    ///
+    /// # Returns
+    ///
+    /// A vector of prompts matching the search query.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swissarmyhammer::{PromptLibrary, Prompt};
+    ///
+    /// let mut library = PromptLibrary::new();
+    /// library.add(Prompt::new("debug-js", "Debug JavaScript code")
+    ///     .with_description("Helps debug JavaScript errors")).unwrap();
+    /// library.add(Prompt::new("format-py", "Format Python code")).unwrap();
+    ///
+    /// let results = library.search("debug").unwrap();
+    /// assert_eq!(results.len(), 1);
+    /// assert_eq!(results[0].name, "debug-js");
+    /// ```
     pub fn search(&self, query: &str) -> Result<Vec<Prompt>> {
         self.storage.search(query)
     }
 
-    /// Add a single prompt
+    /// Adds a single prompt to the library.
+    ///
+    /// If a prompt with the same name already exists, it will be replaced.
+    ///
+    /// # Arguments
+    ///
+    /// * `prompt` - The prompt to add
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swissarmyhammer::{PromptLibrary, Prompt};
+    ///
+    /// let mut library = PromptLibrary::new();
+    /// let prompt = Prompt::new("example", "Example template");
+    /// library.add(prompt).unwrap();
+    ///
+    /// assert!(library.get("example").is_ok());
+    /// ```
     pub fn add(&mut self, prompt: Prompt) -> Result<()> {
         self.storage.store(prompt)
     }
 
-    /// Remove a prompt
+    /// Removes a prompt from the library.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Name of the prompt to remove
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) if the prompt was removed, or an error if it doesn't exist.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swissarmyhammer::{PromptLibrary, Prompt};
+    ///
+    /// let mut library = PromptLibrary::new();
+    /// library.add(Prompt::new("temp", "Temporary prompt")).unwrap();
+    ///
+    /// library.remove("temp").unwrap();
+    /// assert!(library.get("temp").is_err());
+    /// ```
     pub fn remove(&mut self, name: &str) -> Result<()> {
         self.storage.remove(name)
     }

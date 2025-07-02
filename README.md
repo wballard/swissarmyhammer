@@ -56,11 +56,7 @@ Please review this code for:
 
 ### Install
 
-```bash
-# Install from Git repository (requires Rust)
-cargo install --git https://github.com/wballard/swissarmyhammer.git
-
-```
+See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions.
 
 ### Configure Claude Code
 
@@ -94,12 +90,7 @@ That's it! Your prompt is now available in Claude Code.
 
 ### Use as a Rust Library
 
-Add SwissArmyHammer to your `Cargo.toml`:
-
-```toml
-[dependencies]
-swissarmyhammer = "0.1"
-```
+See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions.
 
 Basic usage:
 
@@ -235,20 +226,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ### Development Setup
 
-```bash
-# Clone the repository
-git clone https://github.com/wballard/swissarmyhammer.git
-cd swissarmyhammer
-
-# Install dependencies
-cargo build
-
-# Run tests
-cargo test
-
-# Run the development server
-cargo run -- serve
-```
+See [INSTALLATION.md](INSTALLATION.md) for development setup instructions.
 
 ## 📊 Project Status
 
@@ -260,9 +238,11 @@ SwissArmyHammer is actively developed and maintained. Current focus areas:
 - ✅ Built-in prompt library
 - ✅ CLI tools and diagnostics
 - ✅ Comprehensive documentation
+- ✅ Search and export/import commands
+- ✅ Rust library with full API
+- 🚧 Pre-built binary releases
 - 🚧 Package manager distributions
 - 🚧 Advanced template features
-- 🚧 Plugin system
 
 ## 🌟 Why SwissArmyHammer?
 

@@ -1,122 +1,60 @@
 # Installation
 
-SwissArmyHammer is available through multiple installation methods. Choose the one that works best for your system.
+For complete installation instructions, see [INSTALLATION.md](../../INSTALLATION.md).
 
-## Quick Install (Recommended)
+## Prerequisites
 
-### Cargo Install from Git
+Before installing SwissArmyHammer, you need:
+- **Rust 1.70 or later** - Install from [rustup.rs](https://rustup.rs/)
+- **Git** - For cloning the repository
 
-```bash
-cargo install --git https://github.com/wballard/swissarmyhammer.git
-```
+## PATH Configuration
 
-This requires Rust to be installed on your system. If you don't have Rust, install it from [rustup.rs](https://rustup.rs/).
-
-### One-liner install script
+Make sure `~/.cargo/bin` is in your PATH. Add this to your shell configuration file:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wballard/swissarmyhammer/main/dist/install.sh | bash
+# For bash (~/.bashrc or ~/.bash_profile)
+export PATH="$HOME/.cargo/bin:$PATH"
+
+# For zsh (~/.zshrc)
+export PATH="$HOME/.cargo/bin:$PATH"
+
+# For fish (~/.config/fish/config.fish)
+set -gx PATH $HOME/.cargo/bin $PATH
 ```
 
-This script will:
-- Detect your platform automatically
-- Download the appropriate binary
-- Install it to `~/.local/bin` (or `$INSTALL_DIR` if set)
-- Add the binary to your PATH
-- Verify the installation
+## Alternative: Clone and Build
 
-## Platform-Specific Installation
-
-### macOS
-
-#### Option 1: Homebrew (Recommended)
-
-```bash
-# Add the tap (once the formula is published)
-brew tap wballard/swissarmyhammer
-brew install swissarmyhammer
-```
-
-#### Option 2: Direct Download
-
-```bash
-# Intel Macs
-curl -L https://github.com/wballard/swissarmyhammer/releases/latest/download/swissarmyhammer-x86_64-apple-darwin -o swissarmyhammer
-chmod +x swissarmyhammer
-sudo mv swissarmyhammer /usr/local/bin/
-
-# Apple Silicon Macs
-curl -L https://github.com/wballard/swissarmyhammer/releases/latest/download/swissarmyhammer-aarch64-apple-darwin -o swissarmyhammer
-chmod +x swissarmyhammer
-sudo mv swissarmyhammer /usr/local/bin/
-```
-
-### Linux
-
-#### Direct Download
-
-```bash
-# x86_64 (most common)
-curl -L https://github.com/wballard/swissarmyhammer/releases/latest/download/swissarmyhammer-x86_64-unknown-linux-gnu -o swissarmyhammer
-chmod +x swissarmyhammer
-sudo mv swissarmyhammer /usr/local/bin/
-
-# x86_64 (static binary, works on any Linux distribution)
-curl -L https://github.com/wballard/swissarmyhammer/releases/latest/download/swissarmyhammer-x86_64-unknown-linux-musl -o swissarmyhammer
-chmod +x swissarmyhammer
-sudo mv swissarmyhammer /usr/local/bin/
-
-# ARM64 (for ARM-based servers/systems)
-curl -L https://github.com/wballard/swissarmyhammer/releases/latest/download/swissarmyhammer-aarch64-unknown-linux-gnu -o swissarmyhammer
-chmod +x swissarmyhammer
-sudo mv swissarmyhammer /usr/local/bin/
-```
-
-### Windows
-
-#### Direct Download
-
-```powershell
-# Download the latest release
-Invoke-WebRequest https://github.com/wballard/swissarmyhammer/releases/latest/download/swissarmyhammer-x86_64-pc-windows-msvc.exe -OutFile swissarmyhammer.exe
-
-# Move to a directory in your PATH (optional)
-Move-Item swissarmyhammer.exe $env:USERPROFILE\bin\
-```
-
-## Install from Source
-
-### Prerequisites
-
-- Rust 1.70 or later
-- Git
-
-### Build and Install
+If you want to build from source or contribute to development:
 
 ```bash
 # Clone the repository
 git clone https://github.com/wballard/swissarmyhammer.git
 cd swissarmyhammer
 
-# Build the release binary
+# Build the CLI (debug mode for development)
+cargo build
+
+# Build optimized release version
 cargo build --release
 
-# Install to ~/.cargo/bin (make sure it's in your PATH)
-cargo install --path .
+# Install from the local source
+cargo install --path swissarmyhammer-cli
 
-# Or copy the binary manually
-cp target/release/swissarmyhammer /usr/local/bin/
+# Or run directly without installing
+cargo run --bin swissarmyhammer -- --help
 ```
 
-### Using Cargo
+## Future Installation Methods
 
-```bash
-# Install from the git repository (recommended)
-cargo install --git https://github.com/wballard/swissarmyhammer.git
+Pre-built binaries and package manager support are planned for future releases:
 
-# Install directly from crates.io (once published)
-cargo install swissarmyhammer
-```
+- **macOS**: Homebrew formula
+- **Linux**: DEB and RPM packages
+- **Windows**: MSI installer and Chocolatey package
+- **crates.io**: Published crate for `cargo install swissarmyhammer-cli`
+
+Check the [releases page](https://github.com/wballard/swissarmyhammer/releases) for updates.
 
 ## Verification
 
@@ -129,8 +67,11 @@ swissarmyhammer --version
 # Run diagnostics
 swissarmyhammer doctor
 
-# Test basic functionality
+# Show help
 swissarmyhammer --help
+
+# List available commands
+swissarmyhammer list
 ```
 
 The `doctor` command will check your installation and provide helpful diagnostics if anything needs attention.
@@ -153,16 +94,38 @@ swissarmyhammer completion fish > ~/.config/fish/completions/swissarmyhammer.fis
 swissarmyhammer completion powershell >> $PROFILE
 ```
 
+Remember to reload your shell or start a new terminal session for completions to take effect.
+
+## Updating
+
+To update SwissArmyHammer to the latest version:
+
+```bash
+# Update from git repository
+cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli --force
+```
+
+The `--force` flag will overwrite the existing installation.
+
 ## Next Steps
 
 Once installed, continue to the [Quick Start](./quick-start.md) guide to set up SwissArmyHammer with Claude Code and create your first prompt.
 
 ## Troubleshooting
 
-If you encounter any issues during installation, check the [Troubleshooting](./troubleshooting.md) guide or run:
+### Common Issues
+
+**Command not found**: Make sure `~/.cargo/bin` is in your PATH.
+
+**Build failures**: Ensure you have Rust 1.70+ installed and try updating Rust:
+```bash
+rustup update
+```
+
+**Permission errors**: Don't use `sudo` with cargo install - it installs to your user directory.
+
+For more help, check the [Troubleshooting](./troubleshooting.md) guide or run:
 
 ```bash
 swissarmyhammer doctor
 ```
-
-This will diagnose common setup problems and provide solutions.

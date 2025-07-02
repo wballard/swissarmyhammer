@@ -18,10 +18,12 @@ SwissArmyHammer transforms how you work with AI prompts by:
 ## Key Features
 
 ### 🚀 Quick Setup
-Get started in seconds with our one-liner installer:
+Get started by installing with Cargo:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wballard/swissarmyhammer/main/dist/install.sh | bash
+cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
 ```
+
+This requires Rust 1.70+ to be installed. Get Rust from [rustup.rs](https://rustup.rs/).
 
 ### 📝 Simple Prompt Format
 Create prompts using familiar markdown with YAML front matter:

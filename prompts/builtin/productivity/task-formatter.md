@@ -103,7 +103,7 @@ arguments:
 {% comment %} Add metadata for each task {% endcomment %}
 - Position: {{ forloop.index }} of {{ forloop.length }}
 - {% cycle "Priority: High", "Priority: Medium", "Priority: Low" %}
-- Status: {% if forloop.index0 | modulo: 3 == 0 %}New{% elsif forloop.index0 | modulo: 3 == 1 %}In Progress{% else %}Review{% endif %}
+- Status: {% assign mod_val = forloop.index0 | modulo: 3 %}{% if mod_val == 0 %}New{% elsif mod_val == 1 %}In Progress{% else %}Review{% endif %}
 {% endfor %}
 {% endif %}
 

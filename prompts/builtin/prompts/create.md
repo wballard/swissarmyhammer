@@ -57,9 +57,9 @@ arguments:
 - Mention any constraints
 
 #### Input Integration
-- Use `{{{{variable}}}}` for simple substitution
-- Use `{{{% if variable %}}}` for conditional content
-- Use `{{{{{variable}}}}}` for triple-brace (preserves one set of braces)
+- Use {% raw %}`{{variable}}`{% endraw %} for simple substitution
+- Use {% raw %}`{% if variable %}`{% endraw %} for conditional content
+- Use triple braces if needed (though Liquid uses double braces)
 
 #### Structure Patterns
 For {{complexity}} complexity:
@@ -98,6 +98,7 @@ For {{complexity}} complexity:
 
 Based on your requirements, here's a template:
 
+{% raw %}
 ```markdown
 ---
 name: {{category}}-{{purpose | slugify}}
@@ -108,12 +109,13 @@ arguments:
     description: The main input for {{purpose}}
     required: true
 {% if inputs_needed %}
-{{#each (split inputs_needed ",")}}
-  - name: {{this | trim | slugify}}
-    description: {{this | trim}}
+{% assign input_list = inputs_needed | split: "," %}
+{% for input_item in input_list %}
+  - name: {{ input_item | strip | downcase | replace: " ", "_" | replace: "-", "_" }}
+    description: {{ input_item | strip }}
     required: false
     default: ""
-{{/each}}
+{% endfor %}
 {% endif %}
 ---
 
@@ -123,12 +125,13 @@ arguments:
 This prompt helps you {{purpose | lowercase}}.
 
 ## Input
-- **Main Input**: {{{{input}}}}
+- **Main Input**: {{input}}
 {% if inputs_needed %}
 ## Additional Configuration
-{{#each (split inputs_needed ",")}}
-- **{{this | trim}}**: {{{{{{this | trim | slugify}}}}}}
-{{/each}}
+{% assign input_list = inputs_needed | split: "," %}
+{% for input_item in input_list %}
+- **{{ input_item | strip }}**: {{ input_item | strip | downcase | replace: " ", "_" | replace: "-", "_" }}
+{% endfor %}
 {% endif %}
 
 ## Process
@@ -154,6 +157,7 @@ Provide the result with:
 - Detailed explanation
 - Next steps if applicable
 ```
+{% endraw %}
 
 ### 5. Testing Your Prompt
 - Try with various inputs

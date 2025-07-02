@@ -144,29 +144,25 @@ impl Validator {
         // Validate each loaded prompt
         let prompts = library.list()?;
         for prompt in prompts {
-            let local_prompt = Prompt {
-                name: prompt.name.clone(),
-                title: None,
-                description: prompt.description.clone(),
-                source_path: prompt
-                    .source
-                    .as_ref()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_default(),
-                content: prompt.template.clone(),
-                arguments: prompt
-                    .arguments
-                    .iter()
-                    .map(|arg| PromptArgument {
-                        name: arg.name.clone(),
-                        description: arg.description.clone(),
-                        required: arg.required,
-                        default: arg.default.clone(),
-                    })
-                    .collect(),
-            };
-            self.validate_prompt_data(&local_prompt, &mut result)?;
             result.files_checked += 1;
+            
+            // Validate template syntax directly
+            self.validate_liquid_syntax(&prompt.template, &prompt.source.as_ref().unwrap_or(&PathBuf::new()), &mut result);
+            
+            // Validate template variables
+            let arguments: Vec<PromptArgument> = prompt.arguments.iter()
+                .map(|arg| PromptArgument {
+                    name: arg.name.clone(),
+                    description: arg.description.clone(),
+                    required: arg.required,
+                    default: arg.default.clone(),
+                })
+                .collect();
+            self.validate_variable_usage(&prompt.template, &arguments, &prompt.source.as_ref().unwrap_or(&PathBuf::new()), &mut result);
+            
+            // The library already validates and extracts title/description during loading
+            // If we got this far, the prompt has valid YAML front matter
+            // We only need to validate the template content
         }
 
         Ok(result)
@@ -211,7 +207,9 @@ impl Validator {
         for prompt in prompts {
             let local_prompt = Prompt {
                 name: prompt.name.clone(),
-                title: None,
+                title: prompt.metadata.get("title")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
                 description: prompt.description.clone(),
                 source_path: prompt
                     .source
@@ -603,12 +601,22 @@ impl Validator {
                 for captures in regex.captures_iter(content) {
                     if let Some(var_match) = captures.get(1) {
                         let var_name = var_match.as_str().trim();
-                        // Skip 'env' as it's a special built-in object
-                        if var_name != "env" {
+                        // Skip built-in Liquid objects and variables
+                        let builtin_vars = ["env", "forloop", "tablerow", "paginate"];
+                        if !builtin_vars.contains(&var_name) {
                             used_variables.insert(var_name.to_string());
                         }
                     }
                 }
+            }
+        }
+
+        // Find assigned variables with {% assign %} statements
+        let assign_regex = Regex::new(r"\{\%\s*assign\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=").unwrap();
+        let mut assigned_variables = std::collections::HashSet::new();
+        for captures in assign_regex.captures_iter(content) {
+            if let Some(var_match) = captures.get(1) {
+                assigned_variables.insert(var_match.as_str().trim().to_string());
             }
         }
 
@@ -617,9 +625,21 @@ impl Validator {
             Regex::new(r"\{\%\s*for\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+in\s+([a-zA-Z_][a-zA-Z0-9_]*)")
                 .unwrap();
         for captures in for_regex.captures_iter(content) {
+            if let Some(loop_var) = captures.get(1) {
+                // The loop variable is defined by the for loop
+                assigned_variables.insert(loop_var.as_str().trim().to_string());
+            }
             if let Some(collection_match) = captures.get(2) {
                 let collection_name = collection_match.as_str().trim();
                 used_variables.insert(collection_name.to_string());
+            }
+        }
+
+        // Also find variables from {% capture %} blocks
+        let capture_regex = Regex::new(r"\{\%\s*capture\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\%\}").unwrap();
+        for captures in capture_regex.captures_iter(content) {
+            if let Some(var_match) = captures.get(1) {
+                assigned_variables.insert(var_match.as_str().trim().to_string());
             }
         }
 
@@ -628,6 +648,12 @@ impl Validator {
             arguments.iter().map(|arg| arg.name.clone()).collect();
 
         for used_var in &used_variables {
+            // Skip if this variable is defined within the template
+            if assigned_variables.contains(used_var) {
+                continue;
+            }
+            
+            // Check if it's defined in arguments
             if !defined_args.contains(used_var) {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,

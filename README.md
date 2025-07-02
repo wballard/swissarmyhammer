@@ -2,7 +2,7 @@
 
 # 🔨 SwissArmyHammer
 
-**The MCP server for managing prompts as markdown files**
+**The MCP server and Rust library for managing prompts as markdown files**
 
 [![CI](https://github.com/wballard/swissarmyhammer/workflows/CI/badge.svg)](https://github.com/wballard/swissarmyhammer/actions)
 [![Release](https://img.shields.io/github/v/release/wballard/swissarmyhammer)](https://github.com/wballard/swissarmyhammer/releases)
@@ -18,7 +18,7 @@
 
 ## ✨ What is SwissArmyHammer?
 
-SwissArmyHammer transforms how you work with AI prompts by letting you manage them as simple markdown files. It's a powerful Model Context Protocol (MCP) server that seamlessly integrates with Claude Code and other MCP-compatible tools.
+SwissArmyHammer transforms how you work with AI prompts by letting you manage them as simple markdown files. It's both a powerful Model Context Protocol (MCP) server that seamlessly integrates with Claude Code and a flexible Rust library for building prompt-based applications.
 
 ```markdown
 ---
@@ -44,11 +44,13 @@ Please review this code for:
 
 - **📁 File-based Management** - Store prompts as markdown files with YAML front matter
 - **🔄 Live Reloading** - Changes are automatically detected and reloaded
-- **🎨 Liquid Templates** - Use Liquid templating with variables, conditionals, loops, and filters
+- **🎨 Liquid Templates** - Use Liquid templating with variables, conditionals, loops, and custom filters
 - **⚡ MCP Integration** - Works seamlessly with Claude Code
 - **🗂️ Organized Hierarchy** - Built-in, user, and local prompt directories
 - **🛠️ Developer Tools** - Rich CLI with diagnostics and completions
+- **📚 Rust Library** - Use as a dependency in your own Rust projects
 - **🔍 Built-in Library** - 20+ ready-to-use prompts for common tasks
+- **🎯 Custom Filters** - Domain-specific Liquid filters for code, text, and data processing
 
 ## 🚀 Quick Start
 
@@ -89,6 +91,37 @@ EOF
 ```
 
 That's it! Your prompt is now available in Claude Code.
+
+### Use as a Rust Library
+
+Add SwissArmyHammer to your `Cargo.toml`:
+
+```toml
+[dependencies]
+swissarmyhammer = "0.1"
+```
+
+Basic usage:
+
+```rust
+use swissarmyhammer::{PromptLibrary, ArgumentSpec};
+use std::collections::HashMap;
+
+// Create a prompt library
+let mut library = PromptLibrary::new();
+
+// Add prompts from a directory
+library.add_directory("./prompts")?;
+
+// Get and render a prompt
+let prompt = library.get("code-review")?;
+
+let mut args = HashMap::new();
+args.insert("code".to_string(), "fn main() { println!(\"Hello\"); }".to_string());
+
+let rendered = prompt.render(&args)?;
+println!("{}", rendered);
+```
 
 ## 💡 Examples
 

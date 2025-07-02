@@ -6,6 +6,7 @@ mod export;
 mod import;
 mod list;
 mod mcp;
+mod prompt_loader;
 mod search;
 mod signal_handler;
 mod test;

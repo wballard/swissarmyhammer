@@ -5,6 +5,7 @@ use std::io;
 // Tabled import removed - using custom 2-line format instead
 
 use crate::cli::{OutputFormat, PromptSource};
+use crate::prompt_loader::PromptResolver;
 use swissarmyhammer::PromptLibrary;
 
 // PromptRow struct removed - using custom 2-line format instead of table
@@ -36,27 +37,8 @@ pub fn run_list_command(
 ) -> Result<()> {
     // Load all prompts from all sources
     let mut library = PromptLibrary::new();
-
-    // Load builtin prompts from the prompts/builtin directory
-    let builtin_dir = std::path::Path::new("prompts/builtin");
-    if builtin_dir.exists() {
-        library.add_directory(builtin_dir)?;
-    }
-
-    // Load user prompts
-    let user_dir = dirs::home_dir()
-        .map(|d| d.join(".prompts"))
-        .filter(|p| p.exists());
-
-    if let Some(dir) = user_dir {
-        library.add_directory(&dir)?;
-    }
-
-    // Load local prompts
-    let local_dir = std::path::Path::new("prompts");
-    if local_dir.exists() {
-        library.add_directory(local_dir)?;
-    }
+    let resolver = PromptResolver::new();
+    resolver.load_all_prompts(&mut library)?;
 
     // Get all prompts
     let all_prompts = library.list()?;
@@ -68,12 +50,19 @@ pub fn run_list_command(
         // Determine source based on path
         let source_str = if let Some(source_path) = &prompt.source {
             let path_str = source_path.to_string_lossy();
-            if path_str.contains("prompts/builtin") || path_str.contains(".swissarmyhammer") {
+            if path_str.contains("prompts/builtin") {
                 "builtin"
-            } else if path_str.contains(".prompts") {
-                "user"
+            } else if let Some(home) = dirs::home_dir() {
+                let home_path = home.to_string_lossy();
+                if path_str.contains(&format!("{}/.swissarmyhammer/prompts", home_path)) {
+                    "user"
+                } else if path_str.contains("/.swissarmyhammer/prompts") {
+                    "local"
+                } else {
+                    "unknown"
+                }
             } else {
-                "local"
+                "unknown"
             }
         } else {
             "unknown"

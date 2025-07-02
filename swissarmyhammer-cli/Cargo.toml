@@ -7,6 +7,10 @@ license.workspace = true
 repository.workspace = true
 description = "Command-line interface for SwissArmyHammer prompt management"
 
+[lib]
+name = "swissarmyhammer_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "swissarmyhammer"
 path = "src/main.rs"

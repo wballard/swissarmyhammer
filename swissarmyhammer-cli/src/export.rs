@@ -12,6 +12,7 @@ use tar::Builder;
 use zip::write::{FileOptions, ZipWriter};
 
 use crate::cli::{ExportFormat, PromptSource};
+use crate::prompt_loader::PromptResolver;
 use swissarmyhammer::PromptLibrary;
 
 #[derive(Serialize, Deserialize)]
@@ -94,29 +95,8 @@ pub struct Exporter {
 impl Exporter {
     pub fn new() -> Result<Self> {
         let mut library = PromptLibrary::new();
-
-        // Load builtin prompts if available
-        if let Some(builtin_dir) = dirs::data_dir()
-            .map(|d| d.join("swissarmyhammer").join("prompts"))
-            .filter(|p| p.exists())
-        {
-            library.add_directory(&builtin_dir)?;
-        }
-
-        // Load user prompts
-        if let Some(user_dir) = dirs::home_dir()
-            .map(|d| d.join(".swissarmyhammer").join("prompts"))
-            .filter(|p| p.exists())
-        {
-            library.add_directory(&user_dir)?;
-        }
-
-        // Load local prompts
-        let local_dir = std::path::PathBuf::from(".swissarmyhammer").join("prompts");
-        if local_dir.exists() {
-            library.add_directory(&local_dir)?;
-        }
-
+        let resolver = PromptResolver::new();
+        resolver.load_all_prompts(&mut library)?;
         Ok(Self { library })
     }
 
@@ -153,12 +133,19 @@ impl Exporter {
             if let Some(ref filter_source) = source_filter {
                 let source_str = if let Some(ref source_path) = prompt.source {
                     let path_str = source_path.to_string_lossy();
-                    if path_str.contains(".swissarmyhammer") || path_str.contains("data") {
+                    if path_str.contains("prompts/builtin") {
                         "builtin"
-                    } else if path_str.contains(".prompts") {
-                        "user"
+                    } else if let Some(home) = dirs::home_dir() {
+                        let home_path = home.to_string_lossy();
+                        if path_str.contains(&format!("{}/.swissarmyhammer/prompts", home_path)) {
+                            "user"
+                        } else if path_str.contains("/.swissarmyhammer/prompts") {
+                            "local"
+                        } else {
+                            "unknown"
+                        }
                     } else {
-                        "local"
+                        "unknown"
                     }
                 } else {
                     "unknown"

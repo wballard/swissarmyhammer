@@ -3,9 +3,9 @@ use colored::*;
 use dialoguer::{theme::ColorfulTheme, Input};
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
 
 use crate::cli::Commands;
+use crate::prompt_loader::PromptResolver;
 use swissarmyhammer::{Prompt, PromptLibrary};
 
 pub struct TestRunner {
@@ -68,30 +68,8 @@ impl TestRunner {
     }
 
     fn load_prompts(&mut self) -> Result<()> {
-        // Load builtin prompts
-        let builtin_dir = dirs::data_dir()
-            .map(|d| d.join("swissarmyhammer").join("prompts"))
-            .filter(|p| p.exists());
-
-        if let Some(dir) = builtin_dir {
-            self.library.add_directory(&dir)?;
-        }
-
-        // Load user prompts
-        let user_dir = dirs::home_dir()
-            .map(|d| d.join(".prompts"))
-            .filter(|p| p.exists());
-
-        if let Some(dir) = user_dir {
-            self.library.add_directory(&dir)?;
-        }
-
-        // Load local prompts
-        let local_dir = Path::new("prompts");
-        if local_dir.exists() {
-            self.library.add_directory(local_dir)?;
-        }
-
+        let resolver = PromptResolver::new();
+        resolver.load_all_prompts(&mut self.library)?;
         Ok(())
     }
 

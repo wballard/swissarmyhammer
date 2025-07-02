@@ -14,6 +14,7 @@ mod validate;
 use cli::{
     Cli, Commands, ExportFormat, ImportStrategy, OutputFormat, PromptSource, ValidateFormat,
 };
+use clap::CommandFactory;
 use mcp::MCPServer;
 use tokio::sync::oneshot;
 use tracing::Level;
@@ -164,16 +165,9 @@ async fn main() {
             run_completions(shell)
         }
         None => {
-            // No subcommand provided
-            if Cli::is_tty() {
-                // Running in terminal, show setup instructions
-                Cli::show_setup_instructions();
-                0
-            } else {
-                // Not in terminal (likely stdio), default to serve mode
-                tracing::info!("No subcommand specified, defaulting to serve mode via stdio");
-                run_server().await
-            }
+            // No subcommand provided, show help
+            Cli::command().print_help().expect("Failed to print help");
+            0
         }
     };
 

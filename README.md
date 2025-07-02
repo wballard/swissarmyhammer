@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![MCP](https://img.shields.io/badge/MCP-compatible-green.svg)](https://github.com/anthropics/model-context-protocol)
 
-[📖 Documentation](https://wballard.github.io/swissarmyhammer) • [🚀 Quick Start](#quick-start) • [💡 Examples](#examples) • [🤝 Contributing](#contributing)
+[📖 Documentation](https://wballard.github.io/swissarmyhammer) • [🚀 Quick Start](#quick-start) • [💡 Examples](#examples)
 
 </div>
 
@@ -117,6 +117,7 @@ println!("{}", rendered);
 ## 💡 Examples
 
 ### Debug Assistant
+
 ```markdown
 ---
 title: Debug Helper
@@ -159,6 +160,7 @@ Please provide:
 ```
 
 ### Documentation Generator
+
 ```markdown
 ---
 title: API Documentation
@@ -174,9 +176,7 @@ arguments:
 
 Generate {{format}} documentation for this API:
 
-```
-{{code}}
-```
+`{{code}}`
 
 Include endpoints, parameters, responses, and examples.
 ```
@@ -220,10 +220,6 @@ swissarmyhammer --help
                        └──────────────────┘
 ```
 
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
 ### Development Setup
 
 See [INSTALLATION.md](INSTALLATION.md) for development setup instructions.
@@ -252,10 +248,6 @@ SwissArmyHammer is actively developed and maintained. Current focus areas:
 - **Integrated**: First-class MCP protocol support
 - **Developer-friendly**: Great CLI tools and diagnostics
 - **Open**: MIT licensed, community-driven
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 

@@ -13,3 +13,8 @@ it's jsut -- built ins, which need to be compiled in as resources, those are sou
 -then ~/.swissarmyhammer/prompts
 
 then ./.swissarmyhammer -- recursively looking up, with the current directory as most specific
+
+cargo run validate is picking up
+./issues/complete/list_errors.md
+  ERROR [1:1] Missing YAML front matter delimiter
+    💡 Start file with '---' to begin YAML front matter

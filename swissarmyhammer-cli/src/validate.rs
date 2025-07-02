@@ -284,11 +284,48 @@ impl Validator {
                     }
                 }
             } else if path.is_dir() {
-                // Recursively validate subdirectories
-                self.validate_directory(&path, result)?;
+                // Skip directories that shouldn't contain prompts
+                if !self.should_exclude_directory(&path) {
+                    // Recursively validate subdirectories
+                    self.validate_directory(&path, result)?;
+                }
             }
         }
         Ok(())
+    }
+
+    fn should_exclude_directory(&self, dir: &Path) -> bool {
+        if let Some(dir_name) = dir.file_name().and_then(|n| n.to_str()) {
+            // Exclude common documentation, planning, and development directories
+            match dir_name {
+                // Documentation directories
+                "doc" | "docs" | "documentation" => true,
+                // Issue tracking and planning
+                "issues" | "plan" | "planning" => true,
+                // Examples and specifications
+                "examples" | "example" | "specification" | "specs" => true,
+                // Build/output directories  
+                "dist" | "build" | "target" | "var" | "tmp" | "temp" => true,
+                // Version control and hidden directories
+                ".git" | ".github" | ".vscode" | ".idea" => true,
+                // Node.js/web development
+                "node_modules" | "public" | "static" => true,
+                // Test directories (only exclude if they don't contain prompts)
+                "test" | "tests" if !self.might_contain_prompts(dir) => true,
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+
+    fn might_contain_prompts(&self, dir: &Path) -> bool {
+        // Check if directory path suggests it might contain prompts
+        if let Some(dir_str) = dir.to_str() {
+            dir_str.contains("prompt") || dir_str.contains("template")
+        } else {
+            false
+        }
     }
 
     fn validate_file(&self, file_path: &Path, result: &mut ValidationResult) -> Result<()> {
@@ -1133,5 +1170,51 @@ Discuss {{topic}}.
         assert!(result.errors <= result.files_checked * 5, 
             "Too many errors ({}) for {} files - suggests scanning wrong directories", 
             result.errors, result.files_checked);
+    }
+
+    #[test]
+    fn test_validate_directory_excludes_non_prompt_directories() {
+        // This test reproduces the issue where validation picks up markdown files
+        // from directories that should be excluded (like ./issues/, ./doc/, etc.)
+        let temp_dir = TempDir::new().unwrap();
+        
+        // Create directory structure with markdown files that should NOT be validated
+        let excluded_dirs = ["issues", "doc", "plan", "examples", "dist", "var", "specification"];
+        
+        for dir_name in &excluded_dirs {
+            let dir_path = temp_dir.path().join(dir_name);
+            fs::create_dir_all(&dir_path).unwrap();
+            
+            // Create a markdown file without YAML front matter (would cause error if validated)
+            let file_path = dir_path.join("test.md");
+            fs::write(&file_path, "# Just a regular markdown file\n\nNo YAML front matter here.").unwrap();
+        }
+        
+        // Create a valid prompt directory that SHOULD be validated
+        let prompts_dir = temp_dir.path().join("prompts");
+        fs::create_dir_all(&prompts_dir).unwrap();
+        let valid_prompt = prompts_dir.join("valid.md");
+        let valid_content = r#"---
+title: Valid Prompt
+description: A valid prompt for testing
+arguments:
+  - name: topic
+    description: The topic
+    required: true
+---
+
+# Valid Prompt
+
+Discuss {{topic}}.
+"#;
+        fs::write(&valid_prompt, valid_content).unwrap();
+        
+        let validator = Validator::new(false);
+        let result = validator.validate_path(temp_dir.path()).unwrap();
+        
+        // Should only find and validate the valid prompt, not the excluded directories
+        assert_eq!(result.files_checked, 1, "Should only validate 1 file (the valid prompt), but validated: {}", result.files_checked);
+        assert!(!result.has_errors(), "Should not have errors from excluded directories");
+        assert!(!result.has_warnings(), "Should not have warnings from excluded directories");
     }
 }

@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🔨 SwissArmyHammer
+<img src="icon.svg" alt="SwissArmyHammer" width="64" height="64">
+
+# SwissArmyHammer
 
 **The MCP server and Rust library for managing prompts as markdown files**
 

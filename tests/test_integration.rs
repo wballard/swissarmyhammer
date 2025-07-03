@@ -479,3 +479,21 @@ Hello {{input}}!"#).unwrap();
                 .and(predicate::str::contains("README.md").not())
         );
 }
+
+#[test]
+fn test_readme_uses_icon_svg() {
+    // The README should reference the icon.svg file instead of just using emoji
+    let readme_content = fs::read_to_string("README.md")
+        .expect("Should be able to read README.md");
+    
+    assert!(
+        readme_content.contains("icon.svg"),
+        "README.md should reference icon.svg file"
+    );
+    
+    // Verify the icon.svg file exists
+    assert!(
+        std::path::Path::new("icon.svg").exists(),
+        "icon.svg file should exist in the repository root"
+    );
+}

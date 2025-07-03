@@ -1,7 +1,7 @@
-use anyhow::Result;
-use swissarmyhammer::PromptLibrary;
-use std::collections::HashMap;
 use crate::cli::PromptSource;
+use anyhow::Result;
+use std::collections::HashMap;
+use swissarmyhammer::PromptLibrary;
 
 /// Handles loading prompts from various sources with proper precedence
 pub struct PromptResolver {
@@ -40,36 +40,106 @@ impl PromptResolver {
             ("example", include_str!("../../prompts/builtin/example.md")),
             ("help", include_str!("../../prompts/builtin/help.md")),
             ("plan", include_str!("../../prompts/builtin/plan.md")),
-            ("debug/error", include_str!("../../prompts/builtin/debug/error.md")),
-            ("debug/logs", include_str!("../../prompts/builtin/debug/logs.md")),
-            ("debug/performance", include_str!("../../prompts/builtin/debug/performance.md")),
-            ("docs/api", include_str!("../../prompts/builtin/docs/api.md")),
-            ("docs/comments", include_str!("../../prompts/builtin/docs/comments.md")),
-            ("docs/readme", include_str!("../../prompts/builtin/docs/readme.md")),
-            ("prompts/create", include_str!("../../prompts/builtin/prompts/create.md")),
-            ("prompts/improve", include_str!("../../prompts/builtin/prompts/improve.md")),
-            ("refactor/clean", include_str!("../../prompts/builtin/refactor/clean.md")),
-            ("refactor/extract", include_str!("../../prompts/builtin/refactor/extract.md")),
-            ("refactor/patterns", include_str!("../../prompts/builtin/refactor/patterns.md")),
-            ("review/accessibility", include_str!("../../prompts/builtin/review/accessibility.md")),
-            ("review/code", include_str!("../../prompts/builtin/review/code.md")),
-            ("review/code-dynamic", include_str!("../../prompts/builtin/review/code-dynamic.md")),
-            ("review/security", include_str!("../../prompts/builtin/review/security.md")),
-            ("test/integration", include_str!("../../prompts/builtin/test/integration.md")),
-            ("test/property", include_str!("../../prompts/builtin/test/property.md")),
-            ("test/unit", include_str!("../../prompts/builtin/test/unit.md")),
-            ("analysis/statistics-calculator", include_str!("../../prompts/builtin/analysis/statistics-calculator.md")),
-            ("communication/email-composer", include_str!("../../prompts/builtin/communication/email-composer.md")),
-            ("data/array-processor", include_str!("../../prompts/builtin/data/array-processor.md")),
-            ("formatting/table-generator", include_str!("../../prompts/builtin/formatting/table-generator.md")),
-            ("productivity/task-formatter", include_str!("../../prompts/builtin/productivity/task-formatter.md")),
+            (
+                "debug/error",
+                include_str!("../../prompts/builtin/debug/error.md"),
+            ),
+            (
+                "debug/logs",
+                include_str!("../../prompts/builtin/debug/logs.md"),
+            ),
+            (
+                "debug/performance",
+                include_str!("../../prompts/builtin/debug/performance.md"),
+            ),
+            (
+                "docs/api",
+                include_str!("../../prompts/builtin/docs/api.md"),
+            ),
+            (
+                "docs/comments",
+                include_str!("../../prompts/builtin/docs/comments.md"),
+            ),
+            (
+                "docs/readme",
+                include_str!("../../prompts/builtin/docs/readme.md"),
+            ),
+            (
+                "prompts/create",
+                include_str!("../../prompts/builtin/prompts/create.md"),
+            ),
+            (
+                "prompts/improve",
+                include_str!("../../prompts/builtin/prompts/improve.md"),
+            ),
+            (
+                "refactor/clean",
+                include_str!("../../prompts/builtin/refactor/clean.md"),
+            ),
+            (
+                "refactor/extract",
+                include_str!("../../prompts/builtin/refactor/extract.md"),
+            ),
+            (
+                "refactor/patterns",
+                include_str!("../../prompts/builtin/refactor/patterns.md"),
+            ),
+            (
+                "review/accessibility",
+                include_str!("../../prompts/builtin/review/accessibility.md"),
+            ),
+            (
+                "review/code",
+                include_str!("../../prompts/builtin/review/code.md"),
+            ),
+            (
+                "review/code-dynamic",
+                include_str!("../../prompts/builtin/review/code-dynamic.md"),
+            ),
+            (
+                "review/security",
+                include_str!("../../prompts/builtin/review/security.md"),
+            ),
+            (
+                "test/integration",
+                include_str!("../../prompts/builtin/test/integration.md"),
+            ),
+            (
+                "test/property",
+                include_str!("../../prompts/builtin/test/property.md"),
+            ),
+            (
+                "test/unit",
+                include_str!("../../prompts/builtin/test/unit.md"),
+            ),
+            (
+                "analysis/statistics-calculator",
+                include_str!("../../prompts/builtin/analysis/statistics-calculator.md"),
+            ),
+            (
+                "communication/email-composer",
+                include_str!("../../prompts/builtin/communication/email-composer.md"),
+            ),
+            (
+                "data/array-processor",
+                include_str!("../../prompts/builtin/data/array-processor.md"),
+            ),
+            (
+                "formatting/table-generator",
+                include_str!("../../prompts/builtin/formatting/table-generator.md"),
+            ),
+            (
+                "productivity/task-formatter",
+                include_str!("../../prompts/builtin/productivity/task-formatter.md"),
+            ),
         ];
 
         // Add each embedded prompt to the library
         let loader = swissarmyhammer::PromptLoader::new();
         for (name, content) in builtin_prompts {
             let prompt = self.parse_embedded_prompt(name, content, &loader)?;
-            self.prompt_sources.insert(name.to_string(), PromptSource::Builtin);
+            self.prompt_sources
+                .insert(name.to_string(), PromptSource::Builtin);
             library.add(prompt)?;
         }
 
@@ -85,12 +155,13 @@ impl PromptResolver {
                 let before_count = library.list()?.len();
                 library.add_directory(&user_prompts_dir)?;
                 let after_count = library.list()?.len();
-                
+
                 // Mark all newly added prompts as user prompts
                 let prompts = library.list()?;
                 for i in before_count..after_count {
                     if let Some(prompt) = prompts.get(i) {
-                        self.prompt_sources.insert(prompt.name.clone(), PromptSource::User);
+                        self.prompt_sources
+                            .insert(prompt.name.clone(), PromptSource::User);
                     }
                 }
             }
@@ -126,12 +197,13 @@ impl PromptResolver {
             let before_count = library.list()?.len();
             library.add_directory(&prompts_dir)?;
             let after_count = library.list()?.len();
-            
+
             // Mark all newly added prompts as local prompts
             let prompts = library.list()?;
             for i in before_count..after_count {
                 if let Some(prompt) = prompts.get(i) {
-                    self.prompt_sources.insert(prompt.name.clone(), PromptSource::Local);
+                    self.prompt_sources
+                        .insert(prompt.name.clone(), PromptSource::Local);
                 }
             }
         }
@@ -140,16 +212,21 @@ impl PromptResolver {
     }
 
     /// Parse an embedded prompt from content string
-    fn parse_embedded_prompt(&self, name: &str, content: &str, _loader: &swissarmyhammer::PromptLoader) -> Result<swissarmyhammer::Prompt> {
+    fn parse_embedded_prompt(
+        &self,
+        name: &str,
+        content: &str,
+        _loader: &swissarmyhammer::PromptLoader,
+    ) -> Result<swissarmyhammer::Prompt> {
         // Use reflection to access the private parse_front_matter method
         // Since it's private, we'll need to duplicate the parsing logic
         let (metadata, template) = self.parse_front_matter_embedded(content)?;
-        
+
         let mut prompt = swissarmyhammer::Prompt::new(name, template);
-        
+
         // Builtin prompts don't have a source path - they're embedded
         prompt.source = None;
-        
+
         // Parse metadata (similar to PromptLoader::load_file)
         if let Some(metadata) = metadata {
             if let Some(title) = metadata.get("title").and_then(|v| v.as_str()) {
@@ -210,7 +287,10 @@ impl PromptResolver {
     }
 
     /// Parse front matter from content (duplicated from PromptLoader since it's private)
-    fn parse_front_matter_embedded(&self, content: &str) -> Result<(Option<serde_json::Value>, String)> {
+    fn parse_front_matter_embedded(
+        &self,
+        content: &str,
+    ) -> Result<(Option<serde_json::Value>, String)> {
         if content.starts_with("---\n") {
             let parts: Vec<&str> = content.splitn(3, "---\n").collect();
             if parts.len() >= 3 {
@@ -228,7 +308,6 @@ impl PromptResolver {
 
         Ok((None, content.to_string()))
     }
-
 }
 
 impl Default for PromptResolver {
@@ -248,37 +327,43 @@ mod tests {
         // Test that demonstrates builtin prompts should be embedded in binary, not loaded from files
         let mut resolver = PromptResolver::new();
         let mut library = PromptLibrary::new();
-        
+
         // Delete the builtin directory temporarily to test that prompts are embedded
         let builtin_path = PathBuf::from("prompts/builtin");
         let builtin_existed = builtin_path.exists();
-        
+
         if builtin_existed {
             // This test should pass even when builtin directory doesn't exist
             // because builtin prompts should be embedded in the binary
             std::fs::rename(&builtin_path, "prompts/builtin_backup").unwrap();
         }
-        
+
         // Load builtin prompts - this should work even without the directory
         let result = resolver.load_builtin_prompts(&mut library);
-        
+
         // Restore the directory if it existed
         if builtin_existed {
             std::fs::rename("prompts/builtin_backup", &builtin_path).unwrap();
         }
-        
+
         // This should succeed even without the directory existing
-        assert!(result.is_ok(), "Builtin prompts should be embedded in binary");
-        
+        assert!(
+            result.is_ok(),
+            "Builtin prompts should be embedded in binary"
+        );
+
         // We should have loaded some builtin prompts
-        assert!(!library.list().unwrap().is_empty(), "Should have embedded builtin prompts");
+        assert!(
+            !library.list().unwrap().is_empty(),
+            "Should have embedded builtin prompts"
+        );
     }
 
     #[test]
     fn test_dead_code_removed() {
         // This test verifies that dead code has been successfully removed
         // get_prompt_directories function should no longer exist
-        
+
         // If this test compiles and passes, it means we successfully removed the dead code
         // The old get_prompt_directories function no longer exists
     }

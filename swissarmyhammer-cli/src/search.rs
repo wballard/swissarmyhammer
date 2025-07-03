@@ -12,7 +12,6 @@ use tabled::{
 use crate::cli::{OutputFormat, PromptSource};
 use crate::prompt_loader::PromptResolver;
 
-
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SearchResult {
     pub name: String,
@@ -76,7 +75,9 @@ pub fn run_search_command(
 
     for prompt in all_prompts {
         // Get the source from the resolver
-        let prompt_source = resolver.prompt_sources.get(&prompt.name)
+        let prompt_source = resolver
+            .prompt_sources
+            .get(&prompt.name)
             .cloned()
             .unwrap_or(PromptSource::Dynamic);
         let source_str = prompt_source.to_string();

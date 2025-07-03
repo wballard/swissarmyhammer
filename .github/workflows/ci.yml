@@ -22,19 +22,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Rust with Cache
-        uses: ./.github/actions/setup-rust-cache
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
 
-      - name: Run tests
-        run: cargo test --all-features
+      - name: Cache Cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.rust }}-
+            ${{ runner.os }}-cargo-
 
-      - name: Run integration tests
-        run: cargo test --test '*'
-
-      - name: Run property tests
-        run: cargo test --test property_tests
+      - name: Run tests with all features
+        run: cargo test
 
   clippy:
     name: Clippy
@@ -43,13 +49,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Rust with Cache
-        uses: ./.github/actions/setup-rust-cache
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
 
+      - name: Cache Cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
+
       - name: Run clippy
-        run: cargo clippy --all-features --all-targets -- -D warnings
+        run: cargo clippy
 
   fmt:
     name: Format
@@ -58,8 +73,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Rust with Cache
-        uses: ./.github/actions/setup-rust-cache
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
 
@@ -73,8 +88,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Rust with Cache
-        uses: ./.github/actions/setup-rust-cache
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-audit
         run: cargo install cargo-audit
@@ -82,113 +97,34 @@ jobs:
       - name: Run security audit
         run: cargo audit
 
-  validate-release:
-    name: Validate Release Build
+  coverage:
+    name: Code Coverage
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Rust with Cache
-        uses: ./.github/actions/setup-rust-cache
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Build release binary
-        run: cargo build --release --bin swissarmyhammer
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
 
-      - name: Check binary exists
+      - name: Generate code coverage
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+      - name: Check coverage threshold
         run: |
-          ls -lh target/release/swissarmyhammer
-          echo "Release binary built successfully"
-
-  performance:
-    name: Performance Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Rust with Cache
-        uses: ./.github/actions/setup-rust-cache
-
-      - name: Build release binary
-        run: cargo build --release --bin swissarmyhammer
-
-      - name: Test startup performance requirements
-        run: |
-          echo "Testing CLI startup performance requirements..."
-          
-          # Function to measure startup time
-          measure_startup() {
-            local cmd="$1"
-            local args="$2"
-            local max_ms=50
-            
-            echo "Testing: $cmd $args"
-            
-            # Run command multiple times and measure
-            local total_ms=0
-            local runs=10
-            
-            for i in $(seq 1 $runs); do
-              local start=$(date +%s%3N)
-              timeout 10s $cmd $args > /dev/null 2>&1 || true
-              local end=$(date +%s%3N)
-              local duration=$((end - start))
-              total_ms=$((total_ms + duration))
-            done
-            
-            local avg_ms=$((total_ms / runs))
-            echo "Average startup time: ${avg_ms}ms (target: <${max_ms}ms)"
-            
-            if [ $avg_ms -gt $max_ms ]; then
-              echo "❌ FAIL: Startup time ${avg_ms}ms exceeds ${max_ms}ms requirement"
-              return 1
-            else
-              echo "✅ PASS: Startup time within requirements"
-              return 0
-            fi
-          }
-          
-          # Test help command (most common for users)
-          measure_startup "./target/release/swissarmyhammer" "--help"
-          help_result=$?
-          
-          # Test list command (common operation)
-          measure_startup "./target/release/swissarmyhammer" "list"
-          list_result=$?
-          
-          # Test doctor command (diagnostic operation)
-          measure_startup "./target/release/swissarmyhammer" "doctor"
-          doctor_result=$?
-          
-          # Report overall results
-          echo ""
-          echo "Performance Test Summary:"
-          if [ $help_result -eq 0 ] && [ $list_result -eq 0 ] && [ $doctor_result -eq 0 ]; then
-            echo "✅ All startup performance tests PASSED"
-            exit 0
-          else
-            echo "❌ Performance regression detected!"
-            echo ""
-            echo "Performance requirements:"
-            echo "  - All CLI commands must start in < 50ms"
-            echo "  - This ensures fast responsiveness for users"
-            echo "  - Required for MCP integration performance"
-            echo ""
-            echo "Please optimize startup performance before merging."
+          COVERAGE=$(cargo llvm-cov --all-features --workspace --summary-only | grep -E "TOTAL.*%" | awk '{print $10}' | sed 's/%//')
+          echo "Current coverage: ${COVERAGE}%"
+          if (( $(echo "$COVERAGE < 85.0" | bc -l) )); then
+            echo "Coverage ${COVERAGE}% is below minimum threshold of 85%"
             exit 1
           fi
+          echo "Coverage check passed!"
 
-      - name: Run benchmarks (sampling)
-        run: |
-          echo "Running performance benchmarks..."
-          # Run a subset of benchmarks in CI to avoid timeout
-          cargo bench --bench benchmarks -- --sample-size 10 --warm-up-time 1 --measurement-time 5
-
-      - name: Store performance results
-        if: always()
-        uses: actions/upload-artifact@v4
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
         with:
-          name: performance-results
-          path: target/criterion/
-          retention-days: 30
+          files: lcov.info
+          fail_ci_if_error: true

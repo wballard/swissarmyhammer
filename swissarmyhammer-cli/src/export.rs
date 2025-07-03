@@ -16,7 +16,6 @@ use crate::cli::{ExportFormat, PromptSource};
 use crate::prompt_loader::PromptResolver;
 use swissarmyhammer::PromptLibrary;
 
-
 #[derive(Serialize, Deserialize)]
 pub struct ExportManifest {
     pub version: String,
@@ -100,7 +99,7 @@ impl Exporter {
         let mut library = PromptLibrary::new();
         let mut resolver = PromptResolver::new();
         resolver.load_all_prompts(&mut library)?;
-        Ok(Self { 
+        Ok(Self {
             library,
             prompt_sources: resolver.prompt_sources,
         })
@@ -137,10 +136,12 @@ impl Exporter {
             }
 
             if let Some(ref filter_source) = source_filter {
-                let prompt_source = self.prompt_sources.get(&prompt.name)
+                let prompt_source = self
+                    .prompt_sources
+                    .get(&prompt.name)
                     .cloned()
                     .unwrap_or(PromptSource::Dynamic);
-                
+
                 if filter_source != &prompt_source && filter_source != &PromptSource::Dynamic {
                     continue;
                 }

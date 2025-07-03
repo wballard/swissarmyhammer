@@ -8,7 +8,6 @@ use crate::cli::{OutputFormat, PromptSource};
 use crate::prompt_loader::PromptResolver;
 use swissarmyhammer::PromptLibrary;
 
-
 // PromptRow struct removed - using custom 2-line format instead of table
 
 #[derive(serde::Serialize)]
@@ -49,7 +48,9 @@ pub fn run_list_command(
 
     for prompt in all_prompts {
         // Get the source from the resolver
-        let prompt_source = resolver.prompt_sources.get(&prompt.name)
+        let prompt_source = resolver
+            .prompt_sources
+            .get(&prompt.name)
             .cloned()
             .unwrap_or(PromptSource::Dynamic);
 
@@ -300,11 +301,11 @@ mod tests {
                 arguments: vec![],
             },
         ];
-        
+
         // This test currently fails because display_table checks stderr instead of stdout
         let result = display_table(&prompt_infos, false);
         assert!(result.is_ok());
-        
+
         // TODO: Once fixed, we should capture stdout and verify color codes are present
     }
 
@@ -329,16 +330,23 @@ mod tests {
         // Test that the resolver properly tracks prompt sources
         let mut resolver = PromptResolver::new();
         let mut library = swissarmyhammer::PromptLibrary::new();
-        
+
         // Load builtin prompts
         resolver.load_builtin_prompts(&mut library).unwrap();
-        
+
         // Check that at least one builtin prompt was loaded and tracked
-        assert!(!resolver.prompt_sources.is_empty(), "Should have loaded builtin prompts");
-        
+        assert!(
+            !resolver.prompt_sources.is_empty(),
+            "Should have loaded builtin prompts"
+        );
+
         // Check that builtin prompts are marked as builtin
         let example_source = resolver.prompt_sources.get("example");
-        assert_eq!(example_source, Some(&PromptSource::Builtin), "Example prompt should be marked as builtin");
+        assert_eq!(
+            example_source,
+            Some(&PromptSource::Builtin),
+            "Example prompt should be marked as builtin"
+        );
     }
 
     #[test]

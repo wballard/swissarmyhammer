@@ -801,7 +801,6 @@ impl PromptLoader {
             .unwrap_or(false)
     }
 
-
     /// Parse front matter from content
     fn parse_front_matter(&self, content: &str) -> Result<(Option<serde_json::Value>, String)> {
         if content.starts_with("---\n") {
@@ -861,7 +860,7 @@ mod tests {
         use std::fs;
         use tempfile::TempDir;
 
-        // This test verifies that PromptLoader only successfully loads files 
+        // This test verifies that PromptLoader only successfully loads files
         // that are valid prompts (with proper YAML front matter)
         let temp_dir = TempDir::new().unwrap();
 
@@ -922,14 +921,17 @@ This is another prompt.
             "Should load 5 prompts total, but loaded: {}",
             prompts.len()
         );
-        
+
         // Find the prompts with proper metadata
-        let prompts_with_descriptions: Vec<&Prompt> = prompts.iter()
-            .filter(|p| p.description.is_some())
-            .collect();
-        
-        assert_eq!(prompts_with_descriptions.len(), 2, "Should have 2 prompts with descriptions");
-        
+        let prompts_with_descriptions: Vec<&Prompt> =
+            prompts.iter().filter(|p| p.description.is_some()).collect();
+
+        assert_eq!(
+            prompts_with_descriptions.len(),
+            2,
+            "Should have 2 prompts with descriptions"
+        );
+
         let prompt_names: Vec<String> = prompts.iter().map(|p| p.name.clone()).collect();
         assert!(prompt_names.contains(&"valid".to_string()));
         assert!(prompt_names.contains(&"another".to_string()));

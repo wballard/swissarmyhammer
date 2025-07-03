@@ -58,10 +58,10 @@ pub mod search;
 pub mod plugins;
 
 // Re-export core types
+pub use plugins::{CustomLiquidFilter, PluginRegistry, SwissArmyHammerPlugin};
 pub use prompts::{ArgumentSpec, Prompt, PromptLibrary, PromptLoader};
 pub use storage::{PromptStorage, StorageBackend};
 pub use template::{Template, TemplateEngine};
-pub use plugins::{CustomLiquidFilter, PluginRegistry, SwissArmyHammerPlugin};
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -111,8 +111,9 @@ pub use error::{Result, SwissArmyHammerError};
 /// Prelude module for convenient imports
 pub mod prelude {
     pub use crate::{
-        CustomLiquidFilter, PluginRegistry, Prompt, PromptLibrary, PromptLoader, PromptStorage, 
-        Result, StorageBackend, SwissArmyHammerError, SwissArmyHammerPlugin, Template, TemplateEngine,
+        CustomLiquidFilter, PluginRegistry, Prompt, PromptLibrary, PromptLoader, PromptStorage,
+        Result, StorageBackend, SwissArmyHammerError, SwissArmyHammerPlugin, Template,
+        TemplateEngine,
     };
 
     #[cfg(feature = "mcp")]

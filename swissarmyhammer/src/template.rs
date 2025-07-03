@@ -68,7 +68,7 @@ impl TemplateEngine {
 
     /// Create a new template engine with custom parser
     pub fn with_parser(parser: liquid::Parser) -> Self {
-        Self { 
+        Self {
             parser,
             plugin_registry: None,
         }

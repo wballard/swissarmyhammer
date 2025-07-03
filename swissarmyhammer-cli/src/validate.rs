@@ -344,6 +344,7 @@ impl Validator {
                 "license.md" | "license.txt" | "license" => true,
                 "authors.md" | "authors.txt" | "credits.md" => true,
                 "todo.md" | "todos.md" | "lint_todo.md" => true,
+                "performance.md" => true,
                 // Configuration and project files
                 "cargo.toml" | "package.json" | "requirements.txt" => true,
                 "docker-compose.yml" | "dockerfile" => true,
@@ -674,10 +675,24 @@ impl Validator {
             r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}",
             // Variables with filters: {{ variable | filter }}
             r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\|",
+            // Variables as filter arguments: {{ "value" | filter: variable }}
+            r"\|\s*[a-zA-Z_][a-zA-Z0-9_]*\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)",
             // Object properties: {{ object.property }}
             r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\.[a-zA-Z_][a-zA-Z0-9_]*",
             // Array access: {{ array[0] }}
             r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\[",
+            // Case statements: {% case variable %}
+            r"\{\%\s*case\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\%\}",
+            // If statements: {% if variable %}
+            r"\{\%\s*if\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*[%}=<>!]",
+            // Unless statements: {% unless variable %}
+            r"\{\%\s*unless\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*[%}=<>!]",
+            // Elsif statements: {% elsif variable %}
+            r"\{\%\s*elsif\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*[%}=<>!]",
+            // Variable comparisons: {% if variable == "value" %}
+            r"\{\%\s*(?:if|elsif|unless)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*[=<>!]",
+            // Assignment statements: {% assign var = variable %}
+            r"\{\%\s*assign\s+[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*([a-zA-Z_][a-zA-Z0-9_]*)",
         ];
 
         let mut used_variables = std::collections::HashSet::new();

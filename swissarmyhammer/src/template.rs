@@ -1,6 +1,6 @@
 //! Template engine and rendering functionality
 
-use crate::{Result, SwissArmyHammerError};
+use crate::{plugins::PluginRegistry, Result, SwissArmyHammerError};
 use liquid::{Object, Parser};
 use std::collections::HashMap;
 
@@ -54,6 +54,7 @@ impl Template {
 /// Template engine with Liquid configuration
 pub struct TemplateEngine {
     parser: liquid::Parser,
+    plugin_registry: Option<PluginRegistry>,
 }
 
 impl TemplateEngine {
@@ -61,12 +62,25 @@ impl TemplateEngine {
     pub fn new() -> Self {
         Self {
             parser: Self::default_parser(),
+            plugin_registry: None,
         }
     }
 
     /// Create a new template engine with custom parser
     pub fn with_parser(parser: liquid::Parser) -> Self {
-        Self { parser }
+        Self { 
+            parser,
+            plugin_registry: None,
+        }
+    }
+
+    /// Create a new template engine with plugin registry
+    pub fn with_plugins(plugin_registry: PluginRegistry) -> Self {
+        let parser = plugin_registry.create_parser();
+        Self {
+            parser,
+            plugin_registry: Some(plugin_registry),
+        }
     }
 
     /// Create a default parser
@@ -93,6 +107,11 @@ impl TemplateEngine {
     pub fn render(&self, template_str: &str, args: &HashMap<String, String>) -> Result<String> {
         let template = self.parse(template_str)?;
         template.render(args)
+    }
+
+    /// Get a reference to the plugin registry, if any
+    pub fn plugin_registry(&self) -> Option<&PluginRegistry> {
+        self.plugin_registry.as_ref()
     }
 }
 

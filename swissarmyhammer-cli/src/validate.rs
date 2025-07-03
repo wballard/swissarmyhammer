@@ -125,21 +125,10 @@ impl Validator {
     pub fn validate_builtin_only(&self) -> Result<ValidationResult> {
         let mut result = ValidationResult::new();
 
-        // Load only builtin prompts from the prompts/builtin directory
+        // Load only builtin prompts using the centralized PromptResolver
         let mut library = swissarmyhammer::PromptLibrary::new();
-
-        // Try both relative paths to handle different working directories
-        let builtin_paths = [
-            std::path::Path::new("prompts/builtin"), // From project root
-            std::path::Path::new("../prompts/builtin"), // From CLI crate
-        ];
-
-        for builtin_dir in &builtin_paths {
-            if builtin_dir.exists() {
-                library.add_directory(builtin_dir)?;
-                break;
-            }
-        }
+        let resolver = crate::prompt_loader::PromptResolver::new();
+        resolver.load_builtin_prompts(&mut library)?;
 
         // Validate each loaded prompt
         let prompts = library.list()?;
@@ -182,36 +171,10 @@ impl Validator {
     pub fn validate_all(&self) -> Result<ValidationResult> {
         let mut result = ValidationResult::new();
 
-        // Load all prompts from all sources
+        // Load all prompts using the centralized PromptResolver
         let mut library = swissarmyhammer::PromptLibrary::new();
-
-        // Load builtin prompts from the prompts/builtin directory
-        // Try both relative paths to handle different working directories
-        let builtin_paths = [
-            std::path::Path::new("prompts/builtin"), // From project root
-            std::path::Path::new("../prompts/builtin"), // From CLI crate
-        ];
-
-        for builtin_dir in &builtin_paths {
-            if builtin_dir.exists() {
-                library.add_directory(builtin_dir)?;
-                break;
-            }
-        }
-
-        // Load user prompts
-        if let Some(user_dir) = dirs::home_dir()
-            .map(|d| d.join(".swissarmyhammer").join("prompts"))
-            .filter(|p| p.exists())
-        {
-            library.add_directory(&user_dir)?;
-        }
-
-        // Load local prompts
-        let local_dir = PathBuf::from(".swissarmyhammer").join("prompts");
-        if local_dir.exists() {
-            library.add_directory(&local_dir)?;
-        }
+        let resolver = crate::prompt_loader::PromptResolver::new();
+        resolver.load_all_prompts(&mut library)?;
 
         // Validate each loaded prompt
         let prompts = library.list()?;

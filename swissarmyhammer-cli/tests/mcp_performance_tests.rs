@@ -452,6 +452,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // Ignore by default as this test requires building release binary which is slow
     async fn test_cli_startup_time_under_50ms() -> Result<()> {
         // Build the CLI binary first in release mode for accurate measurement
         let output = Command::new("cargo")
@@ -508,6 +509,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // Ignore by default as this test requires building release binary which is slow
     async fn test_list_command_startup_time_under_50ms() -> Result<()> {
         // Build the CLI binary first in release mode for accurate measurement
         let output = Command::new("cargo")
@@ -564,6 +566,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // Ignore by default as this test requires building release binary which is slow
     async fn test_doctor_command_startup_time_under_50ms() -> Result<()> {
         // Build the CLI binary first in release mode for accurate measurement
         let output = Command::new("cargo")

@@ -111,7 +111,11 @@ impl PluginRegistry {
         self.filters.keys().cloned().collect()
     }
     
-    /// Create a liquid parser with standard filters (custom filters handled separately)
+    /// Create a liquid parser with standard filters
+    /// 
+    /// Note: Custom filter integration with liquid parser is not yet implemented.
+    /// Custom filters can be accessed directly through the registry but are not
+    /// automatically available in liquid templates.
     pub fn create_parser(&self) -> liquid::Parser {
         liquid::ParserBuilder::with_stdlib()
             .build()
@@ -129,6 +133,7 @@ impl Default for PluginRegistry {
 mod tests {
     use super::*;
     use liquid::model::Value;
+    use liquid::ValueView;
 
     // Test plugin implementation
     struct TestPlugin {
@@ -186,24 +191,10 @@ mod tests {
         }
         
         fn apply(&self, input: &Value) -> Result<Value> {
-            // For now, use a simple string representation approach
-            // This works by converting the value to its string representation
-            let str_val = match input {
-                Value::Scalar(scalar) => {
-                    // Use Debug formatting to get string representation
-                    format!("{:?}", scalar)
-                }
-                _ => return Ok(input.clone()),
-            };
+            // Extract string value properly from liquid Value
+            let str_val = input.render().to_string();
             
-            // Remove quotes if it's a string literal from debug formatting
-            let clean_str = if str_val.starts_with('"') && str_val.ends_with('"') {
-                str_val[1..str_val.len()-1].to_string()
-            } else {
-                str_val
-            };
-            
-            let reversed: String = clean_str.chars().rev().collect();
+            let reversed: String = str_val.chars().rev().collect();
             Ok(Value::scalar(reversed))
         }
     }
@@ -245,14 +236,9 @@ mod tests {
         
         // Check that the result is a scalar with the expected value
         match result {
-            Value::Scalar(scalar) => {
-                let debug_str = format!("{:?}", scalar);
-                let clean_str = if debug_str.starts_with('"') && debug_str.ends_with('"') {
-                    debug_str[1..debug_str.len()-1].to_string()
-                } else {
-                    debug_str
-                };
-                assert_eq!(clean_str, "olleh");
+            Value::Scalar(_) => {
+                let result_str = result.render().to_string();
+                assert_eq!(result_str, "olleh");
             }
             _ => panic!("Expected scalar result"),
         }

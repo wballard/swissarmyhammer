@@ -705,10 +705,18 @@ impl PromptLoader {
 
         for entry in walkdir::WalkDir::new(path)
             .into_iter()
+            .filter_entry(|e| {
+                // Filter out directories we should exclude
+                if e.path().is_dir() {
+                    !self.should_exclude_directory(e.path())
+                } else {
+                    true
+                }
+            })
             .filter_map(|e| e.ok())
         {
             let path = entry.path();
-            if path.is_file() && self.is_prompt_file(path) {
+            if path.is_file() && self.is_prompt_file(path) && !self.should_exclude_file(path) {
                 if let Ok(prompt) = self.load_file(path) {
                     prompts.push(prompt);
                 }
@@ -795,6 +803,75 @@ impl PromptLoader {
             .unwrap_or(false)
     }
 
+    /// Check if a directory should be excluded from prompt loading
+    fn should_exclude_directory(&self, dir: &Path) -> bool {
+        if let Some(dir_name) = dir.file_name().and_then(|n| n.to_str()) {
+            // Exclude common documentation, planning, and development directories
+            match dir_name {
+                // Documentation directories
+                "doc" | "docs" | "documentation" => true,
+                // Issue tracking and planning
+                "issues" | "plan" | "planning" => true,
+                // Examples and specifications
+                "examples" | "example" | "specification" | "specs" => true,
+                // Build/output directories
+                "dist" | "build" | "target" | "var" | "tmp" | "temp" => true,
+                // Version control and hidden directories
+                ".git" | ".github" | ".vscode" | ".idea" => true,
+                // Node.js/web development
+                "node_modules" | "public" | "static" => true,
+                // Test directories (only exclude if they don't contain prompts)
+                "test" | "tests" if !self.might_contain_prompts(dir) => true,
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Check if a file should be excluded from prompt loading
+    fn should_exclude_file(&self, file_path: &Path) -> bool {
+        if let Some(file_name) = file_path.file_name().and_then(|n| n.to_str()) {
+            // Exclude common documentation and configuration files
+            match file_name.to_lowercase().as_str() {
+                // Documentation files
+                "readme.md" | "readme.rst" | "readme.txt" => true,
+                "installation.md" | "install.md" | "setup.md" => true,
+                "changelog.md" | "changes.md" | "history.md" => true,
+                "contributing.md" | "contribute.md" => true,
+                "license.md" | "license.txt" | "license" => true,
+                "authors.md" | "authors.txt" | "credits.md" => true,
+                "todo.md" | "todos.md" | "lint_todo.md" => true,
+                // Configuration and project files
+                "cargo.toml" | "package.json" | "requirements.txt" => true,
+                "docker-compose.yml" | "dockerfile" => true,
+                ".gitignore" | ".dockerignore" => true,
+                // Build and CI files
+                "makefile" | "build.md" | "deployment.md" => true,
+                _ => {
+                    // Check for common documentation patterns
+                    file_name.to_lowercase().starts_with("readme")
+                        || file_name.to_lowercase().starts_with("install")
+                        || file_name.to_lowercase().starts_with("setup")
+                        || file_name.to_lowercase().contains("changelog")
+                        || file_name.to_lowercase().contains("todo")
+                }
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Check if a directory might contain prompts
+    fn might_contain_prompts(&self, dir: &Path) -> bool {
+        // Check if directory path suggests it might contain prompts
+        if let Some(dir_str) = dir.to_str() {
+            dir_str.contains("prompt") || dir_str.contains("template")
+        } else {
+            false
+        }
+    }
+
     /// Parse front matter from content
     fn parse_front_matter(&self, content: &str) -> Result<(Option<serde_json::Value>, String)> {
         if content.starts_with("---\n") {
@@ -847,5 +924,73 @@ mod tests {
 
         let result = prompt.render(&args).unwrap();
         assert_eq!(result, "Hello World!");
+    }
+
+    #[test]
+    fn test_prompt_loader_excludes_non_prompt_directories() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        // This test reproduces the issue where PromptLoader loads markdown files
+        // from directories that should be excluded (like ./issues/, ./doc/, etc.)
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create directory structure with markdown files that should NOT be loaded as prompts
+        let excluded_dirs = [
+            "issues",
+            "doc", 
+            "docs",
+            "plan",
+            "examples",
+            "dist",
+            "var",
+            "specification",
+            "target",
+            ".git",
+        ];
+
+        for dir_name in &excluded_dirs {
+            let dir_path = temp_dir.path().join(dir_name);
+            fs::create_dir_all(&dir_path).unwrap();
+
+            // Create a markdown file without YAML front matter (would cause errors if loaded)
+            let file_path = dir_path.join("test.md");
+            fs::write(
+                &file_path,
+                "# Just a regular markdown file\n\nNo YAML front matter here.",
+            )
+            .unwrap();
+        }
+
+        // Create a valid prompt directory that SHOULD be loaded
+        let prompts_dir = temp_dir.path().join("prompts");
+        fs::create_dir_all(&prompts_dir).unwrap();
+        let valid_prompt = prompts_dir.join("valid.md");
+        let valid_content = r#"---
+title: Valid Prompt
+description: A valid prompt for testing
+arguments:
+  - name: topic
+    description: The topic
+    required: true
+---
+
+# Valid Prompt
+
+Discuss {{topic}}.
+"#;
+        fs::write(&valid_prompt, valid_content).unwrap();
+
+        let loader = PromptLoader::new();
+        let prompts = loader.load_directory(temp_dir.path()).unwrap();
+
+        // Should only load the valid prompt, not files from excluded directories
+        assert_eq!(
+            prompts.len(), 1,
+            "Should only load 1 prompt (the valid one), but loaded: {}",
+            prompts.len()
+        );
+        assert_eq!(prompts[0].name, "valid");
+        assert!(prompts[0].description.is_some());
     }
 }

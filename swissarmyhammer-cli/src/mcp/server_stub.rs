@@ -20,3 +20,9 @@ impl MCPServer {
         Ok(())
     }
 }
+
+impl Default for MCPServer {
+    fn default() -> Self {
+        Self::new()
+    }
+}

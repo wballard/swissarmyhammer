@@ -173,25 +173,14 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
-<p>SwissArmyHammer can be installed from source using Cargo. Pre-built binaries will be available in future releases.</p>
+<p>For complete installation instructions, see <a href="../../INSTALLATION.html">INSTALLATION.md</a>.</p>
 <h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
 <p>Before installing SwissArmyHammer, you need:</p>
 <ul>
 <li><strong>Rust 1.70 or later</strong> - Install from <a href="https://rustup.rs/">rustup.rs</a></li>
 <li><strong>Git</strong> - For cloning the repository</li>
 </ul>
-<h2 id="quick-install-recommended"><a class="header" href="#quick-install-recommended">Quick Install (Recommended)</a></h2>
-<h3 id="install-from-git-repository"><a class="header" href="#install-from-git-repository">Install from Git Repository</a></h3>
-<pre><code class="language-bash">cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
-</code></pre>
-<p>This command will:</p>
-<ul>
-<li>Clone the repository</li>
-<li>Build the CLI in release mode</li>
-<li>Install the <code>swissarmyhammer</code> binary to <code>~/.cargo/bin</code></li>
-<li>Make it available in your PATH (if <code>~/.cargo/bin</code> is in your PATH)</li>
-</ul>
-<h3 id="add-to-path"><a class="header" href="#add-to-path">Add to PATH</a></h3>
+<h2 id="path-configuration"><a class="header" href="#path-configuration">PATH Configuration</a></h2>
 <p>Make sure <code>~/.cargo/bin</code> is in your PATH. Add this to your shell configuration file:</p>
 <pre><code class="language-bash"># For bash (~/.bashrc or ~/.bash_profile)
 export PATH="$HOME/.cargo/bin:$PATH"

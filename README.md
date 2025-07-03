@@ -6,6 +6,8 @@
 
 **The MCP server and Rust library for managing prompts as markdown files**
 
+🌟 **[📚 Complete Documentation & Guides](https://wballard.github.io/swissarmyhammer)** 🌟
+
 [![CI](https://github.com/wballard/swissarmyhammer/workflows/CI/badge.svg)](https://github.com/wballard/swissarmyhammer/actions)
 [![Release](https://img.shields.io/github/v/release/wballard/swissarmyhammer)](https://github.com/wballard/swissarmyhammer/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)

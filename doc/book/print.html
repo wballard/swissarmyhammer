@@ -263,25 +263,14 @@ Focus on:
 <h2 id="license"><a class="header" href="#license">License</a></h2>
 <p>SwissArmyHammer is open source software licensed under the MIT License. See the <a href="./license.html">License</a> page for details.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
-<p>SwissArmyHammer can be installed from source using Cargo. Pre-built binaries will be available in future releases.</p>
+<p>For complete installation instructions, see <a href="../../INSTALLATION.html">INSTALLATION.md</a>.</p>
 <h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
 <p>Before installing SwissArmyHammer, you need:</p>
 <ul>
 <li><strong>Rust 1.70 or later</strong> - Install from <a href="https://rustup.rs/">rustup.rs</a></li>
 <li><strong>Git</strong> - For cloning the repository</li>
 </ul>
-<h2 id="quick-install-recommended"><a class="header" href="#quick-install-recommended">Quick Install (Recommended)</a></h2>
-<h3 id="install-from-git-repository"><a class="header" href="#install-from-git-repository">Install from Git Repository</a></h3>
-<pre><code class="language-bash">cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
-</code></pre>
-<p>This command will:</p>
-<ul>
-<li>Clone the repository</li>
-<li>Build the CLI in release mode</li>
-<li>Install the <code>swissarmyhammer</code> binary to <code>~/.cargo/bin</code></li>
-<li>Make it available in your PATH (if <code>~/.cargo/bin</code> is in your PATH)</li>
-</ul>
-<h3 id="add-to-path"><a class="header" href="#add-to-path">Add to PATH</a></h3>
+<h2 id="path-configuration"><a class="header" href="#path-configuration">PATH Configuration</a></h2>
 <p>Make sure <code>~/.cargo/bin</code> is in your PATH. Add this to your shell configuration file:</p>
 <pre><code class="language-bash"># For bash (~/.bashrc or ~/.bash_profile)
 export PATH="$HOME/.cargo/bin:$PATH"
@@ -3174,7 +3163,277 @@ library.export_all("output.tar.gz", ExportFormat::TarGz)?;</code></pre>
 <li><a href="./advanced-prompts.html">Advanced Prompts</a> - Complex template patterns</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="library-api-reference"><a class="header" href="#library-api-reference">Library API Reference</a></h1>
+<p>This document provides comprehensive API documentation for the SwissArmyHammer Rust library.</p>
+<h2 id="core-types"><a class="header" href="#core-types">Core Types</a></h2>
+<h3 id="prompt-1"><a class="header" href="#prompt-1">Prompt</a></h3>
+<p>The <code>Prompt</code> struct represents a single prompt with metadata and template content.</p>
+<pre><code class="language-rust">pub struct Prompt {
+    pub name: String,
+    pub content: String,
+    pub description: Option&lt;String&gt;,
+    pub category: Option&lt;String&gt;,
+    pub tags: Vec&lt;String&gt;,
+    pub arguments: Vec&lt;ArgumentSpec&gt;,
+    pub file_path: Option&lt;PathBuf&gt;,
+}</code></pre>
+<h4 id="methods"><a class="header" href="#methods">Methods</a></h4>
+<ul>
+<li><code>new(name: &amp;str, content: &amp;str) -&gt; Self</code> - Create a new prompt</li>
+<li><code>with_description(self, description: &amp;str) -&gt; Self</code> - Add a description (builder pattern)</li>
+<li><code>with_category(self, category: &amp;str) -&gt; Self</code> - Add a category (builder pattern)</li>
+<li><code>add_tag(self, tag: &amp;str) -&gt; Self</code> - Add a tag (builder pattern)</li>
+<li><code>add_argument(self, arg: ArgumentSpec) -&gt; Self</code> - Add an argument specification</li>
+<li><code>render(&amp;self, args: &amp;HashMap&lt;String, String&gt;) -&gt; Result&lt;String&gt;</code> - Render the prompt with arguments</li>
+<li><code>validate_arguments(&amp;self, args: &amp;HashMap&lt;String, String&gt;) -&gt; Result&lt;()&gt;</code> - Validate provided arguments</li>
+</ul>
+<h4 id="example"><a class="header" href="#example">Example</a></h4>
+<pre><code class="language-rust">use swissarmyhammer::{Prompt, ArgumentSpec};
+use std::collections::HashMap;
+
+let prompt = Prompt::new("greet", "Hello {{name}}!")
+    .with_description("A greeting prompt")
+    .add_argument(ArgumentSpec {
+        name: "name".to_string(),
+        description: Some("Name to greet".to_string()),
+        required: true,
+        default: None,
+        type_hint: Some("string".to_string()),
+    });
+
+let mut args = HashMap::new();
+args.insert("name".to_string(), "World".to_string());
+let result = prompt.render(&amp;args)?;
+// result: "Hello World!"</code></pre>
+<h3 id="argumentspec"><a class="header" href="#argumentspec">ArgumentSpec</a></h3>
+<p>Defines the specification for a prompt argument.</p>
+<pre><code class="language-rust">pub struct ArgumentSpec {
+    pub name: String,
+    pub description: Option&lt;String&gt;,
+    pub required: bool,
+    pub default: Option&lt;String&gt;,
+    pub type_hint: Option&lt;String&gt;,
+}</code></pre>
+<h3 id="promptlibrary-1"><a class="header" href="#promptlibrary-1">PromptLibrary</a></h3>
+<p>The main interface for managing collections of prompts.</p>
+<pre><code class="language-rust">pub struct PromptLibrary {
+    // internal fields...
+}</code></pre>
+<h4 id="methods-1"><a class="header" href="#methods-1">Methods</a></h4>
+<ul>
+<li><code>new() -&gt; Self</code> - Create a new empty library</li>
+<li><code>add_directory&lt;P: AsRef&lt;Path&gt;&gt;(&amp;mut self, path: P) -&gt; Result&lt;()&gt;</code> - Load prompts from directory</li>
+<li><code>add_prompt(&amp;mut self, prompt: Prompt)</code> - Add a single prompt</li>
+<li><code>get(&amp;self, name: &amp;str) -&gt; Result&lt;&amp;Prompt&gt;</code> - Get a prompt by name</li>
+<li><code>list_prompts(&amp;self) -&gt; Vec&lt;&amp;Prompt&gt;</code> - List all prompts</li>
+<li><code>find_by_category(&amp;self, category: &amp;str) -&gt; Vec&lt;&amp;Prompt&gt;</code> - Find prompts by category</li>
+<li><code>find_by_tag(&amp;self, tag: &amp;str) -&gt; Vec&lt;&amp;Prompt&gt;</code> - Find prompts by tag</li>
+<li><code>remove(&amp;mut self, name: &amp;str) -&gt; Option&lt;Prompt&gt;</code> - Remove a prompt</li>
+</ul>
+<h4 id="example-1"><a class="header" href="#example-1">Example</a></h4>
+<pre><code class="language-rust">use swissarmyhammer::PromptLibrary;
+
+let mut library = PromptLibrary::new();
+library.add_directory("./prompts")?;
+
+let prompt = library.get("code-review")?;
+let rendered = prompt.render(&amp;args)?;</code></pre>
+<h3 id="promptloader"><a class="header" href="#promptloader">PromptLoader</a></h3>
+<p>Handles loading prompts from various sources.</p>
+<pre><code class="language-rust">pub struct PromptLoader {
+    // internal fields...
+}</code></pre>
+<h4 id="methods-2"><a class="header" href="#methods-2">Methods</a></h4>
+<ul>
+<li><code>new() -&gt; Self</code> - Create a new loader</li>
+<li><code>load_file&lt;P: AsRef&lt;Path&gt;&gt;(&amp;self, path: P) -&gt; Result&lt;Prompt&gt;</code> - Load single prompt file</li>
+<li><code>load_directory&lt;P: AsRef&lt;Path&gt;&gt;(&amp;self, path: P) -&gt; Result&lt;Vec&lt;Prompt&gt;&gt;</code> - Load all prompts from directory</li>
+<li><code>load_string(&amp;self, name: &amp;str, content: &amp;str) -&gt; Result&lt;Prompt&gt;</code> - Load prompt from string</li>
+</ul>
+<h2 id="template-engine-1"><a class="header" href="#template-engine-1">Template Engine</a></h2>
+<h3 id="template"><a class="header" href="#template">Template</a></h3>
+<p>Wrapper for Liquid templates with custom filters.</p>
+<pre><code class="language-rust">pub struct Template {
+    // internal fields...
+}</code></pre>
+<h4 id="methods-3"><a class="header" href="#methods-3">Methods</a></h4>
+<ul>
+<li><code>new(template_str: &amp;str) -&gt; Result&lt;Self&gt;</code> - Create template from string</li>
+<li><code>render(&amp;self, args: &amp;HashMap&lt;String, String&gt;) -&gt; Result&lt;String&gt;</code> - Render with arguments</li>
+<li><code>raw(&amp;self) -&gt; &amp;str</code> - Get the raw template string</li>
+</ul>
+<h3 id="templateengine"><a class="header" href="#templateengine">TemplateEngine</a></h3>
+<p>Manages template parsing and custom filters.</p>
+<pre><code class="language-rust">pub struct TemplateEngine {
+    // internal fields...
+}</code></pre>
+<h4 id="methods-4"><a class="header" href="#methods-4">Methods</a></h4>
+<ul>
+<li><code>new() -&gt; Self</code> - Create new engine</li>
+<li><code>default_parser() -&gt; Parser</code> - Get default Liquid parser with custom filters</li>
+<li><code>register_filter&lt;F&gt;(&amp;mut self, name: &amp;str, filter: F)</code> - Register custom filter</li>
+</ul>
+<h2 id="storage"><a class="header" href="#storage">Storage</a></h2>
+<h3 id="promptstorage"><a class="header" href="#promptstorage">PromptStorage</a></h3>
+<p>High-level storage interface for prompts.</p>
+<pre><code class="language-rust">pub trait PromptStorage {
+    fn store_prompt(&amp;mut self, prompt: &amp;Prompt) -&gt; Result&lt;()&gt;;
+    fn load_prompt(&amp;self, name: &amp;str) -&gt; Result&lt;Prompt&gt;;
+    fn list_prompts(&amp;self) -&gt; Result&lt;Vec&lt;String&gt;&gt;;
+    fn delete_prompt(&amp;mut self, name: &amp;str) -&gt; Result&lt;()&gt;;
+}</code></pre>
+<h3 id="storagebackend"><a class="header" href="#storagebackend">StorageBackend</a></h3>
+<p>Low-level storage abstraction.</p>
+<pre><code class="language-rust">pub trait StorageBackend {
+    fn read(&amp;self, key: &amp;str) -&gt; Result&lt;Vec&lt;u8&gt;&gt;;
+    fn write(&amp;mut self, key: &amp;str, data: &amp;[u8]) -&gt; Result&lt;()&gt;;
+    fn delete(&amp;mut self, key: &amp;str) -&gt; Result&lt;()&gt;;
+    fn list(&amp;self) -&gt; Result&lt;Vec&lt;String&gt;&gt;;
+}</code></pre>
+<h2 id="search"><a class="header" href="#search">Search</a></h2>
+<p><em>Available with the <code>search</code> feature</em></p>
+<h3 id="searchengine"><a class="header" href="#searchengine">SearchEngine</a></h3>
+<p>Full-text search functionality for prompts.</p>
+<pre><code class="language-rust">pub struct SearchEngine {
+    // internal fields...
+}</code></pre>
+<h4 id="methods-5"><a class="header" href="#methods-5">Methods</a></h4>
+<ul>
+<li><code>new() -&gt; Result&lt;Self&gt;</code> - Create new search engine</li>
+<li><code>index_prompt(&amp;mut self, prompt: &amp;Prompt) -&gt; Result&lt;()&gt;</code> - Add prompt to search index</li>
+<li><code>search(&amp;self, query: &amp;str) -&gt; Result&lt;Vec&lt;SearchResult&gt;&gt;</code> - Search for prompts</li>
+</ul>
+<h3 id="searchresult"><a class="header" href="#searchresult">SearchResult</a></h3>
+<p>Represents a search result.</p>
+<pre><code class="language-rust">pub struct SearchResult {
+    pub name: String,
+    pub score: f32,
+    pub snippet: Option&lt;String&gt;,
+}</code></pre>
+<h2 id="mcp-integration"><a class="header" href="#mcp-integration">MCP Integration</a></h2>
+<p><em>Available with the <code>mcp</code> feature</em></p>
+<h3 id="mcpserver"><a class="header" href="#mcpserver">McpServer</a></h3>
+<p>Model Context Protocol server implementation.</p>
+<pre><code class="language-rust">pub struct McpServer {
+    // internal fields...
+}</code></pre>
+<h4 id="methods-6"><a class="header" href="#methods-6">Methods</a></h4>
+<ul>
+<li><code>new(library: PromptLibrary) -&gt; Self</code> - Create server with prompt library</li>
+<li><code>run(&amp;mut self) -&gt; Result&lt;()&gt;</code> - Start the MCP server</li>
+</ul>
+<h2 id="plugin-system"><a class="header" href="#plugin-system">Plugin System</a></h2>
+<h3 id="swissarmyhammerplugin"><a class="header" href="#swissarmyhammerplugin">SwissArmyHammerPlugin</a></h3>
+<p>Trait for creating plugins.</p>
+<pre><code class="language-rust">pub trait SwissArmyHammerPlugin {
+    fn name(&amp;self) -&gt; &amp;str;
+    fn filters(&amp;self) -&gt; Vec&lt;Box&lt;dyn CustomLiquidFilter&gt;&gt;;
+}</code></pre>
+<h3 id="customliquidfilter"><a class="header" href="#customliquidfilter">CustomLiquidFilter</a></h3>
+<p>Trait for custom Liquid template filters.</p>
+<pre><code class="language-rust">pub trait CustomLiquidFilter {
+    fn name(&amp;self) -&gt; &amp;str;
+    fn filter(&amp;self, input: &amp;str, args: &amp;[&amp;str]) -&gt; Result&lt;String&gt;;
+}</code></pre>
+<h3 id="pluginregistry"><a class="header" href="#pluginregistry">PluginRegistry</a></h3>
+<p>Manages registered plugins and filters.</p>
+<pre><code class="language-rust">pub struct PluginRegistry {
+    // internal fields...
+}</code></pre>
+<h4 id="methods-7"><a class="header" href="#methods-7">Methods</a></h4>
+<ul>
+<li><code>new() -&gt; Self</code> - Create new registry</li>
+<li><code>register_plugin&lt;P: SwissArmyHammerPlugin&gt;(&amp;mut self, plugin: P)</code> - Register plugin</li>
+<li><code>get_filters(&amp;self) -&gt; Vec&lt;&amp;dyn CustomLiquidFilter&gt;</code> - Get all registered filters</li>
+</ul>
+<h2 id="error-handling-4"><a class="header" href="#error-handling-4">Error Handling</a></h2>
+<h3 id="swissarmyhammererror"><a class="header" href="#swissarmyhammererror">SwissArmyHammerError</a></h3>
+<p>Main error type for the library.</p>
+<pre><code class="language-rust">pub enum SwissArmyHammerError {
+    Io(std::io::Error),
+    Template(String),
+    PromptNotFound(String),
+    Config(String),
+    Storage(String),
+    Serialization(serde_yaml::Error),
+    Other(String),
+}</code></pre>
+<h3 id="result-type"><a class="header" href="#result-type">Result Type</a></h3>
+<p>Convenient result type alias.</p>
+<pre><code class="language-rust">pub type Result&lt;T&gt; = std::result::Result&lt;T, SwissArmyHammerError&gt;;</code></pre>
+<h2 id="feature-flags-1"><a class="header" href="#feature-flags-1">Feature Flags</a></h2>
+<p>The library supports several optional features:</p>
+<ul>
+<li><code>search</code> - Enables full-text search functionality</li>
+<li><code>mcp</code> - Enables Model Context Protocol server support</li>
+</ul>
+<p>Enable features in your <code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[dependencies]
+swissarmyhammer = { version = "0.1", features = ["search", "mcp"] }
+</code></pre>
+<h2 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h2>
+<pre><code class="language-rust">use swissarmyhammer::{PromptLibrary, ArgumentSpec, Result};
+use std::collections::HashMap;
+
+fn main() -&gt; Result&lt;()&gt; {
+    // Create library and load prompts
+    let mut library = PromptLibrary::new();
+    library.add_directory("./prompts")?;
+    
+    // Get a prompt
+    let prompt = library.get("code-review")?;
+    
+    // Prepare arguments
+    let mut args = HashMap::new();
+    args.insert("code".to_string(), "fn main() { println!(\"Hello\"); }".to_string());
+    args.insert("language".to_string(), "rust".to_string());
+    
+    // Render the prompt
+    let rendered = prompt.render(&amp;args)?;
+    println!("{}", rendered);
+    
+    Ok(())
+}</code></pre>
+<h2 id="advanced-usage-1"><a class="header" href="#advanced-usage-1">Advanced Usage</a></h2>
+<h3 id="custom-filters-1"><a class="header" href="#custom-filters-1">Custom Filters</a></h3>
+<p>Create custom Liquid filters for domain-specific transformations:</p>
+<pre><code class="language-rust">use swissarmyhammer::{CustomLiquidFilter, PluginRegistry, TemplateEngine};
+
+struct UppercaseFilter;
+
+impl CustomLiquidFilter for UppercaseFilter {
+    fn name(&amp;self) -&gt; &amp;str { "uppercase" }
+    
+    fn filter(&amp;self, input: &amp;str, _args: &amp;[&amp;str]) -&gt; Result&lt;String&gt; {
+        Ok(input.to_uppercase())
+    }
+}
+
+let mut registry = PluginRegistry::new();
+registry.register_filter("uppercase", Box::new(UppercaseFilter));</code></pre>
+<h3 id="storage-backends"><a class="header" href="#storage-backends">Storage Backends</a></h3>
+<p>Implement custom storage backends:</p>
+<pre><code class="language-rust">use swissarmyhammer::{StorageBackend, Result};
+
+struct DatabaseBackend {
+    // database connection...
+}
+
+impl StorageBackend for DatabaseBackend {
+    fn read(&amp;self, key: &amp;str) -&gt; Result&lt;Vec&lt;u8&gt;&gt; {
+        // Read from database
+        todo!()
+    }
+    
+    fn write(&amp;mut self, key: &amp;str, data: &amp;[u8]) -&gt; Result&lt;()&gt; {
+        // Write to database
+        todo!()
+    }
+    
+    // ... implement other methods
+}</code></pre>
+<p>For more examples and advanced usage patterns, see the <a href="./library-examples.html">Library Examples</a> page.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="integration-examples-4"><a class="header" href="#integration-examples-4">Integration Examples</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="-rustdoc-api-documentation"><a class="header" href="#-rustdoc-api-documentation">🔗 Rustdoc API Documentation</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="advanced-prompt-techniques"><a class="header" href="#advanced-prompt-techniques">Advanced Prompt Techniques</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="search-and-discovery-guide"><a class="header" href="#search-and-discovery-guide">Search and Discovery Guide</a></h1>
 <p>SwissArmyHammer provides powerful search capabilities to help you discover and find prompts in your collection. This guide covers search strategies, advanced filtering, and integration workflows.</p>
@@ -3550,7 +3809,210 @@ swissarmyhammer search --json "" --limit 100 | \
 <li><a href="./cli-test.html"><code>test</code> command</a> - Testing found prompts</li>
 <li><a href="./prompt-organization.html">Prompt Organization</a> - Organizing for discoverability</li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="testing-and-debugging"><a class="header" href="#testing-and-debugging">Testing and Debugging</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="testing-and-debugging-guide"><a class="header" href="#testing-and-debugging-guide">Testing and Debugging Guide</a></h1>
+<p>This guide covers testing strategies, debugging techniques, and best practices for working with SwissArmyHammer prompts.</p>
+<h2 id="interactive-testing-1"><a class="header" href="#interactive-testing-1">Interactive Testing</a></h2>
+<h3 id="basic-testing-workflow"><a class="header" href="#basic-testing-workflow">Basic Testing Workflow</a></h3>
+<p>The <code>test</code> command provides an interactive environment for testing prompts:</p>
+<pre><code class="language-bash"># Start interactive testing
+swissarmyhammer test code-review
+</code></pre>
+<p>This will:</p>
+<ol>
+<li>Load the specified prompt</li>
+<li>Prompt for required arguments</li>
+<li>Show optional arguments with defaults</li>
+<li>Render the template</li>
+<li>Display the result</li>
+<li>Offer additional actions (copy, save, retry)</li>
+</ol>
+<h3 id="testing-with-predefined-arguments"><a class="header" href="#testing-with-predefined-arguments">Testing with Predefined Arguments</a></h3>
+<pre><code class="language-bash"># Test with known arguments
+swissarmyhammer test code-review \
+  --arg code="fn main() { println!(\"Hello\"); }" \
+  --arg language="rust"
+
+# Copy result directly to clipboard
+swissarmyhammer test email-template \
+  --arg recipient="John" \
+  --arg subject="Meeting" \
+  --copy
+</code></pre>
+<h2 id="debugging-template-issues"><a class="header" href="#debugging-template-issues">Debugging Template Issues</a></h2>
+<h3 id="common-template-problems"><a class="header" href="#common-template-problems">Common Template Problems</a></h3>
+<h4 id="missing-variables"><a class="header" href="#missing-variables">Missing Variables</a></h4>
+<pre><code class="language-liquid">&lt;!-- Problem: undefined variable --&gt;
+Hello {{name}}
+
+&lt;!-- Solution: provide default --&gt;
+Hello {{ name | default: "Guest" }}
+</code></pre>
+<h4 id="type-mismatches"><a class="header" href="#type-mismatches">Type Mismatches</a></h4>
+<pre><code class="language-liquid">&lt;!-- Problem: trying to use string methods on numbers --&gt;
+{{ count | upcase }}
+
+&lt;!-- Solution: convert types --&gt;
+{{ count | append: " items" }}
+</code></pre>
+<h4 id="loop-issues"><a class="header" href="#loop-issues">Loop Issues</a></h4>
+<pre><code class="language-liquid">&lt;!-- Problem: not checking for empty arrays --&gt;
+{% for item in items %}
+  - {{ item }}
+{% endfor %}
+
+&lt;!-- Solution: check array exists and has items --&gt;
+{% if items and items.size &gt; 0 %}
+  {% for item in items %}
+    - {{ item }}
+  {% endfor %}
+{% else %}
+  No items found.
+{% endif %}
+</code></pre>
+<h3 id="debug-mode-1"><a class="header" href="#debug-mode-1">Debug Mode</a></h3>
+<p>Use debug mode to see detailed template processing:</p>
+<pre><code class="language-bash">swissarmyhammer test prompt-name --debug
+</code></pre>
+<p>Debug output includes:</p>
+<ul>
+<li>Variable resolution steps</li>
+<li>Filter application results</li>
+<li>Conditional evaluation</li>
+<li>Loop iteration details</li>
+<li>Performance timing</li>
+</ul>
+<h2 id="validation-strategies"><a class="header" href="#validation-strategies">Validation Strategies</a></h2>
+<h3 id="argument-validation"><a class="header" href="#argument-validation">Argument Validation</a></h3>
+<p>Test with different argument combinations:</p>
+<pre><code class="language-bash"># Test required arguments only
+swissarmyhammer test prompt-name --arg required_arg="value"
+
+# Test with all arguments
+swissarmyhammer test prompt-name \
+  --arg required_arg="value" \
+  --arg optional_arg="optional_value"
+
+# Test with edge cases
+swissarmyhammer test prompt-name \
+  --arg text="" \
+  --arg number="0" \
+  --arg array="[]"
+</code></pre>
+<h3 id="template-edge-cases"><a class="header" href="#template-edge-cases">Template Edge Cases</a></h3>
+<p>Create test cases for common scenarios:</p>
+<ol>
+<li><strong>Empty inputs</strong></li>
+<li><strong>Very long inputs</strong></li>
+<li><strong>Special characters</strong></li>
+<li><strong>Unicode content</strong></li>
+<li><strong>Null/undefined values</strong></li>
+</ol>
+<h3 id="automated-testing"><a class="header" href="#automated-testing">Automated Testing</a></h3>
+<p>For prompt libraries, create test scripts:</p>
+<pre><code class="language-bash">#!/bin/bash
+# test-all-prompts.sh
+
+PROMPTS=$(swissarmyhammer search --json "" --limit 100 | jq -r '.results[].id')
+
+for prompt in $PROMPTS; do
+    echo "Testing $prompt..."
+    if swissarmyhammer test "$prompt" --arg placeholder="test" 2&gt;/dev/null; then
+        echo "✓ $prompt"
+    else
+        echo "✗ $prompt"
+    fi
+done
+</code></pre>
+<h2 id="performance-testing"><a class="header" href="#performance-testing">Performance Testing</a></h2>
+<h3 id="measuring-render-time"><a class="header" href="#measuring-render-time">Measuring Render Time</a></h3>
+<pre><code class="language-bash"># Time a complex template
+time swissarmyhammer test complex-template \
+  --arg large_data="$(cat large-file.json)"
+
+# Use debug mode for detailed timing
+swissarmyhammer test template-name --debug | grep "Performance:"
+</code></pre>
+<h3 id="memory-usage-testing"><a class="header" href="#memory-usage-testing">Memory Usage Testing</a></h3>
+<p>For large templates or data:</p>
+<pre><code class="language-bash"># Monitor memory usage during rendering
+/usr/bin/time -v swissarmyhammer test large-template \
+  --arg big_data="$(cat massive-dataset.json)"
+</code></pre>
+<h2 id="best-practices-3"><a class="header" href="#best-practices-3">Best Practices</a></h2>
+<h3 id="writing-testable-prompts"><a class="header" href="#writing-testable-prompts">Writing Testable Prompts</a></h3>
+<ol>
+<li><strong>Provide sensible defaults</strong> for optional arguments</li>
+<li><strong>Handle empty/null inputs</strong> gracefully</li>
+<li><strong>Use meaningful argument names</strong></li>
+<li><strong>Include example values</strong> in descriptions</li>
+<li><strong>Test with realistic data sizes</strong></li>
+</ol>
+<h3 id="testing-workflow"><a class="header" href="#testing-workflow">Testing Workflow</a></h3>
+<ol>
+<li><strong>Start simple</strong>: Test with minimal arguments</li>
+<li><strong>Add complexity</strong>: Test with full argument sets</li>
+<li><strong>Test edge cases</strong>: Empty, null, large inputs</li>
+<li><strong>Validate output</strong>: Ensure rendered content makes sense</li>
+<li><strong>Performance check</strong>: Verify reasonable render times</li>
+</ol>
+<h3 id="debugging-tips"><a class="header" href="#debugging-tips">Debugging Tips</a></h3>
+<ol>
+<li><strong>Use debug mode</strong> for complex templates</li>
+<li><strong>Test filters individually</strong> in simple templates</li>
+<li><strong>Validate JSON/YAML</strong> with external tools</li>
+<li><strong>Check argument types</strong> match expectations</li>
+<li><strong>Use raw mode</strong> to see unprocessed templates</li>
+</ol>
+<h2 id="integration-with-development"><a class="header" href="#integration-with-development">Integration with Development</a></h2>
+<h3 id="ide-integration"><a class="header" href="#ide-integration">IDE Integration</a></h3>
+<p>Many editors support SwissArmyHammer testing:</p>
+<pre><code class="language-bash"># VS Code task example
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Test Current Prompt",
+      "type": "shell",
+      "command": "swissarmyhammer",
+      "args": ["test", "${fileBasenameNoExtension}"],
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      }
+    }
+  ]
+}
+</code></pre>
+<h3 id="continuous-integration-1"><a class="header" href="#continuous-integration-1">Continuous Integration</a></h3>
+<p>Add prompt testing to CI pipelines:</p>
+<pre><code class="language-yaml"># .github/workflows/test-prompts.yml
+name: Test Prompts
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install SwissArmyHammer
+        run: cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
+      - name: Test all prompts
+        run: |
+          for prompt in prompts/*.md; do
+            name=$(basename "$prompt" .md)
+            echo "Testing $name..."
+            swissarmyhammer test "$name" --arg test="ci_validation"
+          done
+</code></pre>
+<h2 id="see-also-6"><a class="header" href="#see-also-6">See Also</a></h2>
+<ul>
+<li><a href="./cli-test.html"><code>test</code> command</a> - Command reference</li>
+<li><a href="./template-variables.html">Template Variables</a> - Template syntax</li>
+<li><a href="./custom-filters.html">Custom Filters</a> - Filter reference</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="sharing-and-collaboration"><a class="header" href="#sharing-and-collaboration">Sharing and Collaboration</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="mcp-protocol"><a class="header" href="#mcp-protocol">MCP Protocol</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="configuration-1"><a class="header" href="#configuration-1">Configuration</a></h1>

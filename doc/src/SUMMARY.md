@@ -30,6 +30,7 @@
 - [Rust Library Guide](./library-usage.md)
 - [Library API Reference](./library-api.md)
 - [Integration Examples](./library-examples.md)
+- [🔗 Rustdoc API Documentation](./api/swissarmyhammer/index.html)
 
 # Advanced Usage
 

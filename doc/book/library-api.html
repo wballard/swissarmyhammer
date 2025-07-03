@@ -173,6 +173,275 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="library-api-reference"><a class="header" href="#library-api-reference">Library API Reference</a></h1>
+<p>This document provides comprehensive API documentation for the SwissArmyHammer Rust library.</p>
+<h2 id="core-types"><a class="header" href="#core-types">Core Types</a></h2>
+<h3 id="prompt"><a class="header" href="#prompt">Prompt</a></h3>
+<p>The <code>Prompt</code> struct represents a single prompt with metadata and template content.</p>
+<pre><code class="language-rust">pub struct Prompt {
+    pub name: String,
+    pub content: String,
+    pub description: Option&lt;String&gt;,
+    pub category: Option&lt;String&gt;,
+    pub tags: Vec&lt;String&gt;,
+    pub arguments: Vec&lt;ArgumentSpec&gt;,
+    pub file_path: Option&lt;PathBuf&gt;,
+}</code></pre>
+<h4 id="methods"><a class="header" href="#methods">Methods</a></h4>
+<ul>
+<li><code>new(name: &amp;str, content: &amp;str) -&gt; Self</code> - Create a new prompt</li>
+<li><code>with_description(self, description: &amp;str) -&gt; Self</code> - Add a description (builder pattern)</li>
+<li><code>with_category(self, category: &amp;str) -&gt; Self</code> - Add a category (builder pattern)</li>
+<li><code>add_tag(self, tag: &amp;str) -&gt; Self</code> - Add a tag (builder pattern)</li>
+<li><code>add_argument(self, arg: ArgumentSpec) -&gt; Self</code> - Add an argument specification</li>
+<li><code>render(&amp;self, args: &amp;HashMap&lt;String, String&gt;) -&gt; Result&lt;String&gt;</code> - Render the prompt with arguments</li>
+<li><code>validate_arguments(&amp;self, args: &amp;HashMap&lt;String, String&gt;) -&gt; Result&lt;()&gt;</code> - Validate provided arguments</li>
+</ul>
+<h4 id="example"><a class="header" href="#example">Example</a></h4>
+<pre><code class="language-rust">use swissarmyhammer::{Prompt, ArgumentSpec};
+use std::collections::HashMap;
+
+let prompt = Prompt::new("greet", "Hello {{name}}!")
+    .with_description("A greeting prompt")
+    .add_argument(ArgumentSpec {
+        name: "name".to_string(),
+        description: Some("Name to greet".to_string()),
+        required: true,
+        default: None,
+        type_hint: Some("string".to_string()),
+    });
+
+let mut args = HashMap::new();
+args.insert("name".to_string(), "World".to_string());
+let result = prompt.render(&amp;args)?;
+// result: "Hello World!"</code></pre>
+<h3 id="argumentspec"><a class="header" href="#argumentspec">ArgumentSpec</a></h3>
+<p>Defines the specification for a prompt argument.</p>
+<pre><code class="language-rust">pub struct ArgumentSpec {
+    pub name: String,
+    pub description: Option&lt;String&gt;,
+    pub required: bool,
+    pub default: Option&lt;String&gt;,
+    pub type_hint: Option&lt;String&gt;,
+}</code></pre>
+<h3 id="promptlibrary"><a class="header" href="#promptlibrary">PromptLibrary</a></h3>
+<p>The main interface for managing collections of prompts.</p>
+<pre><code class="language-rust">pub struct PromptLibrary {
+    // internal fields...
+}</code></pre>
+<h4 id="methods-1"><a class="header" href="#methods-1">Methods</a></h4>
+<ul>
+<li><code>new() -&gt; Self</code> - Create a new empty library</li>
+<li><code>add_directory&lt;P: AsRef&lt;Path&gt;&gt;(&amp;mut self, path: P) -&gt; Result&lt;()&gt;</code> - Load prompts from directory</li>
+<li><code>add_prompt(&amp;mut self, prompt: Prompt)</code> - Add a single prompt</li>
+<li><code>get(&amp;self, name: &amp;str) -&gt; Result&lt;&amp;Prompt&gt;</code> - Get a prompt by name</li>
+<li><code>list_prompts(&amp;self) -&gt; Vec&lt;&amp;Prompt&gt;</code> - List all prompts</li>
+<li><code>find_by_category(&amp;self, category: &amp;str) -&gt; Vec&lt;&amp;Prompt&gt;</code> - Find prompts by category</li>
+<li><code>find_by_tag(&amp;self, tag: &amp;str) -&gt; Vec&lt;&amp;Prompt&gt;</code> - Find prompts by tag</li>
+<li><code>remove(&amp;mut self, name: &amp;str) -&gt; Option&lt;Prompt&gt;</code> - Remove a prompt</li>
+</ul>
+<h4 id="example-1"><a class="header" href="#example-1">Example</a></h4>
+<pre><code class="language-rust">use swissarmyhammer::PromptLibrary;
+
+let mut library = PromptLibrary::new();
+library.add_directory("./prompts")?;
+
+let prompt = library.get("code-review")?;
+let rendered = prompt.render(&amp;args)?;</code></pre>
+<h3 id="promptloader"><a class="header" href="#promptloader">PromptLoader</a></h3>
+<p>Handles loading prompts from various sources.</p>
+<pre><code class="language-rust">pub struct PromptLoader {
+    // internal fields...
+}</code></pre>
+<h4 id="methods-2"><a class="header" href="#methods-2">Methods</a></h4>
+<ul>
+<li><code>new() -&gt; Self</code> - Create a new loader</li>
+<li><code>load_file&lt;P: AsRef&lt;Path&gt;&gt;(&amp;self, path: P) -&gt; Result&lt;Prompt&gt;</code> - Load single prompt file</li>
+<li><code>load_directory&lt;P: AsRef&lt;Path&gt;&gt;(&amp;self, path: P) -&gt; Result&lt;Vec&lt;Prompt&gt;&gt;</code> - Load all prompts from directory</li>
+<li><code>load_string(&amp;self, name: &amp;str, content: &amp;str) -&gt; Result&lt;Prompt&gt;</code> - Load prompt from string</li>
+</ul>
+<h2 id="template-engine"><a class="header" href="#template-engine">Template Engine</a></h2>
+<h3 id="template"><a class="header" href="#template">Template</a></h3>
+<p>Wrapper for Liquid templates with custom filters.</p>
+<pre><code class="language-rust">pub struct Template {
+    // internal fields...
+}</code></pre>
+<h4 id="methods-3"><a class="header" href="#methods-3">Methods</a></h4>
+<ul>
+<li><code>new(template_str: &amp;str) -&gt; Result&lt;Self&gt;</code> - Create template from string</li>
+<li><code>render(&amp;self, args: &amp;HashMap&lt;String, String&gt;) -&gt; Result&lt;String&gt;</code> - Render with arguments</li>
+<li><code>raw(&amp;self) -&gt; &amp;str</code> - Get the raw template string</li>
+</ul>
+<h3 id="templateengine"><a class="header" href="#templateengine">TemplateEngine</a></h3>
+<p>Manages template parsing and custom filters.</p>
+<pre><code class="language-rust">pub struct TemplateEngine {
+    // internal fields...
+}</code></pre>
+<h4 id="methods-4"><a class="header" href="#methods-4">Methods</a></h4>
+<ul>
+<li><code>new() -&gt; Self</code> - Create new engine</li>
+<li><code>default_parser() -&gt; Parser</code> - Get default Liquid parser with custom filters</li>
+<li><code>register_filter&lt;F&gt;(&amp;mut self, name: &amp;str, filter: F)</code> - Register custom filter</li>
+</ul>
+<h2 id="storage"><a class="header" href="#storage">Storage</a></h2>
+<h3 id="promptstorage"><a class="header" href="#promptstorage">PromptStorage</a></h3>
+<p>High-level storage interface for prompts.</p>
+<pre><code class="language-rust">pub trait PromptStorage {
+    fn store_prompt(&amp;mut self, prompt: &amp;Prompt) -&gt; Result&lt;()&gt;;
+    fn load_prompt(&amp;self, name: &amp;str) -&gt; Result&lt;Prompt&gt;;
+    fn list_prompts(&amp;self) -&gt; Result&lt;Vec&lt;String&gt;&gt;;
+    fn delete_prompt(&amp;mut self, name: &amp;str) -&gt; Result&lt;()&gt;;
+}</code></pre>
+<h3 id="storagebackend"><a class="header" href="#storagebackend">StorageBackend</a></h3>
+<p>Low-level storage abstraction.</p>
+<pre><code class="language-rust">pub trait StorageBackend {
+    fn read(&amp;self, key: &amp;str) -&gt; Result&lt;Vec&lt;u8&gt;&gt;;
+    fn write(&amp;mut self, key: &amp;str, data: &amp;[u8]) -&gt; Result&lt;()&gt;;
+    fn delete(&amp;mut self, key: &amp;str) -&gt; Result&lt;()&gt;;
+    fn list(&amp;self) -&gt; Result&lt;Vec&lt;String&gt;&gt;;
+}</code></pre>
+<h2 id="search"><a class="header" href="#search">Search</a></h2>
+<p><em>Available with the <code>search</code> feature</em></p>
+<h3 id="searchengine"><a class="header" href="#searchengine">SearchEngine</a></h3>
+<p>Full-text search functionality for prompts.</p>
+<pre><code class="language-rust">pub struct SearchEngine {
+    // internal fields...
+}</code></pre>
+<h4 id="methods-5"><a class="header" href="#methods-5">Methods</a></h4>
+<ul>
+<li><code>new() -&gt; Result&lt;Self&gt;</code> - Create new search engine</li>
+<li><code>index_prompt(&amp;mut self, prompt: &amp;Prompt) -&gt; Result&lt;()&gt;</code> - Add prompt to search index</li>
+<li><code>search(&amp;self, query: &amp;str) -&gt; Result&lt;Vec&lt;SearchResult&gt;&gt;</code> - Search for prompts</li>
+</ul>
+<h3 id="searchresult"><a class="header" href="#searchresult">SearchResult</a></h3>
+<p>Represents a search result.</p>
+<pre><code class="language-rust">pub struct SearchResult {
+    pub name: String,
+    pub score: f32,
+    pub snippet: Option&lt;String&gt;,
+}</code></pre>
+<h2 id="mcp-integration"><a class="header" href="#mcp-integration">MCP Integration</a></h2>
+<p><em>Available with the <code>mcp</code> feature</em></p>
+<h3 id="mcpserver"><a class="header" href="#mcpserver">McpServer</a></h3>
+<p>Model Context Protocol server implementation.</p>
+<pre><code class="language-rust">pub struct McpServer {
+    // internal fields...
+}</code></pre>
+<h4 id="methods-6"><a class="header" href="#methods-6">Methods</a></h4>
+<ul>
+<li><code>new(library: PromptLibrary) -&gt; Self</code> - Create server with prompt library</li>
+<li><code>run(&amp;mut self) -&gt; Result&lt;()&gt;</code> - Start the MCP server</li>
+</ul>
+<h2 id="plugin-system"><a class="header" href="#plugin-system">Plugin System</a></h2>
+<h3 id="swissarmyhammerplugin"><a class="header" href="#swissarmyhammerplugin">SwissArmyHammerPlugin</a></h3>
+<p>Trait for creating plugins.</p>
+<pre><code class="language-rust">pub trait SwissArmyHammerPlugin {
+    fn name(&amp;self) -&gt; &amp;str;
+    fn filters(&amp;self) -&gt; Vec&lt;Box&lt;dyn CustomLiquidFilter&gt;&gt;;
+}</code></pre>
+<h3 id="customliquidfilter"><a class="header" href="#customliquidfilter">CustomLiquidFilter</a></h3>
+<p>Trait for custom Liquid template filters.</p>
+<pre><code class="language-rust">pub trait CustomLiquidFilter {
+    fn name(&amp;self) -&gt; &amp;str;
+    fn filter(&amp;self, input: &amp;str, args: &amp;[&amp;str]) -&gt; Result&lt;String&gt;;
+}</code></pre>
+<h3 id="pluginregistry"><a class="header" href="#pluginregistry">PluginRegistry</a></h3>
+<p>Manages registered plugins and filters.</p>
+<pre><code class="language-rust">pub struct PluginRegistry {
+    // internal fields...
+}</code></pre>
+<h4 id="methods-7"><a class="header" href="#methods-7">Methods</a></h4>
+<ul>
+<li><code>new() -&gt; Self</code> - Create new registry</li>
+<li><code>register_plugin&lt;P: SwissArmyHammerPlugin&gt;(&amp;mut self, plugin: P)</code> - Register plugin</li>
+<li><code>get_filters(&amp;self) -&gt; Vec&lt;&amp;dyn CustomLiquidFilter&gt;</code> - Get all registered filters</li>
+</ul>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<h3 id="swissarmyhammererror"><a class="header" href="#swissarmyhammererror">SwissArmyHammerError</a></h3>
+<p>Main error type for the library.</p>
+<pre><code class="language-rust">pub enum SwissArmyHammerError {
+    Io(std::io::Error),
+    Template(String),
+    PromptNotFound(String),
+    Config(String),
+    Storage(String),
+    Serialization(serde_yaml::Error),
+    Other(String),
+}</code></pre>
+<h3 id="result-type"><a class="header" href="#result-type">Result Type</a></h3>
+<p>Convenient result type alias.</p>
+<pre><code class="language-rust">pub type Result&lt;T&gt; = std::result::Result&lt;T, SwissArmyHammerError&gt;;</code></pre>
+<h2 id="feature-flags"><a class="header" href="#feature-flags">Feature Flags</a></h2>
+<p>The library supports several optional features:</p>
+<ul>
+<li><code>search</code> - Enables full-text search functionality</li>
+<li><code>mcp</code> - Enables Model Context Protocol server support</li>
+</ul>
+<p>Enable features in your <code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[dependencies]
+swissarmyhammer = { version = "0.1", features = ["search", "mcp"] }
+</code></pre>
+<h2 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h2>
+<pre><code class="language-rust">use swissarmyhammer::{PromptLibrary, ArgumentSpec, Result};
+use std::collections::HashMap;
+
+fn main() -&gt; Result&lt;()&gt; {
+    // Create library and load prompts
+    let mut library = PromptLibrary::new();
+    library.add_directory("./prompts")?;
+    
+    // Get a prompt
+    let prompt = library.get("code-review")?;
+    
+    // Prepare arguments
+    let mut args = HashMap::new();
+    args.insert("code".to_string(), "fn main() { println!(\"Hello\"); }".to_string());
+    args.insert("language".to_string(), "rust".to_string());
+    
+    // Render the prompt
+    let rendered = prompt.render(&amp;args)?;
+    println!("{}", rendered);
+    
+    Ok(())
+}</code></pre>
+<h2 id="advanced-usage"><a class="header" href="#advanced-usage">Advanced Usage</a></h2>
+<h3 id="custom-filters"><a class="header" href="#custom-filters">Custom Filters</a></h3>
+<p>Create custom Liquid filters for domain-specific transformations:</p>
+<pre><code class="language-rust">use swissarmyhammer::{CustomLiquidFilter, PluginRegistry, TemplateEngine};
+
+struct UppercaseFilter;
+
+impl CustomLiquidFilter for UppercaseFilter {
+    fn name(&amp;self) -&gt; &amp;str { "uppercase" }
+    
+    fn filter(&amp;self, input: &amp;str, _args: &amp;[&amp;str]) -&gt; Result&lt;String&gt; {
+        Ok(input.to_uppercase())
+    }
+}
+
+let mut registry = PluginRegistry::new();
+registry.register_filter("uppercase", Box::new(UppercaseFilter));</code></pre>
+<h3 id="storage-backends"><a class="header" href="#storage-backends">Storage Backends</a></h3>
+<p>Implement custom storage backends:</p>
+<pre><code class="language-rust">use swissarmyhammer::{StorageBackend, Result};
+
+struct DatabaseBackend {
+    // database connection...
+}
+
+impl StorageBackend for DatabaseBackend {
+    fn read(&amp;self, key: &amp;str) -&gt; Result&lt;Vec&lt;u8&gt;&gt; {
+        // Read from database
+        todo!()
+    }
+    
+    fn write(&amp;mut self, key: &amp;str, data: &amp;[u8]) -&gt; Result&lt;()&gt; {
+        // Write to database
+        todo!()
+    }
+    
+    // ... implement other methods
+}</code></pre>
+<p>For more examples and advanced usage patterns, see the <a href="./library-examples.html">Library Examples</a> page.</p>
 
                     </main>
 

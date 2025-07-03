@@ -35,6 +35,7 @@ impl Doctor {
         println!();
 
         // Run all checks
+        self.check_installation()?;
         self.check_in_path()?;
         self.check_claude_config()?;
         self.check_prompt_directories()?;
@@ -48,17 +49,104 @@ impl Doctor {
         Ok(self.get_exit_code())
     }
 
+    /// Check installation method and binary integrity
+    pub fn check_installation(&mut self) -> Result<()> {
+        // Check if running from cargo install vs standalone binary
+        let current_exe = env::current_exe().unwrap_or_default();
+        let exe_path = current_exe.to_string_lossy();
+        
+        // Determine installation method
+        let installation_method = if exe_path.contains(".cargo/bin") {
+            "Cargo install"
+        } else if exe_path.contains("/usr/local/bin") || exe_path.contains("/usr/bin") {
+            "System installation"
+        } else if exe_path.contains("target/") && exe_path.contains("debug") {
+            "Development build"
+        } else if exe_path.contains("target/") && exe_path.contains("release") {
+            "Local release build"
+        } else {
+            "Unknown"
+        };
+
+        // Check binary version and build info
+        let version = env!("CARGO_PKG_VERSION");
+        let build_info = if cfg!(debug_assertions) {
+            "debug build"
+        } else {
+            "release build"
+        };
+
+        self.checks.push(Check {
+            name: "Installation Method".to_string(),
+            status: CheckStatus::Ok,
+            message: format!(
+                "{} (v{}, {}) at {}",
+                installation_method, version, build_info, exe_path
+            ),
+            fix: None,
+        });
+
+        // Check if binary has execute permissions (Unix only)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(metadata) = std::fs::metadata(&current_exe) {
+                let permissions = metadata.permissions();
+                let mode = permissions.mode();
+                
+                if mode & 0o111 != 0 {
+                    self.checks.push(Check {
+                        name: "Binary Permissions".to_string(),
+                        status: CheckStatus::Ok,
+                        message: format!("Executable permissions: {:o}", mode & 0o777),
+                        fix: None,
+                    });
+                } else {
+                    self.checks.push(Check {
+                        name: "Binary Permissions".to_string(),
+                        status: CheckStatus::Error,
+                        message: "Binary is not executable".to_string(),
+                        fix: Some(format!("Run: chmod +x {}", exe_path)),
+                    });
+                }
+            }
+        }
+
+        // Check if this is the expected binary name
+        let exe_name = current_exe.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown");
+        
+        if exe_name == "swissarmyhammer" || exe_name == "swissarmyhammer.exe" {
+            self.checks.push(Check {
+                name: "Binary Name".to_string(),
+                status: CheckStatus::Ok,
+                message: format!("Running as {}", exe_name),
+                fix: None,
+            });
+        } else {
+            self.checks.push(Check {
+                name: "Binary Name".to_string(),
+                status: CheckStatus::Warning,
+                message: format!("Unexpected binary name: {}", exe_name),
+                fix: Some("Consider renaming binary to 'swissarmyhammer'".to_string()),
+            });
+        }
+
+        Ok(())
+    }
+
     /// Check if swissarmyhammer is in PATH
     pub fn check_in_path(&mut self) -> Result<()> {
         let path_var = env::var("PATH").unwrap_or_default();
-        let paths: Vec<&str> = path_var.split(':').collect();
+        let paths: Vec<std::path::PathBuf> = env::split_paths(&path_var).collect();
 
         let exe_name = "swissarmyhammer";
         let mut found = false;
         let mut found_path = None;
 
         for path in paths {
-            let exe_path = Path::new(path).join(exe_name);
+            let exe_path = path.join(exe_name);
             if exe_path.exists() {
                 found = true;
                 found_path = Some(exe_path);
@@ -591,6 +679,39 @@ mod tests {
         let result = doctor.check_in_path();
         assert!(result.is_ok());
 
+        // Restore original PATH
+        env::set_var("PATH", original_path);
+    }
+
+    #[test]
+    fn test_path_parsing_cross_platform() {
+        let original_path = env::var("PATH").unwrap_or_default();
+        
+        // Test Unix-style PATH on current platform
+        let unix_path = "/usr/local/bin:/usr/bin:/bin";
+        env::set_var("PATH", unix_path);
+        
+        let path_var = env::var("PATH").unwrap_or_default();
+        let paths: Vec<std::path::PathBuf> = env::split_paths(&path_var).collect();
+        
+        // On Unix systems, this should parse correctly
+        // On Windows, std::env::split_paths handles the format appropriately for the platform
+        assert!(!paths.is_empty());
+        
+        // Test that std::env::split_paths() works better than manual splitting
+        let manual_split: Vec<&str> = path_var.split(':').collect();
+        
+        // Demonstrate the difference: manual split always splits on colon, 
+        // but std::env::split_paths() is platform-aware
+        if cfg!(windows) {
+            // On Windows, splitting on ':' would incorrectly split drive letters like "C:"
+            // std::env::split_paths() handles this correctly
+            assert!(paths.len() <= manual_split.len()); // split_paths is smarter
+        } else {
+            // On Unix, they should be similar for this simple case
+            assert_eq!(paths.len(), manual_split.len());
+        }
+        
         // Restore original PATH
         env::set_var("PATH", original_path);
     }

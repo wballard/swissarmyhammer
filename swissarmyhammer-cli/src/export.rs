@@ -15,6 +15,13 @@ use crate::cli::{ExportFormat, PromptSource};
 use crate::prompt_loader::PromptResolver;
 use swissarmyhammer::PromptLibrary;
 
+/// Cross-platform case-insensitive path matching for Windows compatibility
+fn path_contains_case_insensitive(path: &str, pattern: &str) -> bool {
+    // On Windows, paths are case-insensitive, so we need case-insensitive matching
+    // On Unix systems, this provides consistent behavior
+    path.to_lowercase().contains(&pattern.to_lowercase())
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct ExportManifest {
     pub version: String,
@@ -133,13 +140,13 @@ impl Exporter {
             if let Some(ref filter_source) = source_filter {
                 let source_str = if let Some(ref source_path) = prompt.source {
                     let path_str = source_path.to_string_lossy();
-                    if path_str.contains("prompts/builtin") {
+                    if path_contains_case_insensitive(&path_str, "prompts/builtin") {
                         "builtin"
                     } else if let Some(home) = dirs::home_dir() {
                         let home_path = home.to_string_lossy();
-                        if path_str.contains(&format!("{}/.swissarmyhammer/prompts", home_path)) {
+                        if path_contains_case_insensitive(&path_str, &format!("{}/.swissarmyhammer/prompts", home_path)) {
                             "user"
-                        } else if path_str.contains("/.swissarmyhammer/prompts") {
+                        } else if path_contains_case_insensitive(&path_str, "/.swissarmyhammer/prompts") {
                             "local"
                         } else {
                             "unknown"

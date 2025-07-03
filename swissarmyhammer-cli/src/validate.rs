@@ -147,7 +147,7 @@ impl Validator {
             result.files_checked += 1;
             
             // Validate template syntax directly
-            self.validate_liquid_syntax(&prompt.template, &prompt.source.as_ref().unwrap_or(&PathBuf::new()), &mut result);
+            self.validate_liquid_syntax(&prompt.template, prompt.source.as_ref().unwrap_or(&PathBuf::new()), &mut result);
             
             // Validate template variables
             let arguments: Vec<PromptArgument> = prompt.arguments.iter()
@@ -158,7 +158,7 @@ impl Validator {
                     default: arg.default.clone(),
                 })
                 .collect();
-            self.validate_variable_usage(&prompt.template, &arguments, &prompt.source.as_ref().unwrap_or(&PathBuf::new()), &mut result);
+            self.validate_variable_usage(&prompt.template, &arguments, prompt.source.as_ref().unwrap_or(&PathBuf::new()), &mut result);
             
             // The library already validates and extracts title/description during loading
             // If we got this far, the prompt has valid YAML front matter

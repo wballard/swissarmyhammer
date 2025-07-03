@@ -217,7 +217,7 @@ fn display_table(results: &[SearchResult], full: bool) -> Result<()> {
         return Ok(());
     }
 
-    let is_tty = io::stderr().is_terminal();
+    let is_tty = io::stdout().is_terminal();
 
     let rows: Vec<SearchResultRow> = results
         .iter()

@@ -1,0 +1,1 @@
+use the icon.svg in the docs.

@@ -12,12 +12,6 @@ use tabled::{
 use crate::cli::{OutputFormat, PromptSource};
 use crate::prompt_loader::PromptResolver;
 
-/// Cross-platform case-insensitive path matching for Windows compatibility
-fn path_contains_case_insensitive(path: &str, pattern: &str) -> bool {
-    // On Windows, paths are case-insensitive, so we need case-insensitive matching
-    // On Unix systems, this provides consistent behavior
-    path.to_lowercase().contains(&pattern.to_lowercase())
-}
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SearchResult {
@@ -71,7 +65,7 @@ pub fn run_search_command(
 
     // Load all prompts from all sources
     let mut library = PromptLibrary::new();
-    let resolver = PromptResolver::new();
+    let mut resolver = PromptResolver::new();
     resolver.load_all_prompts(&mut library)?;
 
     // Get all prompts
@@ -81,38 +75,15 @@ pub fn run_search_command(
     let mut results = Vec::new();
 
     for prompt in all_prompts {
-        // Determine source based on path
-        let source_str = if let Some(source_path) = &prompt.source {
-            let path_str = source_path.to_string_lossy();
-            if path_contains_case_insensitive(&path_str, "prompts/builtin") {
-                "builtin"
-            } else if let Some(home) = dirs::home_dir() {
-                let home_path = home.to_string_lossy();
-                if path_contains_case_insensitive(
-                    &path_str,
-                    &format!("{}/.swissarmyhammer/prompts", home_path),
-                ) {
-                    "user"
-                } else if path_contains_case_insensitive(&path_str, "/.swissarmyhammer/prompts") {
-                    "local"
-                } else {
-                    "unknown"
-                }
-            } else {
-                "unknown"
-            }
-        } else {
-            "unknown"
-        };
+        // Get the source from the resolver
+        let prompt_source = resolver.prompt_sources.get(&prompt.name)
+            .cloned()
+            .unwrap_or(PromptSource::Dynamic);
+        let source_str = prompt_source.to_string();
 
         // Apply source filter
         if let Some(ref filter) = source_filter {
-            let filter_matches = match filter {
-                PromptSource::Builtin => source_str == "builtin",
-                PromptSource::User => source_str == "user",
-                PromptSource::Local => source_str == "local",
-            };
-            if !filter_matches {
+            if filter != &prompt_source && filter != &PromptSource::Dynamic {
                 continue;
             }
         }

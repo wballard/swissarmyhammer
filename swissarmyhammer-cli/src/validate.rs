@@ -127,7 +127,7 @@ impl Validator {
 
         // Load only builtin prompts using the centralized PromptResolver
         let mut library = swissarmyhammer::PromptLibrary::new();
-        let resolver = crate::prompt_loader::PromptResolver::new();
+        let mut resolver = crate::prompt_loader::PromptResolver::new();
         resolver.load_builtin_prompts(&mut library)?;
 
         // Validate each loaded prompt
@@ -173,7 +173,7 @@ impl Validator {
 
         // Load all prompts using the centralized PromptResolver
         let mut library = swissarmyhammer::PromptLibrary::new();
-        let resolver = crate::prompt_loader::PromptResolver::new();
+        let mut resolver = crate::prompt_loader::PromptResolver::new();
         resolver.load_all_prompts(&mut library)?;
 
         // Validate each loaded prompt

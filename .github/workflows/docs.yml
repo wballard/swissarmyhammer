@@ -34,13 +34,13 @@ jobs:
 
       - name: Build documentation
         run: |
-          cd doc
+          cd docs
           mdbook build
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v2
+        uses: actions/upload-pages-artifact@v3
         with:
-          path: doc/book
+          path: docs/book
 
   deploy:
     if: github.ref == 'refs/heads/main'

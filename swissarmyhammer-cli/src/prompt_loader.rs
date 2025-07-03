@@ -1,19 +1,26 @@
 use anyhow::Result;
 use swissarmyhammer::PromptLibrary;
+use std::collections::HashMap;
+use crate::cli::PromptSource;
 
 /// Handles loading prompts from various sources with proper precedence
-pub struct PromptResolver;
+pub struct PromptResolver {
+    /// Track the source of each prompt by name
+    pub prompt_sources: HashMap<String, PromptSource>,
+}
 
 impl PromptResolver {
     pub fn new() -> Self {
-        Self
+        Self {
+            prompt_sources: HashMap::new(),
+        }
     }
 
     /// Load all prompts following the correct precedence:
     /// 1. Builtin prompts (least specific, embedded in binary)
     /// 2. User prompts from ~/.swissarmyhammer/prompts
     /// 3. Local prompts from .swissarmyhammer directories (most specific)
-    pub fn load_all_prompts(&self, library: &mut PromptLibrary) -> Result<()> {
+    pub fn load_all_prompts(&mut self, library: &mut PromptLibrary) -> Result<()> {
         // Load builtin prompts first (least precedence)
         self.load_builtin_prompts(library)?;
 
@@ -27,7 +34,7 @@ impl PromptResolver {
     }
 
     /// Load builtin prompts (embedded in binary)
-    pub fn load_builtin_prompts(&self, library: &mut PromptLibrary) -> Result<()> {
+    pub fn load_builtin_prompts(&mut self, library: &mut PromptLibrary) -> Result<()> {
         // Embed all builtin prompts directly in the binary
         let builtin_prompts = vec![
             ("example", include_str!("../../prompts/builtin/example.md")),
@@ -62,6 +69,7 @@ impl PromptResolver {
         let loader = swissarmyhammer::PromptLoader::new();
         for (name, content) in builtin_prompts {
             let prompt = self.parse_embedded_prompt(name, content, &loader)?;
+            self.prompt_sources.insert(name.to_string(), PromptSource::Builtin);
             library.add(prompt)?;
         }
 
@@ -69,18 +77,29 @@ impl PromptResolver {
     }
 
     /// Load user prompts from ~/.swissarmyhammer/prompts
-    fn load_user_prompts(&self, library: &mut PromptLibrary) -> Result<()> {
+    fn load_user_prompts(&mut self, library: &mut PromptLibrary) -> Result<()> {
         if let Some(home) = dirs::home_dir() {
             let user_prompts_dir = home.join(".swissarmyhammer").join("prompts");
             if user_prompts_dir.exists() {
+                // Get the count before and after to track new prompts
+                let before_count = library.list()?.len();
                 library.add_directory(&user_prompts_dir)?;
+                let after_count = library.list()?.len();
+                
+                // Mark all newly added prompts as user prompts
+                let prompts = library.list()?;
+                for i in before_count..after_count {
+                    if let Some(prompt) = prompts.get(i) {
+                        self.prompt_sources.insert(prompt.name.clone(), PromptSource::User);
+                    }
+                }
             }
         }
         Ok(())
     }
 
     /// Load local prompts by recursively searching up for .swissarmyhammer directories
-    fn load_local_prompts(&self, library: &mut PromptLibrary) -> Result<()> {
+    fn load_local_prompts(&mut self, library: &mut PromptLibrary) -> Result<()> {
         let current_dir = std::env::current_dir()?;
 
         // Find all .swissarmyhammer directories from root to current
@@ -104,7 +123,17 @@ impl PromptResolver {
 
         // Load in reverse order (root to current) so deeper paths override
         for prompts_dir in prompt_dirs.into_iter().rev() {
+            let before_count = library.list()?.len();
             library.add_directory(&prompts_dir)?;
+            let after_count = library.list()?.len();
+            
+            // Mark all newly added prompts as local prompts
+            let prompts = library.list()?;
+            for i in before_count..after_count {
+                if let Some(prompt) = prompts.get(i) {
+                    self.prompt_sources.insert(prompt.name.clone(), PromptSource::Local);
+                }
+            }
         }
 
         Ok(())
@@ -117,6 +146,9 @@ impl PromptResolver {
         let (metadata, template) = self.parse_front_matter_embedded(content)?;
         
         let mut prompt = swissarmyhammer::Prompt::new(name, template);
+        
+        // Builtin prompts don't have a source path - they're embedded
+        prompt.source = None;
         
         // Parse metadata (similar to PromptLoader::load_file)
         if let Some(metadata) = metadata {
@@ -214,7 +246,7 @@ mod tests {
     #[test]
     fn test_builtin_prompts_should_be_embedded() {
         // Test that demonstrates builtin prompts should be embedded in binary, not loaded from files
-        let resolver = PromptResolver::new();
+        let mut resolver = PromptResolver::new();
         let mut library = PromptLibrary::new();
         
         // Delete the builtin directory temporarily to test that prompts are embedded
@@ -249,6 +281,5 @@ mod tests {
         
         // If this test compiles and passes, it means we successfully removed the dead code
         // The old get_prompt_directories function no longer exists
-        assert!(true, "Dead code successfully removed");
     }
 }

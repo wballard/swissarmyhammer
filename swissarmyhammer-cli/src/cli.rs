@@ -9,11 +9,23 @@ pub enum OutputFormat {
     Yaml,
 }
 
-#[derive(ValueEnum, Clone, Debug, PartialEq)]
+#[derive(ValueEnum, Clone, Debug, PartialEq, serde::Serialize)]
 pub enum PromptSource {
     Builtin,
     User,
     Local,
+    Dynamic,
+}
+
+impl std::fmt::Display for PromptSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PromptSource::Builtin => write!(f, "builtin"),
+            PromptSource::User => write!(f, "user"),
+            PromptSource::Local => write!(f, "local"),
+            PromptSource::Dynamic => write!(f, "dynamic"),
+        }
+    }
 }
 
 #[derive(ValueEnum, Clone, Debug)]

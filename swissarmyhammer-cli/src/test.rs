@@ -68,7 +68,7 @@ impl TestRunner {
     }
 
     fn load_prompts(&mut self) -> Result<()> {
-        let resolver = PromptResolver::new();
+        let mut resolver = PromptResolver::new();
         resolver.load_all_prompts(&mut self.library)?;
         Ok(())
     }

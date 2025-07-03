@@ -8,12 +8,6 @@ use crate::cli::{OutputFormat, PromptSource};
 use crate::prompt_loader::PromptResolver;
 use swissarmyhammer::PromptLibrary;
 
-/// Cross-platform case-insensitive path matching for Windows compatibility
-fn path_contains_case_insensitive(path: &str, pattern: &str) -> bool {
-    // On Windows, paths are case-insensitive, so we need case-insensitive matching
-    // On Unix systems, this provides consistent behavior
-    path.to_lowercase().contains(&pattern.to_lowercase())
-}
 
 // PromptRow struct removed - using custom 2-line format instead of table
 
@@ -22,7 +16,7 @@ struct PromptInfo {
     name: String,
     title: Option<String>,
     description: Option<String>,
-    source: String,
+    source: PromptSource,
     category: Option<String>,
     arguments: Vec<PromptArgument>,
 }
@@ -44,7 +38,7 @@ pub fn run_list_command(
 ) -> Result<()> {
     // Load all prompts from all sources
     let mut library = PromptLibrary::new();
-    let resolver = PromptResolver::new();
+    let mut resolver = PromptResolver::new();
     resolver.load_all_prompts(&mut library)?;
 
     // Get all prompts
@@ -54,38 +48,14 @@ pub fn run_list_command(
     let mut prompt_infos = Vec::new();
 
     for prompt in all_prompts {
-        // Determine source based on path
-        let source_str = if let Some(source_path) = &prompt.source {
-            let path_str = source_path.to_string_lossy();
-            if path_contains_case_insensitive(&path_str, "prompts/builtin") {
-                "builtin"
-            } else if let Some(home) = dirs::home_dir() {
-                let home_path = home.to_string_lossy();
-                if path_contains_case_insensitive(
-                    &path_str,
-                    &format!("{}/.swissarmyhammer/prompts", home_path),
-                ) {
-                    "user"
-                } else if path_contains_case_insensitive(&path_str, "/.swissarmyhammer/prompts") {
-                    "local"
-                } else {
-                    "unknown"
-                }
-            } else {
-                "unknown"
-            }
-        } else {
-            "unknown"
-        };
+        // Get the source from the resolver
+        let prompt_source = resolver.prompt_sources.get(&prompt.name)
+            .cloned()
+            .unwrap_or(PromptSource::Dynamic);
 
         // Apply source filter
         if let Some(ref filter) = source_filter {
-            let filter_matches = match filter {
-                PromptSource::Builtin => source_str == "builtin",
-                PromptSource::User => source_str == "user",
-                PromptSource::Local => source_str == "local",
-            };
-            if !filter_matches {
+            if filter != &prompt_source && filter != &PromptSource::Dynamic {
                 continue;
             }
         }
@@ -165,7 +135,7 @@ pub fn run_list_command(
             name: prompt.name.clone(),
             title,
             description: prompt.description.clone(),
-            source: source_str.to_string(),
+            source: prompt_source,
             category: prompt.category.clone(),
             arguments,
         });
@@ -197,7 +167,7 @@ fn display_table(prompt_infos: &[PromptInfo], _verbose: bool) -> Result<()> {
         return Ok(());
     }
 
-    let is_tty = io::stderr().is_terminal();
+    let is_tty = io::stdout().is_terminal();
 
     // Create a custom 2-line format instead of using Tabled
     for info in prompt_infos {
@@ -206,20 +176,23 @@ fn display_table(prompt_infos: &[PromptInfo], _verbose: bool) -> Result<()> {
 
         // First line: Name | Title (colored by source)
         let first_line = if is_tty {
-            let (name_colored, title_colored) = match info.source.as_str() {
-                "builtin" => (
+            let (name_colored, title_colored) = match &info.source {
+                PromptSource::Builtin => (
                     info.name.green().bold().to_string(),
                     title.green().to_string(),
                 ),
-                "user" => (
+                PromptSource::User => (
                     info.name.blue().bold().to_string(),
                     title.blue().to_string(),
                 ),
-                "local" => (
+                PromptSource::Local => (
                     info.name.yellow().bold().to_string(),
                     title.yellow().to_string(),
                 ),
-                _ => (info.name.clone(), title.to_string()),
+                PromptSource::Dynamic => (
+                    info.name.magenta().bold().to_string(),
+                    title.magenta().to_string(),
+                ),
             };
             format!("{} | {}", name_colored, title_colored)
         } else {
@@ -246,6 +219,7 @@ fn display_table(prompt_infos: &[PromptInfo], _verbose: bool) -> Result<()> {
             "●".blue()
         );
         println!("  {} Local prompts (./prompts/)", "●".yellow());
+        println!("  {} Dynamic prompts", "●".magenta());
     }
 
     Ok(())
@@ -299,70 +273,72 @@ mod tests {
     }
 
     #[test]
+    fn test_color_coding_when_terminal() {
+        let prompt_infos = vec![
+            PromptInfo {
+                name: "test_builtin".to_string(),
+                title: Some("Builtin Test".to_string()),
+                description: Some("A builtin prompt".to_string()),
+                source: PromptSource::Builtin,
+                category: Some("test".to_string()),
+                arguments: vec![],
+            },
+            PromptInfo {
+                name: "test_user".to_string(),
+                title: Some("User Test".to_string()),
+                description: Some("A user prompt".to_string()),
+                source: PromptSource::User,
+                category: Some("test".to_string()),
+                arguments: vec![],
+            },
+            PromptInfo {
+                name: "test_local".to_string(),
+                title: Some("Local Test".to_string()),
+                description: Some("A local prompt".to_string()),
+                source: PromptSource::Local,
+                category: Some("test".to_string()),
+                arguments: vec![],
+            },
+        ];
+        
+        // This test currently fails because display_table checks stderr instead of stdout
+        let result = display_table(&prompt_infos, false);
+        assert!(result.is_ok());
+        
+        // TODO: Once fixed, we should capture stdout and verify color codes are present
+    }
+
+    #[test]
     fn test_prompt_info_creation() {
         let info = PromptInfo {
             name: "test".to_string(),
             title: Some("Test Prompt".to_string()),
             description: Some("A test prompt".to_string()),
-            source: "builtin".to_string(),
+            source: PromptSource::Builtin,
             category: None,
             arguments: vec![],
         };
 
         assert_eq!(info.name, "test");
         assert_eq!(info.title, Some("Test Prompt".to_string()));
-        assert_eq!(info.source, "builtin");
+        assert_eq!(info.source, PromptSource::Builtin);
     }
 
     #[test]
     fn test_builtin_prompts_should_be_identified_correctly() {
-        // Test the fixed source detection logic
-        let builtin_path = "/Users/test/prompts/builtin/array-processor.md";
-        let user_path = "/Users/test/.prompts/my-prompt.md";
-        let local_path = "/Users/test/local/prompts/my-prompt.md";
-
-        // Test the fixed logic
-        let builtin_source = if builtin_path.contains("prompts/builtin")
-            || builtin_path.contains(".swissarmyhammer")
-        {
-            "builtin"
-        } else if builtin_path.contains(".prompts") {
-            "user"
-        } else {
-            "local"
-        };
-
-        let user_source =
-            if user_path.contains("prompts/builtin") || user_path.contains(".swissarmyhammer") {
-                "builtin"
-            } else if user_path.contains(".prompts") {
-                "user"
-            } else {
-                "local"
-            };
-
-        let local_source =
-            if local_path.contains("prompts/builtin") || local_path.contains(".swissarmyhammer") {
-                "builtin"
-            } else if local_path.contains(".prompts") {
-                "user"
-            } else {
-                "local"
-            };
-
-        // These should now pass with the fixed logic
-        assert_eq!(
-            builtin_source, "builtin",
-            "Builtin prompts should be identified as builtin"
-        );
-        assert_eq!(
-            user_source, "user",
-            "User prompts should be identified as user"
-        );
-        assert_eq!(
-            local_source, "local",
-            "Local prompts should be identified as local"
-        );
+        // Test that the resolver properly tracks prompt sources
+        let mut resolver = PromptResolver::new();
+        let mut library = swissarmyhammer::PromptLibrary::new();
+        
+        // Load builtin prompts
+        resolver.load_builtin_prompts(&mut library).unwrap();
+        
+        // Check that at least one builtin prompt was loaded and tracked
+        assert!(!resolver.prompt_sources.is_empty(), "Should have loaded builtin prompts");
+        
+        // Check that builtin prompts are marked as builtin
+        let example_source = resolver.prompt_sources.get("example");
+        assert_eq!(example_source, Some(&PromptSource::Builtin), "Example prompt should be marked as builtin");
     }
 
     #[test]

@@ -4,6 +4,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::{
+    collections::HashMap,
     fs::File,
     io::Write,
     path::{Path, PathBuf},
@@ -15,12 +16,6 @@ use crate::cli::{ExportFormat, PromptSource};
 use crate::prompt_loader::PromptResolver;
 use swissarmyhammer::PromptLibrary;
 
-/// Cross-platform case-insensitive path matching for Windows compatibility
-fn path_contains_case_insensitive(path: &str, pattern: &str) -> bool {
-    // On Windows, paths are case-insensitive, so we need case-insensitive matching
-    // On Unix systems, this provides consistent behavior
-    path.to_lowercase().contains(&pattern.to_lowercase())
-}
 
 #[derive(Serialize, Deserialize)]
 pub struct ExportManifest {
@@ -97,14 +92,18 @@ pub async fn run_export_command(
 
 pub struct Exporter {
     library: PromptLibrary,
+    prompt_sources: HashMap<String, PromptSource>,
 }
 
 impl Exporter {
     pub fn new() -> Result<Self> {
         let mut library = PromptLibrary::new();
-        let resolver = PromptResolver::new();
+        let mut resolver = PromptResolver::new();
         resolver.load_all_prompts(&mut library)?;
-        Ok(Self { library })
+        Ok(Self { 
+            library,
+            prompt_sources: resolver.prompt_sources,
+        })
     }
 
     pub fn collect_prompts(
@@ -138,38 +137,11 @@ impl Exporter {
             }
 
             if let Some(ref filter_source) = source_filter {
-                let source_str = if let Some(ref source_path) = prompt.source {
-                    let path_str = source_path.to_string_lossy();
-                    if path_contains_case_insensitive(&path_str, "prompts/builtin") {
-                        "builtin"
-                    } else if let Some(home) = dirs::home_dir() {
-                        let home_path = home.to_string_lossy();
-                        if path_contains_case_insensitive(
-                            &path_str,
-                            &format!("{}/.swissarmyhammer/prompts", home_path),
-                        ) {
-                            "user"
-                        } else if path_contains_case_insensitive(
-                            &path_str,
-                            "/.swissarmyhammer/prompts",
-                        ) {
-                            "local"
-                        } else {
-                            "unknown"
-                        }
-                    } else {
-                        "unknown"
-                    }
-                } else {
-                    "unknown"
-                };
-
-                let prompt_source_matches = match filter_source {
-                    PromptSource::Builtin => source_str == "builtin",
-                    PromptSource::User => source_str == "user",
-                    PromptSource::Local => source_str == "local",
-                };
-                if !prompt_source_matches {
+                let prompt_source = self.prompt_sources.get(&prompt.name)
+                    .cloned()
+                    .unwrap_or(PromptSource::Dynamic);
+                
+                if filter_source != &prompt_source && filter_source != &PromptSource::Dynamic {
                     continue;
                 }
             }

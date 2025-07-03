@@ -54,7 +54,7 @@ impl Doctor {
         // Check if running from cargo install vs standalone binary
         let current_exe = env::current_exe().unwrap_or_default();
         let exe_path = current_exe.to_string_lossy();
-        
+
         // Determine installation method
         let installation_method = if exe_path.contains(".cargo/bin") {
             "Cargo install"
@@ -93,7 +93,7 @@ impl Doctor {
             if let Ok(metadata) = std::fs::metadata(&current_exe) {
                 let permissions = metadata.permissions();
                 let mode = permissions.mode();
-                
+
                 if mode & 0o111 != 0 {
                     self.checks.push(Check {
                         name: "Binary Permissions".to_string(),
@@ -113,10 +113,11 @@ impl Doctor {
         }
 
         // Check if this is the expected binary name
-        let exe_name = current_exe.file_name()
+        let exe_name = current_exe
+            .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unknown");
-        
+
         if exe_name == "swissarmyhammer" || exe_name == "swissarmyhammer.exe" {
             self.checks.push(Check {
                 name: "Binary Name".to_string(),
@@ -686,22 +687,22 @@ mod tests {
     #[test]
     fn test_path_parsing_cross_platform() {
         let original_path = env::var("PATH").unwrap_or_default();
-        
+
         // Test Unix-style PATH on current platform
         let unix_path = "/usr/local/bin:/usr/bin:/bin";
         env::set_var("PATH", unix_path);
-        
+
         let path_var = env::var("PATH").unwrap_or_default();
         let paths: Vec<std::path::PathBuf> = env::split_paths(&path_var).collect();
-        
+
         // On Unix systems, this should parse correctly
         // On Windows, std::env::split_paths handles the format appropriately for the platform
         assert!(!paths.is_empty());
-        
+
         // Test that std::env::split_paths() works better than manual splitting
         let manual_split: Vec<&str> = path_var.split(':').collect();
-        
-        // Demonstrate the difference: manual split always splits on colon, 
+
+        // Demonstrate the difference: manual split always splits on colon,
         // but std::env::split_paths() is platform-aware
         if cfg!(windows) {
             // On Windows, splitting on ':' would incorrectly split drive letters like "C:"
@@ -711,7 +712,7 @@ mod tests {
             // On Unix, they should be similar for this simple case
             assert_eq!(paths.len(), manual_split.len());
         }
-        
+
         // Restore original PATH
         env::set_var("PATH", original_path);
     }

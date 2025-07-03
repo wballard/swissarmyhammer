@@ -17,13 +17,13 @@ impl PromptResolver {
     pub fn load_all_prompts(&self, library: &mut PromptLibrary) -> Result<()> {
         // Load builtin prompts first (least precedence)
         self.load_builtin_prompts(library)?;
-        
+
         // Load user prompts from home directory
         self.load_user_prompts(library)?;
-        
+
         // Load local prompts recursively (highest precedence)
         self.load_local_prompts(library)?;
-        
+
         Ok(())
     }
 
@@ -52,11 +52,11 @@ impl PromptResolver {
     /// Load local prompts by recursively searching up for .swissarmyhammer directories
     fn load_local_prompts(&self, library: &mut PromptLibrary) -> Result<()> {
         let current_dir = std::env::current_dir()?;
-        
+
         // Find all .swissarmyhammer directories from root to current
         let mut prompt_dirs = Vec::new();
         let mut path = current_dir.as_path();
-        
+
         loop {
             let swissarmyhammer_dir = path.join(".swissarmyhammer");
             if swissarmyhammer_dir.exists() && swissarmyhammer_dir.is_dir() {
@@ -65,18 +65,18 @@ impl PromptResolver {
                     prompt_dirs.push(prompts_dir);
                 }
             }
-            
+
             match path.parent() {
                 Some(parent) => path = parent,
                 None => break,
             }
         }
-        
+
         // Load in reverse order (root to current) so deeper paths override
         for prompts_dir in prompt_dirs.into_iter().rev() {
             library.add_directory(&prompts_dir)?;
         }
-        
+
         Ok(())
     }
 
@@ -84,36 +84,36 @@ impl PromptResolver {
     #[allow(dead_code)]
     pub fn get_prompt_directories() -> Vec<PathBuf> {
         let mut dirs = Vec::new();
-        
+
         // Builtin directory
         dirs.push(PathBuf::from("prompts/builtin"));
-        
+
         // User directory
         if let Some(home) = dirs::home_dir() {
             dirs.push(home.join(".swissarmyhammer").join("prompts"));
         }
-        
+
         // Local directories (recursive up)
         if let Ok(current_dir) = std::env::current_dir() {
             let mut path = current_dir.as_path();
             let mut local_dirs = Vec::new();
-            
+
             loop {
                 let swissarmyhammer_dir = path.join(".swissarmyhammer").join("prompts");
                 if swissarmyhammer_dir.exists() {
                     local_dirs.push(swissarmyhammer_dir);
                 }
-                
+
                 match path.parent() {
                     Some(parent) => path = parent,
                     None => break,
                 }
             }
-            
+
             // Add in order from root to current
             dirs.extend(local_dirs.into_iter().rev());
         }
-        
+
         dirs
     }
 }

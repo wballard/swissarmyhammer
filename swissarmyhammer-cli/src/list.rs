@@ -61,7 +61,10 @@ pub fn run_list_command(
                 "builtin"
             } else if let Some(home) = dirs::home_dir() {
                 let home_path = home.to_string_lossy();
-                if path_contains_case_insensitive(&path_str, &format!("{}/.swissarmyhammer/prompts", home_path)) {
+                if path_contains_case_insensitive(
+                    &path_str,
+                    &format!("{}/.swissarmyhammer/prompts", home_path),
+                ) {
                     "user"
                 } else if path_contains_case_insensitive(&path_str, "/.swissarmyhammer/prompts") {
                     "local"
@@ -132,22 +135,30 @@ pub fn run_list_command(
         // Extract title from metadata
         // If metadata is empty, we have a problem with the library's YAML parsing
         // For now, let's use the prompt name as a fallback title
-        let title = prompt.metadata.get("title")
+        let title = prompt
+            .metadata
+            .get("title")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .or_else(|| {
                 // Fallback: convert prompt name to a readable title
-                Some(prompt.name.replace(['-', '_'], " ")
-                    .split_whitespace()
-                    .map(|word| {
-                        let mut chars = word.chars();
-                        match chars.next() {
-                            None => String::new(),
-                            Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" "))
+                Some(
+                    prompt
+                        .name
+                        .replace(['-', '_'], " ")
+                        .split_whitespace()
+                        .map(|word| {
+                            let mut chars = word.chars();
+                            match chars.next() {
+                                None => String::new(),
+                                Some(first) => {
+                                    first.to_uppercase().collect::<String>() + chars.as_str()
+                                }
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                )
             });
 
         prompt_infos.push(PromptInfo {
@@ -196,9 +207,18 @@ fn display_table(prompt_infos: &[PromptInfo], _verbose: bool) -> Result<()> {
         // First line: Name | Title (colored by source)
         let first_line = if is_tty {
             let (name_colored, title_colored) = match info.source.as_str() {
-                "builtin" => (info.name.green().bold().to_string(), title.green().to_string()),
-                "user" => (info.name.blue().bold().to_string(), title.blue().to_string()),
-                "local" => (info.name.yellow().bold().to_string(), title.yellow().to_string()),
+                "builtin" => (
+                    info.name.green().bold().to_string(),
+                    title.green().to_string(),
+                ),
+                "user" => (
+                    info.name.blue().bold().to_string(),
+                    title.blue().to_string(),
+                ),
+                "local" => (
+                    info.name.yellow().bold().to_string(),
+                    title.yellow().to_string(),
+                ),
                 _ => (info.name.clone(), title.to_string()),
             };
             format!("{} | {}", name_colored, title_colored)
@@ -300,60 +320,85 @@ mod tests {
         let builtin_path = "/Users/test/prompts/builtin/array-processor.md";
         let user_path = "/Users/test/.prompts/my-prompt.md";
         let local_path = "/Users/test/local/prompts/my-prompt.md";
-        
+
         // Test the fixed logic
-        let builtin_source = if builtin_path.contains("prompts/builtin") || builtin_path.contains(".swissarmyhammer") {
+        let builtin_source = if builtin_path.contains("prompts/builtin")
+            || builtin_path.contains(".swissarmyhammer")
+        {
             "builtin"
         } else if builtin_path.contains(".prompts") {
             "user"
         } else {
             "local"
         };
-        
-        let user_source = if user_path.contains("prompts/builtin") || user_path.contains(".swissarmyhammer") {
-            "builtin"
-        } else if user_path.contains(".prompts") {
-            "user"
-        } else {
-            "local"
-        };
-        
-        let local_source = if local_path.contains("prompts/builtin") || local_path.contains(".swissarmyhammer") {
-            "builtin"
-        } else if local_path.contains(".prompts") {
-            "user"
-        } else {
-            "local"
-        };
-        
+
+        let user_source =
+            if user_path.contains("prompts/builtin") || user_path.contains(".swissarmyhammer") {
+                "builtin"
+            } else if user_path.contains(".prompts") {
+                "user"
+            } else {
+                "local"
+            };
+
+        let local_source =
+            if local_path.contains("prompts/builtin") || local_path.contains(".swissarmyhammer") {
+                "builtin"
+            } else if local_path.contains(".prompts") {
+                "user"
+            } else {
+                "local"
+            };
+
         // These should now pass with the fixed logic
-        assert_eq!(builtin_source, "builtin", "Builtin prompts should be identified as builtin");
-        assert_eq!(user_source, "user", "User prompts should be identified as user");
-        assert_eq!(local_source, "local", "Local prompts should be identified as local");
+        assert_eq!(
+            builtin_source, "builtin",
+            "Builtin prompts should be identified as builtin"
+        );
+        assert_eq!(
+            user_source, "user",
+            "User prompts should be identified as user"
+        );
+        assert_eq!(
+            local_source, "local",
+            "Local prompts should be identified as local"
+        );
     }
 
     #[test]
     fn test_title_extraction_logic() {
         // Test that title extraction from metadata works correctly
-        use std::collections::HashMap;
         use serde_json::Value;
-        
+        use std::collections::HashMap;
+
         let mut metadata = HashMap::new();
-        metadata.insert("title".to_string(), Value::String("Array Data Processor".to_string()));
-        
+        metadata.insert(
+            "title".to_string(),
+            Value::String("Array Data Processor".to_string()),
+        );
+
         // Test the title extraction logic
-        let title = metadata.get("title")
+        let title = metadata
+            .get("title")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
-        
-        assert_eq!(title, Some("Array Data Processor".to_string()), "Title should be extracted from metadata");
-        
+
+        assert_eq!(
+            title,
+            Some("Array Data Processor".to_string()),
+            "Title should be extracted from metadata"
+        );
+
         // Test when title is missing
         let empty_metadata: HashMap<String, Value> = HashMap::new();
-        let no_title: Option<String> = empty_metadata.get("title")
+        let no_title: Option<String> = empty_metadata
+            .get("title")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
-        
-        assert_eq!(no_title, None, "Title should be None when not present in metadata");
+
+        assert_eq!(
+            no_title, None,
+            "Title should be None when not present in metadata"
+        );
     }
 }

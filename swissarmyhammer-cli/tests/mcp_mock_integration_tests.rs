@@ -36,7 +36,11 @@ impl MockMcpClient {
         self.prompts.read().await.clone()
     }
 
-    async fn get_prompt(&self, name: &str, args: Option<HashMap<String, String>>) -> Result<String> {
+    async fn get_prompt(
+        &self,
+        name: &str,
+        args: Option<HashMap<String, String>>,
+    ) -> Result<String> {
         let prompts = self.prompts.read().await;
         let _prompt = prompts
             .iter()
@@ -48,8 +52,12 @@ impl MockMcpClient {
             "simple" => Ok("Hello, world!".to_string()),
             "with_args" => {
                 if let Some(args) = args {
-                    let name = args.get("name").ok_or_else(|| anyhow::anyhow!("Missing required argument: name"))?;
-                    let age = args.get("age").ok_or_else(|| anyhow::anyhow!("Missing required argument: age"))?;
+                    let name = args
+                        .get("name")
+                        .ok_or_else(|| anyhow::anyhow!("Missing required argument: name"))?;
+                    let age = args
+                        .get("age")
+                        .ok_or_else(|| anyhow::anyhow!("Missing required argument: age"))?;
                     Ok(format!("Hello {}, you are {} years old", name, age))
                 } else {
                     Err(anyhow::anyhow!("Missing required arguments"))
@@ -57,7 +65,9 @@ impl MockMcpClient {
             }
             "optional_args" => {
                 if let Some(args) = args {
-                    let name = args.get("name").ok_or_else(|| anyhow::anyhow!("Missing required argument: name"))?;
+                    let name = args
+                        .get("name")
+                        .ok_or_else(|| anyhow::anyhow!("Missing required argument: name"))?;
                     let default_greeting = "Hello".to_string();
                     let default_punctuation = "!".to_string();
                     let greeting = args.get("greeting").unwrap_or(&default_greeting);
@@ -109,7 +119,7 @@ async fn setup_test_environment() -> Result<(MockMcpClient, PromptLibrary, TempD
         let mut yaml_content = String::from("---\n");
         yaml_content.push_str(&format!("name: {}\n", name));
         yaml_content.push_str(&format!("description: Test prompt for {}\n", name));
-        
+
         if !args.is_empty() {
             yaml_content.push_str("arguments:\n");
             for (arg_name, desc, required) in &args {
@@ -118,10 +128,10 @@ async fn setup_test_environment() -> Result<(MockMcpClient, PromptLibrary, TempD
                 yaml_content.push_str(&format!("    required: {}\n", required));
             }
         }
-        
+
         yaml_content.push_str("---\n");
         yaml_content.push_str(template);
-        
+
         std::fs::write(&prompt_file, yaml_content)?;
 
         // Add to mock client
@@ -202,7 +212,10 @@ mod tests {
 
         let result = client.get_prompt("with_args", Some(args)).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing required argument: age"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing required argument: age"));
 
         Ok(())
     }
@@ -263,7 +276,10 @@ mod tests {
         // All should succeed
         for (i, handle) in handles.into_iter().enumerate() {
             let result = handle.await??;
-            assert_eq!(result, format!("Hello User{}, you are {} years old", i, 20 + i));
+            assert_eq!(
+                result,
+                format!("Hello User{}, you are {} years old", i, 20 + i)
+            );
         }
 
         Ok(())
@@ -278,11 +294,13 @@ mod tests {
         assert_eq!(prompts.len(), 0);
 
         // Add a prompt
-        client.add_prompt(MockPrompt {
-            name: "dynamic".to_string(),
-            description: "Dynamically added prompt".to_string(),
-            arguments: vec![],
-        }).await;
+        client
+            .add_prompt(MockPrompt {
+                name: "dynamic".to_string(),
+                description: "Dynamically added prompt".to_string(),
+                arguments: vec![],
+            })
+            .await;
 
         // Verify it's available
         let prompts = client.list_prompts().await;
@@ -321,27 +339,33 @@ This has invalid syntax {{unclosed"#;
         // Add many prompts
         let start = std::time::Instant::now();
         for i in 0..1000 {
-            client.add_prompt(MockPrompt {
-                name: format!("prompt_{}", i),
-                description: format!("Test prompt {}", i),
-                arguments: vec![
-                    MockArgument {
-                        name: "arg1".to_string(),
-                        description: "First argument".to_string(),
-                        required: true,
-                    },
-                    MockArgument {
-                        name: "arg2".to_string(),
-                        description: "Second argument".to_string(),
-                        required: false,
-                    },
-                ],
-            }).await;
+            client
+                .add_prompt(MockPrompt {
+                    name: format!("prompt_{}", i),
+                    description: format!("Test prompt {}", i),
+                    arguments: vec![
+                        MockArgument {
+                            name: "arg1".to_string(),
+                            description: "First argument".to_string(),
+                            required: true,
+                        },
+                        MockArgument {
+                            name: "arg2".to_string(),
+                            description: "Second argument".to_string(),
+                            required: false,
+                        },
+                    ],
+                })
+                .await;
         }
         let add_duration = start.elapsed();
 
         // Should add quickly
-        assert!(add_duration.as_secs() < 5, "Adding prompts took too long: {:?}", add_duration);
+        assert!(
+            add_duration.as_secs() < 5,
+            "Adding prompts took too long: {:?}",
+            add_duration
+        );
 
         // List all prompts
         let start = std::time::Instant::now();
@@ -349,7 +373,11 @@ This has invalid syntax {{unclosed"#;
         let list_duration = start.elapsed();
 
         assert_eq!(prompts.len(), 1000);
-        assert!(list_duration.as_millis() < 100, "Listing prompts took too long: {:?}", list_duration);
+        assert!(
+            list_duration.as_millis() < 100,
+            "Listing prompts took too long: {:?}",
+            list_duration
+        );
 
         Ok(())
     }
@@ -360,14 +388,15 @@ This has invalid syntax {{unclosed"#;
 
         let prompts = client.list_prompts().await;
         let with_args_prompt = prompts.iter().find(|p| p.name == "with_args").unwrap();
-        
+
         // Verify required arguments
-        let required_args: Vec<_> = with_args_prompt.arguments
+        let required_args: Vec<_> = with_args_prompt
+            .arguments
             .iter()
             .filter(|a| a.required)
             .map(|a| &a.name)
             .collect();
-        
+
         assert_eq!(required_args.len(), 2);
         assert!(required_args.iter().any(|n| n.as_str() == "name"));
         assert!(required_args.iter().any(|n| n.as_str() == "age"));
@@ -380,19 +409,23 @@ This has invalid syntax {{unclosed"#;
         let (client, _library, _temp_dir) = setup_test_environment().await?;
 
         let prompts = client.list_prompts().await;
-        
+
         for prompt in prompts {
             assert!(!prompt.name.is_empty());
             assert!(!prompt.description.is_empty());
-            
+
             // Check argument metadata
             if prompt.name == "optional_args" {
                 assert_eq!(prompt.arguments.len(), 3);
-                
+
                 let name_arg = prompt.arguments.iter().find(|a| a.name == "name").unwrap();
                 assert!(name_arg.required);
-                
-                let greeting_arg = prompt.arguments.iter().find(|a| a.name == "greeting").unwrap();
+
+                let greeting_arg = prompt
+                    .arguments
+                    .iter()
+                    .find(|a| a.name == "greeting")
+                    .unwrap();
                 assert!(!greeting_arg.required);
             }
         }

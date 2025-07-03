@@ -12,17 +12,25 @@ mod signal_handler;
 mod test;
 mod validate;
 
+use clap::CommandFactory;
 use cli::{
     Cli, Commands, ExportFormat, ImportStrategy, OutputFormat, PromptSource, ValidateFormat,
 };
-use clap::CommandFactory;
 use mcp::MCPServer;
 use tokio::sync::oneshot;
-use tracing::Level;
 
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse_args();
+
+    // Fast path for help - avoid expensive initialization
+    if cli.command.is_none() {
+        Cli::command().print_help().expect("Failed to print help");
+        process::exit(0);
+    }
+
+    // Only initialize heavy dependencies when actually needed
+    use tracing::Level;
 
     // Configure logging based on verbosity flags
     let log_level = if cli.quiet {
@@ -167,9 +175,8 @@ async fn main() {
             run_completions(shell)
         }
         None => {
-            // No subcommand provided, show help
-            Cli::command().print_help().expect("Failed to print help");
-            0
+            // This case is handled early above for performance
+            unreachable!()
         }
     };
 
@@ -235,7 +242,13 @@ fn run_list(
     }
 }
 
-fn run_validate(path: Option<String>, all: bool, builtin_only: bool, quiet: bool, format: ValidateFormat) -> i32 {
+fn run_validate(
+    path: Option<String>,
+    all: bool,
+    builtin_only: bool,
+    quiet: bool,
+    format: ValidateFormat,
+) -> i32 {
     use validate;
 
     match validate::run_validate_command(path, all, builtin_only, quiet, format) {

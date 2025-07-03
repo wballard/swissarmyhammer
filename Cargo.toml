@@ -64,12 +64,20 @@ criterion = "0.5"
 
 [profile.release]
 # Enable Link Time Optimization for smaller binaries
-lto = true
+lto = "thin"  # Use thin LTO for faster builds and startup
 # Strip debug symbols
 strip = true
-# Enable all optimizations
+# Optimize for speed over size for faster startup
 opt-level = 3
-# Reduce code generation units for better optimization
-codegen-units = 1
+# More codegen units for faster compilation and startup
+codegen-units = 16
 # Abort on panic for smaller binary size
 panic = "abort"
+
+# Additional profile for startup optimization
+[profile.release-fast]
+inherits = "release"
+# Optimize specifically for startup time
+lto = false  # Disable LTO for faster startup
+codegen-units = 256  # Maximum parallelization
+incremental = true

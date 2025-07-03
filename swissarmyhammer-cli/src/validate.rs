@@ -130,10 +130,10 @@ impl Validator {
 
         // Try both relative paths to handle different working directories
         let builtin_paths = [
-            std::path::Path::new("prompts/builtin"),    // From project root
+            std::path::Path::new("prompts/builtin"), // From project root
             std::path::Path::new("../prompts/builtin"), // From CLI crate
         ];
-        
+
         for builtin_dir in &builtin_paths {
             if builtin_dir.exists() {
                 library.add_directory(builtin_dir)?;
@@ -145,12 +145,18 @@ impl Validator {
         let prompts = library.list()?;
         for prompt in prompts {
             result.files_checked += 1;
-            
+
             // Validate template syntax directly
-            self.validate_liquid_syntax(&prompt.template, prompt.source.as_ref().unwrap_or(&PathBuf::new()), &mut result);
-            
+            self.validate_liquid_syntax(
+                &prompt.template,
+                prompt.source.as_ref().unwrap_or(&PathBuf::new()),
+                &mut result,
+            );
+
             // Validate template variables
-            let arguments: Vec<PromptArgument> = prompt.arguments.iter()
+            let arguments: Vec<PromptArgument> = prompt
+                .arguments
+                .iter()
                 .map(|arg| PromptArgument {
                     name: arg.name.clone(),
                     description: arg.description.clone(),
@@ -158,8 +164,13 @@ impl Validator {
                     default: arg.default.clone(),
                 })
                 .collect();
-            self.validate_variable_usage(&prompt.template, &arguments, prompt.source.as_ref().unwrap_or(&PathBuf::new()), &mut result);
-            
+            self.validate_variable_usage(
+                &prompt.template,
+                &arguments,
+                prompt.source.as_ref().unwrap_or(&PathBuf::new()),
+                &mut result,
+            );
+
             // The library already validates and extracts title/description during loading
             // If we got this far, the prompt has valid YAML front matter
             // We only need to validate the template content
@@ -177,10 +188,10 @@ impl Validator {
         // Load builtin prompts from the prompts/builtin directory
         // Try both relative paths to handle different working directories
         let builtin_paths = [
-            std::path::Path::new("prompts/builtin"),    // From project root
+            std::path::Path::new("prompts/builtin"), // From project root
             std::path::Path::new("../prompts/builtin"), // From CLI crate
         ];
-        
+
         for builtin_dir in &builtin_paths {
             if builtin_dir.exists() {
                 library.add_directory(builtin_dir)?;
@@ -207,7 +218,9 @@ impl Validator {
         for prompt in prompts {
             let local_prompt = Prompt {
                 name: prompt.name.clone(),
-                title: prompt.metadata.get("title")
+                title: prompt
+                    .metadata
+                    .get("title")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string()),
                 description: prompt.description.clone(),
@@ -304,7 +317,7 @@ impl Validator {
                 "issues" | "plan" | "planning" => true,
                 // Examples and specifications
                 "examples" | "example" | "specification" | "specs" => true,
-                // Build/output directories  
+                // Build/output directories
                 "dist" | "build" | "target" | "var" | "tmp" | "temp" => true,
                 // Version control and hidden directories
                 ".git" | ".github" | ".vscode" | ".idea" => true,
@@ -339,11 +352,11 @@ impl Validator {
                 "makefile" | "build.md" | "deployment.md" => true,
                 _ => {
                     // Check for common documentation patterns
-                    file_name.to_lowercase().starts_with("readme") ||
-                    file_name.to_lowercase().starts_with("install") ||
-                    file_name.to_lowercase().starts_with("setup") ||
-                    file_name.to_lowercase().contains("changelog") ||
-                    file_name.to_lowercase().contains("todo")
+                    file_name.to_lowercase().starts_with("readme")
+                        || file_name.to_lowercase().starts_with("install")
+                        || file_name.to_lowercase().starts_with("setup")
+                        || file_name.to_lowercase().contains("changelog")
+                        || file_name.to_lowercase().contains("todo")
                 }
             }
         } else {
@@ -650,7 +663,7 @@ impl Validator {
         result: &mut ValidationResult,
     ) {
         use regex::Regex;
-        
+
         // Remove {% raw %} blocks from content before validation
         let raw_regex = Regex::new(r"(?s)\{%\s*raw\s*%\}.*?\{%\s*endraw\s*%\}").unwrap();
         let content_without_raw = raw_regex.replace_all(content, "");
@@ -709,7 +722,8 @@ impl Validator {
         }
 
         // Also find variables from {% capture %} blocks
-        let capture_regex = Regex::new(r"\{\%\s*capture\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\%\}").unwrap();
+        let capture_regex =
+            Regex::new(r"\{\%\s*capture\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\%\}").unwrap();
         for captures in capture_regex.captures_iter(&content_without_raw) {
             if let Some(var_match) = captures.get(1) {
                 assigned_variables.insert(var_match.as_str().trim().to_string());
@@ -725,7 +739,7 @@ impl Validator {
             if assigned_variables.contains(used_var) {
                 continue;
             }
-            
+
             // Check if it's defined in arguments
             if !defined_args.contains(used_var) {
                 result.add_issue(ValidationIssue {
@@ -1188,20 +1202,31 @@ Discuss {{topic}}.
     fn test_validate_all_builtin_templates() {
         // This test ensures all built-in templates are found and validated
         // It should find and validate templates in prompts/builtin/ only
-        
+
         // We should have validated more than 0 files
         let validator = Validator::new(true);
         let result = validator.validate_builtin_only().unwrap();
-        assert!(result.files_checked > 0, "Should have found and validated built-in template files (found: {})", result.files_checked);
-        
+        assert!(
+            result.files_checked > 0,
+            "Should have found and validated built-in template files (found: {})",
+            result.files_checked
+        );
+
         // The result should be reasonable - we expect some issues but not catastrophic failures
-        assert!(result.files_checked >= 20, "Should find at least 20 builtin templates (found: {})", result.files_checked);
-        
+        assert!(
+            result.files_checked >= 20,
+            "Should find at least 20 builtin templates (found: {})",
+            result.files_checked
+        );
+
         // Templates should have some structure - we shouldn't have more errors than files * 5
         // (This is a reasonable upper bound assuming max ~5 errors per template)
-        assert!(result.errors <= result.files_checked * 5, 
-            "Too many errors ({}) for {} files - suggests scanning wrong directories", 
-            result.errors, result.files_checked);
+        assert!(
+            result.errors <= result.files_checked * 5,
+            "Too many errors ({}) for {} files - suggests scanning wrong directories",
+            result.errors,
+            result.files_checked
+        );
     }
 
     #[test]
@@ -1209,19 +1234,31 @@ Discuss {{topic}}.
         // This test reproduces the issue where validation picks up markdown files
         // from directories that should be excluded (like ./issues/, ./doc/, etc.)
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create directory structure with markdown files that should NOT be validated
-        let excluded_dirs = ["issues", "doc", "plan", "examples", "dist", "var", "specification"];
-        
+        let excluded_dirs = [
+            "issues",
+            "doc",
+            "plan",
+            "examples",
+            "dist",
+            "var",
+            "specification",
+        ];
+
         for dir_name in &excluded_dirs {
             let dir_path = temp_dir.path().join(dir_name);
             fs::create_dir_all(&dir_path).unwrap();
-            
+
             // Create a markdown file without YAML front matter (would cause error if validated)
             let file_path = dir_path.join("test.md");
-            fs::write(&file_path, "# Just a regular markdown file\n\nNo YAML front matter here.").unwrap();
+            fs::write(
+                &file_path,
+                "# Just a regular markdown file\n\nNo YAML front matter here.",
+            )
+            .unwrap();
         }
-        
+
         // Create a valid prompt directory that SHOULD be validated
         let prompts_dir = temp_dir.path().join("prompts");
         fs::create_dir_all(&prompts_dir).unwrap();
@@ -1240,13 +1277,23 @@ arguments:
 Discuss {{topic}}.
 "#;
         fs::write(&valid_prompt, valid_content).unwrap();
-        
+
         let validator = Validator::new(false);
         let result = validator.validate_path(temp_dir.path()).unwrap();
-        
+
         // Should only find and validate the valid prompt, not the excluded directories
-        assert_eq!(result.files_checked, 1, "Should only validate 1 file (the valid prompt), but validated: {}", result.files_checked);
-        assert!(!result.has_errors(), "Should not have errors from excluded directories");
-        assert!(!result.has_warnings(), "Should not have warnings from excluded directories");
+        assert_eq!(
+            result.files_checked, 1,
+            "Should only validate 1 file (the valid prompt), but validated: {}",
+            result.files_checked
+        );
+        assert!(
+            !result.has_errors(),
+            "Should not have errors from excluded directories"
+        );
+        assert!(
+            !result.has_warnings(),
+            "Should not have warnings from excluded directories"
+        );
     }
 }

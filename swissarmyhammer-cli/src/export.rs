@@ -144,9 +144,15 @@ impl Exporter {
                         "builtin"
                     } else if let Some(home) = dirs::home_dir() {
                         let home_path = home.to_string_lossy();
-                        if path_contains_case_insensitive(&path_str, &format!("{}/.swissarmyhammer/prompts", home_path)) {
+                        if path_contains_case_insensitive(
+                            &path_str,
+                            &format!("{}/.swissarmyhammer/prompts", home_path),
+                        ) {
                             "user"
-                        } else if path_contains_case_insensitive(&path_str, "/.swissarmyhammer/prompts") {
+                        } else if path_contains_case_insensitive(
+                            &path_str,
+                            "/.swissarmyhammer/prompts",
+                        ) {
                             "local"
                         } else {
                             "unknown"

@@ -2,6 +2,8 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use swissarmyhammer::prompts::{PromptLoader, Prompt};
 use swissarmyhammer::template::TemplateEngine;
 use std::collections::HashMap;
+use std::process::Command;
+use std::time::Instant;
 use serde_json::Value;
 
 fn benchmark_prompt_loading(c: &mut Criterion) {
@@ -97,12 +99,107 @@ fn benchmark_template_validation(c: &mut Criterion) {
     });
 }
 
+fn benchmark_cli_startup_time(c: &mut Criterion) {
+    // Build the CLI binary first in release mode for accurate measurement
+    let output = Command::new("cargo")
+        .args(["build", "--release", "--bin", "swissarmyhammer"])
+        .output()
+        .expect("Failed to build release binary");
+    
+    if !output.status.success() {
+        panic!("Failed to build release binary: {}", String::from_utf8_lossy(&output.stderr));
+    }
+    
+    // Get the binary path
+    let binary_path = "./target/release/swissarmyhammer";
+    
+    c.bench_function("CLI startup time (--help)", |b| {
+        b.iter_custom(|iters| {
+            let start = Instant::now();
+            for _i in 0..iters {
+                let _output = Command::new(black_box(binary_path))
+                    .arg("--help")
+                    .output()
+                    .expect("Failed to run CLI binary");
+            }
+            start.elapsed()
+        });
+    });
+    
+    c.bench_function("CLI startup time (list)", |b| {
+        b.iter_custom(|iters| {
+            let start = Instant::now();
+            for _i in 0..iters {
+                let _output = Command::new(black_box(binary_path))
+                    .arg("list")
+                    .output()
+                    .expect("Failed to run CLI binary");
+            }
+            start.elapsed()
+        });
+    });
+}
+
+fn benchmark_cli_vs_other_tools(c: &mut Criterion) {
+    // Benchmark against common fast Rust CLI tools for comparison
+    let tools = vec![
+        ("swissarmyhammer", "./target/release/swissarmyhammer", "--help"),
+        ("cargo", "cargo", "--help"),
+        ("git", "git", "--help"),
+        ("rg", "rg", "--help"),  // ripgrep
+        ("fd", "fd", "--help"),  // fd-find
+    ];
+    
+    let mut group = c.benchmark_group("CLI startup comparison");
+    
+    for (name, binary, args) in tools {
+        // Check if tool exists before benchmarking
+        if let Ok(_) = Command::new(binary).arg("--version").output() {
+            group.bench_function(format!("{} startup", name), |b| {
+                b.iter_custom(|iters| {
+                    let start = Instant::now();
+                    for _i in 0..iters {
+                        let _output = Command::new(black_box(binary))
+                            .arg(black_box(args))
+                            .output();
+                    }
+                    start.elapsed()
+                });
+            });
+        }
+    }
+    
+    group.finish();
+}
+
+fn benchmark_mcp_startup_time(c: &mut Criterion) {
+    // Benchmark MCP server startup specifically (simulate real usage)
+    let binary_path = "./target/release/swissarmyhammer";
+    
+    c.bench_function("MCP server startup (serve command)", |b| {
+        b.iter_custom(|iters| {
+            let start = Instant::now();
+            for _i in 0..iters {
+                // Use timeout to avoid hanging on serve command
+                let _output = Command::new(black_box(binary_path))
+                    .arg("serve")
+                    .env("TIMEOUT", "1") // Signal quick exit for benchmarking
+                    .output();
+            }
+            start.elapsed()
+        });
+    });
+}
+
 criterion_group!(
     benches, 
     benchmark_prompt_loading,
     benchmark_template_processing,
     benchmark_prompt_creation,
     benchmark_prompt_storage,
-    benchmark_template_validation
+    benchmark_template_validation,
+    benchmark_cli_startup_time,
+    benchmark_cli_vs_other_tools,
+    benchmark_mcp_startup_time
 );
 criterion_main!(benches);

@@ -896,7 +896,46 @@ impl PromptLoader {
             }
         }
 
+        // If this appears to be a partial template and has no description, provide a default one
+        if prompt.description.is_none() && self.is_likely_partial(&prompt.name, &prompt.template) {
+            prompt.description = Some("Partial template for reuse in other prompts".to_string());
+        }
+
         Ok(prompt)
+    }
+
+    /// Determine if a prompt is likely a partial template
+    fn is_likely_partial(&self, name: &str, content: &str) -> bool {
+        // Check if the name suggests it's a partial (common naming patterns)
+        let name_lower = name.to_lowercase();
+        if name_lower.contains("partial") || name_lower.starts_with("_") {
+            return true;
+        }
+
+        // Check if it has no YAML front matter (partials often don't)
+        let has_front_matter = content.starts_with("---\n");
+        if !has_front_matter {
+            return true;
+        }
+
+        // Check for typical partial characteristics:
+        // - Short content that looks like a fragment
+        // - Contains mostly template variables
+        // - Doesn't have typical prompt structure
+        let lines: Vec<&str> = content.lines().collect();
+        let content_lines: Vec<&str> = if has_front_matter {
+            // Skip YAML front matter
+            lines.iter().skip_while(|line| **line != "---").skip(1).skip_while(|line| **line != "---").skip(1).copied().collect()
+        } else {
+            lines
+        };
+
+        // If it's very short and has no headers, it might be a partial
+        if content_lines.len() <= 5 && !content_lines.iter().any(|line| line.starts_with('#')) {
+            return true;
+        }
+
+        false
     }
 
     /// Check if a path is a prompt file
@@ -1096,18 +1135,74 @@ This is another prompt.
             prompts.len()
         );
 
-        // Find the prompts with proper metadata
+        // All prompts should now have descriptions (either from metadata or default for partials)
         let prompts_with_descriptions: Vec<&Prompt> =
             prompts.iter().filter(|p| p.description.is_some()).collect();
 
         assert_eq!(
             prompts_with_descriptions.len(),
-            2,
-            "Should have 2 prompts with descriptions"
+            5,
+            "All 5 prompts should have descriptions (2 from metadata, 3 default for partials)"
         );
+        
+        // Check that the invalid ones (now treated as partials) have the default description
+        let partials: Vec<&Prompt> = prompts.iter()
+            .filter(|p| p.description.as_deref() == Some("Partial template for reuse in other prompts"))
+            .collect();
+        assert_eq!(partials.len(), 3, "Should have 3 partials with default description");
+        
+        // Check that the valid ones have their original descriptions
+        let prompts_with_custom_desc: Vec<&Prompt> = prompts.iter()
+            .filter(|p| p.description.is_some() && p.description.as_deref() != Some("Partial template for reuse in other prompts"))
+            .collect();
+        assert_eq!(prompts_with_custom_desc.len(), 2, "Should have 2 prompts with custom descriptions");
 
         let prompt_names: Vec<String> = prompts.iter().map(|p| p.name.clone()).collect();
         assert!(prompt_names.contains(&"valid".to_string()));
         assert!(prompt_names.contains(&"prompts/another".to_string()));
+    }
+
+    #[test]
+    fn test_partial_template_without_description() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        
+        // Create a partial template without front matter (common for partials)
+        let partial_path = temp_dir.path().join("_header.liquid.md");
+        let partial_content = r#"<div class="header">
+  <h1>{{title}}</h1>
+  <p>{{subtitle}}</p>
+</div>"#;
+        fs::write(&partial_path, partial_content).unwrap();
+        
+        // Create another partial with underscore naming pattern
+        let partial2_path = temp_dir.path().join("_footer.md");
+        let partial2_content = r#"<footer>
+  Copyright {{year}} {{company}}
+</footer>"#;
+        fs::write(&partial2_path, partial2_content).unwrap();
+        
+        // Create a partial with "partial" in the name
+        let partial3_path = temp_dir.path().join("header-partial.md");
+        let partial3_content = r#"## {{section_title}}
+{{section_content}}"#;
+        fs::write(&partial3_path, partial3_content).unwrap();
+        
+        let loader = PromptLoader::new();
+        let prompts = loader.load_directory(temp_dir.path()).unwrap();
+        
+        assert_eq!(prompts.len(), 3, "Should load 3 partial templates");
+        
+        // Check that partials now have default descriptions
+        for prompt in &prompts {
+            assert_eq!(
+                prompt.description.as_deref(),
+                Some("Partial template for reuse in other prompts"),
+                "Partial '{}' should have default description",
+                prompt.name
+            );
+        }
     }
 }

@@ -3,9 +3,6 @@ name: docs-comments
 title: Generate Code Comments
 description: Add comprehensive comments and documentation to code
 arguments:
-  - name: code
-    description: The code to document
-    required: true
   - name: comment_style
     description: Comment style (inline, block, jsdoc, docstring, rustdoc)
     required: false
@@ -23,9 +20,10 @@ arguments:
 # Code Documentation: {{comment_style}}
 
 ## Code to Document
-```
-{{ code }}
-```
+
+If the IDE is connected, comment on the currently open file in the editor.
+
+Otherwise, ask the user for the file name they want to comment.
 
 ## Documentation Parameters
 - **Style**: {{comment_style}}
@@ -124,6 +122,7 @@ Examples:
 ### 3. Best Practices
 
 #### What to Document
+
 - Public APIs thoroughly
 - Complex algorithms
 - Non-obvious decisions
@@ -131,12 +130,13 @@ Examples:
 - Performance considerations
 
 #### What NOT to Document
+
 - Obvious code
 - Language features
-- Self-documenting code
 - Redundant information
 
 #### Writing Style
+
 - Clear and concise
 - Active voice
 - Present tense
@@ -146,11 +146,13 @@ Examples:
 
 {% if detail_level == "minimal" %}
 Focus on:
+
 - Public API documentation
 - Critical warnings
 - Non-obvious behavior
 {% elsif detail_level == "comprehensive" %}
 Include:
+
 - Detailed parameter descriptions
 - Multiple examples
 - Edge cases
@@ -158,6 +160,7 @@ Include:
 - Related references
 {% else %}
 Balance between clarity and completeness:
+
 - Clear purpose statements
 - Parameter/return documentation
 - Key examples
@@ -165,4 +168,5 @@ Balance between clarity and completeness:
 {% endif %}
 
 ### 5. Generated Documentation
+
 Provide the code with appropriate comments added according to the specified style and detail level.

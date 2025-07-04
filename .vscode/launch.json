@@ -1,0 +1,312 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in library 'swissarmyhammer'",
+      "cargo": {
+        "args": ["test", "--no-run", "--lib", "--package=swissarmyhammer"],
+        "filter": {
+          "name": "swissarmyhammer",
+          "kind": "lib"
+        }
+      },
+      "args": ["validate"],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'async_and_mcp'",
+      "cargo": {
+        "args": [
+          "build",
+          "--example=async_and_mcp",
+          "--package=swissarmyhammer"
+        ],
+        "filter": {
+          "name": "async_and_mcp",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'async_and_mcp'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=async_and_mcp",
+          "--package=swissarmyhammer"
+        ],
+        "filter": {
+          "name": "async_and_mcp",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'basic_usage'",
+      "cargo": {
+        "args": ["build", "--example=basic_usage", "--package=swissarmyhammer"],
+        "filter": {
+          "name": "basic_usage",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'basic_usage'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=basic_usage",
+          "--package=swissarmyhammer"
+        ],
+        "filter": {
+          "name": "basic_usage",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'custom_templates'",
+      "cargo": {
+        "args": [
+          "build",
+          "--example=custom_templates",
+          "--package=swissarmyhammer"
+        ],
+        "filter": {
+          "name": "custom_templates",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'custom_templates'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=custom_templates",
+          "--package=swissarmyhammer"
+        ],
+        "filter": {
+          "name": "custom_templates",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'search_example'",
+      "cargo": {
+        "args": [
+          "build",
+          "--example=search_example",
+          "--package=swissarmyhammer"
+        ],
+        "filter": {
+          "name": "search_example",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'search_example'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=search_example",
+          "--package=swissarmyhammer"
+        ],
+        "filter": {
+          "name": "search_example",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug integration test 'integration_tests'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--test=integration_tests",
+          "--package=swissarmyhammer"
+        ],
+        "filter": {
+          "name": "integration_tests",
+          "kind": "test"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug integration test 'plugin_tests'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--test=plugin_tests",
+          "--package=swissarmyhammer"
+        ],
+        "filter": {
+          "name": "plugin_tests",
+          "kind": "test"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in library 'swissarmyhammer_cli'",
+      "cargo": {
+        "args": ["test", "--no-run", "--lib", "--package=swissarmyhammer-cli"],
+        "filter": {
+          "name": "swissarmyhammer_cli",
+          "kind": "lib"
+        }
+      },
+      "args": ["validate"],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'swissarmyhammer'",
+      "cargo": {
+        "args": [
+          "build",
+          "--bin=swissarmyhammer",
+          "--package=swissarmyhammer-cli"
+        ],
+        "filter": {
+          "name": "swissarmyhammer",
+          "kind": "bin"
+        }
+      },
+      "args": ["validate"],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in executable 'swissarmyhammer'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--bin=swissarmyhammer",
+          "--package=swissarmyhammer-cli"
+        ],
+        "filter": {
+          "name": "swissarmyhammer",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug integration test 'mcp_e2e_tests'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--test=mcp_e2e_tests",
+          "--package=swissarmyhammer-cli"
+        ],
+        "filter": {
+          "name": "mcp_e2e_tests",
+          "kind": "test"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug integration test 'mcp_mock_integration_tests'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--test=mcp_mock_integration_tests",
+          "--package=swissarmyhammer-cli"
+        ],
+        "filter": {
+          "name": "mcp_mock_integration_tests",
+          "kind": "test"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug integration test 'mcp_performance_tests'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--test=mcp_performance_tests",
+          "--package=swissarmyhammer-cli"
+        ],
+        "filter": {
+          "name": "mcp_performance_tests",
+          "kind": "test"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

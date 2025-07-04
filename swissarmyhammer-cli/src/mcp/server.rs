@@ -23,10 +23,12 @@ impl MCPServer {
         }
     }
 
+    #[allow(dead_code)]
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    #[allow(dead_code)]
     pub fn version(&self) -> &str {
         &self.version
     }

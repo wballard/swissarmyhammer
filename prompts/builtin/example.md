@@ -12,3 +12,5 @@ arguments:
 # Example Prompt
 
 This is an example prompt about {{topic}}.
+
+{% render "empty" %}

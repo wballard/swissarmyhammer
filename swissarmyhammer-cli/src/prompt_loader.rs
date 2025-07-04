@@ -132,6 +132,10 @@ impl PromptResolver {
                 "productivity/task-formatter",
                 include_str!("../../prompts/builtin/productivity/task-formatter.md"),
             ),
+            (
+                "empty",
+                include_str!("../../prompts/builtin/empty.md.liquid"),
+            ),
         ];
 
         // Add each embedded prompt to the library
@@ -222,7 +226,7 @@ impl PromptResolver {
         // Since it's private, we'll need to duplicate the parsing logic
         let (metadata, template) = self.parse_front_matter_embedded(content)?;
 
-        let mut prompt = swissarmyhammer::Prompt::new(name, template);
+        let mut prompt = swissarmyhammer::Prompt::new(name, template.clone());
 
         // Builtin prompts don't have a source path - they're embedded
         prompt.source = None;
@@ -283,7 +287,46 @@ impl PromptResolver {
             }
         }
 
+        // If this appears to be a partial template and has no description, provide a default one
+        if prompt.description.is_none() && self.is_likely_partial(name, &template) {
+            prompt.description = Some("Partial template for reuse in other prompts".to_string());
+        }
+
         Ok(prompt)
+    }
+
+    /// Determine if a prompt is likely a partial template
+    fn is_likely_partial(&self, name: &str, content: &str) -> bool {
+        // Check if the name suggests it's a partial (common naming patterns)
+        let name_lower = name.to_lowercase();
+        if name_lower.contains("partial") || name_lower.starts_with("_") {
+            return true;
+        }
+
+        // Check if it has no YAML front matter (partials often don't)
+        let has_front_matter = content.starts_with("---\n");
+        if !has_front_matter {
+            return true;
+        }
+
+        // Check for typical partial characteristics:
+        // - Short content that looks like a fragment
+        // - Contains mostly template variables
+        // - Doesn't have typical prompt structure
+        let lines: Vec<&str> = content.lines().collect();
+        let content_lines: Vec<&str> = if has_front_matter {
+            // Skip YAML front matter
+            lines.iter().skip_while(|line| **line != "---").skip(1).skip_while(|line| **line != "---").skip(1).copied().collect()
+        } else {
+            lines
+        };
+
+        // If it's very short and has no headers, it might be a partial
+        if content_lines.len() <= 5 && !content_lines.iter().any(|line| line.starts_with('#')) {
+            return true;
+        }
+
+        false
     }
 
     /// Parse front matter from content (duplicated from PromptLoader since it's private)

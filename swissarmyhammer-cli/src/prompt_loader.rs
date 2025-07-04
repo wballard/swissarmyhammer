@@ -3,6 +3,9 @@ use anyhow::Result;
 use std::collections::HashMap;
 use swissarmyhammer::PromptLibrary;
 
+// Include the auto-generated builtin prompts
+include!(concat!(env!("OUT_DIR"), "/builtin_prompts.rs"));
+
 /// Handles loading prompts from various sources with proper precedence
 pub struct PromptResolver {
     /// Track the source of each prompt by name
@@ -35,108 +38,8 @@ impl PromptResolver {
 
     /// Load builtin prompts (embedded in binary)
     pub fn load_builtin_prompts(&mut self, library: &mut PromptLibrary) -> Result<()> {
-        // Embed all builtin prompts directly in the binary
-        let builtin_prompts = vec![
-            ("example", include_str!("../../prompts/builtin/example.md")),
-            ("help", include_str!("../../prompts/builtin/help.md")),
-            ("plan", include_str!("../../prompts/builtin/plan.md")),
-            (
-                "debug/error",
-                include_str!("../../prompts/builtin/debug/error.md"),
-            ),
-            (
-                "debug/logs",
-                include_str!("../../prompts/builtin/debug/logs.md"),
-            ),
-            (
-                "debug/performance",
-                include_str!("../../prompts/builtin/debug/performance.md"),
-            ),
-            (
-                "docs/api",
-                include_str!("../../prompts/builtin/docs/api.md"),
-            ),
-            (
-                "docs/comments",
-                include_str!("../../prompts/builtin/docs/comments.md"),
-            ),
-            (
-                "docs/readme",
-                include_str!("../../prompts/builtin/docs/readme.md"),
-            ),
-            (
-                "prompts/create",
-                include_str!("../../prompts/builtin/prompts/create.md"),
-            ),
-            (
-                "prompts/improve",
-                include_str!("../../prompts/builtin/prompts/improve.md"),
-            ),
-            (
-                "refactor/clean",
-                include_str!("../../prompts/builtin/refactor/clean.md"),
-            ),
-            (
-                "refactor/extract",
-                include_str!("../../prompts/builtin/refactor/extract.md"),
-            ),
-            (
-                "refactor/patterns",
-                include_str!("../../prompts/builtin/refactor/patterns.md"),
-            ),
-            (
-                "review/accessibility",
-                include_str!("../../prompts/builtin/review/accessibility.md"),
-            ),
-            (
-                "review/code",
-                include_str!("../../prompts/builtin/review/code.md"),
-            ),
-            (
-                "review/code-dynamic",
-                include_str!("../../prompts/builtin/review/code-dynamic.md"),
-            ),
-            (
-                "review/security",
-                include_str!("../../prompts/builtin/review/security.md"),
-            ),
-            (
-                "test/integration",
-                include_str!("../../prompts/builtin/test/integration.md"),
-            ),
-            (
-                "test/property",
-                include_str!("../../prompts/builtin/test/property.md"),
-            ),
-            (
-                "test/unit",
-                include_str!("../../prompts/builtin/test/unit.md"),
-            ),
-            (
-                "analysis/statistics-calculator",
-                include_str!("../../prompts/builtin/analysis/statistics-calculator.md"),
-            ),
-            (
-                "communication/email-composer",
-                include_str!("../../prompts/builtin/communication/email-composer.md"),
-            ),
-            (
-                "data/array-processor",
-                include_str!("../../prompts/builtin/data/array-processor.md"),
-            ),
-            (
-                "formatting/table-generator",
-                include_str!("../../prompts/builtin/formatting/table-generator.md"),
-            ),
-            (
-                "productivity/task-formatter",
-                include_str!("../../prompts/builtin/productivity/task-formatter.md"),
-            ),
-            (
-                "empty",
-                include_str!("../../prompts/builtin/empty.md.liquid"),
-            ),
-        ];
+        // Get all builtin prompts from the generated function
+        let builtin_prompts = get_builtin_prompts();
 
         // Add each embedded prompt to the library
         let loader = swissarmyhammer::PromptLoader::new();

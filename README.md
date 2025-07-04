@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="icon.svg" alt="SwissArmyHammer" width="64" height="64">
+<img src="icon.svg" alt="SwissArmyHammer" width="128" height="128">
 
 # SwissArmyHammer
 

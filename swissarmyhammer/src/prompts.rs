@@ -840,28 +840,31 @@ impl PromptLoader {
         let mut prompt = Prompt::new(name, template);
         prompt.source = Some(path.to_path_buf());
 
+        // Check if this is a partial template before processing metadata
+        let has_partial_marker = content.trim_start().starts_with("{% partial %}");
+        
         // Parse metadata
-        if let Some(metadata) = metadata {
-            if let Some(title) = metadata.get("title").and_then(|v| v.as_str()) {
+        if let Some(ref metadata_value) = metadata {
+            if let Some(title) = metadata_value.get("title").and_then(|v| v.as_str()) {
                 prompt.metadata.insert(
                     "title".to_string(),
                     serde_json::Value::String(title.to_string()),
                 );
             }
-            if let Some(desc) = metadata.get("description").and_then(|v| v.as_str()) {
+            if let Some(desc) = metadata_value.get("description").and_then(|v| v.as_str()) {
                 prompt.description = Some(desc.to_string());
             }
-            if let Some(cat) = metadata.get("category").and_then(|v| v.as_str()) {
+            if let Some(cat) = metadata_value.get("category").and_then(|v| v.as_str()) {
                 prompt.category = Some(cat.to_string());
             }
-            if let Some(tags) = metadata.get("tags").and_then(|v| v.as_array()) {
+            if let Some(tags) = metadata_value.get("tags").and_then(|v| v.as_array()) {
                 prompt.tags = tags
                     .iter()
                     .filter_map(|v| v.as_str())
                     .map(String::from)
                     .collect();
             }
-            if let Some(args) = metadata.get("arguments").and_then(|v| v.as_array()) {
+            if let Some(args) = metadata_value.get("arguments").and_then(|v| v.as_array()) {
                 for arg in args {
                     if let Some(arg_obj) = arg.as_object() {
                         let name = arg_obj
@@ -896,8 +899,10 @@ impl PromptLoader {
             }
         }
 
-        // If this appears to be a partial template and has no description, provide a default one
-        if prompt.description.is_none() && self.is_likely_partial(&prompt.name, &prompt.template) {
+        // If this is a partial template (no metadata), set appropriate description
+        if metadata.is_none() && has_partial_marker {
+            prompt.description = Some("Partial template for reuse in other prompts".to_string());
+        } else if prompt.description.is_none() && self.is_likely_partial(&prompt.name, &prompt.template) {
             prompt.description = Some("Partial template for reuse in other prompts".to_string());
         }
 
@@ -948,6 +953,12 @@ impl PromptLoader {
 
     /// Parse front matter from content
     fn parse_front_matter(&self, content: &str) -> Result<(Option<serde_json::Value>, String)> {
+        // Check for partial marker first
+        if content.trim_start().starts_with("{% partial %}") {
+            // This is a partial template, no front matter expected
+            return Ok((None, content.to_string()));
+        }
+        
         if content.starts_with("---\n") {
             let parts: Vec<&str> = content.splitn(3, "---\n").collect();
             if parts.len() >= 3 {

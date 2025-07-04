@@ -3004,6 +3004,7 @@ dependencies = [
  "dashmap",
  "fuzzy-matcher",
  "liquid",
+ "liquid-core",
  "notify",
  "proptest",
  "regex",

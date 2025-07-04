@@ -23,6 +23,7 @@ thiserror = "1.0"
 
 # Template engine
 liquid = { workspace = true }
+liquid-core = { version = "0.26" }
 
 # File system
 walkdir = { workspace = true }

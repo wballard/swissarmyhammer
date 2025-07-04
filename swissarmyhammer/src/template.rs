@@ -2,9 +2,60 @@
 
 use crate::{plugins::PluginRegistry, Result, SwissArmyHammerError, PromptLibrary};
 use liquid::{Object, Parser};
+use liquid_core::{Language, ParseTag, Renderable, Runtime, TagReflection, TagTokenIter};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::borrow::Cow;
+use std::io::Write;
+
+/// Custom partial tag that acts as a no-op marker for liquid partial files
+#[derive(Clone, Debug, Default)]
+struct PartialTag;
+
+impl PartialTag {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl TagReflection for PartialTag {
+    fn tag(&self) -> &'static str {
+        "partial"
+    }
+
+    fn description(&self) -> &'static str {
+        "Marks a file as a partial template (no-op)"
+    }
+}
+
+impl ParseTag for PartialTag {
+    fn parse(
+        &self,
+        mut arguments: TagTokenIter<'_>,
+        _options: &Language,
+    ) -> liquid_core::Result<Box<dyn Renderable>> {
+        // Consume any arguments (though we expect none)
+        arguments.expect_nothing()?;
+        
+        // Return a no-op renderable
+        Ok(Box::new(PartialRenderable))
+    }
+
+    fn reflection(&self) -> &dyn TagReflection {
+        self
+    }
+}
+
+/// Renderable for the partial tag (does nothing)
+#[derive(Debug, Clone)]
+struct PartialRenderable;
+
+impl Renderable for PartialRenderable {
+    fn render_to(&self, _output: &mut dyn Write, _context: &dyn Runtime) -> liquid_core::Result<()> {
+        // No-op: this tag doesn't render anything
+        Ok(())
+    }
+}
 
 /// Custom partial source that loads partials from the prompt library
 pub struct PromptPartialSource {
@@ -148,6 +199,7 @@ impl TemplateEngine {
     /// Create a default parser
     pub fn default_parser() -> liquid::Parser {
         liquid::ParserBuilder::with_stdlib()
+            .tag(PartialTag::new())
             .build()
             .expect("Failed to build Liquid parser")
     }
@@ -157,6 +209,7 @@ impl TemplateEngine {
         let partial_compiler = liquid::partials::EagerCompiler::new(partial_source);
         liquid::ParserBuilder::with_stdlib()
             .partials(partial_compiler)
+            .tag(PartialTag::new())
             .build()
             .expect("Failed to build Liquid parser with partials")
     }

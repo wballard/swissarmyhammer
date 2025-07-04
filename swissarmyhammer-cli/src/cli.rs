@@ -154,41 +154,22 @@ Examples:
     },
     /// Validate prompt files for syntax and best practices
     #[command(long_about = "
-Validates prompt files for syntax errors and best practices.
+Validates all prompt files for syntax errors and best practices.
 Checks YAML front matter, template variables, and suggests improvements.
 
-Usage modes:
-  swissarmyhammer validate file.md         # Validate single file
-  swissarmyhammer validate dir/            # Validate directory
-  swissarmyhammer validate --all           # Validate all prompt directories
-  swissarmyhammer validate --builtin-only  # Validate only builtin prompts
-
 Validation checks:
-- YAML front matter syntax
+- YAML front matter syntax (skipped for .liquid files with {% partial %} marker)
 - Required fields (title, description)
 - Template variables match arguments
-- File encoding and line endings
+- Liquid template syntax
 - Best practice recommendations
 
 Examples:
-  swissarmyhammer validate prompts/my-prompt.md    # Validate one file
-  swissarmyhammer validate --all                   # Validate all prompts
-  swissarmyhammer validate --builtin-only          # Validate only builtin prompts
-  swissarmyhammer validate --quiet --all           # CI/CD mode (exit code only)
-  swissarmyhammer validate --format json --all     # JSON output for tooling
+  swissarmyhammer validate                 # Validate all prompts
+  swissarmyhammer validate --quiet         # CI/CD mode (exit code only)
+  swissarmyhammer validate --format json   # JSON output for tooling
 ")]
     Validate {
-        /// Path to file or directory to validate
-        path: Option<String>,
-
-        /// Validate all prompt directories (builtin, user, local)
-        #[arg(long)]
-        all: bool,
-
-        /// Validate only builtin prompts (ignore user and local)
-        #[arg(long)]
-        builtin_only: bool,
-
         /// Only show errors, no warnings or info
         #[arg(short, long)]
         quiet: bool,

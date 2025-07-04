@@ -66,14 +66,11 @@ async fn main() {
             run_list(format, verbose, source, category, search)
         }
         Some(Commands::Validate {
-            path,
-            all,
-            builtin_only,
             quiet,
             format,
         }) => {
             tracing::info!("Validating prompts");
-            run_validate(path, all, builtin_only, quiet, format)
+            run_validate(quiet, format)
         }
         Some(Commands::Test {
             prompt_name,
@@ -243,15 +240,12 @@ fn run_list(
 }
 
 fn run_validate(
-    path: Option<String>,
-    all: bool,
-    builtin_only: bool,
     quiet: bool,
     format: ValidateFormat,
 ) -> i32 {
     use validate;
 
-    match validate::run_validate_command(path, all, builtin_only, quiet, format) {
+    match validate::run_validate_command(quiet, format) {
         Ok(exit_code) => exit_code,
         Err(e) => {
             eprintln!("Validation error: {}", e);

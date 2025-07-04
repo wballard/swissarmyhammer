@@ -255,7 +255,7 @@ impl TestRunner {
             final_args.entry(key).or_insert(value);
         }
 
-        Ok(prompt.render(&final_args)?)
+        Ok(self.library.render_prompt(&prompt.name, &final_args)?)
     }
 
     fn output_result(

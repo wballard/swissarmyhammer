@@ -1,8 +1,55 @@
 //! Template engine and rendering functionality
 
-use crate::{plugins::PluginRegistry, Result, SwissArmyHammerError};
+use crate::{plugins::PluginRegistry, Result, SwissArmyHammerError, PromptLibrary};
 use liquid::{Object, Parser};
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::borrow::Cow;
+
+/// Custom partial source that loads partials from the prompt library
+pub struct PromptPartialSource {
+    library: Arc<PromptLibrary>,
+    names: Vec<String>,
+}
+
+impl std::fmt::Debug for PromptPartialSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PromptPartialSource")
+            .field("library", &"<PromptLibrary>")
+            .finish()
+    }
+}
+
+impl PromptPartialSource {
+    /// Create a new partial source that loads partials from the given prompt library
+    pub fn new(library: Arc<PromptLibrary>) -> Self {
+        let names = if let Ok(prompts) = library.list() {
+            prompts.iter().map(|p| p.name.clone()).collect()
+        } else {
+            Vec::new()
+        };
+        Self { library, names }
+    }
+}
+
+impl liquid::partials::PartialSource for PromptPartialSource {
+    fn contains(&self, name: &str) -> bool {
+        self.library.get(name).is_ok()
+    }
+
+    fn names(&self) -> Vec<&str> {
+        self.names.iter().map(|s| s.as_str()).collect()
+    }
+
+    fn try_get(&self, name: &str) -> Option<Cow<'_, str>> {
+        if let Ok(prompt) = self.library.get(name) {
+            // Extract just the template content without front matter
+            Some(Cow::Owned(prompt.template))
+        } else {
+            None
+        }
+    }
+}
 
 /// Template wrapper for Liquid templates
 pub struct Template {
@@ -14,6 +61,21 @@ impl Template {
     /// Create a new template from a string
     pub fn new(template_str: &str) -> Result<Self> {
         let parser = TemplateEngine::default_parser();
+        // Validate the template by trying to parse it
+        parser
+            .parse(template_str)
+            .map_err(|e| SwissArmyHammerError::Template(e.to_string()))?;
+
+        Ok(Self {
+            parser,
+            template_str: template_str.to_string(),
+        })
+    }
+
+    /// Create a new template with partial support
+    pub fn with_partials(template_str: &str, library: Arc<PromptLibrary>) -> Result<Self> {
+        let partial_source = PromptPartialSource::new(library);
+        let parser = TemplateEngine::parser_with_partials(partial_source);
         // Validate the template by trying to parse it
         parser
             .parse(template_str)
@@ -88,6 +150,15 @@ impl TemplateEngine {
         liquid::ParserBuilder::with_stdlib()
             .build()
             .expect("Failed to build Liquid parser")
+    }
+
+    /// Create a parser with custom partial loader
+    pub fn parser_with_partials(partial_source: PromptPartialSource) -> liquid::Parser {
+        let partial_compiler = liquid::partials::EagerCompiler::new(partial_source);
+        liquid::ParserBuilder::with_stdlib()
+            .partials(partial_compiler)
+            .build()
+            .expect("Failed to build Liquid parser with partials")
     }
 
     /// Parse a template string

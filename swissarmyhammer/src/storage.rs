@@ -34,6 +34,9 @@ pub trait StorageBackend: Send + Sync {
     fn count(&self) -> Result<usize> {
         self.list().map(|prompts| prompts.len())
     }
+
+    /// Clone the storage backend in a box
+    fn clone_box(&self) -> Box<dyn StorageBackend>;
 }
 
 /// In-memory storage implementation
@@ -104,6 +107,12 @@ impl StorageBackend for MemoryStorage {
             })
             .cloned()
             .collect())
+    }
+
+    fn clone_box(&self) -> Box<dyn StorageBackend> {
+        Box::new(MemoryStorage {
+            prompts: self.prompts.clone(),
+        })
     }
 }
 
@@ -229,6 +238,13 @@ impl StorageBackend for FileSystemStorage {
             })
             .map(|entry| entry.value().clone())
             .collect())
+    }
+
+    fn clone_box(&self) -> Box<dyn StorageBackend> {
+        Box::new(FileSystemStorage {
+            base_path: self.base_path.clone(),
+            cache: self.cache.clone(),
+        })
     }
 }
 

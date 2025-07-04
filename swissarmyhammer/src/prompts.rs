@@ -31,6 +31,7 @@ use crate::{Result, SwissArmyHammerError, Template};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// Represents a single prompt with metadata and template content.
 ///
@@ -296,6 +297,64 @@ impl Prompt {
     /// ```
     pub fn render(&self, args: &HashMap<String, String>) -> Result<String> {
         let template = Template::new(&self.template)?;
+
+        // Validate required arguments
+        for arg in &self.arguments {
+            if arg.required && !args.contains_key(&arg.name) {
+                return Err(SwissArmyHammerError::Template(format!(
+                    "Required argument '{}' not provided",
+                    arg.name
+                )));
+            }
+        }
+
+        // Start with all provided arguments
+        let mut render_args = args.clone();
+
+        // Add defaults for missing arguments
+        for arg in &self.arguments {
+            if !render_args.contains_key(&arg.name) {
+                if let Some(default) = &arg.default {
+                    render_args.insert(arg.name.clone(), default.clone());
+                }
+            }
+        }
+
+        template.render(&render_args)
+    }
+
+    /// Renders the prompt template with partial support
+    ///
+    /// This method enables the use of `{% render %}` tags within the template
+    /// to include other prompts as partials.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - Template variables as key-value pairs
+    /// * `library` - The prompt library to use for resolving partials
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use swissarmyhammer::{Prompt, PromptLibrary};
+    /// use std::collections::HashMap;
+    /// use std::sync::Arc;
+    ///
+    /// let mut library = PromptLibrary::new();
+    /// // Add partials to library...
+    ///
+    /// let prompt = Prompt::new("main", "{% render \"header\" %}\nContent here");
+    /// let mut args = HashMap::new();
+    /// args.insert("name".to_string(), "World".to_string());
+    ///
+    /// let result = prompt.render_with_partials(&args, Arc::new(library)).unwrap();
+    /// ```
+    pub fn render_with_partials(
+        &self,
+        args: &HashMap<String, String>,
+        library: Arc<PromptLibrary>,
+    ) -> Result<String> {
+        let template = crate::Template::with_partials(&self.template, library)?;
 
         // Validate required arguments
         for arg in &self.arguments {
@@ -590,6 +649,42 @@ impl PromptLibrary {
         self.storage.list()
     }
 
+    /// Renders a prompt with partial support
+    ///
+    /// This method renders the specified prompt with access to all prompts in the library
+    /// as partials, enabling the use of `{% render %}` tags.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the prompt to render
+    /// * `args` - Template variables as key-value pairs
+    ///
+    /// # Returns
+    ///
+    /// The rendered prompt content, or an error if the prompt is not found or rendering fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use swissarmyhammer::PromptLibrary;
+    /// use std::collections::HashMap;
+    ///
+    /// let library = PromptLibrary::new();
+    /// let mut args = HashMap::new();
+    /// args.insert("name".to_string(), "World".to_string());
+    ///
+    /// let result = library.render_prompt("greeting", &args).unwrap();
+    /// ```
+    pub fn render_prompt(&self, name: &str, args: &HashMap<String, String>) -> Result<String> {
+        let prompt = self.get(name)?;
+        prompt.render_with_partials(
+            args,
+            Arc::new(PromptLibrary {
+                storage: self.storage.clone_box(),
+            }),
+        )
+    }
+
     /// Searches for prompts matching the given query.
     ///
     /// The search implementation depends on the storage backend. Basic implementations
@@ -687,7 +782,15 @@ impl PromptLoader {
     /// Create a new prompt loader
     pub fn new() -> Self {
         Self {
-            extensions: vec!["md".to_string(), "markdown".to_string()],
+            extensions: vec![
+                "md".to_string(),
+                "md.liquid".to_string(),
+                "markdown".to_string(),
+                "markdown.liquid".to_string(),
+                "liquid".to_string(),
+                "liquid.md".to_string(),
+                "liquid.markdown".to_string(),
+            ],
         }
     }
 
@@ -709,7 +812,7 @@ impl PromptLoader {
         {
             let entry_path = entry.path();
             if entry_path.is_file() && self.is_prompt_file(entry_path) {
-                if let Ok(prompt) = self.load_file(entry_path) {
+                if let Ok(prompt) = self.load_file_with_base(entry_path, path) {
                     prompts.push(prompt);
                 }
             }
@@ -720,16 +823,19 @@ impl PromptLoader {
 
     /// Load a single prompt file
     pub fn load_file(&self, path: impl AsRef<Path>) -> Result<Prompt> {
-        let path = path.as_ref();
+        self.load_file_with_base(
+            path.as_ref(),
+            path.as_ref().parent().unwrap_or(path.as_ref()),
+        )
+    }
+
+    /// Load a single prompt file with base path for relative naming
+    fn load_file_with_base(&self, path: &Path, base_path: &Path) -> Result<Prompt> {
         let content = std::fs::read_to_string(path)?;
 
         let (metadata, template) = self.parse_front_matter(&content)?;
 
-        let name = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .ok_or_else(|| SwissArmyHammerError::Other("Invalid file name".to_string()))?
-            .to_string();
+        let name = self.extract_prompt_name_with_base(path, base_path);
 
         let mut prompt = Prompt::new(name, template);
         prompt.source = Some(path.to_path_buf());
@@ -795,10 +901,10 @@ impl PromptLoader {
 
     /// Check if a path is a prompt file
     fn is_prompt_file(&self, path: &Path) -> bool {
-        path.extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| self.extensions.contains(&ext.to_lowercase()))
-            .unwrap_or(false)
+        let path_str = path.to_string_lossy().to_lowercase();
+        self.extensions
+            .iter()
+            .any(|ext| path_str.ends_with(&format!(".{}", ext)))
     }
 
     /// Parse front matter from content
@@ -818,6 +924,53 @@ impl PromptLoader {
         }
 
         Ok((None, content.to_string()))
+    }
+
+    /// Extract prompt name from file path, handling compound extensions
+    fn extract_prompt_name(&self, path: &Path) -> String {
+        let filename = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default();
+
+        // Sort extensions by length descending to match longest first
+        let mut sorted_extensions = self.extensions.clone();
+        sorted_extensions.sort_by_key(|b| std::cmp::Reverse(b.len()));
+
+        // Remove supported extensions, checking longest first
+        for ext in &sorted_extensions {
+            let extension = format!(".{}", ext);
+            if filename.ends_with(&extension) {
+                return filename[..filename.len() - extension.len()].to_string();
+            }
+        }
+
+        // Fallback to file_stem behavior
+        path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default()
+            .to_string()
+    }
+
+    /// Extract prompt name with relative path from base directory
+    fn extract_prompt_name_with_base(&self, path: &Path, base_path: &Path) -> String {
+        // Get relative path from base
+        let relative_path = path.strip_prefix(base_path).unwrap_or(path);
+
+        // Get the path without the filename
+        let mut name_path = String::new();
+        if let Some(parent) = relative_path.parent() {
+            if parent != Path::new("") {
+                name_path = parent.to_string_lossy().replace('\\', "/");
+                name_path.push('/');
+            }
+        }
+
+        // Extract filename without extension
+        let filename = self.extract_prompt_name(path);
+        name_path.push_str(&filename);
+
+        name_path
     }
 }
 
@@ -853,6 +1006,27 @@ mod tests {
 
         let result = prompt.render(&args).unwrap();
         assert_eq!(result, "Hello World!");
+    }
+
+    #[test]
+    fn test_extension_stripping() {
+        let loader = PromptLoader::new();
+        
+        // Test various extensions
+        let test_cases = vec![
+            ("test.md", "test"),
+            ("test.liquid.md", "test"),
+            ("test.md.liquid", "test"),
+            ("test.liquid", "test"),
+            ("partials/header.liquid.md", "header"),
+        ];
+        
+        for (filename, expected) in test_cases {
+            let path = std::path::Path::new(filename);
+            let result = loader.extract_prompt_name(path);
+            println!("File: {} -> Name: {} (expected: {})", filename, result, expected);
+            assert_eq!(result, expected, "Failed for {}", filename);
+        }
     }
 
     #[test]
@@ -934,6 +1108,6 @@ This is another prompt.
 
         let prompt_names: Vec<String> = prompts.iter().map(|p| p.name.clone()).collect();
         assert!(prompt_names.contains(&"valid".to_string()));
-        assert!(prompt_names.contains(&"another".to_string()));
+        assert!(prompt_names.contains(&"prompts/another".to_string()));
     }
 }

@@ -1,19 +1,11 @@
 use anyhow::Result;
-use rmcp::{
-    model::{
-        GetPromptRequestParam, GetPromptResult, Implementation, ListPromptsResult,
-        PaginatedRequestParam, Prompt, PromptArgument, PromptMessage, PromptMessageContent,
-        PromptMessageRole, ServerCapabilities, ServerInfo,
-    },
-    service::RequestContext,
-    tool, Error, RoleServer, ServerHandler, ServiceExt,
-};
-use serde_json::{json, Value};
 use tokio::sync::oneshot;
-use tracing::info;
-use std::collections::HashMap;
+use tracing::{info, error, debug};
 use std::sync::{Arc, Mutex};
-use swissarmyhammer::{PromptLibrary, Prompt as SwissPrompt, PromptLoader};
+use swissarmyhammer::PromptLibrary;
+use serde_json::{json, Value};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct MCPServer {
@@ -29,6 +21,14 @@ impl MCPServer {
             version: env!("CARGO_PKG_VERSION").to_string(),
             library: Arc::new(Mutex::new(PromptLibrary::new())),
         }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn version(&self) -> &str {
+        &self.version
     }
     
     pub async fn initialize(&self) -> Result<()> {
@@ -69,217 +69,258 @@ impl MCPServer {
         Ok(())
     }
 
-    /// Convert internal prompts to MCP-compatible format
-    pub fn convert_prompts_to_mcp_format(&self) -> Value {
-        let library = self.library.lock().unwrap();
-        let prompts = library.list().unwrap_or_default();
+    pub async fn run(self, mut shutdown_rx: oneshot::Receiver<()>) -> Result<()> {
+        info!("Starting MCP server - real implementation active");
+
+        // Initialize prompts
+        self.initialize().await?;
+
+        info!("MCP server initialized with {} prompts", {
+            let library = self.library.lock().unwrap();
+            library.list().unwrap_or_default().len()
+        });
+
+        // Create stdin/stdout handles
+        let stdin = tokio::io::stdin();
+        let mut stdout = tokio::io::stdout();
+        let mut reader = BufReader::new(stdin);
+        let mut line = String::new();
+
+        info!("MCP server listening on stdio");
+
+        loop {
+            tokio::select! {
+                // Handle shutdown signal
+                _ = &mut shutdown_rx => {
+                    info!("Shutdown signal received");
+                    break;
+                }
+                
+                // Handle incoming requests
+                result = reader.read_line(&mut line) => {
+                    match result {
+                        Ok(0) => {
+                            // EOF reached
+                            debug!("EOF reached on stdin");
+                            break;
+                        }
+                        Ok(_) => {
+                            // Process the request
+                            let trimmed = line.trim();
+                            if !trimmed.is_empty() {
+                                debug!("Received request: {}", trimmed);
+                                
+                                if let Ok(request) = serde_json::from_str::<Value>(trimmed) {
+                                    let response = self.handle_request(request).await;
+                                    let response_json = serde_json::to_string(&response)?;
+                                    stdout.write_all(response_json.as_bytes()).await?;
+                                    stdout.write_all(b"\n").await?;
+                                    stdout.flush().await?;
+                                    debug!("Sent response: {}", response_json);
+                                } else {
+                                    error!("Failed to parse JSON request: {}", trimmed);
+                                }
+                            }
+                            line.clear();
+                        }
+                        Err(e) => {
+                            error!("Error reading from stdin: {}", e);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         
-        let mcp_prompts: Vec<Value> = prompts
-            .iter()
-            .map(|prompt| {
-                let mcp_arguments: Vec<Value> = prompt.arguments
-                    .iter()
-                    .map(|arg| json!({
-                        "name": arg.name,
-                        "description": arg.description,
-                        "required": arg.required
-                    }))
-                    .collect();
+        info!("MCP server stopped");
+        Ok(())
+    }
 
+    pub async fn handle_request(&self, request: Value) -> Value {
+        let method = request.get("method").and_then(|m| m.as_str()).unwrap_or("");
+        let id = request.get("id");
+        let params = request.get("params");
+
+        debug!("Handling method: {}", method);
+
+        match method {
+            "initialize" => self.handle_initialize(id, params),
+            "prompts/list" => self.handle_prompts_list(id, params),
+            "prompts/get" => self.handle_prompts_get(id, params).await,
+            _ => {
                 json!({
-                    "name": prompt.name,
-                    "description": prompt.description.as_deref().unwrap_or(""),
-                    "arguments": mcp_arguments
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32601,
+                        "message": "Method not found"
+                    }
                 })
-            })
-            .collect();
+            }
+        }
+    }
 
+    fn handle_initialize(&self, id: Option<&Value>, _params: Option<&Value>) -> Value {
         json!({
-            "prompts": mcp_prompts
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {
+                    "prompts": {
+                        "listChanged": true
+                    }
+                },
+                "serverInfo": {
+                    "name": self.name,
+                    "version": self.version
+                }
+            }
         })
     }
 
-    /// Get a specific prompt by name
-    pub fn get_prompt_by_name(&self, name: &str, arguments: Option<&Value>) -> Result<Value> {
+    fn handle_prompts_list(&self, id: Option<&Value>, _params: Option<&Value>) -> Value {
         let library = self.library.lock().unwrap();
-        let prompt = library.get(name)?;
         
-        // Convert JSON arguments to HashMap<String, String> for the template engine
-        let args_map = if let Some(args) = arguments {
-            if let Some(obj) = args.as_object() {
-                obj.iter()
-                    .map(|(k, v)| {
-                        let value_str = match v {
-                            Value::String(s) => s.clone(),
-                            v => v.to_string(),
-                        };
-                        (k.clone(), value_str)
-                    })
-                    .collect()
-            } else {
-                HashMap::new()
-            }
-        } else {
-            HashMap::new()
-        };
-        
-        // Use the template engine to process the prompt
-        let processed_content = prompt.render(&args_map)?;
+        match library.list() {
+            Ok(prompts) => {
+                let prompt_list: Vec<Value> = prompts.iter().map(|p| {
+                    let arguments = if p.arguments.is_empty() {
+                        None
+                    } else {
+                        Some(p.arguments.iter().map(|arg| {
+                            json!({
+                                "name": arg.name,
+                                "description": arg.description,
+                                "required": arg.required
+                            })
+                        }).collect::<Vec<Value>>())
+                    };
 
-        Ok(json!({
-            "description": prompt.description.as_deref().unwrap_or(""),
-            "messages": [{
-                "role": "user",
-                "content": {
-                    "type": "text",
-                    "text": processed_content
+                    json!({
+                        "name": p.name,
+                        "description": p.description.as_deref().unwrap_or(""),
+                        "arguments": arguments
+                    })
+                }).collect();
+
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {
+                        "prompts": prompt_list
+                    }
+                })
+            }
+            Err(e) => {
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32603,
+                        "message": format!("Internal error: {}", e)
+                    }
+                })
+            }
+        }
+    }
+
+    async fn handle_prompts_get(&self, id: Option<&Value>, params: Option<&Value>) -> Value {
+        let params = match params {
+            Some(p) => p,
+            None => {
+                return json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32602,
+                        "message": "Invalid params"
+                    }
+                });
+            }
+        };
+
+        let name = match params.get("name").and_then(|n| n.as_str()) {
+            Some(n) => n,
+            None => {
+                return json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32602,
+                        "message": "Missing 'name' parameter"
+                    }
+                });
+            }
+        };
+
+        let library = self.library.lock().unwrap();
+        
+        match library.get(name) {
+            Ok(prompt) => {
+                // Handle arguments if provided
+                let mut content = prompt.template.clone();
+                
+                if let Some(arguments) = params.get("arguments") {
+                    if let Some(args_obj) = arguments.as_object() {
+                        let mut template_args = HashMap::new();
+                        for (key, value) in args_obj {
+                            let value_str = match value {
+                                Value::String(s) => s.clone(),
+                                v => v.to_string()
+                            };
+                            template_args.insert(key.clone(), value_str);
+                        }
+                        
+                        // Render the template with arguments
+                        match prompt.render(&template_args) {
+                            Ok(rendered) => content = rendered,
+                            Err(e) => {
+                                return json!({
+                                    "jsonrpc": "2.0",
+                                    "id": id,
+                                    "error": {
+                                        "code": -32603,
+                                        "message": format!("Template rendering error: {}", e)
+                                    }
+                                });
+                            }
+                        }
+                    }
                 }
-            }]
-        }))
+
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {
+                        "description": prompt.description.as_deref().unwrap_or(""),
+                        "messages": [{
+                            "role": "user",
+                            "content": {
+                                "type": "text",
+                                "text": content
+                            }
+                        }]
+                    }
+                })
+            }
+            Err(e) => {
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32603,
+                        "message": format!("Prompt not found: {}", e)
+                    }
+                })
+            }
+        }
     }
 }
 
 impl Default for MCPServer {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl MCPServer {
-    pub async fn run(self, shutdown_rx: oneshot::Receiver<()>) -> Result<()> {
-        info!("Starting MCP server via stdio");
-
-        // Initialize prompts
-        self.initialize().await?;
-
-        // Create server instance
-        let role_server = ServerHandler::<Self>::stdio();
-
-        // Run the server
-        role_server.with_cancel(shutdown_rx).run().await;
-
-        info!("MCP server stopped");
-        Ok(())
-    }
-}
-
-#[tool]
-impl ServerHandler for MCPServer {
-    type Services = (MCPServer,);
-
-    fn capabilities(&self) -> ServerCapabilities {
-        ServerCapabilities {
-            prompts: Some(Default::default()),
-            ..Default::default()
-        }
-    }
-
-    fn info(&self) -> Implementation {
-        Implementation {
-            name: self.name.clone(),
-            version: self.version.clone(),
-        }
-    }
-
-    fn services(&self) -> Self::Services {
-        (self.clone(),)
-    }
-}
-
-impl MCPServer {
-    /// Handler for listing prompts
-    #[tool]
-    pub async fn list_prompts(
-        &self,
-        _ctx: RequestContext,
-        _req: PaginatedRequestParam,
-    ) -> Result<ListPromptsResult, Error> {
-        let library = self.library.lock().unwrap();
-        let prompts = library.list()
-            .map_err(|e| Error::server_error(e.to_string()))?;
-        
-        let mcp_prompts: Vec<Prompt> = prompts
-            .into_iter()
-            .map(|p| {
-                let arguments = if p.arguments.is_empty() {
-                    None
-                } else {
-                    Some(p.arguments.into_iter().map(|arg| PromptArgument {
-                        name: arg.name,
-                        description: arg.description,
-                        required: Some(arg.required),
-                    }).collect())
-                };
-                
-                Prompt {
-                    name: p.name,
-                    description: p.description,
-                    arguments,
-                }
-            })
-            .collect();
-
-        Ok(ListPromptsResult {
-            prompts: mcp_prompts,
-            next_cursor: None,
-        })
-    }
-
-    /// Handler for getting a prompt by name
-    #[tool]
-    pub async fn get_prompt(
-        &self,
-        _ctx: RequestContext,
-        req: GetPromptRequestParam,
-    ) -> Result<GetPromptResult, Error> {
-        let library = self.library.lock().unwrap();
-        let prompt = library.get(&req.name)
-            .map_err(|e| Error::server_error(e.to_string()))?;
-        
-        // Convert arguments
-        let arguments = if prompt.arguments.is_empty() {
-            None
-        } else {
-            Some(prompt.arguments.iter().map(|arg| PromptArgument {
-                name: arg.name.clone(),
-                description: arg.description.clone(),
-                required: Some(arg.required),
-            }).collect())
-        };
-        
-        // Render template if arguments provided
-        let content = if let Some(args) = req.arguments {
-            // Convert JSON to string map
-            let mut string_args = HashMap::new();
-            if let Some(obj) = args.as_object() {
-                for (k, v) in obj {
-                    let value_str = match v {
-                        Value::String(s) => s.clone(),
-                        v => v.to_string(),
-                    };
-                    string_args.insert(k.clone(), value_str);
-                }
-            }
-            
-            prompt.render(&string_args)
-                .map_err(|e| Error::server_error(e.to_string()))?
-        } else {
-            prompt.template.clone()
-        };
-        
-        let message = PromptMessage {
-            role: PromptMessageRole::User,
-            content: PromptMessageContent::Text { text: content },
-        };
-
-        Ok(GetPromptResult {
-            prompt: Prompt {
-                name: prompt.name,
-                description: prompt.description,
-                arguments,
-            },
-            messages: vec![message],
-        })
     }
 }
 
@@ -294,16 +335,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_server_info() {
+    async fn test_server_initialization() {
         let server = MCPServer::new();
-        let info = server.info();
-        assert_eq!(info.name, "swissarmyhammer");
-    }
-
-    #[tokio::test]
-    async fn test_server_capabilities_include_prompts() {
-        let server = MCPServer::new();
-        let capabilities = server.capabilities();
-        assert!(capabilities.prompts.is_some());
+        // Test that initialization doesn't fail
+        let result = server.initialize().await;
+        assert!(result.is_ok());
     }
 }

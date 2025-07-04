@@ -135,9 +135,10 @@ impl Validator {
         for prompt in prompts {
             result.files_checked += 1;
 
-            // Validate template syntax directly
-            self.validate_liquid_syntax(
-                &prompt.template,
+            // Validate template syntax with partials support
+            self.validate_liquid_syntax_with_partials(
+                &prompt,
+                &library,
                 prompt.source.as_ref().unwrap_or(&PathBuf::new()),
                 &mut result,
             );
@@ -179,6 +180,17 @@ impl Validator {
         // Validate each loaded prompt
         let prompts = library.list()?;
         for prompt in prompts {
+            result.files_checked += 1;
+
+            // Validate template syntax with partials support
+            self.validate_liquid_syntax_with_partials(
+                &prompt,
+                &library,
+                prompt.source.as_ref().unwrap_or(&PathBuf::new()),
+                &mut result,
+            );
+
+            // Create local prompt for field validation
             let local_prompt = Prompt {
                 name: prompt.name.clone(),
                 title: prompt
@@ -204,8 +216,9 @@ impl Validator {
                     })
                     .collect(),
             };
-            self.validate_prompt_data(&local_prompt, &mut result)?;
-            result.files_checked += 1;
+
+            // Validate fields and variables (but skip liquid syntax since we did it above)
+            self.validate_prompt_fields_and_variables(&local_prompt, &mut result)?;
         }
 
         Ok(result)
@@ -410,6 +423,7 @@ impl Validator {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn validate_prompt_data(&self, prompt: &Prompt, result: &mut ValidationResult) -> Result<()> {
         let file_path = PathBuf::from(&prompt.source_path);
 
@@ -438,6 +452,38 @@ impl Validator {
 
         // Validate template variables
         self.validate_template_variables(&prompt.content, &prompt.arguments, &file_path, result);
+
+        Ok(())
+    }
+
+    fn validate_prompt_fields_and_variables(&self, prompt: &Prompt, result: &mut ValidationResult) -> Result<()> {
+        let file_path = PathBuf::from(&prompt.source_path);
+
+        // Check required fields
+        if prompt.title.is_none() || prompt.title.as_ref().unwrap().is_empty() {
+            result.add_issue(ValidationIssue {
+                level: ValidationLevel::Error,
+                file_path: file_path.clone(),
+                line: None,
+                column: None,
+                message: "Missing required field: title".to_string(),
+                suggestion: Some("Add a title field to the YAML front matter".to_string()),
+            });
+        }
+
+        if prompt.description.is_none() || prompt.description.as_ref().unwrap().is_empty() {
+            result.add_issue(ValidationIssue {
+                level: ValidationLevel::Error,
+                file_path: file_path.clone(),
+                line: None,
+                column: None,
+                message: "Missing required field: description".to_string(),
+                suggestion: Some("Add a description field to the YAML front matter".to_string()),
+            });
+        }
+
+        // Validate template variables (without liquid syntax validation)
+        self.validate_variable_usage(&prompt.content, &prompt.arguments, &file_path, result);
 
         Ok(())
     }
@@ -614,6 +660,34 @@ impl Validator {
                     column: None,
                     message: format!("Liquid template syntax error: {}", error_msg),
                     suggestion: Some("Check Liquid template syntax and fix any errors".to_string()),
+                });
+            }
+        }
+    }
+
+    fn validate_liquid_syntax_with_partials(
+        &self,
+        prompt: &swissarmyhammer::Prompt,
+        library: &swissarmyhammer::PromptLibrary,
+        file_path: &Path,
+        result: &mut ValidationResult,
+    ) {
+        // Try to render the template with partials support using the same path as test/serve
+        let empty_args = std::collections::HashMap::new();
+        
+        // Use render_prompt which internally uses render_with_partials
+        if let Err(e) = library.render_prompt(&prompt.name, &empty_args) {
+            let error_msg = e.to_string();
+
+            // Only report actual syntax errors, not unknown variable errors
+            if !error_msg.contains("Unknown variable") && !error_msg.contains("Required argument") {
+                result.add_issue(ValidationIssue {
+                    level: ValidationLevel::Error,
+                    file_path: file_path.to_path_buf(),
+                    line: None,
+                    column: None,
+                    message: format!("Liquid template syntax error: {}", error_msg),
+                    suggestion: Some("Check Liquid template syntax and partial references".to_string()),
                 });
             }
         }

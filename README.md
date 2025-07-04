@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="icon.svg" alt="SwissArmyHammer" width="64" height="64">
+<img src="icon.svg" alt="SwissArmyHammer" width="256" height="256">
 
 # SwissArmyHammer
 
@@ -67,7 +67,7 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions.
 Add to your Claude Code [MCP configuration](https://docs.anthropic.com/en/docs/claude-code/mcp)
 
 ```bash
-claude mcp add sah_server -e  -- swissarmyhammer serve
+claude mcp add --scope user swissarmyhammer swissarmyhammer serve
 ```
 
 ### Create Your First Prompt

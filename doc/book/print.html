@@ -751,7 +751,807 @@ swissarmyhammer doctor
 <li><strong>File encoding</strong> - Use UTF-8 encoding for your markdown files</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="creating-prompts"><a class="header" href="#creating-prompts">Creating Prompts</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="yaml-front-matter"><a class="header" href="#yaml-front-matter">YAML Front Matter</a></h1>
+<p>SwissArmyHammer prompts are markdown files with YAML front matter that define reusable AI prompts. This guide walks you through creating effective prompts.</p>
+<h2 id="basic-structure"><a class="header" href="#basic-structure">Basic Structure</a></h2>
+<p>Every prompt file has two parts:</p>
+<ol>
+<li><strong>YAML Front Matter</strong> - Metadata about the prompt</li>
+<li><strong>Markdown Content</strong> - The actual prompt template</li>
+</ol>
+<pre><code class="language-markdown">---
+name: my-prompt
+title: My Awesome Prompt
+description: Does something useful
+arguments:
+  - name: input
+    description: What to process
+    required: true
+---
+
+# My Prompt
+
+Please help me with {{input}}.
+
+Provide a detailed response.
+</code></pre>
+<h2 id="yaml-front-matter"><a class="header" href="#yaml-front-matter">YAML Front Matter</a></h2>
+<p>The YAML front matter defines the prompt’s metadata:</p>
+<h3 id="required-fields"><a class="header" href="#required-fields">Required Fields</a></h3>
+<ul>
+<li><code>name</code> - Unique identifier for the prompt</li>
+<li><code>title</code> - Human-readable name</li>
+<li><code>description</code> - What the prompt does</li>
+</ul>
+<h3 id="optional-fields"><a class="header" href="#optional-fields">Optional Fields</a></h3>
+<ul>
+<li><code>category</code> - Group related prompts (e.g., “development”, “writing”)</li>
+<li><code>tags</code> - List of keywords for discovery</li>
+<li><code>arguments</code> - Input parameters (see <a href="creating-prompts.html#arguments">Arguments</a>)</li>
+<li><code>author</code> - Prompt creator</li>
+<li><code>version</code> - Version number</li>
+<li><code>license</code> - License information</li>
+</ul>
+<h3 id="example"><a class="header" href="#example">Example</a></h3>
+<pre><code class="language-yaml">---
+name: code-review
+title: Code Review Assistant
+description: Reviews code for best practices, bugs, and improvements
+category: development
+tags: ["code", "review", "quality", "best-practices"]
+author: SwissArmyHammer Team
+version: 1.0.0
+arguments:
+  - name: code
+    description: The code to review
+    required: true
+  - name: language
+    description: Programming language
+    required: false
+    default: auto-detect
+  - name: focus
+    description: Specific areas to focus on
+    required: false
+    default: all aspects
+---
+</code></pre>
+<h2 id="arguments"><a class="header" href="#arguments">Arguments</a></h2>
+<p>Arguments define the inputs your prompt accepts. Each argument has:</p>
+<h3 id="argument-properties"><a class="header" href="#argument-properties">Argument Properties</a></h3>
+<ul>
+<li><code>name</code> - Parameter name (used in template as <code>{{name}}</code>)</li>
+<li><code>description</code> - What this parameter is for</li>
+<li><code>required</code> - Whether the argument is mandatory</li>
+<li><code>default</code> - Default value if not provided</li>
+<li><code>type_hint</code> - Expected data type (documentation only)</li>
+</ul>
+<h3 id="example-arguments"><a class="header" href="#example-arguments">Example Arguments</a></h3>
+<pre><code class="language-yaml">arguments:
+  - name: text
+    description: Text to analyze
+    required: true
+    type_hint: string
+  
+  - name: format
+    description: Output format
+    required: false
+    default: markdown
+    type_hint: string
+  
+  - name: max_length
+    description: Maximum response length
+    required: false
+    default: 500
+    type_hint: integer
+  
+  - name: include_examples
+    description: Include code examples
+    required: false
+    default: true
+    type_hint: boolean
+</code></pre>
+<h2 id="template-content"><a class="header" href="#template-content">Template Content</a></h2>
+<p>The markdown content is your prompt template using <a href="./template-variables.html">Liquid templating</a>.</p>
+<h3 id="basic-variables"><a class="header" href="#basic-variables">Basic Variables</a></h3>
+<p>Use <code>{{variable}}</code> to insert argument values:</p>
+<pre><code class="language-markdown">Please review this {{language}} code:
+
+```{{code}}```
+
+Focus on {{focus}}.
+</code></pre>
+<h3 id="conditional-logic"><a class="header" href="#conditional-logic">Conditional Logic</a></h3>
+<p>Use <code>{% if %}</code> blocks for conditional content:</p>
+<pre><code class="language-markdown">{% if language == "python" %}
+Pay special attention to:
+- PEP 8 style guidelines
+- Type hints
+- Error handling
+{% elsif language == "javascript" %}
+Pay special attention to:
+- ESLint rules
+- Async/await usage
+- Error handling
+{% endif %}
+</code></pre>
+<h3 id="loops"><a class="header" href="#loops">Loops</a></h3>
+<p>Use <code>{% for %}</code> to iterate over lists:</p>
+<pre><code class="language-markdown">{% if tags %}
+Tags: {% for tag in tags %}#{{tag}}{% unless forloop.last %}, {% endunless %}{% endfor %}
+{% endif %}
+</code></pre>
+<h3 id="filters"><a class="header" href="#filters">Filters</a></h3>
+<p>Apply filters to transform data:</p>
+<pre><code class="language-markdown">Language: {{language | capitalize}}
+Code length: {{code | length}} characters
+Summary: {{description | truncate: 100}}
+</code></pre>
+<h2 id="organization"><a class="header" href="#organization">Organization</a></h2>
+<h3 id="directory-structure"><a class="header" href="#directory-structure">Directory Structure</a></h3>
+<p>Organize prompts in logical directories:</p>
+<pre><code>prompts/
+├── development/
+│   ├── code-review.md
+│   ├── debug-helper.md
+│   └── api-docs.md
+├── writing/
+│   ├── blog-post.md
+│   ├── email-draft.md
+│   └── summary.md
+└── analysis/
+    ├── data-insights.md
+    └── competitor-analysis.md
+</code></pre>
+<h3 id="naming-conventions"><a class="header" href="#naming-conventions">Naming Conventions</a></h3>
+<ul>
+<li>Use kebab-case for filenames: <code>code-review.md</code></li>
+<li>Make names descriptive: <code>debug-python-errors.md</code> not <code>debug.md</code></li>
+<li>Include the category in the path, not the filename</li>
+</ul>
+<h3 id="categories-and-tags"><a class="header" href="#categories-and-tags">Categories and Tags</a></h3>
+<p>Use categories for broad groupings:</p>
+<ul>
+<li><code>development</code> - Code-related prompts</li>
+<li><code>writing</code> - Content creation</li>
+<li><code>analysis</code> - Data and research</li>
+<li><code>productivity</code> - Task management</li>
+</ul>
+<p>Use tags for specific features:</p>
+<ul>
+<li><code>["python", "debugging", "error-handling"]</code></li>
+<li><code>["marketing", "email", "b2b"]</code></li>
+<li><code>["data", "visualization", "charts"]</code></li>
+</ul>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="1-write-clear-descriptions"><a class="header" href="#1-write-clear-descriptions">1. Write Clear Descriptions</a></h3>
+<pre><code class="language-yaml"># Good
+description: Reviews Python code for PEP 8 compliance, type hints, and common bugs
+
+# Bad
+description: Code review
+</code></pre>
+<h3 id="2-provide-helpful-defaults"><a class="header" href="#2-provide-helpful-defaults">2. Provide Helpful Defaults</a></h3>
+<pre><code class="language-yaml">arguments:
+  - name: style_guide
+    description: Coding style guide to follow
+    required: false
+    default: PEP 8  # Sensible default
+</code></pre>
+<h3 id="3-use-descriptive-variable-names"><a class="header" href="#3-use-descriptive-variable-names">3. Use Descriptive Variable Names</a></h3>
+<pre><code class="language-markdown"># Good
+Please analyze this {{source_code}} for {{security_vulnerabilities}}.
+
+# Bad
+Please analyze this {{input}} for {{stuff}}.
+</code></pre>
+<h3 id="4-include-examples-in-descriptions"><a class="header" href="#4-include-examples-in-descriptions">4. Include Examples in Descriptions</a></h3>
+<pre><code class="language-yaml">arguments:
+  - name: format
+    description: Output format (markdown, json, html)
+    required: false
+    default: markdown
+</code></pre>
+<h3 id="5-structure-your-prompts"><a class="header" href="#5-structure-your-prompts">5. Structure Your Prompts</a></h3>
+<p>Use clear sections and formatting:</p>
+<pre><code class="language-markdown"># Code Review
+
+## Overview
+Please review the following {{language}} code for:
+
+## Focus Areas
+1. **Best Practices** - Follow {{style_guide}} guidelines
+2. **Security** - Identify potential vulnerabilities
+3. **Performance** - Suggest optimizations
+4. **Maintainability** - Assess code clarity
+
+## Code to Review
+
+```{{code}}```
+
+## Instructions
+{{#if include_suggestions}}
+Please provide specific improvement suggestions.
+{{/if}}
+</code></pre>
+<h3 id="6-test-your-prompts"><a class="header" href="#6-test-your-prompts">6. Test Your Prompts</a></h3>
+<p>Use the CLI to test prompts:</p>
+<pre><code class="language-bash"># Test with required arguments
+swissarmyhammer test code-review --code "def hello(): print('hi')" --language python
+
+# Test with defaults
+swissarmyhammer test code-review --code "function hello() { console.log('hi'); }"
+</code></pre>
+<h2 id="common-patterns"><a class="header" href="#common-patterns">Common Patterns</a></h2>
+<h3 id="code-analysis"><a class="header" href="#code-analysis">Code Analysis</a></h3>
+<pre><code class="language-markdown">---
+name: analyze-code
+title: Code Analyzer
+description: Analyzes code for issues and improvements
+arguments:
+  - name: code
+    description: Code to analyze
+    required: true
+  - name: language
+    description: Programming language
+    required: false
+    default: auto-detect
+---
+
+# Code Analysis
+
+Analyze this {{language}} code:
+
+```{{code}}```
+
+Provide feedback on:
+- Code quality and best practices
+- Potential bugs or issues
+- Performance optimizations
+- Readability improvements
+</code></pre>
+<h3 id="document-generation"><a class="header" href="#document-generation">Document Generation</a></h3>
+<pre><code class="language-markdown">---
+name: api-docs
+title: API Documentation Generator
+description: Generates API documentation from code
+arguments:
+  - name: code
+    description: API code to document
+    required: true
+  - name: format
+    description: Documentation format
+    required: false
+    default: markdown
+---
+
+# API Documentation
+
+Generate {{format}} documentation for this API:
+
+```{{code}}```
+
+Include:
+- Endpoint descriptions
+- Parameter details
+- Response examples
+- Error codes
+</code></pre>
+<h3 id="text-processing"><a class="header" href="#text-processing">Text Processing</a></h3>
+<pre><code class="language-markdown">---
+name: summarize
+title: Text Summarizer
+description: Creates concise summaries of text
+arguments:
+  - name: text
+    description: Text to summarize
+    required: true
+  - name: length
+    description: Target summary length
+    required: false
+    default: 3 sentences
+---
+
+# Text Summary
+
+Create a {{length}} summary of this text:
+
+{{text}}
+
+Focus on the key points and main ideas.
+</code></pre>
+<h2 id="next-steps-2"><a class="header" href="#next-steps-2">Next Steps</a></h2>
+<ul>
+<li>Learn about <a href="./yaml-front-matter.html">YAML Front Matter</a> in detail</li>
+<li>Explore <a href="./template-variables.html">Template Variables</a> and Liquid syntax</li>
+<li>Check out <a href="./custom-filters.html">Custom Filters</a> for advanced transformations</li>
+<li>See <a href="./examples.html">Examples</a> for real-world prompt templates</li>
+<li>Read about <a href="./prompt-organization.html">Prompt Organization</a> strategies</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="yaml-front-matter-1"><a class="header" href="#yaml-front-matter-1">YAML Front Matter</a></h1>
+<p>YAML front matter is the metadata section at the beginning of each prompt file. It defines the prompt’s properties, arguments, and other configuration details.</p>
+<h2 id="structure"><a class="header" href="#structure">Structure</a></h2>
+<p>Front matter appears between triple dashes (<code>---</code>) at the start of your markdown file:</p>
+<pre><code class="language-markdown">---
+name: my-prompt
+title: My Prompt
+description: What this prompt does
+---
+
+# Prompt content starts here
+</code></pre>
+<h2 id="required-fields-1"><a class="header" href="#required-fields-1">Required Fields</a></h2>
+<p>Every prompt must have these fields:</p>
+<h3 id="name"><a class="header" href="#name"><code>name</code></a></h3>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Description</strong>: Unique identifier for the prompt</li>
+<li><strong>Format</strong>: kebab-case recommended</li>
+<li><strong>Example</strong>: <code>code-review</code>, <code>debug-helper</code>, <code>api-docs</code></li>
+</ul>
+<pre><code class="language-yaml">name: code-review
+</code></pre>
+<h3 id="title"><a class="header" href="#title"><code>title</code></a></h3>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Description</strong>: Human-readable name displayed in UIs</li>
+<li><strong>Format</strong>: Title Case</li>
+<li><strong>Example</strong>: <code>Code Review Assistant</code>, <code>Debug Helper</code></li>
+</ul>
+<pre><code class="language-yaml">title: Code Review Assistant
+</code></pre>
+<h3 id="description"><a class="header" href="#description"><code>description</code></a></h3>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Description</strong>: Brief explanation of what the prompt does</li>
+<li><strong>Format</strong>: Sentence or short paragraph</li>
+<li><strong>Example</strong>: Clear, actionable description</li>
+</ul>
+<pre><code class="language-yaml">description: Reviews code for best practices, bugs, and potential improvements
+</code></pre>
+<h2 id="optional-fields-1"><a class="header" href="#optional-fields-1">Optional Fields</a></h2>
+<h3 id="category"><a class="header" href="#category"><code>category</code></a></h3>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Description</strong>: Groups related prompts together</li>
+<li><strong>Common Values</strong>: <code>development</code>, <code>writing</code>, <code>analysis</code>, <code>productivity</code></li>
+</ul>
+<pre><code class="language-yaml">category: development
+</code></pre>
+<h3 id="tags"><a class="header" href="#tags"><code>tags</code></a></h3>
+<ul>
+<li><strong>Type</strong>: Array of strings</li>
+<li><strong>Description</strong>: Keywords for discovery and filtering</li>
+<li><strong>Format</strong>: Lowercase, descriptive terms</li>
+</ul>
+<pre><code class="language-yaml">tags: ["python", "debugging", "error-handling"]
+</code></pre>
+<h3 id="arguments-1"><a class="header" href="#arguments-1"><code>arguments</code></a></h3>
+<ul>
+<li><strong>Type</strong>: Array of argument objects</li>
+<li><strong>Description</strong>: Input parameters the prompt accepts</li>
+<li><strong>See</strong>: <a href="yaml-front-matter.html#arguments">Arguments section</a> below</li>
+</ul>
+<pre><code class="language-yaml">arguments:
+  - name: code
+    description: Code to review
+    required: true
+</code></pre>
+<h3 id="author"><a class="header" href="#author"><code>author</code></a></h3>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Description</strong>: Creator of the prompt</li>
+<li><strong>Format</strong>: Name or organization</li>
+</ul>
+<pre><code class="language-yaml">author: SwissArmyHammer Team
+</code></pre>
+<h3 id="version"><a class="header" href="#version"><code>version</code></a></h3>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Description</strong>: Version number for tracking changes</li>
+<li><strong>Format</strong>: Semantic versioning recommended</li>
+</ul>
+<pre><code class="language-yaml">version: 1.2.0
+</code></pre>
+<h3 id="license-1"><a class="header" href="#license-1"><code>license</code></a></h3>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Description</strong>: License for the prompt</li>
+<li><strong>Common Values</strong>: <code>MIT</code>, <code>Apache-2.0</code>, <code>GPL-3.0</code></li>
+</ul>
+<pre><code class="language-yaml">license: MIT
+</code></pre>
+<h3 id="created"><a class="header" href="#created"><code>created</code></a></h3>
+<ul>
+<li><strong>Type</strong>: Date string</li>
+<li><strong>Description</strong>: When the prompt was created</li>
+<li><strong>Format</strong>: ISO 8601 date</li>
+</ul>
+<pre><code class="language-yaml">created: 2024-01-15
+</code></pre>
+<h3 id="updated"><a class="header" href="#updated"><code>updated</code></a></h3>
+<ul>
+<li><strong>Type</strong>: Date string</li>
+<li><strong>Description</strong>: Last modification date</li>
+<li><strong>Format</strong>: ISO 8601 date</li>
+</ul>
+<pre><code class="language-yaml">updated: 2024-03-20
+</code></pre>
+<h3 id="keywords"><a class="header" href="#keywords"><code>keywords</code></a></h3>
+<ul>
+<li><strong>Type</strong>: Array of strings</li>
+<li><strong>Description</strong>: Alternative to tags for SEO/discovery</li>
+<li><strong>Note</strong>: Similar to tags but more formal</li>
+</ul>
+<pre><code class="language-yaml">keywords: ["code quality", "static analysis", "best practices"]
+</code></pre>
+<h2 id="arguments-2"><a class="header" href="#arguments-2">Arguments</a></h2>
+<p>Arguments define the inputs your prompt can accept. Each argument is an object with these properties:</p>
+<h3 id="argument-properties-1"><a class="header" href="#argument-properties-1">Argument Properties</a></h3>
+<h4 id="name-required"><a class="header" href="#name-required"><code>name</code> (required)</a></h4>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Description</strong>: Parameter name used in template</li>
+<li><strong>Format</strong>: snake_case or kebab-case</li>
+<li><strong>Usage</strong>: Referenced as <code>{{name}}</code> in template</li>
+</ul>
+<pre><code class="language-yaml">arguments:
+  - name: source_code
+    # Used as {{source_code}} in template
+</code></pre>
+<h4 id="description-required"><a class="header" href="#description-required"><code>description</code> (required)</a></h4>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Description</strong>: What this argument is for</li>
+<li><strong>Format</strong>: Clear, helpful explanation</li>
+</ul>
+<pre><code class="language-yaml">arguments:
+  - name: language
+    description: Programming language of the code
+</code></pre>
+<h4 id="required-optional-default-false"><a class="header" href="#required-optional-default-false"><code>required</code> (optional, default: false)</a></h4>
+<ul>
+<li><strong>Type</strong>: Boolean</li>
+<li><strong>Description</strong>: Whether this argument must be provided</li>
+<li><strong>Default</strong>: <code>false</code></li>
+</ul>
+<pre><code class="language-yaml">arguments:
+  - name: code
+    description: Code to analyze
+    required: true  # Must be provided
+  - name: style_guide
+    description: Coding style to follow
+    required: false  # Optional
+</code></pre>
+<h4 id="default-optional"><a class="header" href="#default-optional"><code>default</code> (optional)</a></h4>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Description</strong>: Default value if not provided</li>
+<li><strong>Note</strong>: Only used when <code>required: false</code></li>
+</ul>
+<pre><code class="language-yaml">arguments:
+  - name: format
+    description: Output format
+    required: false
+    default: markdown
+</code></pre>
+<h4 id="type_hint-optional"><a class="header" href="#type_hint-optional"><code>type_hint</code> (optional)</a></h4>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Description</strong>: Expected data type (documentation only)</li>
+<li><strong>Common Values</strong>: <code>string</code>, <code>integer</code>, <code>boolean</code>, <code>array</code>, <code>object</code></li>
+</ul>
+<pre><code class="language-yaml">arguments:
+  - name: max_length
+    description: Maximum output length
+    required: false
+    default: 500
+    type_hint: integer
+</code></pre>
+<h3 id="argument-examples"><a class="header" href="#argument-examples">Argument Examples</a></h3>
+<h4 id="simple-text-input"><a class="header" href="#simple-text-input">Simple Text Input</a></h4>
+<pre><code class="language-yaml">arguments:
+  - name: text
+    description: Text to process
+    required: true
+    type_hint: string
+</code></pre>
+<h4 id="optional-with-default"><a class="header" href="#optional-with-default">Optional with Default</a></h4>
+<pre><code class="language-yaml">arguments:
+  - name: format
+    description: Output format (markdown, json, html)
+    required: false
+    default: markdown
+    type_hint: string
+</code></pre>
+<h4 id="boolean-flag"><a class="header" href="#boolean-flag">Boolean Flag</a></h4>
+<pre><code class="language-yaml">arguments:
+  - name: include_examples
+    description: Include code examples in output
+    required: false
+    default: true
+    type_hint: boolean
+</code></pre>
+<h4 id="multiple-arguments"><a class="header" href="#multiple-arguments">Multiple Arguments</a></h4>
+<pre><code class="language-yaml">arguments:
+  - name: code
+    description: Source code to review
+    required: true
+    type_hint: string
+  
+  - name: language
+    description: Programming language
+    required: false
+    default: auto-detect
+    type_hint: string
+    
+  - name: severity
+    description: Minimum issue severity to report
+    required: false
+    default: medium
+    type_hint: string
+    
+  - name: include_suggestions
+    description: Include improvement suggestions
+    required: false
+    default: true
+    type_hint: boolean
+</code></pre>
+<h2 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h2>
+<p>Here’s a comprehensive example showing all available fields:</p>
+<pre><code class="language-yaml">---
+name: comprehensive-code-review
+title: Comprehensive Code Review Assistant
+description: Performs detailed code review focusing on best practices, security, and performance
+category: development
+tags: ["code-review", "security", "performance", "best-practices"]
+author: SwissArmyHammer Team
+version: 2.1.0
+license: MIT
+created: 2024-01-15
+updated: 2024-03-20
+keywords: ["static analysis", "code quality", "security audit"]
+
+arguments:
+  - name: code
+    description: Source code to review
+    required: true
+    type_hint: string
+    
+  - name: language
+    description: Programming language (python, javascript, rust, etc.)
+    required: false
+    default: auto-detect
+    type_hint: string
+    
+  - name: focus_areas
+    description: Specific areas to focus on (security, performance, style)
+    required: false
+    default: all
+    type_hint: string
+    
+  - name: severity_threshold
+    description: Minimum severity level to report (low, medium, high)
+    required: false
+    default: medium
+    type_hint: string
+    
+  - name: include_examples
+    description: Include code examples in suggestions
+    required: false
+    default: true
+    type_hint: boolean
+    
+  - name: max_suggestions
+    description: Maximum number of suggestions to provide
+    required: false
+    default: 10
+    type_hint: integer
+---
+
+# Comprehensive Code Review
+
+I'll perform a detailed review of your {{language}} code, focusing on {{focus_areas}}.
+
+## Code Analysis
+
+```{{code}}```
+
+## Review Criteria
+
+I'll evaluate the code for:
+
+{% if focus_areas contains "security" or focus_areas == "all" %}
+- **Security vulnerabilities** and best practices
+{% endif %}
+
+{% if focus_areas contains "performance" or focus_areas == "all" %}
+- **Performance optimizations** and efficiency
+{% endif %}
+
+{% if focus_areas contains "style" or focus_areas == "all" %}
+- **Code style** and formatting consistency
+{% endif %}
+
+{% if language != "auto-detect" %}
+- **{{language | capitalize}}-specific** best practices and idioms
+{% endif %}
+
+## Reporting
+
+- Minimum severity: {{severity_threshold}}
+- Maximum suggestions: {{max_suggestions}}
+{% if include_examples %}
+- Including code examples and fixes
+{% endif %}
+
+Please provide detailed feedback with specific line references where applicable.
+</code></pre>
+<h2 id="validation-rules"><a class="header" href="#validation-rules">Validation Rules</a></h2>
+<p>SwissArmyHammer validates your YAML front matter:</p>
+<h3 id="required-field-validation"><a class="header" href="#required-field-validation">Required Field Validation</a></h3>
+<ul>
+<li><code>name</code>, <code>title</code>, and <code>description</code> must be present</li>
+<li><code>name</code> must be unique within the prompt library</li>
+<li><code>name</code> must not contain spaces or special characters</li>
+</ul>
+<h3 id="argument-validation"><a class="header" href="#argument-validation">Argument Validation</a></h3>
+<ul>
+<li>Each argument must have <code>name</code> and <code>description</code></li>
+<li>Argument names must be valid template variables</li>
+<li>Required arguments cannot have default values</li>
+<li>Argument names must be unique within the prompt</li>
+</ul>
+<h3 id="type-validation"><a class="header" href="#type-validation">Type Validation</a></h3>
+<ul>
+<li>Arrays must contain valid elements</li>
+<li>Dates must be in ISO format</li>
+<li>Booleans must be <code>true</code> or <code>false</code></li>
+</ul>
+<h2 id="best-practices-1"><a class="header" href="#best-practices-1">Best Practices</a></h2>
+<h3 id="1-use-descriptive-names"><a class="header" href="#1-use-descriptive-names">1. Use Descriptive Names</a></h3>
+<pre><code class="language-yaml"># Good
+name: python-code-review
+title: Python Code Review Assistant
+
+# Bad
+name: review
+title: Review
+</code></pre>
+<h3 id="2-write-clear-descriptions"><a class="header" href="#2-write-clear-descriptions">2. Write Clear Descriptions</a></h3>
+<pre><code class="language-yaml"># Good
+description: Analyzes Python code for PEP 8 compliance, type hints, security issues, and performance optimizations
+
+# Bad
+description: Reviews code
+</code></pre>
+<h3 id="3-organize-with-categories-and-tags"><a class="header" href="#3-organize-with-categories-and-tags">3. Organize with Categories and Tags</a></h3>
+<pre><code class="language-yaml">category: development
+tags: ["python", "pep8", "security", "performance", "code-quality"]
+</code></pre>
+<h3 id="4-provide-sensible-defaults"><a class="header" href="#4-provide-sensible-defaults">4. Provide Sensible Defaults</a></h3>
+<pre><code class="language-yaml">arguments:
+  - name: style_guide
+    description: Python style guide to follow
+    required: false
+    default: PEP 8  # Most common choice
+</code></pre>
+<h3 id="5-use-type-hints"><a class="header" href="#5-use-type-hints">5. Use Type Hints</a></h3>
+<pre><code class="language-yaml">arguments:
+  - name: max_issues
+    description: Maximum number of issues to report
+    required: false
+    default: 20
+    type_hint: integer  # Helps users understand expected format
+</code></pre>
+<h3 id="6-keep-versions-updated"><a class="header" href="#6-keep-versions-updated">6. Keep Versions Updated</a></h3>
+<pre><code class="language-yaml">version: 1.2.0  # Update when you make changes
+updated: 2024-03-20  # Track modification date
+</code></pre>
+<h2 id="common-patterns-1"><a class="header" href="#common-patterns-1">Common Patterns</a></h2>
+<h3 id="code-processing-prompt"><a class="header" href="#code-processing-prompt">Code Processing Prompt</a></h3>
+<pre><code class="language-yaml">---
+name: code-processor
+title: Code Processor
+description: Processes and transforms code
+category: development
+arguments:
+  - name: code
+    description: Source code to process
+    required: true
+  - name: language
+    description: Programming language
+    required: false
+    default: auto-detect
+  - name: output_format
+    description: Desired output format
+    required: false
+    default: markdown
+---
+</code></pre>
+<h3 id="text-analysis-prompt"><a class="header" href="#text-analysis-prompt">Text Analysis Prompt</a></h3>
+<pre><code class="language-yaml">---
+name: text-analyzer
+title: Text Analyzer
+description: Analyzes text for various metrics
+category: analysis
+arguments:
+  - name: text
+    description: Text to analyze
+    required: true
+  - name: analysis_type
+    description: Type of analysis to perform
+    required: false
+    default: comprehensive
+  - name: include_stats
+    description: Include statistical analysis
+    required: false
+    default: true
+    type_hint: boolean
+---
+</code></pre>
+<h3 id="document-generator"><a class="header" href="#document-generator">Document Generator</a></h3>
+<pre><code class="language-yaml">---
+name: doc-generator
+title: Document Generator
+description: Generates documentation from code or specifications
+category: documentation
+arguments:
+  - name: source
+    description: Source material to document
+    required: true
+  - name: format
+    description: Output format
+    required: false
+    default: markdown
+  - name: include_examples
+    description: Include usage examples
+    required: false
+    default: true
+    type_hint: boolean
+---
+</code></pre>
+<h2 id="troubleshooting-3"><a class="header" href="#troubleshooting-3">Troubleshooting</a></h2>
+<h3 id="common-errors"><a class="header" href="#common-errors">Common Errors</a></h3>
+<h4 id="invalid-yaml-syntax"><a class="header" href="#invalid-yaml-syntax">Invalid YAML Syntax</a></h4>
+<pre><code class="language-yaml"># Error: Missing quotes around string with special characters
+description: This won't work: because of the colon
+
+# Fixed: Quote strings with special characters
+description: "This works: because it's quoted"
+</code></pre>
+<h4 id="missing-required-fields"><a class="header" href="#missing-required-fields">Missing Required Fields</a></h4>
+<pre><code class="language-yaml"># Error: Missing required fields
+title: My Prompt
+
+# Fixed: Include all required fields
+name: my-prompt
+title: My Prompt
+description: What this prompt does
+</code></pre>
+<h4 id="invalid-argument-structure"><a class="header" href="#invalid-argument-structure">Invalid Argument Structure</a></h4>
+<pre><code class="language-yaml"># Error: Missing required argument properties
+arguments:
+  - name: code
+
+# Fixed: Include required properties
+arguments:
+  - name: code
+    description: Code to process
+    required: true
+</code></pre>
+<h3 id="validation-tips"><a class="header" href="#validation-tips">Validation Tips</a></h3>
+<ol>
+<li><strong>Use a YAML validator</strong> - Many online tools can check syntax</li>
+<li><strong>Test with CLI</strong> - Use <code>swissarmyhammer test</code> to validate prompts</li>
+<li><strong>Check the logs</strong> - SwissArmyHammer provides detailed error messages</li>
+<li><strong>Start simple</strong> - Begin with minimal front matter and add complexity</li>
+</ol>
+<h2 id="next-steps-3"><a class="header" href="#next-steps-3">Next Steps</a></h2>
+<ul>
+<li>Learn about <a href="./template-variables.html">Template Variables</a> to use your arguments</li>
+<li>Explore <a href="./custom-filters.html">Custom Filters</a> for advanced text processing</li>
+<li>See <a href="./creating-prompts.html">Creating Prompts</a> for the complete workflow</li>
+<li>Check <a href="./examples.html">Examples</a> for real-world YAML configurations</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="template-variables"><a class="header" href="#template-variables">Template Variables</a></h1>
 <p>SwissArmyHammer uses the <a href="https://shopify.github.io/liquid/">Liquid template engine</a> for processing prompts. This provides powerful templating features including variables, conditionals, loops, and filters.</p>
 <h2 id="basic-variable-substitution"><a class="header" href="#basic-variable-substitution">Basic Variable Substitution</a></h2>
@@ -813,7 +1613,7 @@ Your email is {{ email }}.
     ❓ Unknown status
 {% endcase %}
 </code></pre>
-<h2 id="loops"><a class="header" href="#loops">Loops</a></h2>
+<h2 id="loops-1"><a class="header" href="#loops-1">Loops</a></h2>
 <h3 id="basic-for-loops"><a class="header" href="#basic-for-loops">Basic For Loops</a></h3>
 <p>Iterate over arrays:</p>
 <pre><code class="language-liquid">{% for item in items %}
@@ -862,7 +1662,7 @@ Your email is {{ email }}.
   &lt;/tr&gt;
 {% endfor %}
 </code></pre>
-<h2 id="filters"><a class="header" href="#filters">Filters</a></h2>
+<h2 id="filters-1"><a class="header" href="#filters-1">Filters</a></h2>
 <p>Filters modify variables using the pipe (<code>|</code>) character:</p>
 <h3 id="string-filters"><a class="header" href="#string-filters">String Filters</a></h3>
 <pre><code class="language-liquid">{{ name | upcase }}           # ALICE
@@ -1115,7 +1915,7 @@ Total: {{ files | size }} files
   {% endfor %}
 {% endif %}
 </code></pre>
-<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h2 id="best-practices-2"><a class="header" href="#best-practices-2">Best Practices</a></h2>
 <ol>
 <li><strong>Use meaningful variable names</strong>: <code>{{ user_email }}</code> instead of <code>{{ ue }}</code></li>
 <li><strong>Provide defaults</strong>: <code>{{ value | default: "N/A" }}</code> for optional values</li>
@@ -1659,17 +2459,427 @@ Available fields: {{ fields | bullet_list }}
 - [Advanced Prompts](./advanced-prompts.md) - Using filters in complex templates
 - [Testing Guide](./testing-guide.md) - Testing templates with custom filters</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="prompt-organization"><a class="header" href="#prompt-organization">Prompt Organization</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="using-with-claude-code"><a class="header" href="#using-with-claude-code">Using with Claude Code</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="claude-code-integration"><a class="header" href="#claude-code-integration">Claude Code Integration</a></h1>
+<p>SwissArmyHammer integrates seamlessly with <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a> through the Model Context Protocol (MCP). This guide shows you how to set up and use SwissArmyHammer with Claude Code.</p>
+<h2 id="what-is-mcp"><a class="header" href="#what-is-mcp">What is MCP?</a></h2>
+<p>The <a href="https://github.com/anthropics/model-context-protocol">Model Context Protocol</a> allows AI assistants like Claude to access external tools and data sources. SwissArmyHammer acts as an MCP server, providing Claude Code with access to your prompt library.</p>
+<h2 id="installation-1"><a class="header" href="#installation-1">Installation</a></h2>
+<h3 id="1-install-swissarmyhammer"><a class="header" href="#1-install-swissarmyhammer">1. Install SwissArmyHammer</a></h3>
+<p>See the <a href="./installation.html">Installation Guide</a> for detailed instructions. The quickest method:</p>
+<pre><code class="language-bash"># Install using the install script
+curl -sSL https://raw.githubusercontent.com/wballard/swissarmyhammer/main/install.sh | bash
+</code></pre>
+<h3 id="2-verify-installation"><a class="header" href="#2-verify-installation">2. Verify Installation</a></h3>
+<pre><code class="language-bash">swissarmyhammer --version
+</code></pre>
+<h3 id="3-test-the-mcp-server"><a class="header" href="#3-test-the-mcp-server">3. Test the MCP Server</a></h3>
+<pre><code class="language-bash">swissarmyhammer serve --help
+</code></pre>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<h3 id="add-to-claude-code"><a class="header" href="#add-to-claude-code">Add to Claude Code</a></h3>
+<p>Configure Claude Code to use SwissArmyHammer as an MCP server:</p>
+<pre><code class="language-bash">claude mcp add --scope user swissarmyhammer swissarmyhammer serve
+</code></pre>
+<p>This command:</p>
+<ul>
+<li>Adds <code>swissarmyhammer</code> as an MCP server name</li>
+<li>Uses <code>swissarmyhammer serve</code> as the command to start the server</li>
+<li>Sets user scope (available for your user account)</li>
+</ul>
+<h3 id="alternative-configuration-methods"><a class="header" href="#alternative-configuration-methods">Alternative Configuration Methods</a></h3>
+<h4 id="manual-configuration"><a class="header" href="#manual-configuration">Manual Configuration</a></h4>
+<p>If you prefer to configure manually, add this to your Claude Code MCP configuration:</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "swissarmyhammer": {
+      "command": "swissarmyhammer",
+      "args": ["serve"]
+    }
+  }
+}
+</code></pre>
+<h4 id="project-specific-configuration"><a class="header" href="#project-specific-configuration">Project-Specific Configuration</a></h4>
+<p>For project-specific prompts, create a local configuration:</p>
+<pre><code class="language-bash"># In your project directory
+claude mcp add --scope project swissarmyhammer_local swissarmyhammer serve --prompts ./prompts
+</code></pre>
+<h2 id="verification-1"><a class="header" href="#verification-1">Verification</a></h2>
+<h3 id="check-mcp-configuration"><a class="header" href="#check-mcp-configuration">Check MCP Configuration</a></h3>
+<p>List your configured MCP servers:</p>
+<pre><code class="language-bash">claude mcp list
+</code></pre>
+<p>You should see <code>swissarmyhammer</code> in the output.</p>
+<h3 id="test-the-connection"><a class="header" href="#test-the-connection">Test the Connection</a></h3>
+<p>Start Claude Code and verify SwissArmyHammer is connected:</p>
+<ol>
+<li>Open Claude Code</li>
+<li>Look for SwissArmyHammer prompts in the available tools</li>
+<li>Try using a built-in prompt like <code>help</code> or <code>plan</code></li>
+</ol>
+<h3 id="debug-connection-issues"><a class="header" href="#debug-connection-issues">Debug Connection Issues</a></h3>
+<p>If SwissArmyHammer doesn’t appear in Claude Code:</p>
+<pre><code class="language-bash"># Check if the server starts correctly
+swissarmyhammer serve --debug
+
+# Verify prompts are loaded
+swissarmyhammer list
+
+# Check configuration
+claude mcp list
+</code></pre>
+<h2 id="usage-in-claude-code"><a class="header" href="#usage-in-claude-code">Usage in Claude Code</a></h2>
+<h3 id="available-features"><a class="header" href="#available-features">Available Features</a></h3>
+<p>Once configured, SwissArmyHammer provides these features in Claude Code:</p>
+<h4 id="1-prompt-library-access"><a class="header" href="#1-prompt-library-access">1. Prompt Library Access</a></h4>
+<p>All your prompts become available as tools in Claude Code:</p>
+<ul>
+<li>Built-in prompts (code review, debugging, documentation)</li>
+<li>User prompts (in <code>~/.swissarmyhammer/prompts/</code>)</li>
+<li>Local prompts (in current project directory)</li>
+</ul>
+<h4 id="2-dynamic-arguments"><a class="header" href="#2-dynamic-arguments">2. Dynamic Arguments</a></h4>
+<p>Prompts with arguments become interactive forms in Claude Code:</p>
+<pre><code class="language-markdown">---
+name: code-review
+arguments:
+  - name: code
+    description: Code to review
+    required: true
+  - name: language
+    description: Programming language
+    required: false
+    default: auto-detect
+---
+</code></pre>
+<h4 id="3-live-reloading"><a class="header" href="#3-live-reloading">3. Live Reloading</a></h4>
+<p>Changes to prompt files are automatically detected and reloaded.</p>
+<h3 id="using-prompts"><a class="header" href="#using-prompts">Using Prompts</a></h3>
+<h4 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h4>
+<ol>
+<li><strong>Select a Prompt</strong>: Choose from available SwissArmyHammer prompts</li>
+<li><strong>Fill Arguments</strong>: Provide required and optional parameters</li>
+<li><strong>Execute</strong>: Claude runs the prompt with your arguments</li>
+</ol>
+<h4 id="example-workflow"><a class="header" href="#example-workflow">Example Workflow</a></h4>
+<ol>
+<li>
+<p><strong>Code Review</strong>:</p>
+<ul>
+<li>Select <code>code-review</code> prompt</li>
+<li>Paste your code in the <code>code</code> field</li>
+<li>Set <code>language</code> if needed</li>
+<li>Execute to get detailed code analysis</li>
+</ul>
+</li>
+<li>
+<p><strong>Debug Helper</strong>:</p>
+<ul>
+<li>Select <code>debug</code> prompt</li>
+<li>Describe your error in the <code>error</code> field</li>
+<li>Get step-by-step debugging guidance</li>
+</ul>
+</li>
+<li>
+<p><strong>Documentation</strong>:</p>
+<ul>
+<li>Select <code>docs</code> prompt</li>
+<li>Provide code or specifications</li>
+<li>Generate comprehensive documentation</li>
+</ul>
+</li>
+</ol>
+<h3 id="advanced-usage"><a class="header" href="#advanced-usage">Advanced Usage</a></h3>
+<h4 id="prompt-chaining"><a class="header" href="#prompt-chaining">Prompt Chaining</a></h4>
+<p>Use multiple prompts in sequence:</p>
+<pre><code class="language-markdown">1. Use `analyze-code` to understand the codebase
+2. Use `plan` to create implementation strategy  
+3. Use `code-review` on the new code
+4. Use `docs` to generate documentation
+</code></pre>
+<h4 id="custom-workflows"><a class="header" href="#custom-workflows">Custom Workflows</a></h4>
+<p>Create project-specific prompt workflows:</p>
+<pre><code class="language-markdown"># Project prompts in ./prompts/
+
+## development/
+- project-setup.md - Initialize new features
+- code-standards.md - Apply project coding standards
+- deployment.md - Deploy to staging/production
+
+## documentation/  
+- api-docs.md - Generate API documentation
+- user-guide.md - Create user-facing documentation
+- changelog.md - Generate release notes
+</code></pre>
+<h2 id="configuration-options"><a class="header" href="#configuration-options">Configuration Options</a></h2>
+<h3 id="server-configuration"><a class="header" href="#server-configuration">Server Configuration</a></h3>
+<p>The <code>swissarmyhammer serve</code> command accepts several options:</p>
+<pre><code class="language-bash">swissarmyhammer serve [OPTIONS]
+</code></pre>
+<h4 id="common-options"><a class="header" href="#common-options">Common Options</a></h4>
+<ul>
+<li><code>--port &lt;PORT&gt;</code> - Port for MCP communication (default: auto)</li>
+<li><code>--host &lt;HOST&gt;</code> - Host to bind to (default: localhost)</li>
+<li><code>--prompts &lt;DIR&gt;</code> - Additional prompt directories</li>
+<li><code>--builtin &lt;BOOL&gt;</code> - Include built-in prompts (default: true)</li>
+<li><code>--watch &lt;BOOL&gt;</code> - Enable file watching (default: true)</li>
+<li><code>--debug</code> - Enable debug logging</li>
+</ul>
+<h4 id="examples-1"><a class="header" href="#examples-1">Examples</a></h4>
+<pre><code class="language-bash"># Basic server
+swissarmyhammer serve
+
+# Custom prompt directory
+swissarmyhammer serve --prompts /path/to/prompts
+
+# Multiple prompt directories
+swissarmyhammer serve --prompts ./prompts --prompts ~/.custom-prompts
+
+# Debug mode
+swissarmyhammer serve --debug
+
+# Disable built-in prompts
+swissarmyhammer serve --builtin false
+</code></pre>
+<h3 id="claude-code-configuration"><a class="header" href="#claude-code-configuration">Claude Code Configuration</a></h3>
+<h4 id="server-arguments"><a class="header" href="#server-arguments">Server Arguments</a></h4>
+<p>Pass arguments to the SwissArmyHammer server:</p>
+<pre><code class="language-bash"># Add with custom options
+claude mcp add swissarmyhammer_custom swissarmyhammer serve --prompts ./project-prompts --debug
+</code></pre>
+<h4 id="environment-variables-1"><a class="header" href="#environment-variables-1">Environment Variables</a></h4>
+<p>Configure through environment variables:</p>
+<pre><code class="language-bash">export SWISSARMYHAMMER_PROMPTS_DIR=/path/to/prompts
+export SWISSARMYHAMMER_DEBUG=true
+claude mcp add swissarmyhammer swissarmyhammer serve
+</code></pre>
+<h2 id="prompt-organization-1"><a class="header" href="#prompt-organization-1">Prompt Organization</a></h2>
+<h3 id="directory-structure-1"><a class="header" href="#directory-structure-1">Directory Structure</a></h3>
+<p>Organize prompts for easy discovery in Claude Code:</p>
+<pre><code>~/.swissarmyhammer/prompts/
+├── development/
+│   ├── code-review.md
+│   ├── debug-helper.md
+│   ├── refactor.md
+│   └── testing.md
+├── writing/
+│   ├── blog-post.md
+│   ├── documentation.md
+│   └── email.md
+├── analysis/
+│   ├── data-insights.md
+│   └── research.md
+└── productivity/
+    ├── task-planning.md
+    └── meeting-notes.md
+</code></pre>
+<h3 id="naming-conventions-1"><a class="header" href="#naming-conventions-1">Naming Conventions</a></h3>
+<p>Use clear, descriptive names that work well in Claude Code:</p>
+<pre><code class="language-markdown"># Good - Clear and specific
+code-review-python.md
+debug-javascript-async.md
+documentation-api.md
+
+# Bad - Too generic
+review.md
+debug.md
+docs.md
+</code></pre>
+<h3 id="categories-and-tags-1"><a class="header" href="#categories-and-tags-1">Categories and Tags</a></h3>
+<p>Use categories and tags for better organization in Claude Code:</p>
+<pre><code class="language-yaml">---
+name: python-code-review
+title: Python Code Review
+description: Reviews Python code for PEP 8, security, and performance
+category: development
+tags: ["python", "code-review", "pep8", "security"]
+---
+</code></pre>
+<h2 id="troubleshooting-4"><a class="header" href="#troubleshooting-4">Troubleshooting</a></h2>
+<h3 id="common-issues-1"><a class="header" href="#common-issues-1">Common Issues</a></h3>
+<h4 id="swissarmyhammer-not-available"><a class="header" href="#swissarmyhammer-not-available">SwissArmyHammer Not Available</a></h4>
+<p><strong>Symptoms</strong>: SwissArmyHammer prompts don’t appear in Claude Code</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>Verify installation: <code>swissarmyhammer --version</code></li>
+<li>Check MCP configuration: <code>claude mcp list</code></li>
+<li>Test server manually: <code>swissarmyhammer serve --debug</code></li>
+<li>Restart Claude Code</li>
+</ol>
+<h4 id="connection-errors"><a class="header" href="#connection-errors">Connection Errors</a></h4>
+<p><strong>Symptoms</strong>: Error messages about MCP connection</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>Check if port is available: <code>swissarmyhammer serve --port 8080</code></li>
+<li>Verify permissions: Run with <code>--debug</code> to see detailed logs</li>
+<li>Check firewall settings</li>
+<li>Try different host: <code>--host 127.0.0.1</code></li>
+</ol>
+<h4 id="prompts-not-loading"><a class="header" href="#prompts-not-loading">Prompts Not Loading</a></h4>
+<p><strong>Symptoms</strong>: Some prompts missing or outdated</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>Check prompt syntax: <code>swissarmyhammer test &lt;prompt-name&gt;</code></li>
+<li>Verify file permissions in prompt directories</li>
+<li>Check for YAML syntax errors</li>
+<li>Restart the MCP server: Restart Claude Code</li>
+</ol>
+<h4 id="performance-issues"><a class="header" href="#performance-issues">Performance Issues</a></h4>
+<p><strong>Symptoms</strong>: Slow prompt loading or execution</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>Reduce prompt directory size</li>
+<li>Disable file watching: <code>--watch false</code></li>
+<li>Use specific prompt directories: <code>--prompts ./specific-dir</code></li>
+<li>Check system resources</li>
+</ol>
+<h3 id="debug-mode"><a class="header" href="#debug-mode">Debug Mode</a></h3>
+<p>Enable debug mode for detailed troubleshooting:</p>
+<pre><code class="language-bash">swissarmyhammer serve --debug
+</code></pre>
+<p>Debug mode provides:</p>
+<ul>
+<li>Detailed logging of MCP communication</li>
+<li>Prompt loading information</li>
+<li>Error stack traces</li>
+<li>Performance metrics</li>
+</ul>
+<h3 id="logs-and-diagnostics"><a class="header" href="#logs-and-diagnostics">Logs and Diagnostics</a></h3>
+<h4 id="server-logs"><a class="header" href="#server-logs">Server Logs</a></h4>
+<p>SwissArmyHammer logs to standard output:</p>
+<pre><code class="language-bash"># Save logs to file
+swissarmyhammer serve --debug &gt; swissarmyhammer.log 2&gt;&amp;1
+</code></pre>
+<h4 id="claude-code-logs"><a class="header" href="#claude-code-logs">Claude Code Logs</a></h4>
+<p>Check Claude Code logs for MCP-related issues:</p>
+<pre><code class="language-bash"># Location varies by platform
+# macOS: ~/Library/Logs/Claude Code/
+# Linux: ~/.local/share/claude-code/logs/
+# Windows: %APPDATA%/Claude Code/logs/
+</code></pre>
+<h4 id="health-check"><a class="header" href="#health-check">Health Check</a></h4>
+<p>Use the doctor command to check configuration:</p>
+<pre><code class="language-bash">swissarmyhammer doctor
+</code></pre>
+<p>This checks:</p>
+<ul>
+<li>Installation status</li>
+<li>Configuration validity</li>
+<li>Prompt directory accessibility</li>
+<li>MCP server functionality</li>
+</ul>
+<h2 id="best-practices-3"><a class="header" href="#best-practices-3">Best Practices</a></h2>
+<h3 id="1-organize-prompts-logically"><a class="header" href="#1-organize-prompts-logically">1. Organize Prompts Logically</a></h3>
+<p>Structure prompts by workflow rather than just topic:</p>
+<pre><code>prompts/
+├── workflows/
+│   ├── code-review-workflow.md
+│   ├── feature-development.md
+│   └── bug-fixing.md
+├── utilities/
+│   ├── format-code.md
+│   ├── generate-tests.md
+│   └── extract-docs.md
+</code></pre>
+<h3 id="2-use-descriptive-metadata"><a class="header" href="#2-use-descriptive-metadata">2. Use Descriptive Metadata</a></h3>
+<p>Make prompts discoverable with good metadata:</p>
+<pre><code class="language-yaml">---
+name: comprehensive-code-review
+title: Comprehensive Code Review
+description: Deep analysis of code for security, performance, and maintainability
+category: development
+tags: ["security", "performance", "maintainability", "best-practices"]
+keywords: ["static analysis", "code quality", "peer review"]
+---
+</code></pre>
+<h3 id="3-test-prompts-regularly"><a class="header" href="#3-test-prompts-regularly">3. Test Prompts Regularly</a></h3>
+<p>Validate prompts before using in Claude Code:</p>
+<pre><code class="language-bash"># Test basic functionality
+swissarmyhammer test code-review --code "def hello(): print('hi')"
+
+# Test all prompts
+swissarmyhammer test --all
+</code></pre>
+<h3 id="4-use-project-specific-configurations"><a class="header" href="#4-use-project-specific-configurations">4. Use Project-Specific Configurations</a></h3>
+<p>Create project-specific prompt collections:</p>
+<pre><code class="language-bash"># Per-project MCP server
+cd my-project
+claude mcp add project_prompts swissarmyhammer serve --prompts ./prompts
+</code></pre>
+<h3 id="5-keep-prompts-updated"><a class="header" href="#5-keep-prompts-updated">5. Keep Prompts Updated</a></h3>
+<p>Maintain prompt quality:</p>
+<pre><code class="language-yaml">---
+name: my-prompt
+version: 1.2.0
+updated: 2024-03-20  # Track changes
+---
+</code></pre>
+<h2 id="examples-2"><a class="header" href="#examples-2">Examples</a></h2>
+<h3 id="complete-setup-example"><a class="header" href="#complete-setup-example">Complete Setup Example</a></h3>
+<p>Here’s a complete example of setting up SwissArmyHammer for a development project:</p>
+<pre><code class="language-bash"># 1. Install SwissArmyHammer
+curl -sSL https://raw.githubusercontent.com/wballard/swissarmyhammer/main/install.sh | bash
+
+# 2. Create project prompts
+mkdir -p ./prompts/development
+cat &gt; ./prompts/development/project-review.md &lt;&lt; 'EOF'
+---
+name: project-code-review
+title: Project Code Review
+description: Reviews code according to our project standards
+category: development
+arguments:
+  - name: code
+    description: Code to review
+    required: true
+  - name: component
+    description: Which component this code belongs to
+    required: false
+    default: general
+---
+
+# Project Code Review
+
+Please review this {{component}} code according to our project standards:
+
+```{{code}}```
+
+Check for:
+- Adherence to our coding standards
+- Security best practices
+- Performance considerations
+- Documentation completeness
+- Test coverage
+
+Provide specific, actionable feedback.
+EOF
+
+# 3. Configure Claude Code
+claude mcp add project_sah swissarmyhammer serve --prompts ./prompts
+
+# 4. Test the setup
+swissarmyhammer test project-code-review --code "print('hello')" --component "utility"
+
+# 5. Start using in Claude Code
+echo "Setup complete! Restart Claude Code to use your prompts."
+</code></pre>
+<h2 id="next-steps-4"><a class="header" href="#next-steps-4">Next Steps</a></h2>
+<ul>
+<li>Explore <a href="./builtin-prompts.html">Built-in Prompts</a> to see what’s available</li>
+<li>Learn <a href="./creating-prompts.html">Creating Prompts</a> to build custom prompts</li>
+<li>Read about <a href="./prompt-organization.html">Prompt Organization</a> strategies</li>
+<li>Check the <a href="./cli-reference.html">CLI Reference</a> for all available commands</li>
+<li>See <a href="./troubleshooting.html">Troubleshooting</a> for additional help</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="command-line-interface"><a class="header" href="#command-line-interface">Command Line Interface</a></h1>
 <p>SwissArmyHammer provides a comprehensive command-line interface for managing prompts, running the MCP server, and integrating with your development workflow.</p>
-<h2 id="installation-1"><a class="header" href="#installation-1">Installation</a></h2>
+<h2 id="installation-2"><a class="header" href="#installation-2">Installation</a></h2>
 <pre><code class="language-bash"># Install from Git repository (requires Rust)
 cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
 
 # Ensure ~/.cargo/bin is in your PATH
 export PATH="$HOME/.cargo/bin:$PATH"
 </code></pre>
-<h2 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h2>
+<h2 id="basic-usage-1"><a class="header" href="#basic-usage-1">Basic Usage</a></h2>
 <pre><code class="language-bash">swissarmyhammer [COMMAND] [OPTIONS]
 </code></pre>
 <h2 id="global-options"><a class="header" href="#global-options">Global Options</a></h2>
@@ -1734,7 +2944,7 @@ swissarmyhammer completion zsh &gt; ~/.zfunc/_swissarmyhammer
 <li><code>4</code> - Prompt not found</li>
 <li><code>5</code> - Template rendering error</li>
 </ul>
-<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<h2 id="configuration-1"><a class="header" href="#configuration-1">Configuration</a></h2>
 <p>SwissArmyHammer looks for prompts in these directories (in order):</p>
 <ol>
 <li>Built-in prompts (embedded in the binary)</li>
@@ -1742,19 +2952,449 @@ swissarmyhammer completion zsh &gt; ~/.zfunc/_swissarmyhammer
 <li>Local prompts: <code>./prompts/</code> (current directory)</li>
 </ol>
 <p>For detailed command documentation, see the individual command pages linked in the table above.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="serve"><a class="header" href="#serve">serve</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="serve-command"><a class="header" href="#serve-command">serve Command</a></h1>
+<p>The <code>serve</code> command starts SwissArmyHammer as a Model Context Protocol (MCP) server, making your prompts available to Claude Code and other MCP clients.</p>
+<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
+<pre><code class="language-bash">swissarmyhammer serve [OPTIONS]
+</code></pre>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>The serve command:</p>
+<ul>
+<li>Starts an MCP server that provides access to your prompt library</li>
+<li>Loads prompts from various directories (built-in, user, local)</li>
+<li>Watches for file changes and automatically reloads prompts</li>
+<li>Provides real-time access to prompts for Claude Code integration</li>
+</ul>
+<h2 id="options"><a class="header" href="#options">Options</a></h2>
+<h3 id="--port-port"><a class="header" href="#--port-port"><code>--port &lt;PORT&gt;</code></a></h3>
+<ul>
+<li><strong>Description</strong>: Port number for MCP communication</li>
+<li><strong>Default</strong>: Automatically assigned by the system</li>
+<li><strong>Example</strong>: <code>--port 8080</code></li>
+</ul>
+<pre><code class="language-bash">swissarmyhammer serve --port 8080
+</code></pre>
+<h3 id="--host-host"><a class="header" href="#--host-host"><code>--host &lt;HOST&gt;</code></a></h3>
+<ul>
+<li><strong>Description</strong>: Host address to bind the server to</li>
+<li><strong>Default</strong>: <code>localhost</code></li>
+<li><strong>Example</strong>: <code>--host 127.0.0.1</code></li>
+</ul>
+<pre><code class="language-bash">swissarmyhammer serve --host 127.0.0.1
+</code></pre>
+<h3 id="--prompts-directory"><a class="header" href="#--prompts-directory"><code>--prompts &lt;DIRECTORY&gt;</code></a></h3>
+<ul>
+<li><strong>Description</strong>: Additional directories to load prompts from</li>
+<li><strong>Default</strong>: Standard locations (<code>~/.swissarmyhammer/prompts</code>, <code>./prompts</code>)</li>
+<li><strong>Repeatable</strong>: Can be used multiple times</li>
+<li><strong>Example</strong>: <code>--prompts ./custom-prompts</code></li>
+</ul>
+<pre><code class="language-bash"># Single custom directory
+swissarmyhammer serve --prompts ./project-prompts
+
+# Multiple directories
+swissarmyhammer serve --prompts ./prompts --prompts ~/.custom-prompts
+</code></pre>
+<h3 id="--builtin-boolean"><a class="header" href="#--builtin-boolean"><code>--builtin &lt;BOOLEAN&gt;</code></a></h3>
+<ul>
+<li><strong>Description</strong>: Include built-in prompts in the library</li>
+<li><strong>Default</strong>: <code>true</code></li>
+<li><strong>Values</strong>: <code>true</code>, <code>false</code></li>
+<li><strong>Example</strong>: <code>--builtin false</code></li>
+</ul>
+<pre><code class="language-bash"># Disable built-in prompts
+swissarmyhammer serve --builtin false
+
+# Explicitly enable built-in prompts
+swissarmyhammer serve --builtin true
+</code></pre>
+<h3 id="--watch-boolean"><a class="header" href="#--watch-boolean"><code>--watch &lt;BOOLEAN&gt;</code></a></h3>
+<ul>
+<li><strong>Description</strong>: Enable file watching for automatic prompt reloading</li>
+<li><strong>Default</strong>: <code>true</code></li>
+<li><strong>Values</strong>: <code>true</code>, <code>false</code></li>
+<li><strong>Example</strong>: <code>--watch false</code></li>
+</ul>
+<pre><code class="language-bash"># Disable file watching (for performance)
+swissarmyhammer serve --watch false
+</code></pre>
+<h3 id="--debug"><a class="header" href="#--debug"><code>--debug</code></a></h3>
+<ul>
+<li><strong>Description</strong>: Enable debug logging for troubleshooting</li>
+<li><strong>Default</strong>: Disabled</li>
+<li><strong>Output</strong>: Detailed logs to stdout</li>
+</ul>
+<pre><code class="language-bash">swissarmyhammer serve --debug
+</code></pre>
+<h3 id="--config-file"><a class="header" href="#--config-file"><code>--config &lt;FILE&gt;</code></a></h3>
+<ul>
+<li><strong>Description</strong>: Path to configuration file</li>
+<li><strong>Default</strong>: <code>~/.swissarmyhammer/config.toml</code></li>
+<li><strong>Example</strong>: <code>--config ./custom-config.toml</code></li>
+</ul>
+<pre><code class="language-bash">swissarmyhammer serve --config ./project-config.toml
+</code></pre>
+<h2 id="examples-3"><a class="header" href="#examples-3">Examples</a></h2>
+<h3 id="basic-server"><a class="header" href="#basic-server">Basic Server</a></h3>
+<p>Start a basic MCP server with default settings:</p>
+<pre><code class="language-bash">swissarmyhammer serve
+</code></pre>
+<p>This loads:</p>
+<ul>
+<li>Built-in prompts</li>
+<li>User prompts from <code>~/.swissarmyhammer/prompts/</code></li>
+<li>Local prompts from <code>./prompts/</code> (if exists)</li>
+<li>Enables file watching</li>
+</ul>
+<h3 id="development-server"><a class="header" href="#development-server">Development Server</a></h3>
+<p>For development with debug logging:</p>
+<pre><code class="language-bash">swissarmyhammer serve --debug
+</code></pre>
+<p>Output includes:</p>
+<ul>
+<li>Prompt loading details</li>
+<li>MCP protocol messages</li>
+<li>File watching events</li>
+<li>Error stack traces</li>
+</ul>
+<h3 id="custom-prompt-directory"><a class="header" href="#custom-prompt-directory">Custom Prompt Directory</a></h3>
+<p>Serve prompts from a specific directory:</p>
+<pre><code class="language-bash">swissarmyhammer serve --prompts /path/to/my/prompts
+</code></pre>
+<h3 id="multiple-directories"><a class="header" href="#multiple-directories">Multiple Directories</a></h3>
+<p>Load prompts from multiple locations:</p>
+<pre><code class="language-bash">swissarmyhammer serve \
+  --prompts ./project-prompts \
+  --prompts ~/.shared-prompts \
+  --prompts /team/common-prompts
+</code></pre>
+<h3 id="project-only-prompts"><a class="header" href="#project-only-prompts">Project-Only Prompts</a></h3>
+<p>Serve only local project prompts (no built-in or user prompts):</p>
+<pre><code class="language-bash">swissarmyhammer serve \
+  --prompts ./prompts \
+  --builtin false
+</code></pre>
+<h3 id="performance-optimized"><a class="header" href="#performance-optimized">Performance-Optimized</a></h3>
+<p>For large prompt collections, disable file watching:</p>
+<pre><code class="language-bash">swissarmyhammer serve \
+  --watch false \
+  --prompts ./large-prompt-collection
+</code></pre>
+<h3 id="custom-port-and-host"><a class="header" href="#custom-port-and-host">Custom Port and Host</a></h3>
+<p>Specify network settings:</p>
+<pre><code class="language-bash">swissarmyhammer serve \
+  --host 0.0.0.0 \
+  --port 9000
+</code></pre>
+<h2 id="prompt-loading-order"><a class="header" href="#prompt-loading-order">Prompt Loading Order</a></h2>
+<p>SwissArmyHammer loads prompts in this order:</p>
+<ol>
+<li>
+<p><strong>Built-in prompts</strong> (if <code>--builtin true</code>)</p>
+<ul>
+<li>Located in the binary</li>
+<li>Categories: development, writing, analysis, etc.</li>
+</ul>
+</li>
+<li>
+<p><strong>User prompts</strong> (always loaded)</p>
+<ul>
+<li>Location: <code>~/.swissarmyhammer/prompts/</code></li>
+<li>Your personal prompt library</li>
+</ul>
+</li>
+<li>
+<p><strong>Custom directories</strong> (from <code>--prompts</code> flags)</p>
+<ul>
+<li>Processed in order specified</li>
+<li>Can override earlier prompts with same name</li>
+</ul>
+</li>
+<li>
+<p><strong>Local prompts</strong> (always checked)</p>
+<ul>
+<li>Location: <code>./prompts/</code> in current directory</li>
+<li>Project-specific prompts</li>
+</ul>
+</li>
+</ol>
+<h3 id="prompt-override-behavior"><a class="header" href="#prompt-override-behavior">Prompt Override Behavior</a></h3>
+<p>When prompts have the same name:</p>
+<ul>
+<li><strong>Later sources override earlier ones</strong></li>
+<li><strong>Local prompts have highest priority</strong></li>
+<li><strong>Built-in prompts have lowest priority</strong></li>
+</ul>
+<p>Example hierarchy:</p>
+<pre><code>./prompts/code-review.md          (highest priority)
+~/.custom/code-review.md          (from --prompts ~/.custom)
+~/.swissarmyhammer/prompts/code-review.md  (user prompts)
+built-in:code-review              (lowest priority)
+</code></pre>
+<h2 id="file-watching"><a class="header" href="#file-watching">File Watching</a></h2>
+<p>When file watching is enabled (<code>--watch true</code>), the server automatically:</p>
+<h3 id="detects-changes"><a class="header" href="#detects-changes">Detects Changes</a></h3>
+<ul>
+<li>New prompt files added</li>
+<li>Existing prompt files modified</li>
+<li>Prompt files deleted</li>
+<li>Directory structure changes</li>
+</ul>
+<h3 id="reloads-prompts"><a class="header" href="#reloads-prompts">Reloads Prompts</a></h3>
+<ul>
+<li>Parses updated files</li>
+<li>Validates YAML front matter</li>
+<li>Updates the prompt library</li>
+<li>Notifies connected MCP clients</li>
+</ul>
+<h3 id="handles-errors"><a class="header" href="#handles-errors">Handles Errors</a></h3>
+<ul>
+<li>Invalid YAML syntax</li>
+<li>Missing required fields</li>
+<li>Template compilation errors</li>
+<li>Logs errors without stopping the server</li>
+</ul>
+<h3 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h3>
+<p>File watching uses system resources:</p>
+<ul>
+<li><strong>Memory</strong>: Stores file metadata</li>
+<li><strong>CPU</strong>: Processes file system events</li>
+<li><strong>Disk I/O</strong>: Reads modified files</li>
+</ul>
+<p>For large prompt collections (1000+ files), consider:</p>
+<pre><code class="language-bash"># Disable watching for better performance
+swissarmyhammer serve --watch false
+</code></pre>
+<h2 id="mcp-protocol-details"><a class="header" href="#mcp-protocol-details">MCP Protocol Details</a></h2>
+<h3 id="server-capabilities"><a class="header" href="#server-capabilities">Server Capabilities</a></h3>
+<p>SwissArmyHammer advertises these MCP capabilities:</p>
+<pre><code class="language-json">{
+  "capabilities": {
+    "prompts": {
+      "listChanged": true
+    },
+    "tools": {
+      "listChanged": false
+    }
+  }
+}
+</code></pre>
+<h3 id="prompt-exposure"><a class="header" href="#prompt-exposure">Prompt Exposure</a></h3>
+<p>Each prompt becomes an MCP prompt with:</p>
+<ul>
+<li><strong>Name</strong>: From prompt’s <code>name</code> field</li>
+<li><strong>Description</strong>: From prompt’s <code>description</code> field</li>
+<li><strong>Arguments</strong>: From prompt’s <code>arguments</code> array</li>
+</ul>
+<h3 id="example-mcp-prompt"><a class="header" href="#example-mcp-prompt">Example MCP Prompt</a></h3>
+<p>A SwissArmyHammer prompt:</p>
+<pre><code class="language-yaml">---
+name: code-review
+title: Code Review Assistant
+description: Reviews code for best practices and issues
+arguments:
+  - name: code
+    description: Code to review
+    required: true
+  - name: language
+    description: Programming language
+    required: false
+    default: auto-detect
+---
+</code></pre>
+<p>Becomes this MCP prompt:</p>
+<pre><code class="language-json">{
+  "name": "code-review",
+  "description": "Reviews code for best practices and issues",
+  "arguments": [
+    {
+      "name": "code",
+      "description": "Code to review",
+      "required": true
+    },
+    {
+      "name": "language", 
+      "description": "Programming language",
+      "required": false
+    }
+  ]
+}
+</code></pre>
+<h2 id="integration-with-claude-code"><a class="header" href="#integration-with-claude-code">Integration with Claude Code</a></h2>
+<h3 id="configuration-2"><a class="header" href="#configuration-2">Configuration</a></h3>
+<p>Add SwissArmyHammer to Claude Code’s MCP configuration:</p>
+<pre><code class="language-bash">claude mcp add swissarmyhammer swissarmyhammer serve
+</code></pre>
+<h3 id="custom-configuration"><a class="header" href="#custom-configuration">Custom Configuration</a></h3>
+<p>Add with specific options:</p>
+<pre><code class="language-bash">claude mcp add project_sah swissarmyhammer serve --prompts ./project-prompts --debug
+</code></pre>
+<h3 id="multiple-servers"><a class="header" href="#multiple-servers">Multiple Servers</a></h3>
+<p>Run different SwissArmyHammer instances:</p>
+<pre><code class="language-bash"># Global prompts
+claude mcp add sah_global swissarmyhammer serve
+
+# Project-specific prompts  
+claude mcp add sah_project swissarmyhammer serve --prompts ./prompts --builtin false
+</code></pre>
+<h2 id="logging-and-output"><a class="header" href="#logging-and-output">Logging and Output</a></h2>
+<h3 id="standard-output"><a class="header" href="#standard-output">Standard Output</a></h3>
+<p>Normal operation logs:</p>
+<pre><code>2024-03-20T10:30:00Z INFO SwissArmyHammer MCP Server starting
+2024-03-20T10:30:00Z INFO Loaded 25 prompts from 3 directories
+2024-03-20T10:30:00Z INFO Server listening on localhost:8080
+2024-03-20T10:30:00Z INFO MCP client connected
+</code></pre>
+<h3 id="debug-output"><a class="header" href="#debug-output">Debug Output</a></h3>
+<p>With <code>--debug</code> flag:</p>
+<pre><code>2024-03-20T10:30:00Z DEBUG Loading prompts from: ~/.swissarmyhammer/prompts
+2024-03-20T10:30:00Z DEBUG Found prompt file: code-review.md
+2024-03-20T10:30:00Z DEBUG Parsed prompt: code-review (Code Review Assistant)
+2024-03-20T10:30:00Z DEBUG MCP request: prompts/list
+2024-03-20T10:30:00Z DEBUG MCP response: 25 prompts returned
+</code></pre>
+<h3 id="error-handling-2"><a class="header" href="#error-handling-2">Error Handling</a></h3>
+<p>The server continues running even with errors:</p>
+<pre><code>2024-03-20T10:30:00Z ERROR Failed to parse prompt: invalid-prompt.md
+2024-03-20T10:30:00Z ERROR   YAML error: missing required field 'description'
+2024-03-20T10:30:00Z INFO  Continuing with 24 valid prompts
+</code></pre>
+<h2 id="troubleshooting-5"><a class="header" href="#troubleshooting-5">Troubleshooting</a></h2>
+<h3 id="server-wont-start"><a class="header" href="#server-wont-start">Server Won’t Start</a></h3>
+<p><strong>Check port availability:</strong></p>
+<pre><code class="language-bash"># Try a specific port
+swissarmyhammer serve --port 8080
+
+# Check if port is in use
+lsof -i :8080  # macOS/Linux
+netstat -an | findstr 8080  # Windows
+</code></pre>
+<p><strong>Check permissions:</strong></p>
+<pre><code class="language-bash"># Run with debug to see detailed errors
+swissarmyhammer serve --debug
+</code></pre>
+<h3 id="prompts-not-loading-1"><a class="header" href="#prompts-not-loading-1">Prompts Not Loading</a></h3>
+<p><strong>Verify directories exist:</strong></p>
+<pre><code class="language-bash"># Check default directories
+ls -la ~/.swissarmyhammer/prompts
+ls -la ./prompts
+
+# Check custom directories
+ls -la /path/to/custom/prompts
+</code></pre>
+<p><strong>Validate prompt syntax:</strong></p>
+<pre><code class="language-bash"># Test individual prompts
+swissarmyhammer test prompt-name
+
+# Validate all prompts
+swissarmyhammer doctor
+</code></pre>
+<h3 id="performance-issues-1"><a class="header" href="#performance-issues-1">Performance Issues</a></h3>
+<p><strong>Large prompt collections:</strong></p>
+<pre><code class="language-bash"># Disable file watching
+swissarmyhammer serve --watch false
+
+# Limit to specific directories
+swissarmyhammer serve --prompts ./essential-prompts --builtin false
+</code></pre>
+<p><strong>Memory usage:</strong></p>
+<pre><code class="language-bash"># Monitor memory usage
+top -p $(pgrep swissarmyhammer)  # Linux
+top | grep swissarmyhammer       # macOS
+</code></pre>
+<h3 id="connection-issues"><a class="header" href="#connection-issues">Connection Issues</a></h3>
+<p><strong>MCP client can’t connect:</strong></p>
+<pre><code class="language-bash"># Check server is running
+ps aux | grep swissarmyhammer
+
+# Test with different host/port
+swissarmyhammer serve --host 127.0.0.1 --port 8080
+
+# Check firewall settings
+</code></pre>
+<p><strong>Debug MCP communication:</strong></p>
+<pre><code class="language-bash"># Enable debug logging
+swissarmyhammer serve --debug
+
+# Save logs to file
+swissarmyhammer serve --debug &gt; server.log 2&gt;&amp;1
+</code></pre>
+<h2 id="configuration-file"><a class="header" href="#configuration-file">Configuration File</a></h2>
+<p>Create a configuration file for persistent settings:</p>
+<pre><code class="language-toml"># ~/.swissarmyhammer/config.toml
+
+[server]
+host = "localhost"
+port = 8080
+debug = false
+
+[prompts]
+builtin = true
+watch = true
+directories = [
+    "~/.swissarmyhammer/prompts",
+    "./prompts",
+    "/team/shared-prompts"
+]
+</code></pre>
+<p>Use with:</p>
+<pre><code class="language-bash">swissarmyhammer serve --config ~/.swissarmyhammer/config.toml
+</code></pre>
+<h2 id="environment-variables-2"><a class="header" href="#environment-variables-2">Environment Variables</a></h2>
+<p>Configure through environment variables:</p>
+<pre><code class="language-bash">export SWISSARMYHAMMER_HOST=localhost
+export SWISSARMYHAMMER_PORT=8080
+export SWISSARMYHAMMER_DEBUG=true
+export SWISSARMYHAMMER_PROMPTS_DIR=/custom/prompts
+
+swissarmyhammer serve
+</code></pre>
+<h2 id="best-practices-4"><a class="header" href="#best-practices-4">Best Practices</a></h2>
+<h3 id="1-use-consistent-directory-structure"><a class="header" href="#1-use-consistent-directory-structure">1. Use Consistent Directory Structure</a></h3>
+<pre><code>~/.swissarmyhammer/prompts/
+├── development/
+├── writing/
+├── analysis/
+└── productivity/
+</code></pre>
+<h3 id="2-enable-debug-during-development"><a class="header" href="#2-enable-debug-during-development">2. Enable Debug During Development</a></h3>
+<pre><code class="language-bash">swissarmyhammer serve --debug
+</code></pre>
+<h3 id="3-use-project-specific-servers"><a class="header" href="#3-use-project-specific-servers">3. Use Project-Specific Servers</a></h3>
+<pre><code class="language-bash"># In each project
+claude mcp add project_sah swissarmyhammer serve --prompts ./prompts
+</code></pre>
+<h3 id="4-monitor-performance"><a class="header" href="#4-monitor-performance">4. Monitor Performance</a></h3>
+<pre><code class="language-bash"># For large collections
+swissarmyhammer serve --watch false --debug
+</code></pre>
+<h3 id="5-version-control-integration"><a class="header" href="#5-version-control-integration">5. Version Control Integration</a></h3>
+<pre><code class="language-bash"># .gitignore
+.swissarmyhammer/cache/
+.swissarmyhammer/logs/
+
+# Keep prompts in version control
+git add prompts/
+</code></pre>
+<h2 id="next-steps-5"><a class="header" href="#next-steps-5">Next Steps</a></h2>
+<ul>
+<li>Learn about <a href="./claude-code-integration.html">Claude Code Integration</a> setup</li>
+<li>Explore <a href="./configuration.html">Configuration</a> options</li>
+<li>See <a href="./troubleshooting.html">Troubleshooting</a> for common issues</li>
+<li>Check <a href="./builtin-prompts.html">Built-in Prompts</a> reference</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="search---search-and-discover-prompts"><a class="header" href="#search---search-and-discover-prompts">search - Search and Discover Prompts</a></h1>
 <p>The <code>search</code> command provides powerful functionality to find prompts in your collection using various search strategies and filters.</p>
 <h2 id="synopsis"><a class="header" href="#synopsis">Synopsis</a></h2>
 <pre><code class="language-bash">swissarmyhammer search [OPTIONS] [QUERY]
 </code></pre>
-<h2 id="description"><a class="header" href="#description">Description</a></h2>
+<h2 id="description-1"><a class="header" href="#description-1">Description</a></h2>
 <p>Search through your prompt collection using fuzzy matching, regular expressions, or exact text matching. The search can target specific fields and provides relevance-ranked results.</p>
-<h2 id="arguments"><a class="header" href="#arguments">Arguments</a></h2>
+<h2 id="arguments-3"><a class="header" href="#arguments-3">Arguments</a></h2>
 <ul>
 <li><code>QUERY</code> - Search term or pattern (optional if using filters)</li>
 </ul>
-<h2 id="options"><a class="header" href="#options">Options</a></h2>
+<h2 id="options-1"><a class="header" href="#options-1">Options</a></h2>
 <h3 id="search-strategy"><a class="header" href="#search-strategy">Search Strategy</a></h3>
 <ul>
 <li><code>--case-sensitive, -c</code> - Enable case-sensitive matching</li>
@@ -1783,7 +3423,7 @@ swissarmyhammer completion zsh &gt; ~/.zfunc/_swissarmyhammer
 <li><code>--limit, -l N</code> - Limit results to N prompts (default: 20)</li>
 <li><code>--json</code> - Output results in JSON format</li>
 </ul>
-<h2 id="examples-1"><a class="header" href="#examples-1">Examples</a></h2>
+<h2 id="examples-4"><a class="header" href="#examples-4">Examples</a></h2>
 <h3 id="basic-search"><a class="header" href="#basic-search">Basic Search</a></h3>
 <pre><code class="language-bash"># Find prompts containing "code"
 swissarmyhammer search code
@@ -1904,13 +3544,13 @@ swissarmyhammer search debug --limit 5 | \
 <h2 id="synopsis-1"><a class="header" href="#synopsis-1">Synopsis</a></h2>
 <pre><code class="language-bash">swissarmyhammer test [OPTIONS] &lt;PROMPT_ID&gt;
 </code></pre>
-<h2 id="description-1"><a class="header" href="#description-1">Description</a></h2>
+<h2 id="description-2"><a class="header" href="#description-2">Description</a></h2>
 <p>Test prompts interactively by providing arguments and viewing the rendered output. This is essential for debugging template issues, validating arguments, and refining prompts before deployment.</p>
-<h2 id="arguments-1"><a class="header" href="#arguments-1">Arguments</a></h2>
+<h2 id="arguments-4"><a class="header" href="#arguments-4">Arguments</a></h2>
 <ul>
 <li><code>PROMPT_ID</code> - The ID of the prompt to test (required)</li>
 </ul>
-<h2 id="options-1"><a class="header" href="#options-1">Options</a></h2>
+<h2 id="options-2"><a class="header" href="#options-2">Options</a></h2>
 <h3 id="argument-specification"><a class="header" href="#argument-specification">Argument Specification</a></h3>
 <ul>
 <li><code>--arg KEY=VALUE</code> - Provide argument values directly (can be used multiple times)</li>
@@ -1930,7 +3570,7 @@ swissarmyhammer search debug --limit 5 | \
 <li><strong>Template Rendering</strong>: Shows the rendered output</li>
 <li><strong>Actions</strong>: Offers to copy to clipboard or save to file</li>
 </ol>
-<h2 id="examples-2"><a class="header" href="#examples-2">Examples</a></h2>
+<h2 id="examples-5"><a class="header" href="#examples-5">Examples</a></h2>
 <h3 id="interactive-testing"><a class="header" href="#interactive-testing">Interactive Testing</a></h3>
 <pre><code class="language-bash"># Test a prompt interactively
 swissarmyhammer test code-review
@@ -1964,7 +3604,7 @@ swissarmyhammer test api-docs \
   --arg code="$(cat src/api.rs)" \
   --save generated-docs.md
 </code></pre>
-<h3 id="debug-mode"><a class="header" href="#debug-mode">Debug Mode</a></h3>
+<h3 id="debug-mode-1"><a class="header" href="#debug-mode-1">Debug Mode</a></h3>
 <pre><code class="language-bash"># Show debug information
 swissarmyhammer test template-complex --debug
 
@@ -2027,7 +3667,7 @@ Rendered Output:
 
 ✓ Template rendered successfully (247 characters)
 </code></pre>
-<h3 id="debug-output"><a class="header" href="#debug-output">Debug Output</a></h3>
+<h3 id="debug-output-1"><a class="header" href="#debug-output-1">Debug Output</a></h3>
 <pre><code>Testing prompt: code-review (debug mode)
 
 Prompt loaded from: ~/.swissarmyhammer/prompts/review/code.md
@@ -2054,7 +3694,7 @@ Performance:
 - Rendering: 3ms
 - Total: 6ms
 </code></pre>
-<h2 id="error-handling-2"><a class="header" href="#error-handling-2">Error Handling</a></h2>
+<h2 id="error-handling-3"><a class="header" href="#error-handling-3">Error Handling</a></h2>
 <p>The test command provides helpful error messages for common issues:</p>
 <h3 id="missing-arguments"><a class="header" href="#missing-arguments">Missing Arguments</a></h3>
 <pre><code class="language-bash">$ swissarmyhammer test code-review
@@ -2124,14 +3764,14 @@ fi
 <h2 id="synopsis-2"><a class="header" href="#synopsis-2">Synopsis</a></h2>
 <pre><code class="language-bash">swissarmyhammer export [OPTIONS] [PROMPTS...] &lt;OUTPUT&gt;
 </code></pre>
-<h2 id="description-2"><a class="header" href="#description-2">Description</a></h2>
+<h2 id="description-3"><a class="header" href="#description-3">Description</a></h2>
 <p>Export prompts to archives, directories, or other formats for sharing, backup, or deployment. Supports exporting individual prompts, categories, or entire collections.</p>
-<h2 id="arguments-2"><a class="header" href="#arguments-2">Arguments</a></h2>
+<h2 id="arguments-5"><a class="header" href="#arguments-5">Arguments</a></h2>
 <ul>
 <li><code>PROMPTS...</code> - Specific prompt IDs to export (optional if using <code>--all</code> or <code>--category</code>)</li>
 <li><code>OUTPUT</code> - Output path (file for archives, directory for directory format)</li>
 </ul>
-<h2 id="options-2"><a class="header" href="#options-2">Options</a></h2>
+<h2 id="options-3"><a class="header" href="#options-3">Options</a></h2>
 <h3 id="selection"><a class="header" href="#selection">Selection</a></h3>
 <ul>
 <li><code>--all, -a</code> - Export all prompts</li>
@@ -2160,7 +3800,7 @@ fi
 <li><code>--quiet, -q</code> - Suppress progress output</li>
 <li><code>--verbose, -v</code> - Show detailed export progress</li>
 </ul>
-<h2 id="examples-3"><a class="header" href="#examples-3">Examples</a></h2>
+<h2 id="examples-6"><a class="header" href="#examples-6">Examples</a></h2>
 <h3 id="basic-export"><a class="header" href="#basic-export">Basic Export</a></h3>
 <pre><code class="language-bash"># Export specific prompts to tar.gz
 swissarmyhammer export code-review debug-helper exported-prompts.tar.gz
@@ -2363,13 +4003,13 @@ scp team-prompts-*.tar.gz team@shared-server:/shared/prompts/
 <h2 id="synopsis-3"><a class="header" href="#synopsis-3">Synopsis</a></h2>
 <pre><code class="language-bash">swissarmyhammer import [OPTIONS] &lt;SOURCE&gt;
 </code></pre>
-<h2 id="description-3"><a class="header" href="#description-3">Description</a></h2>
+<h2 id="description-4"><a class="header" href="#description-4">Description</a></h2>
 <p>Import prompts from various sources including local files, URLs, Git repositories, and other SwissArmyHammer installations. Supports conflict resolution, validation, and backup creation.</p>
-<h2 id="arguments-3"><a class="header" href="#arguments-3">Arguments</a></h2>
+<h2 id="arguments-6"><a class="header" href="#arguments-6">Arguments</a></h2>
 <ul>
 <li><code>SOURCE</code> - Import source (file path, URL, Git repository, or directory)</li>
 </ul>
-<h2 id="options-3"><a class="header" href="#options-3">Options</a></h2>
+<h2 id="options-4"><a class="header" href="#options-4">Options</a></h2>
 <h3 id="conflict-resolution"><a class="header" href="#conflict-resolution">Conflict Resolution</a></h3>
 <ul>
 <li><code>--strategy STRATEGY</code> - Conflict resolution strategy
@@ -2401,7 +4041,7 @@ scp team-prompts-*.tar.gz team@shared-server:/shared/prompts/
 <li><code>--verbose, -v</code> - Show detailed import progress</li>
 <li><code>--json</code> - Output results in JSON format</li>
 </ul>
-<h2 id="examples-4"><a class="header" href="#examples-4">Examples</a></h2>
+<h2 id="examples-7"><a class="header" href="#examples-7">Examples</a></h2>
 <h3 id="file-import"><a class="header" href="#file-import">File Import</a></h3>
 <pre><code class="language-bash"># Import from local archive
 swissarmyhammer import prompts-backup.tar.gz
@@ -2690,11 +4330,483 @@ echo "Migration complete. Backup at: $BACKUP_DIR"
 <li><a href="./sharing-guide.html">Sharing Guide</a> - Collaboration workflows</li>
 <li><a href="./cli-doctor.html"><code>doctor</code></a> - Validate installation after import</li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="doctor"><a class="header" href="#doctor">doctor</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="doctor-command"><a class="header" href="#doctor-command">doctor Command</a></h1>
+<p>The <code>doctor</code> command performs comprehensive health checks on your SwissArmyHammer installation and configuration. It identifies issues and provides recommendations for optimal operation.</p>
+<h2 id="usage-1"><a class="header" href="#usage-1">Usage</a></h2>
+<pre><code class="language-bash">swissarmyhammer doctor [OPTIONS]
+</code></pre>
+<h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
+<p>The doctor command checks:</p>
+<ul>
+<li>Installation integrity and version compatibility</li>
+<li>Configuration file validity</li>
+<li>Prompt directory accessibility and structure</li>
+<li>Prompt file syntax and metadata</li>
+<li>MCP server functionality</li>
+<li>System dependencies and environment</li>
+</ul>
+<h2 id="options-5"><a class="header" href="#options-5">Options</a></h2>
+<h3 id="--verbose"><a class="header" href="#--verbose"><code>--verbose</code></a></h3>
+<ul>
+<li><strong>Description</strong>: Enable detailed output with additional diagnostic information</li>
+<li><strong>Default</strong>: Disabled</li>
+<li><strong>Example</strong>: Shows file paths, configuration details, and system information</li>
+</ul>
+<pre><code class="language-bash">swissarmyhammer doctor --verbose
+</code></pre>
+<h3 id="--json"><a class="header" href="#--json"><code>--json</code></a></h3>
+<ul>
+<li><strong>Description</strong>: Output results in JSON format for programmatic use</li>
+<li><strong>Default</strong>: Human-readable text output</li>
+<li><strong>Example</strong>: Useful for scripts and automation</li>
+</ul>
+<pre><code class="language-bash">swissarmyhammer doctor --json
+</code></pre>
+<h3 id="--fix"><a class="header" href="#--fix"><code>--fix</code></a></h3>
+<ul>
+<li><strong>Description</strong>: Automatically fix issues when possible</li>
+<li><strong>Default</strong>: Report-only mode</li>
+<li><strong>Example</strong>: Creates missing directories, fixes permissions</li>
+</ul>
+<pre><code class="language-bash">swissarmyhammer doctor --fix
+</code></pre>
+<h3 id="--check-category"><a class="header" href="#--check-category"><code>--check &lt;CATEGORY&gt;</code></a></h3>
+<ul>
+<li><strong>Description</strong>: Run specific check categories only</li>
+<li><strong>Values</strong>: <code>installation</code>, <code>config</code>, <code>prompts</code>, <code>mcp</code>, <code>system</code></li>
+<li><strong>Repeatable</strong>: Can specify multiple categories</li>
+</ul>
+<pre><code class="language-bash"># Check only prompt-related issues
+swissarmyhammer doctor --check prompts
+
+# Check multiple categories
+swissarmyhammer doctor --check config --check prompts
+</code></pre>
+<h2 id="check-categories"><a class="header" href="#check-categories">Check Categories</a></h2>
+<h3 id="installation-checks"><a class="header" href="#installation-checks">Installation Checks</a></h3>
+<p>Verifies SwissArmyHammer installation:</p>
+<h4 id="binary-location"><a class="header" href="#binary-location">Binary Location</a></h4>
+<ul>
+<li>Checks if <code>swissarmyhammer</code> is in PATH</li>
+<li>Verifies executable permissions</li>
+<li>Confirms version compatibility</li>
+</ul>
+<h4 id="dependencies"><a class="header" href="#dependencies">Dependencies</a></h4>
+<ul>
+<li>Validates system requirements</li>
+<li>Checks for required libraries</li>
+<li>Verifies runtime dependencies</li>
+</ul>
+<h4 id="example-output"><a class="header" href="#example-output">Example Output</a></h4>
+<pre><code>✓ SwissArmyHammer binary found: /usr/local/bin/swissarmyhammer
+✓ Version: 0.1.0 (latest)
+✓ Executable permissions: OK
+✓ System dependencies: All present
+</code></pre>
+<h3 id="configuration-checks"><a class="header" href="#configuration-checks">Configuration Checks</a></h3>
+<p>Validates configuration files and settings:</p>
+<h4 id="configuration-file-1"><a class="header" href="#configuration-file-1">Configuration File</a></h4>
+<ul>
+<li>Checks for valid TOML syntax</li>
+<li>Validates configuration schema</li>
+<li>Identifies deprecated settings</li>
+</ul>
+<h4 id="directory-structure-2"><a class="header" href="#directory-structure-2">Directory Structure</a></h4>
+<ul>
+<li>Verifies default directories exist</li>
+<li>Checks directory permissions</li>
+<li>Validates custom prompt directories</li>
+</ul>
+<h4 id="environment-variables-3"><a class="header" href="#environment-variables-3">Environment Variables</a></h4>
+<ul>
+<li>Lists relevant environment variables</li>
+<li>Checks for conflicts or inconsistencies</li>
+<li>Validates variable values</li>
+</ul>
+<h4 id="example-output-1"><a class="header" href="#example-output-1">Example Output</a></h4>
+<pre><code>✓ Configuration file: ~/.swissarmyhammer/config.toml
+✓ Configuration syntax: Valid TOML
+✓ Default directories: Created and accessible
+⚠ Custom directory not found: /nonexistent/prompts
+✓ Environment variables: No conflicts
+</code></pre>
+<h3 id="prompt-checks"><a class="header" href="#prompt-checks">Prompt Checks</a></h3>
+<p>Analyzes prompt files and library structure:</p>
+<h4 id="directory-scanning"><a class="header" href="#directory-scanning">Directory Scanning</a></h4>
+<ul>
+<li>Scans all configured prompt directories</li>
+<li>Counts prompt files by category</li>
+<li>Identifies orphaned or miscategorized files</li>
+</ul>
+<h4 id="file-validation"><a class="header" href="#file-validation">File Validation</a></h4>
+<ul>
+<li>Validates YAML front matter syntax</li>
+<li>Checks required fields presence</li>
+<li>Verifies argument specifications</li>
+</ul>
+<h4 id="content-analysis"><a class="header" href="#content-analysis">Content Analysis</a></h4>
+<ul>
+<li>Validates Liquid template syntax</li>
+<li>Checks for common template errors</li>
+<li>Identifies missing or broken references</li>
+</ul>
+<h4 id="duplicate-detection"><a class="header" href="#duplicate-detection">Duplicate Detection</a></h4>
+<ul>
+<li>Finds prompts with identical names</li>
+<li>Shows override hierarchy</li>
+<li>Warns about potential conflicts</li>
+</ul>
+<h4 id="example-output-2"><a class="header" href="#example-output-2">Example Output</a></h4>
+<pre><code>✓ Prompt directories: 3 found, all accessible
+✓ Prompt files: 47 total, 45 valid
+✗ Invalid prompts: 2 files with errors
+  - debug-helper.md: Missing required field 'description'
+  - code-review.md: Invalid YAML syntax on line 8
+⚠ Duplicate names: 1 conflict found
+  - 'help' defined in both builtin and ~/.swissarmyhammer/prompts/
+✓ Template syntax: All valid
+</code></pre>
+<h3 id="mcp-checks"><a class="header" href="#mcp-checks">MCP Checks</a></h3>
+<p>Tests Model Context Protocol functionality:</p>
+<h4 id="server-startup"><a class="header" href="#server-startup">Server Startup</a></h4>
+<ul>
+<li>Attempts to start MCP server</li>
+<li>Tests port binding</li>
+<li>Verifies server responds to requests</li>
+</ul>
+<h4 id="protocol-compliance"><a class="header" href="#protocol-compliance">Protocol Compliance</a></h4>
+<ul>
+<li>Validates MCP protocol responses</li>
+<li>Checks capability advertisements</li>
+<li>Tests prompt exposure format</li>
+</ul>
+<h4 id="integration-status"><a class="header" href="#integration-status">Integration Status</a></h4>
+<ul>
+<li>Checks Claude Code configuration</li>
+<li>Tests end-to-end connectivity</li>
+<li>Validates prompt accessibility</li>
+</ul>
+<h4 id="example-output-3"><a class="header" href="#example-output-3">Example Output</a></h4>
+<pre><code>✓ MCP server startup: Success on port 8080
+✓ Protocol compliance: All tests passed
+✓ Prompt exposure: 45 prompts available
+⚠ Claude Code integration: Not configured
+  Run: claude mcp add swissarmyhammer swissarmyhammer serve
+</code></pre>
+<h3 id="system-checks"><a class="header" href="#system-checks">System Checks</a></h3>
+<p>Analyzes system environment and performance:</p>
+<h4 id="operating-system"><a class="header" href="#operating-system">Operating System</a></h4>
+<ul>
+<li>Identifies OS and version</li>
+<li>Checks compatibility</li>
+<li>Validates system requirements</li>
+</ul>
+<h4 id="file-system"><a class="header" href="#file-system">File System</a></h4>
+<ul>
+<li>Tests file watching capabilities</li>
+<li>Checks disk space availability</li>
+<li>Validates permissions</li>
+</ul>
+<h4 id="performance-1"><a class="header" href="#performance-1">Performance</a></h4>
+<ul>
+<li>Measures prompt loading time</li>
+<li>Tests file watching responsiveness</li>
+<li>Checks memory usage patterns</li>
+</ul>
+<h4 id="example-output-4"><a class="header" href="#example-output-4">Example Output</a></h4>
+<pre><code>✓ Operating system: macOS 14.0 (supported)
+✓ File system: APFS with file watching support
+✓ Disk space: 15.2 GB available
+✓ Performance: Prompt loading &lt; 100ms
+⚠ Memory usage: High with 1000+ prompts (consider --watch false)
+</code></pre>
+<h2 id="common-issues-and-solutions"><a class="header" href="#common-issues-and-solutions">Common Issues and Solutions</a></h2>
+<h3 id="installation-issues"><a class="header" href="#installation-issues">Installation Issues</a></h3>
+<h4 id="swissarmyhammer-not-found"><a class="header" href="#swissarmyhammer-not-found">SwissArmyHammer Not Found</a></h4>
+<pre><code>✗ SwissArmyHammer binary: Not found in PATH
+</code></pre>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Install SwissArmyHammer: <code>curl -sSL https://install.sh | bash</code></li>
+<li>Add to PATH: <code>export PATH="$HOME/.local/bin:$PATH"</code></li>
+<li>Verify installation: <code>which swissarmyhammer</code></li>
+</ul>
+<h4 id="permission-denied"><a class="header" href="#permission-denied">Permission Denied</a></h4>
+<pre><code>✗ Executable permissions: Permission denied
+</code></pre>
+<p><strong>Solutions:</strong></p>
+<pre><code class="language-bash"># Fix permissions
+chmod +x $(which swissarmyhammer)
+
+# Or reinstall
+curl -sSL https://install.sh | bash
+</code></pre>
+<h3 id="configuration-issues"><a class="header" href="#configuration-issues">Configuration Issues</a></h3>
+<h4 id="invalid-configuration-file"><a class="header" href="#invalid-configuration-file">Invalid Configuration File</a></h4>
+<pre><code>✗ Configuration syntax: Invalid TOML at line 15
+</code></pre>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Validate TOML syntax online</li>
+<li>Check for missing quotes or brackets</li>
+<li>Reset to defaults: <code>swissarmyhammer doctor --fix</code></li>
+</ul>
+<h4 id="missing-directories"><a class="header" href="#missing-directories">Missing Directories</a></h4>
+<pre><code>⚠ Prompt directory not accessible: /custom/prompts
+</code></pre>
+<p><strong>Solutions:</strong></p>
+<pre><code class="language-bash"># Create missing directory
+mkdir -p /custom/prompts
+
+# Fix automatically
+swissarmyhammer doctor --fix
+</code></pre>
+<h3 id="prompt-issues"><a class="header" href="#prompt-issues">Prompt Issues</a></h3>
+<h4 id="invalid-yaml-front-matter"><a class="header" href="#invalid-yaml-front-matter">Invalid YAML Front Matter</a></h4>
+<pre><code>✗ Invalid prompts: 3 files with YAML errors
+  - code-review.md: missing required field 'name'
+</code></pre>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Add missing required fields</li>
+<li>Validate YAML syntax</li>
+<li>Use <code>swissarmyhammer test &lt;prompt&gt;</code> for detailed errors</li>
+</ul>
+<h4 id="duplicate-prompt-names"><a class="header" href="#duplicate-prompt-names">Duplicate Prompt Names</a></h4>
+<pre><code>⚠ Duplicate names: 'help' defined in multiple locations
+</code></pre>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Rename one of the conflicting prompts</li>
+<li>Use different directories for different contexts</li>
+<li>Check prompt override hierarchy</li>
+</ul>
+<h4 id="template-syntax-errors"><a class="header" href="#template-syntax-errors">Template Syntax Errors</a></h4>
+<pre><code>✗ Template errors: 2 prompts with Liquid syntax issues
+  - debug.md: Unknown filter 'unknownfilter'
+</code></pre>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Fix Liquid template syntax</li>
+<li>Check available filters: see <a href="./custom-filters.html">Custom Filters</a></li>
+<li>Test templates: <code>swissarmyhammer test &lt;prompt&gt;</code></li>
+</ul>
+<h3 id="mcp-issues"><a class="header" href="#mcp-issues">MCP Issues</a></h3>
+<h4 id="server-wont-start-1"><a class="header" href="#server-wont-start-1">Server Won’t Start</a></h4>
+<pre><code>✗ MCP server startup: Failed to bind to port 8080
+</code></pre>
+<p><strong>Solutions:</strong></p>
+<pre><code class="language-bash"># Try different port
+swissarmyhammer serve --port 8081
+
+# Check what's using the port
+lsof -i :8080  # macOS/Linux
+netstat -an | findstr 8080  # Windows
+</code></pre>
+<h4 id="claude-code-not-configured"><a class="header" href="#claude-code-not-configured">Claude Code Not Configured</a></h4>
+<pre><code>⚠ Claude Code integration: Not configured
+</code></pre>
+<p><strong>Solutions:</strong></p>
+<pre><code class="language-bash"># Add to Claude Code
+claude mcp add swissarmyhammer swissarmyhammer serve
+
+# Verify configuration
+claude mcp list
+</code></pre>
+<h3 id="performance-issues-2"><a class="header" href="#performance-issues-2">Performance Issues</a></h3>
+<h4 id="slow-prompt-loading"><a class="header" href="#slow-prompt-loading">Slow Prompt Loading</a></h4>
+<pre><code>⚠ Performance: Prompt loading &gt; 1000ms
+</code></pre>
+<p><strong>Solutions:</strong></p>
+<ul>
+<li>Reduce prompt directory size</li>
+<li>Disable file watching: <code>--watch false</code></li>
+<li>Use SSDs for prompt storage</li>
+<li>Split large libraries into categories</li>
+</ul>
+<h4 id="high-memory-usage"><a class="header" href="#high-memory-usage">High Memory Usage</a></h4>
+<pre><code>⚠ Memory usage: 2.1 GB with file watching enabled
+</code></pre>
+<p><strong>Solutions:</strong></p>
+<pre><code class="language-bash"># Disable file watching
+swissarmyhammer serve --watch false
+
+# Limit prompt directories
+swissarmyhammer serve --prompts ./essential-prompts
+</code></pre>
+<h2 id="automated-fixes"><a class="header" href="#automated-fixes">Automated Fixes</a></h2>
+<p>With the <code>--fix</code> flag, doctor can automatically resolve:</p>
+<h3 id="directory-issues"><a class="header" href="#directory-issues">Directory Issues</a></h3>
+<ul>
+<li>Creates missing prompt directories</li>
+<li>Sets appropriate permissions</li>
+<li>Creates default configuration file</li>
+</ul>
+<h3 id="configuration-issues-1"><a class="header" href="#configuration-issues-1">Configuration Issues</a></h3>
+<ul>
+<li>Repairs malformed TOML files</li>
+<li>Sets missing default values</li>
+<li>Removes deprecated settings</li>
+</ul>
+<h3 id="permission-issues"><a class="header" href="#permission-issues">Permission Issues</a></h3>
+<ul>
+<li>Fixes file and directory permissions</li>
+<li>Makes binaries executable</li>
+<li>Sets appropriate ownership</li>
+</ul>
+<h3 id="example-auto-fix"><a class="header" href="#example-auto-fix">Example Auto-Fix</a></h3>
+<pre><code class="language-bash">swissarmyhammer doctor --fix
+
+# Output:
+Fixed: Created missing directory ~/.swissarmyhammer/prompts
+Fixed: Set executable permission on swissarmyhammer binary
+Fixed: Created default configuration file
+Warning: Could not fix invalid YAML in code-review.md (manual intervention required)
+</code></pre>
+<h2 id="output-formats"><a class="header" href="#output-formats">Output Formats</a></h2>
+<h3 id="human-readable-default"><a class="header" href="#human-readable-default">Human-Readable (Default)</a></h3>
+<pre><code>SwissArmyHammer Doctor Report
+============================
+
+Installation Checks:
+✓ Binary found and executable
+✓ Version 0.1.0 (latest)
+✓ Dependencies satisfied
+
+Configuration Checks:
+✓ Configuration file valid
+⚠ Custom directory not found: /tmp/prompts
+
+Prompt Checks:
+✓ 45 prompts loaded successfully
+✗ 2 prompts with errors (see details below)
+
+MCP Checks:
+✓ Server starts successfully
+✓ Protocol compliance verified
+
+System Checks:
+✓ OS compatibility confirmed
+⚠ High memory usage detected
+
+Summary: 3 warnings, 1 error found
+</code></pre>
+<h3 id="json-format"><a class="header" href="#json-format">JSON Format</a></h3>
+<pre><code class="language-json">{
+  "timestamp": "2024-03-20T10:30:00Z",
+  "version": "0.1.0",
+  "checks": {
+    "installation": {
+      "status": "passed",
+      "details": [
+        {
+          "check": "binary_found",
+          "status": "passed",
+          "message": "Binary found at /usr/local/bin/swissarmyhammer"
+        }
+      ]
+    },
+    "configuration": {
+      "status": "warning",
+      "details": [
+        {
+          "check": "custom_directory",
+          "status": "warning", 
+          "message": "Directory not found: /tmp/prompts",
+          "fixable": true
+        }
+      ]
+    }
+  },
+  "summary": {
+    "total_checks": 15,
+    "passed": 12,
+    "warnings": 2,
+    "errors": 1
+  }
+}
+</code></pre>
+<h2 id="integration-with-cicd"><a class="header" href="#integration-with-cicd">Integration with CI/CD</a></h2>
+<p>Use doctor in automated workflows:</p>
+<h3 id="github-actions"><a class="header" href="#github-actions">GitHub Actions</a></h3>
+<pre><code class="language-yaml">- name: Check SwissArmyHammer Health
+  run: |
+    swissarmyhammer doctor --json &gt; health-report.json
+    if [ $(jq '.summary.errors' health-report.json) -gt 0 ]; then
+      echo "Health check failed"
+      exit 1
+    fi
+</code></pre>
+<h3 id="pre-commit-hook"><a class="header" href="#pre-commit-hook">Pre-commit Hook</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# .git/hooks/pre-commit
+swissarmyhammer doctor --check prompts
+if [ $? -ne 0 ]; then
+  echo "Prompt validation failed. Fix issues before committing."
+  exit 1
+fi
+</code></pre>
+<h3 id="development-script"><a class="header" href="#development-script">Development Script</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# dev-setup.sh
+echo "Setting up development environment..."
+swissarmyhammer doctor --fix --verbose
+echo "Health check complete. Run 'swissarmyhammer serve' to start."
+</code></pre>
+<h2 id="best-practices-5"><a class="header" href="#best-practices-5">Best Practices</a></h2>
+<h3 id="regular-health-checks"><a class="header" href="#regular-health-checks">Regular Health Checks</a></h3>
+<pre><code class="language-bash"># Weekly health check
+swissarmyhammer doctor --verbose
+
+# Before important deployments
+swissarmyhammer doctor --check mcp --check prompts
+</code></pre>
+<h3 id="monitoring-integration"><a class="header" href="#monitoring-integration">Monitoring Integration</a></h3>
+<pre><code class="language-bash"># Check and alert on issues
+swissarmyhammer doctor --json | jq -r '.summary.errors' | \
+  xargs -I {} sh -c 'if [ {} -gt 0 ]; then echo "Alert: SwissArmyHammer errors detected"; fi'
+</code></pre>
+<h3 id="development-workflow"><a class="header" href="#development-workflow">Development Workflow</a></h3>
+<pre><code class="language-bash"># After making prompt changes
+swissarmyhammer doctor --check prompts --fix
+
+# Before committing
+swissarmyhammer doctor --check prompts
+</code></pre>
+<h2 id="troubleshooting-doctor-issues"><a class="header" href="#troubleshooting-doctor-issues">Troubleshooting Doctor Issues</a></h2>
+<h3 id="doctor-command-not-found"><a class="header" href="#doctor-command-not-found">Doctor Command Not Found</a></h3>
+<pre><code class="language-bash"># Verify installation
+which swissarmyhammer
+
+# Reinstall if needed
+curl -sSL https://install.sh | bash
+</code></pre>
+<h3 id="doctor-hangs-or-crashes"><a class="header" href="#doctor-hangs-or-crashes">Doctor Hangs or Crashes</a></h3>
+<pre><code class="language-bash"># Run with timeout
+timeout 30s swissarmyhammer doctor --verbose
+
+# Check specific categories
+swissarmyhammer doctor --check installation
+</code></pre>
+<h3 id="false-positives"><a class="header" href="#false-positives">False Positives</a></h3>
+<pre><code class="language-bash"># Skip problematic checks
+swissarmyhammer doctor --check config --check prompts
+
+# Use verbose mode for details
+swissarmyhammer doctor --verbose
+</code></pre>
+<h2 id="next-steps-6"><a class="header" href="#next-steps-6">Next Steps</a></h2>
+<ul>
+<li>Fix any issues identified by doctor</li>
+<li>Set up regular health monitoring</li>
+<li>Configure automated fixes where appropriate</li>
+<li>See <a href="./troubleshooting.html">Troubleshooting</a> for detailed problem resolution</li>
+<li>Check <a href="./configuration.html">Configuration</a> for advanced settings</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="completion"><a class="header" href="#completion">completion</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="rust-library-guide"><a class="header" href="#rust-library-guide">Rust Library Guide</a></h1>
 <p>SwissArmyHammer is available as a Rust library (<code>swissarmyhammer</code>) that you can integrate into your own applications. This guide covers installation, basic usage, and advanced integration patterns.</p>
-<h2 id="installation-2"><a class="header" href="#installation-2">Installation</a></h2>
+<h2 id="installation-3"><a class="header" href="#installation-3">Installation</a></h2>
 <p>Add SwissArmyHammer to your <code>Cargo.toml</code>:</p>
 <pre><code class="language-toml">[dependencies]
 swissarmyhammer = { git = "https://github.com/wballard/swissarmyhammer", features = ["full"] }
@@ -2842,7 +4954,7 @@ context.insert("name", "alice");
 
 let result = engine.render(template, &amp;context)?;
 println!("{}", result); // "Hello Alice! Today is 2024-01-15."</code></pre>
-<h2 id="advanced-usage"><a class="header" href="#advanced-usage">Advanced Usage</a></h2>
+<h2 id="advanced-usage-1"><a class="header" href="#advanced-usage-1">Advanced Usage</a></h2>
 <h3 id="custom-storage-backend"><a class="header" href="#custom-storage-backend">Custom Storage Backend</a></h3>
 <p>Implement your own storage for prompts:</p>
 <pre><code class="language-rust">use swissarmyhammer::storage::{StorageBackend, PromptSource};
@@ -2933,7 +5045,7 @@ impl EventHandler for MyEventHandler {
 
 let mut library = PromptLibrary::new();
 library.add_event_handler(Box::new(MyEventHandler));</code></pre>
-<h3 id="file-watching"><a class="header" href="#file-watching">File Watching</a></h3>
+<h3 id="file-watching-1"><a class="header" href="#file-watching-1">File Watching</a></h3>
 <p>Automatically reload prompts when files change:</p>
 <pre><code class="language-rust">use swissarmyhammer::watcher::FileWatcher;
 
@@ -3079,7 +5191,7 @@ async fn setup_library(config: &amp;AppConfig) -&gt; Result&lt;PromptLibrary, Bo
     
     Ok(library)
 }</code></pre>
-<h2 id="error-handling-3"><a class="header" href="#error-handling-3">Error Handling</a></h2>
+<h2 id="error-handling-4"><a class="header" href="#error-handling-4">Error Handling</a></h2>
 <p>SwissArmyHammer uses comprehensive error types:</p>
 <pre><code class="language-rust">use swissarmyhammer::error::{SwissArmyHammerError, PromptError, TemplateError};
 
@@ -3122,7 +5234,7 @@ async fn test_prompt_rendering() {
     let result = prompt.render(&amp;args).unwrap();
     assert_eq!(result, "Hello World!");
 }</code></pre>
-<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<h2 id="performance-considerations-1"><a class="header" href="#performance-considerations-1">Performance Considerations</a></h2>
 <h3 id="memory-usage"><a class="header" href="#memory-usage">Memory Usage</a></h3>
 <ul>
 <li>Prompt libraries cache parsed templates in memory</li>
@@ -3135,7 +5247,7 @@ async fn test_prompt_rendering() {
 <li>Template rendering is thread-safe</li>
 <li>Consider using <code>Arc&lt;RwLock&lt;PromptLibrary&gt;&gt;</code> for shared access</li>
 </ul>
-<h3 id="best-practices-1"><a class="header" href="#best-practices-1">Best Practices</a></h3>
+<h3 id="best-practices-6"><a class="header" href="#best-practices-6">Best Practices</a></h3>
 <ul>
 <li>Prefer batch operations for multiple prompts</li>
 <li>Cache rendered templates when arguments don’t change</li>
@@ -3186,7 +5298,7 @@ library.export_all("output.tar.gz", ExportFormat::TarGz)?;</code></pre>
 <li><code>render(&amp;self, args: &amp;HashMap&lt;String, String&gt;) -&gt; Result&lt;String&gt;</code> - Render the prompt with arguments</li>
 <li><code>validate_arguments(&amp;self, args: &amp;HashMap&lt;String, String&gt;) -&gt; Result&lt;()&gt;</code> - Validate provided arguments</li>
 </ul>
-<h4 id="example"><a class="header" href="#example">Example</a></h4>
+<h4 id="example-1"><a class="header" href="#example-1">Example</a></h4>
 <pre><code class="language-rust">use swissarmyhammer::{Prompt, ArgumentSpec};
 use std::collections::HashMap;
 
@@ -3229,7 +5341,7 @@ let result = prompt.render(&amp;args)?;
 <li><code>find_by_tag(&amp;self, tag: &amp;str) -&gt; Vec&lt;&amp;Prompt&gt;</code> - Find prompts by tag</li>
 <li><code>remove(&amp;mut self, name: &amp;str) -&gt; Option&lt;Prompt&gt;</code> - Remove a prompt</li>
 </ul>
-<h4 id="example-1"><a class="header" href="#example-1">Example</a></h4>
+<h4 id="example-2"><a class="header" href="#example-2">Example</a></h4>
 <pre><code class="language-rust">use swissarmyhammer::PromptLibrary;
 
 let mut library = PromptLibrary::new();
@@ -3345,7 +5457,7 @@ let rendered = prompt.render(&amp;args)?;</code></pre>
 <li><code>register_plugin&lt;P: SwissArmyHammerPlugin&gt;(&amp;mut self, plugin: P)</code> - Register plugin</li>
 <li><code>get_filters(&amp;self) -&gt; Vec&lt;&amp;dyn CustomLiquidFilter&gt;</code> - Get all registered filters</li>
 </ul>
-<h2 id="error-handling-4"><a class="header" href="#error-handling-4">Error Handling</a></h2>
+<h2 id="error-handling-5"><a class="header" href="#error-handling-5">Error Handling</a></h2>
 <h3 id="swissarmyhammererror"><a class="header" href="#swissarmyhammererror">SwissArmyHammerError</a></h3>
 <p>Main error type for the library.</p>
 <pre><code class="language-rust">pub enum SwissArmyHammerError {
@@ -3370,7 +5482,7 @@ let rendered = prompt.render(&amp;args)?;</code></pre>
 <pre><code class="language-toml">[dependencies]
 swissarmyhammer = { version = "0.1", features = ["search", "mcp"] }
 </code></pre>
-<h2 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h2>
+<h2 id="complete-example-1"><a class="header" href="#complete-example-1">Complete Example</a></h2>
 <pre><code class="language-rust">use swissarmyhammer::{PromptLibrary, ArgumentSpec, Result};
 use std::collections::HashMap;
 
@@ -3393,7 +5505,7 @@ fn main() -&gt; Result&lt;()&gt; {
     
     Ok(())
 }</code></pre>
-<h2 id="advanced-usage-1"><a class="header" href="#advanced-usage-1">Advanced Usage</a></h2>
+<h2 id="advanced-usage-2"><a class="header" href="#advanced-usage-2">Advanced Usage</a></h2>
 <h3 id="custom-filters-1"><a class="header" href="#custom-filters-1">Custom Filters</a></h3>
 <p>Create custom Liquid filters for domain-specific transformations:</p>
 <pre><code class="language-rust">use swissarmyhammer::{CustomLiquidFilter, PluginRegistry, TemplateEngine};
@@ -3749,7 +5861,7 @@ swissarmyhammer search --regex "^exact term$"
 # Search in specific field
 swissarmyhammer search --in description query
 </code></pre>
-<h2 id="best-practices-2"><a class="header" href="#best-practices-2">Best Practices</a></h2>
+<h2 id="best-practices-7"><a class="header" href="#best-practices-7">Best Practices</a></h2>
 <h3 id="effective-search-terms"><a class="header" href="#effective-search-terms">Effective Search Terms</a></h3>
 <ol>
 <li><strong>Use specific terms</strong>: “REST API documentation” vs. “API”</li>
@@ -3869,7 +5981,7 @@ Hello {{ name | default: "Guest" }}
   No items found.
 {% endif %}
 </code></pre>
-<h3 id="debug-mode-1"><a class="header" href="#debug-mode-1">Debug Mode</a></h3>
+<h3 id="debug-mode-2"><a class="header" href="#debug-mode-2">Debug Mode</a></h3>
 <p>Use debug mode to see detailed template processing:</p>
 <pre><code class="language-bash">swissarmyhammer test prompt-name --debug
 </code></pre>
@@ -3882,7 +5994,7 @@ Hello {{ name | default: "Guest" }}
 <li>Performance timing</li>
 </ul>
 <h2 id="validation-strategies"><a class="header" href="#validation-strategies">Validation Strategies</a></h2>
-<h3 id="argument-validation"><a class="header" href="#argument-validation">Argument Validation</a></h3>
+<h3 id="argument-validation-1"><a class="header" href="#argument-validation-1">Argument Validation</a></h3>
 <p>Test with different argument combinations:</p>
 <pre><code class="language-bash"># Test required arguments only
 swissarmyhammer test prompt-name --arg required_arg="value"
@@ -3938,7 +6050,7 @@ swissarmyhammer test template-name --debug | grep "Performance:"
 /usr/bin/time -v swissarmyhammer test large-template \
   --arg big_data="$(cat massive-dataset.json)"
 </code></pre>
-<h2 id="best-practices-3"><a class="header" href="#best-practices-3">Best Practices</a></h2>
+<h2 id="best-practices-8"><a class="header" href="#best-practices-8">Best Practices</a></h2>
 <h3 id="writing-testable-prompts"><a class="header" href="#writing-testable-prompts">Writing Testable Prompts</a></h3>
 <ol>
 <li><strong>Provide sensible defaults</strong> for optional arguments</li>
@@ -4015,19 +6127,19 @@ jobs:
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="sharing-and-collaboration"><a class="header" href="#sharing-and-collaboration">Sharing and Collaboration</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="mcp-protocol"><a class="header" href="#mcp-protocol">MCP Protocol</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="configuration-1"><a class="header" href="#configuration-1">Configuration</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="file-watching-1"><a class="header" href="#file-watching-1">File Watching</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="configuration-3"><a class="header" href="#configuration-3">Configuration</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="file-watching-2"><a class="header" href="#file-watching-2">File Watching</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="prompt-overrides"><a class="header" href="#prompt-overrides">Prompt Overrides</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="built-in-prompts"><a class="header" href="#built-in-prompts">Built-in Prompts</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="custom-filters-reference-1"><a class="header" href="#custom-filters-reference-1">Custom Filters Reference</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="examples-5"><a class="header" href="#examples-5">Examples</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="troubleshooting-3"><a class="header" href="#troubleshooting-3">Troubleshooting</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="examples-8"><a class="header" href="#examples-8">Examples</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="troubleshooting-6"><a class="header" href="#troubleshooting-6">Troubleshooting</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="contributing"><a class="header" href="#contributing">Contributing</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="development-setup"><a class="header" href="#development-setup">Development Setup</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="testing-1"><a class="header" href="#testing-1">Testing</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="release-process"><a class="header" href="#release-process">Release Process</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="changelog"><a class="header" href="#changelog">Changelog</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="license-1"><a class="header" href="#license-1">License</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="license-2"><a class="header" href="#license-2">License</a></h1>
 
                     </main>
 

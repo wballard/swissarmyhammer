@@ -896,8 +896,7 @@ pub fn run_validate_command(
     } else if let Some(path) = path {
         validator.validate_path(&path)?
     } else {
-        // If no path and not --all, default to current directory
-        validator.validate_path(".")?
+        validator.validate_all()?
     };
 
     validator.print_results(&result, format)?;

@@ -588,11 +588,11 @@ fn count_markdown_files(path: &Path) -> usize {
 fn get_claude_add_command() -> String {
     r#"Add swissarmyhammer to Claude Code using this command:
 
-claude mcp add swissarmyhammer swissarmyhammer serve
+claude mcp add --scope user swissarmyhammer swissarmyhammer serve
 
 Or if swissarmyhammer is not in your PATH, use the full path:
 
-claude mcp add swissarmyhammer /path/to/swissarmyhammer serve"#
+claude mcp add --scope user  swissarmyhammer /path/to/swissarmyhammer serve"#
         .to_string()
 }
 

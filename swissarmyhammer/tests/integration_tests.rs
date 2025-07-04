@@ -335,7 +335,7 @@ description: "A partial template for headers"
     let main_content = r#"---
 description: "Main template using partial"
 ---
-{% render "partials/header" %}
+{% include "partials/header" %}
 
 This is the main content."#;
     
@@ -384,7 +384,7 @@ description: "Main template using .md partial"
 ---
 Main content here.
 
-{% render "footer" %}"#;
+{% include "footer" %}"#;
     
     fs::write(prompts_dir.join("main.md"), main_content).unwrap();
     

@@ -173,6 +173,586 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="prompt-organization"><a class="header" href="#prompt-organization">Prompt Organization</a></h1>
+<p>Effective prompt organization is crucial for maintaining a scalable and manageable prompt library. This guide covers best practices for organizing your SwissArmyHammer prompts.</p>
+<h2 id="directory-structure"><a class="header" href="#directory-structure">Directory Structure</a></h2>
+<h3 id="recommended-hierarchy"><a class="header" href="#recommended-hierarchy">Recommended Hierarchy</a></h3>
+<pre><code>~/.swissarmyhammer/prompts/
+├── development/
+│   ├── languages/
+│   │   ├── python/
+│   │   ├── javascript/
+│   │   └── rust/
+│   ├── frameworks/
+│   │   ├── react/
+│   │   ├── django/
+│   │   └── fastapi/
+│   └── tools/
+│       ├── git/
+│       ├── docker/
+│       └── ci-cd/
+├── writing/
+│   ├── technical/
+│   ├── business/
+│   └── creative/
+├── data/
+│   ├── analysis/
+│   ├── transformation/
+│   └── visualization/
+├── productivity/
+│   ├── planning/
+│   ├── automation/
+│   └── workflows/
+└── _shared/
+    ├── components/
+    ├── templates/
+    └── utilities/
+</code></pre>
+<h3 id="directory-purposes"><a class="header" href="#directory-purposes">Directory Purposes</a></h3>
+<ul>
+<li><strong>development/</strong> - Programming and technical prompts</li>
+<li><strong>writing/</strong> - Content creation and documentation</li>
+<li><strong>data/</strong> - Data processing and analysis</li>
+<li><strong>productivity/</strong> - Task management and workflows</li>
+<li><strong>_shared/</strong> - Reusable components and utilities</li>
+</ul>
+<h2 id="naming-conventions"><a class="header" href="#naming-conventions">Naming Conventions</a></h2>
+<h3 id="file-names"><a class="header" href="#file-names">File Names</a></h3>
+<p>Use consistent, descriptive file names:</p>
+<pre><code># Good examples
+code-review-python.md
+api-documentation-generator.md
+git-commit-message.md
+database-migration-planner.md
+
+# Avoid
+review.md
+doc.md
+prompt1.md
+temp.md
+</code></pre>
+<h3 id="naming-rules"><a class="header" href="#naming-rules">Naming Rules</a></h3>
+<ol>
+<li><strong>Use kebab-case</strong> for file names</li>
+<li><strong>Be descriptive</strong> - Include the purpose and context</li>
+<li><strong>Add type suffix</strong> when multiple variants exist</li>
+<li><strong>Keep under 40 characters</strong> for readability</li>
+</ol>
+<h3 id="prompt-names-in-yaml"><a class="header" href="#prompt-names-in-yaml">Prompt Names (in YAML)</a></h3>
+<pre><code class="language-yaml"># Good - matches file name pattern
+name: code-review-python
+
+# Also good - hierarchical naming
+name: development/code-review/python
+
+# Avoid - too generic
+name: review
+</code></pre>
+<h2 id="categories-and-tags"><a class="header" href="#categories-and-tags">Categories and Tags</a></h2>
+<h3 id="using-categories"><a class="header" href="#using-categories">Using Categories</a></h3>
+<p>Categories provide broad groupings:</p>
+<pre><code class="language-yaml">---
+name: api-security-scanner
+title: API Security Scanner
+category: development
+subcategory: security
+---
+</code></pre>
+<h3 id="effective-tagging"><a class="header" href="#effective-tagging">Effective Tagging</a></h3>
+<p>Tags enable fine-grained discovery:</p>
+<pre><code class="language-yaml">---
+name: react-component-generator
+tags:
+  - react
+  - javascript
+  - frontend
+  - component
+  - generator
+  - boilerplate
+---
+</code></pre>
+<h3 id="category-vs-tags"><a class="header" href="#category-vs-tags">Category vs Tags</a></h3>
+<ul>
+<li><strong>Categories</strong>: Single, broad classification</li>
+<li><strong>Tags</strong>: Multiple, specific attributes</li>
+</ul>
+<pre><code class="language-yaml"># Category for primary classification
+category: development
+
+# Tags for detailed attributes
+tags:
+  - python
+  - testing
+  - pytest
+  - unit-tests
+  - tdd
+</code></pre>
+<h2 id="modular-design"><a class="header" href="#modular-design">Modular Design</a></h2>
+<h3 id="base-templates"><a class="header" href="#base-templates">Base Templates</a></h3>
+<p>Create base templates in <code>_shared/templates/</code>:</p>
+<pre><code class="language-markdown">&lt;!-- _shared/templates/code-review-base.md --&gt;
+---
+name: code-review-base
+title: Base Code Review Template
+abstract: true  # Indicates this is a template
+---
+
+# Code Review
+
+## Overview
+Review the following code for:
+- Best practices
+- Potential bugs
+- Performance issues
+- Security concerns
+
+## Code
+```{{language}}
+{{code}}
+</code></pre>
+<h2 id="analysis"><a class="header" href="#analysis">Analysis</a></h2>
+<p>{{analysis_content}}</p>
+<pre><code>
+### Extending Base Templates
+
+```markdown
+&lt;!-- development/languages/python/code-review-python.md --&gt;
+---
+name: code-review-python
+title: Python Code Review
+extends: code-review-base
+---
+
+{% capture analysis_content %}
+### Python-Specific Checks
+- PEP 8 compliance
+- Type hints usage
+- Pythonic idioms
+- Import organization
+{% endcapture %}
+
+{% include "code-review-base" %}
+</code></pre>
+<h3 id="shared-components"><a class="header" href="#shared-components">Shared Components</a></h3>
+<p>Store reusable components in <code>_shared/components/</code>:</p>
+<pre><code class="language-markdown">&lt;!-- _shared/components/security-checks.md --&gt;
+---
+name: security-checks-component
+component: true
+---
+
+### Security Analysis
+- Input validation
+- SQL injection risks
+- XSS vulnerabilities
+- Authentication flaws
+- Data exposure
+</code></pre>
+<p>Use in prompts:</p>
+<pre><code class="language-markdown">---
+name: web-app-review
+---
+
+# Web Application Review
+
+{{code}}
+
+{% include "_shared/components/security-checks.md" %}
+
+## Additional Checks
+...
+</code></pre>
+<h2 id="versioning"><a class="header" href="#versioning">Versioning</a></h2>
+<h3 id="version-in-metadata"><a class="header" href="#version-in-metadata">Version in Metadata</a></h3>
+<p>Track prompt versions:</p>
+<pre><code class="language-yaml">---
+name: api-generator
+version: 2.1.0
+updated: 2024-03-20
+changelog:
+  - 2.1.0: Added GraphQL support
+  - 2.0.0: Breaking change - new argument structure
+  - 1.0.0: Initial release
+---
+</code></pre>
+<h3 id="version-directories"><a class="header" href="#version-directories">Version Directories</a></h3>
+<p>For major versions with breaking changes:</p>
+<pre><code>prompts/
+├── development/
+│   ├── api-generator/
+│   │   ├── v1/
+│   │   │   └── api-generator.md
+│   │   ├── v2/
+│   │   │   └── api-generator.md
+│   │   └── latest -&gt; v2/api-generator.md
+</code></pre>
+<h3 id="migration-guides"><a class="header" href="#migration-guides">Migration Guides</a></h3>
+<p>Document version changes:</p>
+<pre><code class="language-markdown">&lt;!-- development/api-generator/MIGRATION.md --&gt;
+# API Generator Migration Guide
+
+## v1 to v2
+
+### Breaking Changes
+- `endpoint_list` argument renamed to `endpoints`
+- `auth_method` now requires specific values
+
+### Migration Steps
+1. Update argument names in your scripts
+2. Validate auth_method values
+3. Test with new version
+</code></pre>
+<h2 id="collections"><a class="header" href="#collections">Collections</a></h2>
+<h3 id="prompt-collections"><a class="header" href="#prompt-collections">Prompt Collections</a></h3>
+<p>Group related prompts:</p>
+<pre><code class="language-markdown">&lt;!-- collections/fullstack-development.md --&gt;
+---
+name: fullstack-collection
+title: Full-Stack Development Collection
+type: collection
+---
+
+# Full-Stack Development Prompts
+
+## Frontend
+- `frontend/react-component` - React component generator
+- `frontend/vue-template` - Vue.js templates
+- `frontend/css-optimizer` - CSS optimization
+
+## Backend
+- `backend/api-design` - API design assistant
+- `backend/database-schema` - Schema designer
+- `backend/auth-implementation` - Authentication setup
+
+## DevOps
+- `devops/docker-config` - Docker configuration
+- `devops/ci-pipeline` - CI/CD pipeline setup
+- `devops/deployment-guide` - Deployment strategies
+</code></pre>
+<h3 id="collection-metadata"><a class="header" href="#collection-metadata">Collection Metadata</a></h3>
+<pre><code class="language-yaml">---
+name: data-science-toolkit
+type: collection
+prompts:
+  - data/eda-assistant
+  - data/feature-engineering
+  - data/model-evaluation
+  - data/visualization-guide
+dependencies:
+  - python
+  - pandas
+  - scikit-learn
+---
+</code></pre>
+<h2 id="search-and-discovery"><a class="header" href="#search-and-discovery">Search and Discovery</a></h2>
+<h3 id="metadata-for-search"><a class="header" href="#metadata-for-search">Metadata for Search</a></h3>
+<p>Optimize prompts for discovery:</p>
+<pre><code class="language-yaml">---
+name: code-documenter
+title: Intelligent Code Documentation Generator
+description: |
+  Generates comprehensive documentation for code including:
+  - Function/method documentation
+  - Class documentation
+  - Module overview
+  - Usage examples
+  - API references
+keywords:
+  - documentation
+  - docstring
+  - comments
+  - api docs
+  - code docs
+  - jsdoc
+  - sphinx
+  - rustdoc
+search_terms:
+  - "generate documentation"
+  - "add comments to code"
+  - "create api docs"
+  - "document functions"
+---
+</code></pre>
+<h3 id="aliases"><a class="header" href="#aliases">Aliases</a></h3>
+<p>Support multiple names:</p>
+<pre><code class="language-yaml">---
+name: git-commit-message
+aliases:
+  - commit-message
+  - git-message
+  - commit-generator
+---
+</code></pre>
+<h3 id="related-prompts"><a class="header" href="#related-prompts">Related Prompts</a></h3>
+<p>Link related prompts:</p>
+<pre><code class="language-yaml">---
+name: code-review-security
+related:
+  - code-review-general
+  - security-audit
+  - vulnerability-scanner
+  - penetration-test-guide
+---
+</code></pre>
+<h2 id="team-collaboration"><a class="header" href="#team-collaboration">Team Collaboration</a></h2>
+<h3 id="shared-conventions"><a class="header" href="#shared-conventions">Shared Conventions</a></h3>
+<p>Document team conventions in <code>CONVENTIONS.md</code>:</p>
+<pre><code class="language-markdown"># Prompt Conventions
+
+## Naming
+- Use `project-` prefix for project-specific prompts
+- Use `team-` prefix for team-wide prompts
+- Use `personal-` prefix for individual prompts
+
+## Categories
+- `project` - Project-specific
+- `team` - Team standards
+- `experimental` - Under development
+
+## Required Metadata
+All prompts must include:
+- name
+- title
+- description
+- author
+- created date
+- category
+</code></pre>
+<h3 id="ownership"><a class="header" href="#ownership">Ownership</a></h3>
+<p>Track prompt ownership:</p>
+<pre><code class="language-yaml">---
+name: deployment-checklist
+author: jane.doe@company.com
+team: platform-engineering
+maintainers:
+  - jane.doe@company.com
+  - john.smith@company.com
+review_required: true
+last_reviewed: 2024-03-15
+---
+</code></pre>
+<h3 id="review-process"><a class="header" href="#review-process">Review Process</a></h3>
+<p>Implement prompt review:</p>
+<pre><code class="language-yaml">---
+name: api-contract-generator
+status: draft  # draft, review, approved, deprecated
+reviewers:
+  - senior-dev-team
+approved_by: tech-lead@company.com
+approval_date: 2024-03-10
+---
+</code></pre>
+<h2 id="importexport-strategies"><a class="header" href="#importexport-strategies">Import/Export Strategies</a></h2>
+<h3 id="partial-exports"><a class="header" href="#partial-exports">Partial Exports</a></h3>
+<p>Export specific categories:</p>
+<pre><code class="language-bash"># Export only development prompts
+swissarmyhammer export dev-prompts.tar.gz --filter "category:development"
+
+# Export by tags
+swissarmyhammer export python-prompts.tar.gz --filter "tag:python"
+
+# Export by date
+swissarmyhammer export recent-prompts.tar.gz --filter "updated:&gt;2024-01-01"
+</code></pre>
+<h3 id="collection-bundles"><a class="header" href="#collection-bundles">Collection Bundles</a></h3>
+<p>Create installable bundles:</p>
+<pre><code class="language-yaml"># bundle.yaml
+name: web-development-bundle
+version: 1.0.0
+description: Complete web development prompt collection
+prompts:
+  include:
+    - category: frontend
+    - category: backend
+    - tag: web
+  exclude:
+    - tag: experimental
+dependencies:
+  - swissarmyhammer: "&gt;=0.1.0"
+install_to: ~/.swissarmyhammer/prompts/bundles/web-dev/
+</code></pre>
+<h3 id="sync-strategies"><a class="header" href="#sync-strategies">Sync Strategies</a></h3>
+<p>Keep prompts synchronized:</p>
+<pre><code class="language-bash">#!/bin/bash
+# sync-prompts.sh
+
+# Backup local changes
+swissarmyhammer export local-backup-$(date +%Y%m%d).tar.gz
+
+# Pull team prompts
+git pull origin main
+
+# Import team updates
+swissarmyhammer import team-prompts.tar.gz --merge
+
+# Export for distribution
+swissarmyhammer export team-bundle.tar.gz --filter "team:approved"
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="1-start-simple"><a class="header" href="#1-start-simple">1. Start Simple</a></h3>
+<p>Begin with basic organization:</p>
+<pre><code>prompts/
+├── work/
+├── personal/
+└── learning/
+</code></pre>
+<p>Then evolve as needed.</p>
+<h3 id="2-use-meaningful-hierarchies"><a class="header" href="#2-use-meaningful-hierarchies">2. Use Meaningful Hierarchies</a></h3>
+<pre><code># Good - clear hierarchy
+development/testing/unit-test-generator.md
+development/testing/integration-test-builder.md
+
+# Avoid - flat structure
+unit-test-generator.md
+integration-test-builder.md
+</code></pre>
+<h3 id="3-document-your-system"><a class="header" href="#3-document-your-system">3. Document Your System</a></h3>
+<p>Create <code>prompts/README.md</code>:</p>
+<pre><code class="language-markdown"># Prompt Library Organization
+
+## Structure
+- `development/` - Programming prompts
+- `data/` - Data analysis prompts
+- `writing/` - Content creation
+- `_shared/` - Reusable components
+
+## Naming Convention
+- Files: `purpose-context-type.md`
+- Prompts: Match file names
+
+## How to Contribute
+1. Choose appropriate category
+2. Follow naming conventions
+3. Include all required metadata
+4. Test before committing
+</code></pre>
+<h3 id="4-regular-maintenance"><a class="header" href="#4-regular-maintenance">4. Regular Maintenance</a></h3>
+<pre><code class="language-bash"># Find unused prompts
+swissarmyhammer list --unused --days 90
+
+# Find duplicates
+swissarmyhammer list --duplicates
+
+# Validate all prompts
+swissarmyhammer doctor --check prompts
+</code></pre>
+<h3 id="5-progressive-enhancement"><a class="header" href="#5-progressive-enhancement">5. Progressive Enhancement</a></h3>
+<p>Start with basic prompts and enhance:</p>
+<pre><code class="language-yaml"># Version 1 - Basic
+name: code-review
+description: Reviews code
+
+# Version 2 - Enhanced
+name: code-review
+description: Reviews code for quality, security, and performance
+category: development
+tags: [review, quality, security]
+version: 2.0.0
+</code></pre>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<h3 id="enterprise-setup"><a class="header" href="#enterprise-setup">Enterprise Setup</a></h3>
+<pre><code>company-prompts/
+├── departments/
+│   ├── engineering/
+│   │   ├── standards/
+│   │   ├── templates/
+│   │   └── tools/
+│   ├── product/
+│   │   ├── specs/
+│   │   ├── research/
+│   │   └── documentation/
+│   └── data-science/
+│       ├── analysis/
+│       ├── models/
+│       └── reporting/
+├── projects/
+│   ├── project-alpha/
+│   ├── project-beta/
+│   └── _archived/
+├── shared/
+│   ├── components/
+│   ├── templates/
+│   └── utilities/
+└── personal/
+    └── [username]/
+</code></pre>
+<h3 id="open-source-project"><a class="header" href="#open-source-project">Open Source Project</a></h3>
+<pre><code>oss-prompts/
+├── contribution/
+│   ├── issue-templates/
+│   ├── pr-templates/
+│   └── code-review/
+├── documentation/
+│   ├── api-docs/
+│   ├── user-guide/
+│   └── examples/
+├── maintenance/
+│   ├── release/
+│   ├── changelog/
+│   └── security/
+└── community/
+    ├── support/
+    └── onboarding/
+</code></pre>
+<h2 id="automation"><a class="header" href="#automation">Automation</a></h2>
+<h3 id="auto-organization-script"><a class="header" href="#auto-organization-script">Auto-Organization Script</a></h3>
+<pre><code class="language-python">#!/usr/bin/env python3
+# organize-prompts.py
+
+import os
+import yaml
+from pathlib import Path
+
+def organize_prompts(source_dir, target_dir):
+    """Auto-organize prompts based on metadata."""
+    for prompt_file in Path(source_dir).glob("**/*.md"):
+        with open(prompt_file) as f:
+            content = f.read()
+            
+        # Extract front matter
+        if content.startswith("---"):
+            _, fm, _ = content.split("---", 2)
+            metadata = yaml.safe_load(fm)
+            
+            # Determine target path
+            category = metadata.get("category", "uncategorized")
+            subcategory = metadata.get("subcategory", "")
+            
+            target_path = Path(target_dir) / category
+            if subcategory:
+                target_path = target_path / subcategory
+                
+            # Move file
+            target_path.mkdir(parents=True, exist_ok=True)
+            target_file = target_path / prompt_file.name
+            prompt_file.rename(target_file)
+            
+            print(f"Moved {prompt_file} -&gt; {target_file}")
+</code></pre>
+<h3 id="validation-script"><a class="header" href="#validation-script">Validation Script</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# validate-organization.sh
+
+echo "Validating prompt organization..."
+
+# Check for prompts without categories
+echo "Prompts without categories:"
+grep -L "category:" prompts/**/*.md
+
+# Check for duplicate names
+echo "Duplicate prompt names:"
+swissarmyhammer list --format json | jq -r '.[] | .name' | sort | uniq -d
+
+# Check naming conventions
+echo "Files not following naming convention:"
+find prompts -name "*.md" | grep -v "[a-z0-9-]*.md"
+</code></pre>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ul>
+<li>See <a href="./creating-prompts.html">Creating Prompts</a> for prompt creation guidelines</li>
+<li>Learn about <a href="./advanced-prompts.html">Advanced Prompts</a> for complex scenarios</li>
+<li>Explore <a href="./examples.html">Examples</a> for organization patterns</li>
+<li>Read <a href="./configuration.html">Configuration</a> for system-wide settings</li>
+</ul>
 
                     </main>
 

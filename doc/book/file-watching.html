@@ -173,6 +173,423 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="file-watching"><a class="header" href="#file-watching">File Watching</a></h1>
+<p>SwissArmyHammer includes a powerful file watching system that automatically detects and reloads prompt changes without restarting the server.</p>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
+<p>The file watcher monitors your prompt directories for changes and automatically:</p>
+<ol>
+<li><strong>Detects</strong> new, modified, or deleted prompt files</li>
+<li><strong>Validates</strong> changed files for syntax errors</li>
+<li><strong>Reloads</strong> prompts into memory</li>
+<li><strong>Notifies</strong> connected clients of updates</li>
+<li><strong>Maintains</strong> state during the reload process</li>
+</ol>
+<pre><code>┌─────────────┐     ┌──────────────┐     ┌──────────────┐
+│ File System │────&gt;│ File Watcher │────&gt;│ Prompt Cache │
+└─────────────┘     └──────────────┘     └──────────────┘
+                            │                     │
+                            ▼                     ▼
+                    ┌──────────────┐     ┌──────────────┐
+                    │  Validator   │     │ MCP Clients  │
+                    └──────────────┘     └──────────────┘
+</code></pre>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<h3 id="basic-settings"><a class="header" href="#basic-settings">Basic Settings</a></h3>
+<p>Configure file watching in your <code>config.yaml</code>:</p>
+<pre><code class="language-yaml">watch:
+  # Enable/disable file watching
+  enabled: true
+  
+  # Check interval in milliseconds
+  interval: 1000
+  
+  # Debounce delay to batch rapid changes
+  debounce: 500
+  
+  # Maximum files to process per cycle
+  batch_size: 100
+</code></pre>
+<h3 id="advanced-options"><a class="header" href="#advanced-options">Advanced Options</a></h3>
+<pre><code class="language-yaml">watch:
+  # File patterns to watch
+  patterns:
+    - "**/*.md"
+    - "**/*.markdown"
+    - "**/prompts.yaml"
+  
+  # Patterns to ignore
+  ignore:
+    - "**/node_modules/**"
+    - "**/.git/**"
+    - "**/target/**"
+    - "**/*.swp"
+    - "**/*~"
+    - "**/.DS_Store"
+  
+  # Watch strategy
+  strategy: efficient  # efficient, aggressive, polling
+  
+  # Platform-specific settings
+  platform:
+    # macOS FSEvents
+    macos:
+      use_fsevents: true
+      latency: 0.1
+    
+    # Linux inotify
+    linux:
+      use_inotify: true
+      max_watches: 8192
+    
+    # Windows
+    windows:
+      use_polling: false
+      poll_interval: 1000
+</code></pre>
+<h2 id="watch-strategies"><a class="header" href="#watch-strategies">Watch Strategies</a></h2>
+<h3 id="efficient-default"><a class="header" href="#efficient-default">Efficient (Default)</a></h3>
+<p>Best for most use cases:</p>
+<pre><code class="language-yaml">watch:
+  strategy: efficient
+  # Uses native OS file watching APIs
+  # Low CPU usage
+  # May have slight delay on some systems
+</code></pre>
+<h3 id="aggressive"><a class="header" href="#aggressive">Aggressive</a></h3>
+<p>For development with frequent changes:</p>
+<pre><code class="language-yaml">watch:
+  strategy: aggressive
+  interval: 100      # Check every 100ms
+  debounce: 50       # Minimal debounce
+  # Higher CPU usage
+  # Near-instant updates
+</code></pre>
+<h3 id="polling"><a class="header" href="#polling">Polling</a></h3>
+<p>Fallback for compatibility:</p>
+<pre><code class="language-yaml">watch:
+  strategy: polling
+  interval: 2000     # Poll every 2 seconds
+  # Works everywhere
+  # Higher CPU usage
+  # Slower updates
+</code></pre>
+<h2 id="file-events"><a class="header" href="#file-events">File Events</a></h2>
+<h3 id="supported-events"><a class="header" href="#supported-events">Supported Events</a></h3>
+<p>The watcher handles these file system events:</p>
+<ol>
+<li><strong>Created</strong> - New prompt files added</li>
+<li><strong>Modified</strong> - Existing files changed</li>
+<li><strong>Deleted</strong> - Files removed</li>
+<li><strong>Renamed</strong> - Files moved or renamed</li>
+<li><strong>Metadata</strong> - Permission or timestamp changes</li>
+</ol>
+<h3 id="event-processing"><a class="header" href="#event-processing">Event Processing</a></h3>
+<pre><code class="language-yaml"># Event processing configuration
+watch:
+  events:
+    # Process creation events
+    create:
+      enabled: true
+      validate: true
+      
+    # Process modification events
+    modify:
+      enabled: true
+      validate: true
+      reload_delay: 100  # ms
+      
+    # Process deletion events
+    delete:
+      enabled: true
+      cleanup_cache: true
+      
+    # Process rename events
+    rename:
+      enabled: true
+      track_moves: true
+</code></pre>
+<h2 id="validation"><a class="header" href="#validation">Validation</a></h2>
+<h3 id="automatic-validation"><a class="header" href="#automatic-validation">Automatic Validation</a></h3>
+<p>Files are validated before reload:</p>
+<pre><code class="language-yaml">watch:
+  validation:
+    # Enable validation
+    enabled: true
+    
+    # Validation rules
+    rules:
+      # Check YAML front matter
+      yaml_syntax: true
+      
+      # Validate required fields
+      required_fields:
+        - name
+        - title
+        - description
+      
+      # Check template syntax
+      template_syntax: true
+      
+      # Maximum file size
+      max_size: 1MB
+    
+    # What to do on validation failure
+    on_failure: warn  # warn, ignore, stop
+</code></pre>
+<h3 id="validation-errors"><a class="header" href="#validation-errors">Validation Errors</a></h3>
+<p>When validation fails:</p>
+<pre><code>[WARN] Validation failed for prompts/invalid.md:
+  - Line 5: Invalid YAML syntax
+  - Missing required field: 'title'
+  - Template error: Unclosed tag '{% if'
+  
+File will not be loaded. Fix errors and save again.
+</code></pre>
+<h2 id="performance"><a class="header" href="#performance">Performance</a></h2>
+<h3 id="optimization-tips"><a class="header" href="#optimization-tips">Optimization Tips</a></h3>
+<ol>
+<li>
+<p><strong>Exclude unnecessary paths</strong>:</p>
+<pre><code class="language-yaml">watch:
+  ignore:
+    - "**/backup/**"
+    - "**/archive/**"
+    - "**/*.log"
+</code></pre>
+</li>
+<li>
+<p><strong>Tune intervals for your workflow</strong>:</p>
+<pre><code class="language-yaml"># For active development
+watch:
+  interval: 500
+  debounce: 250
+
+# For production
+watch:
+  interval: 5000
+  debounce: 2000
+</code></pre>
+</li>
+<li>
+<p><strong>Limit watch scope</strong>:</p>
+<pre><code class="language-yaml">watch:
+  # Only watch specific directories
+  directories:
+    - ./prompts
+    - ~/.swissarmyhammer/prompts
+  # Don't watch subdirectories
+  recursive: false
+</code></pre>
+</li>
+</ol>
+<h3 id="resource-usage"><a class="header" href="#resource-usage">Resource Usage</a></h3>
+<p>Monitor watcher resource usage:</p>
+<pre><code class="language-bash"># Check watcher status
+swissarmyhammer doctor --watch
+
+# Show watcher statistics
+swissarmyhammer status --verbose
+
+# Output:
+File Watcher Status:
+  Strategy: efficient
+  Files watched: 156
+  Directories: 12
+  CPU usage: 0.1%
+  Memory: 2.4MB
+  Events processed: 1,234
+  Last reload: 2 minutes ago
+</code></pre>
+<h2 id="debugging"><a class="header" href="#debugging">Debugging</a></h2>
+<h3 id="enable-debug-logging"><a class="header" href="#enable-debug-logging">Enable Debug Logging</a></h3>
+<pre><code class="language-yaml">logging:
+  modules:
+    swissarmyhammer::watcher: debug
+</code></pre>
+<h3 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h3>
+<ol>
+<li>
+<p><strong>Changes not detected</strong>:</p>
+<pre><code class="language-bash"># Check if watching is enabled
+swissarmyhammer config get watch.enabled
+
+# Test file watching
+swissarmyhammer test --watch
+</code></pre>
+</li>
+<li>
+<p><strong>High CPU usage</strong>:</p>
+<pre><code class="language-yaml"># Increase intervals
+watch:
+  interval: 2000
+  debounce: 1000
+
+# Use efficient strategy
+watch:
+  strategy: efficient
+</code></pre>
+</li>
+<li>
+<p><strong>Too many open files</strong>:</p>
+<pre><code class="language-bash"># Linux: Increase inotify watches
+echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+
+# macOS: Usually not an issue with FSEvents
+
+# Windows: Use polling fallback
+</code></pre>
+</li>
+</ol>
+<h2 id="platform-specific-notes"><a class="header" href="#platform-specific-notes">Platform-Specific Notes</a></h2>
+<h3 id="macos"><a class="header" href="#macos">macOS</a></h3>
+<p>Uses FSEvents for efficient watching:</p>
+<pre><code class="language-yaml">watch:
+  platform:
+    macos:
+      use_fsevents: true
+      # FSEvents latency in seconds
+      latency: 0.1
+      # Ignore events older than
+      ignore_older_than: 10  # seconds
+</code></pre>
+<h3 id="linux"><a class="header" href="#linux">Linux</a></h3>
+<p>Uses inotify with automatic limits:</p>
+<pre><code class="language-yaml">watch:
+  platform:
+    linux:
+      use_inotify: true
+      # Will warn if approaching limits
+      warn_threshold: 0.8
+      # Fallback to polling if needed
+      auto_fallback: true
+</code></pre>
+<h3 id="windows"><a class="header" href="#windows">Windows</a></h3>
+<p>Uses ReadDirectoryChangesW:</p>
+<pre><code class="language-yaml">watch:
+  platform:
+    windows:
+      # Buffer size for changes
+      buffer_size: 65536
+      # Watch subtree
+      watch_subtree: true
+      # Notification filters
+      filters:
+        - file_name
+        - last_write
+        - size
+</code></pre>
+<h2 id="integration"><a class="header" href="#integration">Integration</a></h2>
+<h3 id="client-notifications"><a class="header" href="#client-notifications">Client Notifications</a></h3>
+<p>Clients are notified of changes:</p>
+<pre><code class="language-javascript">// MCP client receives notification
+client.on('prompt.changed', (event) =&gt; {
+  console.log(`Prompt ${event.name} was ${event.type}`);
+  // Refresh UI, clear caches, etc.
+});
+</code></pre>
+<h3 id="hooks"><a class="header" href="#hooks">Hooks</a></h3>
+<p>Run commands on file changes:</p>
+<pre><code class="language-yaml">watch:
+  hooks:
+    # Before processing changes
+    pre_reload:
+      - echo "Reloading prompts..."
+    
+    # After successful reload
+    post_reload:
+      - ./scripts/notify-team.sh
+      - ./scripts/update-index.sh
+    
+    # On reload failure
+    on_error:
+      - ./scripts/alert-admin.sh
+</code></pre>
+<h3 id="api-access"><a class="header" href="#api-access">API Access</a></h3>
+<p>Query watcher status via API:</p>
+<pre><code class="language-bash"># Get watcher status
+curl http://localhost:3333/api/watcher/status
+
+# Get recent events
+curl http://localhost:3333/api/watcher/events
+
+# Trigger manual reload
+curl -X POST http://localhost:3333/api/watcher/reload
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="development"><a class="header" href="#development">Development</a></h3>
+<ol>
+<li><strong>Use aggressive watching</strong> for immediate feedback</li>
+<li><strong>Enable validation</strong> to catch errors early</li>
+<li><strong>Watch only active directories</strong> to reduce overhead</li>
+<li><strong>Use debug logging</strong> to troubleshoot issues</li>
+</ol>
+<h3 id="production"><a class="header" href="#production">Production</a></h3>
+<ol>
+<li><strong>Use efficient strategy</strong> for lower resource usage</li>
+<li><strong>Increase intervals</strong> to reduce CPU load</li>
+<li><strong>Disable watching</strong> if prompts rarely change</li>
+<li><strong>Monitor resource usage</strong> regularly</li>
+</ol>
+<h3 id="large-projects"><a class="header" href="#large-projects">Large Projects</a></h3>
+<ol>
+<li><strong>Exclude build directories</strong> and dependencies</li>
+<li><strong>Use specific patterns</strong> instead of wildcards</li>
+<li><strong>Consider splitting</strong> prompts across multiple directories</li>
+<li><strong>Implement caching</strong> to reduce reload impact</li>
+</ol>
+<h2 id="manual-control"><a class="header" href="#manual-control">Manual Control</a></h2>
+<h3 id="cli-commands"><a class="header" href="#cli-commands">CLI Commands</a></h3>
+<p>Control file watching manually:</p>
+<pre><code class="language-bash"># Pause file watching
+swissarmyhammer watch pause
+
+# Resume file watching
+swissarmyhammer watch resume
+
+# Force reload all prompts
+swissarmyhammer watch reload
+
+# Show watch status
+swissarmyhammer watch status
+</code></pre>
+<h3 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h3>
+<p>Override watch settings:</p>
+<pre><code class="language-bash"># Disable watching
+export SWISSARMYHAMMER_WATCH_ENABLED=false
+
+# Change interval
+export SWISSARMYHAMMER_WATCH_INTERVAL=5000
+
+# Force polling strategy
+export SWISSARMYHAMMER_WATCH_STRATEGY=polling
+</code></pre>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="diagnostic-commands"><a class="header" href="#diagnostic-commands">Diagnostic Commands</a></h3>
+<pre><code class="language-bash"># Run watcher diagnostics
+swissarmyhammer doctor --watch
+
+# Test file detection
+echo "test" &gt;&gt; prompts/test.md
+swissarmyhammer watch test
+
+# Monitor events in real-time
+swissarmyhammer watch monitor
+</code></pre>
+<h3 id="common-solutions"><a class="header" href="#common-solutions">Common Solutions</a></h3>
+<ol>
+<li><strong>Linux: Increase inotify limits</strong></li>
+<li><strong>macOS: Grant full disk access</strong></li>
+<li><strong>Windows: Run as administrator</strong></li>
+<li><strong>All: Check file permissions</strong></li>
+<li><strong>All: Verify ignore patterns</strong></li>
+</ol>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ul>
+<li>Configure watching in <a href="./configuration.html">Configuration</a></li>
+<li>Learn about <a href="./prompt-organization.html">Prompt Organization</a></li>
+<li>Understand <a href="./prompt-overrides.html">Prompt Overrides</a></li>
+<li>Read <a href="./troubleshooting.html">Troubleshooting</a> for more help</li>
+</ul>
 
                     </main>
 

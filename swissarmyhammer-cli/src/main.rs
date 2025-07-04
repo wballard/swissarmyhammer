@@ -5,7 +5,6 @@ mod doctor;
 mod export;
 mod import;
 mod list;
-mod mcp;
 mod prompt_loader;
 mod search;
 mod signal_handler;
@@ -16,8 +15,6 @@ use clap::CommandFactory;
 use cli::{
     Cli, Commands, ExportFormat, ImportStrategy, OutputFormat, PromptSource, ValidateFormat,
 };
-use mcp::MCPServer;
-use tokio::sync::oneshot;
 
 #[tokio::main]
 async fn main() {
@@ -181,23 +178,42 @@ async fn main() {
 }
 
 async fn run_server() -> i32 {
-    let server = MCPServer::new();
-
-    // Set up shutdown channel
-    let (shutdown_tx, shutdown_rx) = oneshot::channel();
-
+    use swissarmyhammer::{PromptLibrary, mcp::McpServer};
+    use rmcp::serve_server;
+    use rmcp::transport::io::stdio;
+    use tokio_util::sync::CancellationToken;
+    
+    // Create library and server
+    let library = PromptLibrary::new();
+    let server = McpServer::new(library);
+    
+    // Initialize prompts
+    if let Err(e) = server.initialize().await {
+        tracing::error!("Failed to initialize MCP server: {}", e);
+        return 1;
+    }
+    
+    // Set up cancellation token
+    let ct = CancellationToken::new();
+    let ct_clone = ct.clone();
+    
     // Set up signal handlers
     tokio::spawn(async move {
         tokio::signal::ctrl_c()
             .await
             .expect("failed to listen for ctrl+c");
-
+        
         tracing::info!("Shutdown signal received");
-        let _ = shutdown_tx.send(());
+        ct_clone.cancel();
     });
-
-    match server.run(shutdown_rx).await {
-        Ok(_) => {
+    
+    // Start the rmcp SDK server with stdio transport
+    match serve_server(server, stdio()).await {
+        Ok(_running_service) => {
+            tracing::info!("MCP server started successfully");
+            
+            // Wait for cancellation
+            ct.cancelled().await;
             tracing::info!("MCP server exited successfully");
             0
         }

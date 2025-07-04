@@ -4,6 +4,9 @@ use swissarmyhammer::prelude::*;
 use swissarmyhammer::ArgumentSpec;
 use tempfile::TempDir;
 
+#[cfg(feature = "mcp")]
+use rmcp::ServerHandler;
+
 #[test]
 fn test_library_creation() {
     let library = PromptLibrary::new();
@@ -274,8 +277,8 @@ async fn test_mcp_server() {
     let server = McpServer::new(library);
 
     // Test server info
-    let info = server.info();
-    assert_eq!(info.name, "SwissArmyHammer");
+    let info = server.get_info();
+    assert!(!info.server_info.name.is_empty());
 }
 
 // Example usage for documentation

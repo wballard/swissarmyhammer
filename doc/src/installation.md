@@ -1,29 +1,26 @@
 # Installation
 
-For complete installation instructions, see [INSTALLATION.md](../../INSTALLATION.md).
+## Quick Install (Recommended)
 
-## Prerequisites
-
-Before installing SwissArmyHammer, you need:
-- **Rust 1.70 or later** - Install from [rustup.rs](https://rustup.rs/)
-- **Git** - For cloning the repository
-
-## PATH Configuration
-
-Make sure `~/.cargo/bin` is in your PATH. Add this to your shell configuration file:
+### Unix-like Systems (Linux/macOS)
 
 ```bash
-# For bash (~/.bashrc or ~/.bash_profile)
-export PATH="$HOME/.cargo/bin:$PATH"
-
-# For zsh (~/.zshrc)
-export PATH="$HOME/.cargo/bin:$PATH"
-
-# For fish (~/.config/fish/config.fish)
-set -gx PATH $HOME/.cargo/bin $PATH
+curl -fsSL https://raw.githubusercontent.com/swissarmyhammer/swissarmyhammer/main/install.sh | sh
 ```
 
-## Alternative: Clone and Build
+This script will:
+
+- Detect your platform automatically
+- Download the latest release
+- Install to `/usr/local/bin`
+- Verify the installation
+
+## Clone and Build
+
+If you are installing from source:
+
+- **Rust 1.70 or later** - Install from [rustup.rs](https://rustup.rs/)
+- **Git** - For cloning the repository
 
 If you want to build from source or contribute to development:
 

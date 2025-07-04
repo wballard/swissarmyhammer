@@ -40,13 +40,15 @@ fuzzy-matcher = { workspace = true, optional = true }
 
 # MCP support
 rmcp = { workspace = true, optional = true }
+schemars = { version = "0.8", optional = true }
+dirs = { workspace = true, optional = true }
 
 [features]
 default = ["async", "search", "watch"]
 async = ["tokio"]
 search = ["tantivy", "fuzzy-matcher"]
 watch = ["notify", "async"]
-mcp = ["rmcp", "async"]
+mcp = ["rmcp", "schemars", "dirs", "async"]
 full = ["async", "search", "watch", "mcp"]
 
 [dev-dependencies]

@@ -173,6 +173,481 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="contributing"><a class="header" href="#contributing">Contributing</a></h1>
+<p>Thank you for your interest in contributing to SwissArmyHammer! This guide will help you get started with contributing to the project.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>SwissArmyHammer welcomes contributions in many forms:</p>
+<ul>
+<li><strong>Code contributions</strong> - Features, bug fixes, optimizations</li>
+<li><strong>Prompt contributions</strong> - New built-in prompts</li>
+<li><strong>Documentation</strong> - Improvements, examples, translations</li>
+<li><strong>Bug reports</strong> - Issues and reproducible test cases</li>
+<li><strong>Feature requests</strong> - Ideas and suggestions</li>
+</ul>
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
+<h3 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h3>
+<ul>
+<li>Rust 1.70+ (check with <code>rustc --version</code>)</li>
+<li>Git</li>
+<li>GitHub account</li>
+<li>Basic familiarity with:
+<ul>
+<li>Rust programming</li>
+<li>Model Context Protocol (MCP)</li>
+<li>Liquid templating</li>
+</ul>
+</li>
+</ul>
+<h3 id="fork-and-clone"><a class="header" href="#fork-and-clone">Fork and Clone</a></h3>
+<ol>
+<li>
+<p>Fork the repository on GitHub</p>
+</li>
+<li>
+<p>Clone your fork:</p>
+<pre><code class="language-bash">git clone https://github.com/YOUR_USERNAME/swissarmyhammer.git
+cd swissarmyhammer
+</code></pre>
+</li>
+<li>
+<p>Add upstream remote:</p>
+<pre><code class="language-bash">git remote add upstream https://github.com/wballard/swissarmyhammer.git
+</code></pre>
+</li>
+</ol>
+<h3 id="development-setup"><a class="header" href="#development-setup">Development Setup</a></h3>
+<ol>
+<li>
+<p>Install Rust toolchain:</p>
+<pre><code class="language-bash">curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+</code></pre>
+</li>
+<li>
+<p>Install development tools:</p>
+<pre><code class="language-bash"># Format checker
+rustup component add rustfmt
+
+# Linter
+rustup component add clippy
+
+# Documentation
+cargo install mdbook
+</code></pre>
+</li>
+<li>
+<p>Build the project:</p>
+<pre><code class="language-bash">cargo build
+cargo test
+</code></pre>
+</li>
+</ol>
+<h2 id="development-workflow"><a class="header" href="#development-workflow">Development Workflow</a></h2>
+<h3 id="branch-strategy"><a class="header" href="#branch-strategy">Branch Strategy</a></h3>
+<ul>
+<li><code>main</code> - Stable release branch</li>
+<li><code>develop</code> - Development branch</li>
+<li><code>feature/*</code> - Feature branches</li>
+<li><code>fix/*</code> - Bug fix branches</li>
+<li><code>docs/*</code> - Documentation branches</li>
+</ul>
+<h3 id="creating-a-feature-branch"><a class="header" href="#creating-a-feature-branch">Creating a Feature Branch</a></h3>
+<pre><code class="language-bash"># Update your fork
+git checkout main
+git pull upstream main
+git push origin main
+
+# Create feature branch
+git checkout -b feature/your-feature-name
+
+# Or for fixes
+git checkout -b fix/issue-description
+</code></pre>
+<h3 id="making-changes"><a class="header" href="#making-changes">Making Changes</a></h3>
+<ol>
+<li><strong>Write code</strong> following our style guide</li>
+<li><strong>Add tests</strong> for new functionality</li>
+<li><strong>Update documentation</strong> as needed</li>
+<li><strong>Run checks</strong> before committing</li>
+</ol>
+<h3 id="running-checks"><a class="header" href="#running-checks">Running Checks</a></h3>
+<pre><code class="language-bash"># Format code
+cargo fmt
+
+# Run linter
+cargo clippy -- -D warnings
+
+# Run tests
+cargo test
+
+# Build documentation
+cargo doc --no-deps --open
+
+# Check everything
+./scripts/check-all.sh
+</code></pre>
+<h2 id="code-style-guide"><a class="header" href="#code-style-guide">Code Style Guide</a></h2>
+<h3 id="rust-code"><a class="header" href="#rust-code">Rust Code</a></h3>
+<p>Follow Rust standard style with these additions:</p>
+<pre><code class="language-rust">// Good: Clear module organization
+pub mod prompts;
+pub mod template;
+pub mod mcp;
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+
+// Good: Descriptive names
+pub struct PromptManager {
+    prompts: HashMap&lt;String, Prompt&gt;,
+    directories: Vec&lt;PathBuf&gt;,
+    watcher: Option&lt;FileWatcher&gt;,
+}
+
+// Good: Clear error handling
+impl PromptManager {
+    pub fn load_prompt(&amp;mut self, path: &amp;Path) -&gt; Result&lt;()&gt; {
+        let content = std::fs::read_to_string(path)
+            .with_context(|| format!("Failed to read prompt file: {}", path.display()))?;
+        
+        let prompt = Prompt::parse(&amp;content)
+            .with_context(|| format!("Failed to parse prompt: {}", path.display()))?;
+        
+        self.prompts.insert(prompt.name.clone(), prompt);
+        Ok(())
+    }
+}
+
+// Good: Comprehensive tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_load_prompt() {
+        let mut manager = PromptManager::new();
+        let result = manager.load_prompt(Path::new("test.md"));
+        assert!(result.is_ok());
+    }
+}</code></pre>
+<h3 id="documentation"><a class="header" href="#documentation">Documentation</a></h3>
+<ul>
+<li>Use <code>///</code> for public API documentation</li>
+<li>Include examples in doc comments</li>
+<li>Keep comments concise and helpful</li>
+</ul>
+<pre><code class="language-rust">/// Manages a collection of prompts and provides MCP server functionality.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use swissarmyhammer::PromptManager;
+/// 
+/// let mut manager = PromptManager::new();
+/// manager.load_prompts()?;
+/// ```
+pub struct PromptManager {
+    // Implementation details...
+}</code></pre>
+<h3 id="error-messages"><a class="header" href="#error-messages">Error Messages</a></h3>
+<p>Make errors helpful and actionable:</p>
+<pre><code class="language-rust">// Good
+bail!("Prompt '{}' not found in directories: {:?}", name, self.directories);
+
+// Good with context
+.with_context(|| format!("Failed to parse YAML front matter in {}", path.display()))?;
+
+// Bad
+bail!("Error");</code></pre>
+<h2 id="contributing-prompts"><a class="header" href="#contributing-prompts">Contributing Prompts</a></h2>
+<h3 id="built-in-prompt-guidelines"><a class="header" href="#built-in-prompt-guidelines">Built-in Prompt Guidelines</a></h3>
+<ol>
+<li><strong>Location</strong>: <code>src/prompts/builtin/</code></li>
+<li><strong>Categories</strong>: Place in appropriate subdirectory</li>
+<li><strong>Quality</strong>: Must be generally useful</li>
+<li><strong>Testing</strong>: Include test cases</li>
+</ol>
+<h3 id="prompt-standards"><a class="header" href="#prompt-standards">Prompt Standards</a></h3>
+<pre><code class="language-markdown">---
+name: descriptive-name
+title: Human Readable Title
+description: |
+  Clear description of what this prompt does.
+  Include use cases and examples.
+category: development
+tags:
+  - relevant
+  - searchable
+  - tags
+author: your-email@example.com
+version: 1.0.0
+arguments:
+  - name: required_arg
+    description: What this argument is for
+    required: true
+  - name: optional_arg
+    description: Optional parameter
+    default: "default value"
+---
+
+# Prompt Title
+
+Clear instructions using the arguments:
+- {{required_arg}}
+- {{optional_arg}}
+
+## Section Headers
+
+Organize the prompt logically...
+</code></pre>
+<h3 id="testing-prompts"><a class="header" href="#testing-prompts">Testing Prompts</a></h3>
+<p>Add test file <code>src/prompts/builtin/tests/your-prompt.test.md</code>:</p>
+<pre><code class="language-yaml">name: test-your-prompt
+cases:
+  - name: basic usage
+    arguments:
+      required_arg: "test value"
+    expected_contains:
+      - "test value"
+      - "expected output"
+    expected_not_contains:
+      - "error"
+      
+  - name: edge case
+    arguments:
+      required_arg: ""
+      optional_arg: "custom"
+    expected_error: "required_arg cannot be empty"
+</code></pre>
+<h2 id="documentation-1"><a class="header" href="#documentation-1">Documentation</a></h2>
+<h3 id="documentation-structure"><a class="header" href="#documentation-structure">Documentation Structure</a></h3>
+<pre><code>doc/
+├── src/
+│   ├── SUMMARY.md      # Table of contents
+│   ├── chapter-1.md    # Content files
+│   └── images/         # Images and diagrams
+└── book.toml          # mdbook configuration
+</code></pre>
+<h3 id="writing-documentation"><a class="header" href="#writing-documentation">Writing Documentation</a></h3>
+<ol>
+<li><strong>Be clear and concise</strong></li>
+<li><strong>Include examples</strong></li>
+<li><strong>Use proper markdown</strong></li>
+<li><strong>Test all code examples</strong></li>
+</ol>
+<h3 id="building-documentation"><a class="header" href="#building-documentation">Building Documentation</a></h3>
+<pre><code class="language-bash">cd doc
+mdbook build
+mdbook serve  # Preview at http://localhost:3000
+</code></pre>
+<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
+<h3 id="test-organization"><a class="header" href="#test-organization">Test Organization</a></h3>
+<pre><code>tests/
+├── integration/     # Integration tests
+├── fixtures/       # Test data
+└── common/        # Shared test utilities
+</code></pre>
+<h3 id="writing-tests"><a class="header" href="#writing-tests">Writing Tests</a></h3>
+<pre><code class="language-rust">#[test]
+fn test_prompt_loading() {
+    let temp_dir = tempdir().unwrap();
+    let prompt_file = temp_dir.path().join("test.md");
+    
+    std::fs::write(&amp;prompt_file, r#"---
+name: test-prompt
+title: Test
+---
+Content"#).unwrap();
+    
+    let mut manager = PromptManager::new();
+    manager.add_directory(temp_dir.path());
+    manager.load_prompts().unwrap();
+    
+    assert!(manager.get_prompt("test-prompt").is_some());
+}</code></pre>
+<h3 id="running-tests"><a class="header" href="#running-tests">Running Tests</a></h3>
+<pre><code class="language-bash"># All tests
+cargo test
+
+# Specific test
+cargo test test_prompt_loading
+
+# With output
+cargo test -- --nocapture
+
+# Integration tests only
+cargo test --test integration
+</code></pre>
+<h2 id="submitting-changes"><a class="header" href="#submitting-changes">Submitting Changes</a></h2>
+<h3 id="commit-messages"><a class="header" href="#commit-messages">Commit Messages</a></h3>
+<p>Follow <a href="https://www.conventionalcommits.org/">Conventional Commits</a>:</p>
+<pre><code class="language-bash"># Features
+git commit -m "feat: add prompt validation API"
+git commit -m "feat(mcp): implement notification support"
+
+# Bug fixes
+git commit -m "fix: correct template escaping issue"
+git commit -m "fix(watcher): handle symlink changes"
+
+# Documentation
+git commit -m "docs: add prompt writing guide"
+git commit -m "docs(api): document PromptManager methods"
+
+# Performance
+git commit -m "perf: optimize prompt loading"
+git commit -m "perf(cache): implement LRU cache"
+
+# Refactoring
+git commit -m "refactor: simplify error handling"
+git commit -m "refactor(template): extract common logic"
+</code></pre>
+<h3 id="pull-request-process"><a class="header" href="#pull-request-process">Pull Request Process</a></h3>
+<ol>
+<li>
+<p><strong>Update your branch</strong>:</p>
+<pre><code class="language-bash">git fetch upstream
+git rebase upstream/main
+</code></pre>
+</li>
+<li>
+<p><strong>Push to your fork</strong>:</p>
+<pre><code class="language-bash">git push origin feature/your-feature-name
+</code></pre>
+</li>
+<li>
+<p><strong>Create pull request</strong>:</p>
+<ul>
+<li>Use clear, descriptive title</li>
+<li>Reference any related issues</li>
+<li>Describe what changes do</li>
+<li>Include test results</li>
+<li>Add screenshots if UI changes</li>
+</ul>
+</li>
+</ol>
+<h3 id="pr-template"><a class="header" href="#pr-template">PR Template</a></h3>
+<pre><code class="language-markdown">## Description
+Brief description of changes
+
+## Related Issue
+Fixes #123
+
+## Type of Change
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Breaking change
+- [ ] Documentation update
+
+## Testing
+- [ ] Unit tests pass
+- [ ] Integration tests pass
+- [ ] Manual testing completed
+
+## Checklist
+- [ ] Code follows style guidelines
+- [ ] Self-review completed
+- [ ] Documentation updated
+- [ ] Tests added/updated
+- [ ] Breaking changes documented
+</code></pre>
+<h2 id="code-review-process"><a class="header" href="#code-review-process">Code Review Process</a></h2>
+<h3 id="what-we-look-for"><a class="header" href="#what-we-look-for">What We Look For</a></h3>
+<ol>
+<li><strong>Correctness</strong> - Does it work as intended?</li>
+<li><strong>Tests</strong> - Are changes adequately tested?</li>
+<li><strong>Documentation</strong> - Is it documented?</li>
+<li><strong>Style</strong> - Does it follow conventions?</li>
+<li><strong>Performance</strong> - Any performance impacts?</li>
+<li><strong>Security</strong> - Any security concerns?</li>
+</ol>
+<h3 id="review-timeline"><a class="header" href="#review-timeline">Review Timeline</a></h3>
+<ul>
+<li>Initial response: 2-3 days</li>
+<li>Full review: Within a week</li>
+<li>Follow-ups: As needed</li>
+</ul>
+<h3 id="addressing-feedback"><a class="header" href="#addressing-feedback">Addressing Feedback</a></h3>
+<pre><code class="language-bash"># Make requested changes
+git add -A
+git commit -m "address review feedback"
+
+# Or amend if small change
+git commit --amend
+
+# Force push to your branch
+git push -f origin feature/your-feature-name
+</code></pre>
+<h2 id="release-process"><a class="header" href="#release-process">Release Process</a></h2>
+<h3 id="version-numbering"><a class="header" href="#version-numbering">Version Numbering</a></h3>
+<p>We use <a href="https://semver.org/">Semantic Versioning</a>:</p>
+<ul>
+<li>MAJOR: Breaking API changes</li>
+<li>MINOR: New features, backward compatible</li>
+<li>PATCH: Bug fixes, backward compatible</li>
+</ul>
+<h3 id="release-checklist"><a class="header" href="#release-checklist">Release Checklist</a></h3>
+<ol>
+<li>Update <code>Cargo.toml</code> version</li>
+<li>Update <code>CHANGELOG.md</code></li>
+<li>Run full test suite</li>
+<li>Build and test binaries</li>
+<li>Update documentation</li>
+<li>Create release PR</li>
+<li>Tag release after merge</li>
+<li>Publish to crates.io</li>
+</ol>
+<h2 id="community"><a class="header" href="#community">Community</a></h2>
+<h3 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h3>
+<ul>
+<li><strong>GitHub Issues</strong> - Bug reports and features</li>
+<li><strong>Discussions</strong> - Questions and ideas</li>
+<li><strong>Discord</strong> - Real-time chat (if available)</li>
+</ul>
+<h3 id="code-of-conduct"><a class="header" href="#code-of-conduct">Code of Conduct</a></h3>
+<p>We follow the <a href="https://www.rust-lang.org/policies/code-of-conduct">Rust Code of Conduct</a>:</p>
+<ul>
+<li>Be respectful and inclusive</li>
+<li>Welcome newcomers</li>
+<li>Focus on what’s best for the community</li>
+<li>Show empathy towards others</li>
+</ul>
+<h3 id="recognition"><a class="header" href="#recognition">Recognition</a></h3>
+<p>Contributors are recognized in:</p>
+<ul>
+<li><code>CONTRIBUTORS.md</code> file</li>
+<li>Release notes</li>
+<li>Documentation credits</li>
+</ul>
+<h2 id="quick-reference"><a class="header" href="#quick-reference">Quick Reference</a></h2>
+<h3 id="common-commands"><a class="header" href="#common-commands">Common Commands</a></h3>
+<pre><code class="language-bash"># Development
+cargo build                 # Build project
+cargo test                  # Run tests
+cargo fmt                   # Format code
+cargo clippy                # Lint code
+cargo doc                   # Build docs
+
+# Documentation
+cd doc &amp;&amp; mdbook serve      # Preview docs
+
+# Prompts
+cargo run -- list           # List prompts
+cargo run -- doctor         # Validate prompts
+
+# Release
+cargo publish --dry-run     # Test publishing
+</code></pre>
+<h3 id="useful-resources"><a class="header" href="#useful-resources">Useful Resources</a></h3>
+<ul>
+<li><a href="https://doc.rust-lang.org/book/">Rust Book</a></li>
+<li><a href="https://modelcontextprotocol.io/">MCP Specification</a></li>
+<li><a href="https://shopify.github.io/liquid/">Liquid Documentation</a></li>
+<li><a href="https://rust-lang.github.io/mdBook/">mdBook Documentation</a></li>
+</ul>
+<h2 id="thank-you"><a class="header" href="#thank-you">Thank You!</a></h2>
+<p>Your contributions make SwissArmyHammer better for everyone. Whether it’s fixing a typo, adding a feature, or improving documentation, every contribution is valued.</p>
+<p>Happy contributing! 🚀</p>
 
                     </main>
 

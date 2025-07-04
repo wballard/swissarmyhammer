@@ -172,7 +172,573 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="integration-examples"><a class="header" href="#integration-examples">Integration Examples</a></h1>
+                        <h1 id="library-examples"><a class="header" href="#library-examples">Library Examples</a></h1>
+<p>This guide provides practical examples of using SwissArmyHammer as a Rust library in your applications.</p>
+<h2 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h2>
+<h3 id="adding-to-your-project"><a class="header" href="#adding-to-your-project">Adding to Your Project</a></h3>
+<p>Add SwissArmyHammer to your <code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[dependencies]
+swissarmyhammer = { git = "https://github.com/wballard/swissarmyhammer.git" }
+tokio = { version = "1", features = ["full"] }
+serde_json = "1"
+</code></pre>
+<h3 id="simple-example"><a class="header" href="#simple-example">Simple Example</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::{PromptManager, PromptArgument};
+use std::collections::HashMap;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Create a prompt manager
+    let manager = PromptManager::new()?;
+    
+    // Load prompts from default directories
+    manager.load_prompts().await?;
+    
+    // Get a specific prompt
+    let prompt = manager.get_prompt("code-review")?;
+    
+    // Prepare arguments
+    let mut args = HashMap::new();
+    args.insert("code".to_string(), r#"
+        def calculate_sum(a, b):
+            return a + b
+    "#.to_string());
+    args.insert("language".to_string(), "python".to_string());
+    
+    // Render the prompt
+    let rendered = prompt.render(&amp;args)?;
+    println!("Rendered prompt:\n{}", rendered);
+    
+    Ok(())
+}</code></pre>
+<h2 id="advanced-examples"><a class="header" href="#advanced-examples">Advanced Examples</a></h2>
+<h3 id="custom-prompt-directories"><a class="header" href="#custom-prompt-directories">Custom Prompt Directories</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::{PromptManager, Config};
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Create custom configuration
+    let mut config = Config::default();
+    config.prompt_directories.push(PathBuf::from("./my-prompts"));
+    config.prompt_directories.push(PathBuf::from("/opt/company/prompts"));
+    
+    // Create manager with custom config
+    let manager = PromptManager::with_config(config)?;
+    
+    // Load prompts from all directories
+    manager.load_prompts().await?;
+    
+    // List all available prompts
+    for prompt in manager.list_prompts() {
+        println!("Found prompt: {} - {}", prompt.name, prompt.title);
+    }
+    
+    Ok(())
+}</code></pre>
+<h3 id="watching-for-changes"><a class="header" href="#watching-for-changes">Watching for Changes</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::{PromptManager, WatchEvent};
+use tokio::sync::mpsc;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let manager = PromptManager::new()?;
+    
+    // Create a channel for watch events
+    let (tx, mut rx) = mpsc::channel(100);
+    
+    // Start watching for changes
+    manager.watch(tx).await?;
+    
+    // Handle watch events
+    tokio::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            match event {
+                WatchEvent::PromptAdded(name) =&gt; {
+                    println!("New prompt added: {}", name);
+                }
+                WatchEvent::PromptModified(name) =&gt; {
+                    println!("Prompt modified: {}", name);
+                }
+                WatchEvent::PromptRemoved(name) =&gt; {
+                    println!("Prompt removed: {}", name);
+                }
+            }
+        }
+    });
+    
+    // Keep the program running
+    tokio::signal::ctrl_c().await?;
+    println!("Shutting down...");
+    
+    Ok(())
+}</code></pre>
+<h3 id="mcp-server-implementation"><a class="header" href="#mcp-server-implementation">MCP Server Implementation</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::{PromptManager, MCPServer, MCPRequest, MCPResponse};
+use tokio::net::TcpListener;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Create prompt manager
+    let manager = PromptManager::new()?;
+    manager.load_prompts().await?;
+    
+    // Create MCP server
+    let server = MCPServer::new(manager);
+    
+    // Listen on TCP socket
+    let listener = TcpListener::bind("127.0.0.1:3333").await?;
+    println!("MCP server listening on 127.0.0.1:3333");
+    
+    loop {
+        let (mut socket, addr) = listener.accept().await?;
+        let server = server.clone();
+        
+        // Handle each connection
+        tokio::spawn(async move {
+            let mut buffer = vec![0; 1024];
+            
+            loop {
+                let n = match socket.read(&amp;mut buffer).await {
+                    Ok(n) if n == 0 =&gt; return,
+                    Ok(n) =&gt; n,
+                    Err(e) =&gt; {
+                        eprintln!("Error reading from {}: {}", addr, e);
+                        return;
+                    }
+                };
+                
+                // Parse request
+                if let Ok(request) = serde_json::from_slice::&lt;MCPRequest&gt;(&amp;buffer[..n]) {
+                    // Handle request
+                    let response = server.handle_request(request).await;
+                    
+                    // Send response
+                    let response_bytes = serde_json::to_vec(&amp;response).unwrap();
+                    if let Err(e) = socket.write_all(&amp;response_bytes).await {
+                        eprintln!("Error writing to {}: {}", addr, e);
+                        return;
+                    }
+                }
+            }
+        });
+    }
+}</code></pre>
+<h3 id="custom-template-filters"><a class="header" href="#custom-template-filters">Custom Template Filters</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::{PromptManager, TemplateEngine, FilterFunction};
+use liquid::ValueView;
+
+fn create_custom_filters() -&gt; Vec&lt;(&amp;'static str, FilterFunction)&gt; {
+    vec![
+        // Custom filter to convert to snake_case
+        ("snake_case", Box::new(|input: &amp;dyn ValueView, _args: &amp;[liquid::model::Value]| {
+            let s = input.to_kstr().to_string();
+            let snake = s.chars().fold(String::new(), |mut acc, ch| {
+                if ch.is_uppercase() &amp;&amp; !acc.is_empty() {
+                    acc.push('_');
+                }
+                acc.push(ch.to_lowercase().next().unwrap());
+                acc
+            });
+            Ok(liquid::model::Value::scalar(snake))
+        })),
+        
+        // Custom filter to add line numbers
+        ("line_numbers", Box::new(|input: &amp;dyn ValueView, _args: &amp;[liquid::model::Value]| {
+            let s = input.to_kstr().to_string();
+            let numbered = s.lines()
+                .enumerate()
+                .map(|(i, line)| format!("{:4}: {}", i + 1, line))
+                .collect::&lt;Vec&lt;_&gt;&gt;()
+                .join("\n");
+            Ok(liquid::model::Value::scalar(numbered))
+        })),
+    ]
+}
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Create template engine with custom filters
+    let mut engine = TemplateEngine::new();
+    for (name, filter) in create_custom_filters() {
+        engine.register_filter(name, filter);
+    }
+    
+    // Create prompt manager with custom engine
+    let manager = PromptManager::with_engine(engine)?;
+    
+    // Use prompts with custom filters
+    let template = r#"
+    Function name: {{ function_name | snake_case }}
+    
+    Code with line numbers:
+    {{ code | line_numbers }}
+    "#;
+    
+    let mut args = HashMap::new();
+    args.insert("function_name", "calculateTotalPrice");
+    args.insert("code", "def hello():\n    print('Hello')\n    return True");
+    
+    let rendered = engine.render_str(template, &amp;args)?;
+    println!("{}", rendered);
+    
+    Ok(())
+}</code></pre>
+<h3 id="prompt-validation"><a class="header" href="#prompt-validation">Prompt Validation</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::{PromptManager, PromptValidator, ValidationRule};
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Create custom validation rules
+    let rules = vec![
+        ValidationRule::RequiredFields(vec!["name", "title", "description"]),
+        ValidationRule::ArgumentTypes(HashMap::from([
+            ("max_length", "integer"),
+            ("temperature", "float"),
+            ("enabled", "boolean"),
+        ])),
+        ValidationRule::TemplatePatterns(vec![
+            r"\{\{[^}]+\}\}",  // Must use double braces
+        ]),
+    ];
+    
+    // Create validator
+    let validator = PromptValidator::new(rules);
+    
+    // Create manager with validator
+    let manager = PromptManager::with_validator(validator)?;
+    
+    // Load and validate prompts
+    match manager.load_prompts().await {
+        Ok(_) =&gt; println!("All prompts validated successfully"),
+        Err(e) =&gt; eprintln!("Validation errors: {}", e),
+    }
+    
+    // Validate a specific prompt file
+    let prompt_content = std::fs::read_to_string("my-prompt.md")?;
+    match manager.validate_prompt_content(&amp;prompt_content) {
+        Ok(prompt) =&gt; println!("Prompt '{}' is valid", prompt.name),
+        Err(errors) =&gt; {
+            println!("Validation errors:");
+            for error in errors {
+                println!("  - {}", error);
+            }
+        }
+    }
+    
+    Ok(())
+}</code></pre>
+<h3 id="batch-processing"><a class="header" href="#batch-processing">Batch Processing</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::{PromptManager, BatchProcessor};
+use futures::stream::StreamExt;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let manager = PromptManager::new()?;
+    manager.load_prompts().await?;
+    
+    // Create batch processor
+    let processor = BatchProcessor::new(manager, 10); // 10 concurrent tasks
+    
+    // Prepare batch jobs
+    let jobs = vec![
+        ("code-review", HashMap::from([
+            ("code", "def add(a, b): return a + b"),
+            ("language", "python"),
+        ])),
+        ("api-docs", HashMap::from([
+            ("api_spec", r#"{"endpoints": ["/users", "/posts"]}"#),
+            ("format", "markdown"),
+        ])),
+        ("test-writer", HashMap::from([
+            ("code", "class Calculator { add(a, b) { return a + b; } }"),
+            ("framework", "jest"),
+        ])),
+    ];
+    
+    // Process in parallel
+    let results = processor.process_batch(jobs).await;
+    
+    // Handle results
+    for (index, result) in results.iter().enumerate() {
+        match result {
+            Ok(rendered) =&gt; {
+                println!("Job {} completed:", index + 1);
+                println!("{}\n", rendered);
+            }
+            Err(e) =&gt; {
+                eprintln!("Job {} failed: {}", index + 1, e);
+            }
+        }
+    }
+    
+    Ok(())
+}</code></pre>
+<h3 id="integration-with-ai-services"><a class="header" href="#integration-with-ai-services">Integration with AI Services</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::{PromptManager, AIServiceClient};
+use async_trait::async_trait;
+
+// Custom AI service implementation
+struct OpenAIClient {
+    api_key: String,
+    client: reqwest::Client,
+}
+
+#[async_trait]
+impl AIServiceClient for OpenAIClient {
+    async fn complete(&amp;self, prompt: &amp;str) -&gt; Result&lt;String, Box&lt;dyn std::error::Error&gt;&gt; {
+        let response = self.client
+            .post("https://api.openai.com/v1/chat/completions")
+            .bearer_auth(&amp;self.api_key)
+            .json(&amp;serde_json::json!({
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.7,
+            }))
+            .send()
+            .await?;
+        
+        let data: serde_json::Value = response.json().await?;
+        let content = data["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or("");
+        
+        Ok(content.to_string())
+    }
+}
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Setup prompt manager
+    let manager = PromptManager::new()?;
+    manager.load_prompts().await?;
+    
+    // Create AI client
+    let ai_client = OpenAIClient {
+        api_key: std::env::var("OPENAI_API_KEY")?,
+        client: reqwest::Client::new(),
+    };
+    
+    // Get and render prompt
+    let prompt = manager.get_prompt("code-review")?;
+    let args = HashMap::from([
+        ("code", "def factorial(n): return 1 if n &lt;= 1 else n * factorial(n-1)"),
+        ("language", "python"),
+    ]);
+    let rendered = prompt.render(&amp;args)?;
+    
+    // Send to AI service
+    println!("Sending prompt to AI service...");
+    let response = ai_client.complete(&amp;rendered).await?;
+    println!("AI Response:\n{}", response);
+    
+    Ok(())
+}</code></pre>
+<h3 id="web-server-integration"><a class="header" href="#web-server-integration">Web Server Integration</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::PromptManager;
+use axum::{
+    routing::{get, post},
+    Router, Json, Extension,
+    response::IntoResponse,
+    http::StatusCode,
+};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+#[derive(Deserialize)]
+struct RenderRequest {
+    prompt_name: String,
+    arguments: HashMap&lt;String, String&gt;,
+}
+
+#[derive(Serialize)]
+struct RenderResponse {
+    rendered: String,
+}
+
+async fn list_prompts(
+    Extension(manager): Extension&lt;Arc&lt;PromptManager&gt;&gt;
+) -&gt; impl IntoResponse {
+    let prompts = manager.list_prompts();
+    Json(prompts)
+}
+
+async fn render_prompt(
+    Extension(manager): Extension&lt;Arc&lt;PromptManager&gt;&gt;,
+    Json(request): Json&lt;RenderRequest&gt;,
+) -&gt; impl IntoResponse {
+    match manager.get_prompt(&amp;request.prompt_name) {
+        Ok(prompt) =&gt; match prompt.render(&amp;request.arguments) {
+            Ok(rendered) =&gt; Ok(Json(RenderResponse { rendered })),
+            Err(e) =&gt; Err((StatusCode::BAD_REQUEST, e.to_string())),
+        },
+        Err(e) =&gt; Err((StatusCode::NOT_FOUND, e.to_string())),
+    }
+}
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Setup prompt manager
+    let manager = Arc::new(PromptManager::new()?);
+    manager.load_prompts().await?;
+    
+    // Build web app
+    let app = Router::new()
+        .route("/prompts", get(list_prompts))
+        .route("/render", post(render_prompt))
+        .layer(Extension(manager));
+    
+    // Start server
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
+    println!("Web server listening on http://0.0.0.0:8080");
+    axum::serve(listener, app).await?;
+    
+    Ok(())
+}</code></pre>
+<h3 id="testing-utilities"><a class="header" href="#testing-utilities">Testing Utilities</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::{PromptManager, TestHarness, TestCase};
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let manager = PromptManager::new()?;
+    manager.load_prompts().await?;
+    
+    // Create test harness
+    let harness = TestHarness::new(manager);
+    
+    // Define test cases
+    let test_cases = vec![
+        TestCase {
+            prompt_name: "code-review",
+            arguments: HashMap::from([
+                ("code", "def divide(a, b): return a / b"),
+                ("language", "python"),
+            ]),
+            expected_contains: vec!["division by zero", "error handling"],
+            expected_not_contains: vec!["syntax error"],
+        },
+        TestCase {
+            prompt_name: "api-docs",
+            arguments: HashMap::from([
+                ("api_spec", r#"{"version": "1.0"}"#),
+            ]),
+            expected_contains: vec!["API Documentation", "version"],
+            expected_not_contains: vec!["error", "invalid"],
+        },
+    ];
+    
+    // Run tests
+    let results = harness.run_tests(test_cases).await;
+    
+    // Report results
+    for (test, result) in results {
+        match result {
+            Ok(_) =&gt; println!("✓ {} passed", test.prompt_name),
+            Err(e) =&gt; println!("✗ {} failed: {}", test.prompt_name, e),
+        }
+    }
+    
+    Ok(())
+}</code></pre>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<h3 id="comprehensive-error-handling"><a class="header" href="#comprehensive-error-handling">Comprehensive Error Handling</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::{PromptManager, SwissArmyHammerError};
+
+#[tokio::main]
+async fn main() {
+    match run_app().await {
+        Ok(_) =&gt; println!("Application completed successfully"),
+        Err(e) =&gt; {
+            eprintln!("Application error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+async fn run_app() -&gt; Result&lt;(), SwissArmyHammerError&gt; {
+    let manager = PromptManager::new()
+        .map_err(|e| SwissArmyHammerError::Initialization(e.to_string()))?;
+    
+    // Handle different error types
+    match manager.load_prompts().await {
+        Ok(_) =&gt; println!("Prompts loaded successfully"),
+        Err(SwissArmyHammerError::IoError(e)) =&gt; {
+            eprintln!("File system error: {}", e);
+            return Err(SwissArmyHammerError::IoError(e));
+        }
+        Err(SwissArmyHammerError::ParseError(e)) =&gt; {
+            eprintln!("Prompt parsing error: {}", e);
+            // Continue with partial prompts
+        }
+        Err(e) =&gt; return Err(e),
+    }
+    
+    // Safely get and render prompt
+    let prompt_name = "code-review";
+    let prompt = manager.get_prompt(prompt_name)
+        .map_err(|_| SwissArmyHammerError::PromptNotFound(prompt_name.to_string()))?;
+    
+    let args = HashMap::from([("code", "print('hello')")]);
+    let rendered = prompt.render(&amp;args)
+        .map_err(|e| SwissArmyHammerError::RenderError(e.to_string()))?;
+    
+    println!("Rendered: {}", rendered);
+    Ok(())
+}</code></pre>
+<h2 id="performance-optimization"><a class="header" href="#performance-optimization">Performance Optimization</a></h2>
+<h3 id="caching-and-pooling"><a class="header" href="#caching-and-pooling">Caching and Pooling</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::{PromptManager, CacheConfig, ConnectionPool};
+use std::time::Duration;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Configure caching
+    let cache_config = CacheConfig {
+        max_size: 100_000_000, // 100MB
+        ttl: Duration::from_secs(3600),
+        strategy: CacheStrategy::LRU,
+    };
+    
+    // Create connection pool for MCP
+    let pool = ConnectionPool::builder()
+        .max_connections(100)
+        .connection_timeout(Duration::from_secs(5))
+        .idle_timeout(Duration::from_secs(60))
+        .build()?;
+    
+    // Create optimized manager
+    let manager = PromptManager::builder()
+        .cache_config(cache_config)
+        .connection_pool(pool)
+        .parallel_load(true)
+        .build()?;
+    
+    // Benchmark loading
+    let start = std::time::Instant::now();
+    manager.load_prompts().await?;
+    println!("Loaded prompts in {:?}", start.elapsed());
+    
+    // Benchmark rendering with cache
+    let mut total_time = Duration::ZERO;
+    for i in 0..1000 {
+        let start = std::time::Instant::now();
+        let prompt = manager.get_prompt("code-review")?;
+        let args = HashMap::from([("code", format!("test {}", i))]);
+        let _ = prompt.render(&amp;args)?;
+        total_time += start.elapsed();
+    }
+    println!("Average render time: {:?}", total_time / 1000);
+    
+    Ok(())
+}</code></pre>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ul>
+<li>Review the <a href="./library-api.html">Library API</a> reference</li>
+<li>Learn about <a href="./library-usage.html">Library Usage</a> patterns</li>
+<li>See <a href="./examples.html">Integration Examples</a> for more use cases</li>
+<li>Check the <a href="./api-reference.html">API Documentation</a> for detailed information</li>
+</ul>
 
                     </main>
 

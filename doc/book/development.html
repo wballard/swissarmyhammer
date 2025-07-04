@@ -173,6 +173,518 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="development-setup"><a class="header" href="#development-setup">Development Setup</a></h1>
+<p>This guide covers setting up a development environment for working on SwissArmyHammer.</p>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<h3 id="required-tools"><a class="header" href="#required-tools">Required Tools</a></h3>
+<ul>
+<li><strong>Rust</strong> 1.70 or later</li>
+<li><strong>Git</strong> 2.0 or later</li>
+<li><strong>Cargo</strong> (comes with Rust)</li>
+<li><strong>A code editor</strong> (VS Code recommended)</li>
+</ul>
+<h3 id="optional-tools"><a class="header" href="#optional-tools">Optional Tools</a></h3>
+<ul>
+<li><strong>Docker</strong> - For testing container builds</li>
+<li><strong>mdBook</strong> - For documentation development</li>
+<li><strong>Node.js</strong> - For web-based tooling</li>
+<li><strong>Python</strong> - For utility scripts</li>
+</ul>
+<h2 id="environment-setup"><a class="header" href="#environment-setup">Environment Setup</a></h2>
+<h3 id="installing-rust"><a class="header" href="#installing-rust">Installing Rust</a></h3>
+<pre><code class="language-bash"># Install Rust via rustup
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Follow the installation prompts, then:
+source $HOME/.cargo/env
+
+# Verify installation
+rustc --version
+cargo --version
+</code></pre>
+<h3 id="setting-up-the-repository"><a class="header" href="#setting-up-the-repository">Setting Up the Repository</a></h3>
+<pre><code class="language-bash"># Clone the repository
+git clone https://github.com/wballard/swissarmyhammer.git
+cd swissarmyhammer
+
+# Install development dependencies
+cargo install cargo-watch cargo-edit cargo-outdated
+
+# Install formatting and linting tools
+rustup component add rustfmt clippy
+
+# Install documentation tools
+cargo install mdbook mdbook-linkcheck mdbook-mermaid
+</code></pre>
+<h3 id="vs-code-setup"><a class="header" href="#vs-code-setup">VS Code Setup</a></h3>
+<p>Install recommended extensions:</p>
+<pre><code class="language-json">{
+  "recommendations": [
+    "rust-lang.rust-analyzer",
+    "vadimcn.vscode-lldb",
+    "serayuzgur.crates",
+    "tamasfe.even-better-toml",
+    "streetsidesoftware.code-spell-checker",
+    "yzhang.markdown-all-in-one"
+  ]
+}
+</code></pre>
+<p>Settings for <code>.vscode/settings.json</code>:</p>
+<pre><code class="language-json">{
+  "editor.formatOnSave": true,
+  "rust-analyzer.cargo.features": "all",
+  "rust-analyzer.checkOnSave.command": "clippy",
+  "rust-analyzer.inlayHints.enable": true,
+  "rust-analyzer.inlayHints.typeHints.enable": true,
+  "rust-analyzer.inlayHints.parameterHints.enable": true,
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  }
+}
+</code></pre>
+<h2 id="project-structure"><a class="header" href="#project-structure">Project Structure</a></h2>
+<pre><code>swissarmyhammer/
+├── src/
+│   ├── main.rs           # CLI entry point
+│   ├── lib.rs            # Library entry point
+│   ├── cli/              # CLI commands
+│   ├── mcp/              # MCP server implementation
+│   ├── prompts/          # Prompt management
+│   ├── template/         # Template engine
+│   └── utils/            # Utilities
+├── tests/
+│   ├── integration/      # Integration tests
+│   └── fixtures/         # Test data
+├── doc/
+│   └── src/              # Documentation source
+├── examples/             # Example code
+├── benches/              # Benchmarks
+└── Cargo.toml           # Project manifest
+</code></pre>
+<h2 id="building-the-project"><a class="header" href="#building-the-project">Building the Project</a></h2>
+<h3 id="development-build"><a class="header" href="#development-build">Development Build</a></h3>
+<pre><code class="language-bash"># Quick build (debug mode)
+cargo build
+
+# Run tests
+cargo test
+
+# Run with debug output
+RUST_LOG=debug cargo run -- serve
+
+# Watch for changes and rebuild
+cargo watch -x build
+</code></pre>
+<h3 id="release-build"><a class="header" href="#release-build">Release Build</a></h3>
+<pre><code class="language-bash"># Optimized build
+cargo build --release
+
+# Run release binary
+./target/release/swissarmyhammer --version
+
+# Build with all features
+cargo build --release --all-features
+</code></pre>
+<h3 id="cross-compilation"><a class="header" href="#cross-compilation">Cross-Compilation</a></h3>
+<pre><code class="language-bash"># Install cross-compilation tools
+cargo install cross
+
+# Build for different targets
+cross build --target x86_64-pc-windows-gnu
+cross build --target aarch64-apple-darwin
+cross build --target x86_64-unknown-linux-musl
+</code></pre>
+<h2 id="development-workflow"><a class="header" href="#development-workflow">Development Workflow</a></h2>
+<h3 id="running-tests"><a class="header" href="#running-tests">Running Tests</a></h3>
+<pre><code class="language-bash"># All tests
+cargo test
+
+# Unit tests only
+cargo test --lib
+
+# Integration tests only
+cargo test --test '*'
+
+# Specific test
+cargo test test_prompt_loading
+
+# With output
+cargo test -- --show-output
+
+# With specific features
+cargo test --features "experimental"
+</code></pre>
+<h3 id="code-quality"><a class="header" href="#code-quality">Code Quality</a></h3>
+<pre><code class="language-bash"># Format code
+cargo fmt
+
+# Check formatting
+cargo fmt -- --check
+
+# Run linter
+cargo clippy
+
+# Strict linting
+cargo clippy -- -D warnings
+
+# Check for security issues
+cargo audit
+
+# Update dependencies
+cargo update
+cargo outdated
+</code></pre>
+<h3 id="documentation"><a class="header" href="#documentation">Documentation</a></h3>
+<pre><code class="language-bash"># Build API documentation
+cargo doc --no-deps --open
+
+# Build user documentation
+cd doc
+mdbook build
+mdbook serve
+
+# Check documentation examples
+cargo test --doc
+</code></pre>
+<h2 id="debugging"><a class="header" href="#debugging">Debugging</a></h2>
+<h3 id="vs-code-debug-configuration"><a class="header" href="#vs-code-debug-configuration">VS Code Debug Configuration</a></h3>
+<p><code>.vscode/launch.json</code>:</p>
+<pre><code class="language-json">{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug CLI",
+      "cargo": {
+        "args": ["build", "--bin=swissarmyhammer"],
+        "filter": {
+          "name": "swissarmyhammer",
+          "kind": "bin"
+        }
+      },
+      "args": ["serve", "--debug"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_LOG": "debug",
+        "RUST_BACKTRACE": "1"
+      }
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug Tests",
+      "cargo": {
+        "args": ["test", "--no-run"],
+        "filter": {
+          "name": "swissarmyhammer",
+          "kind": "lib"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
+</code></pre>
+<h3 id="command-line-debugging"><a class="header" href="#command-line-debugging">Command Line Debugging</a></h3>
+<pre><code class="language-bash"># Enable debug logging
+export RUST_LOG=swissarmyhammer=debug
+
+# Enable backtrace
+export RUST_BACKTRACE=1
+
+# Run with debugging
+cargo run -- serve --debug
+
+# Use GDB
+rust-gdb target/debug/swissarmyhammer
+
+# Use LLDB
+rust-lldb target/debug/swissarmyhammer
+</code></pre>
+<h3 id="logging"><a class="header" href="#logging">Logging</a></h3>
+<p>Add debug logging to your code:</p>
+<pre><code class="language-rust">use log::{debug, info, warn, error};
+
+fn process_prompt(name: &amp;str) -&gt; Result&lt;()&gt; {
+    debug!("Processing prompt: {}", name);
+    
+    if let Some(prompt) = self.get_prompt(name) {
+        info!("Found prompt: {}", prompt.title);
+        Ok(())
+    } else {
+        error!("Prompt not found: {}", name);
+        Err(anyhow!("Prompt not found"))
+    }
+}</code></pre>
+<h2 id="performance-profiling"><a class="header" href="#performance-profiling">Performance Profiling</a></h2>
+<h3 id="benchmarking"><a class="header" href="#benchmarking">Benchmarking</a></h3>
+<p>Create benchmarks in <code>benches/</code>:</p>
+<pre><code class="language-rust">use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use swissarmyhammer::PromptManager;
+
+fn bench_prompt_loading(c: &amp;mut Criterion) {
+    c.bench_function("load 100 prompts", |b| {
+        b.iter(|| {
+            let manager = PromptManager::new();
+            manager.load_prompts()
+        });
+    });
+}
+
+criterion_group!(benches, bench_prompt_loading);
+criterion_main!(benches);</code></pre>
+<p>Run benchmarks:</p>
+<pre><code class="language-bash">cargo bench
+
+# Compare benchmarks
+cargo bench -- --save-baseline before
+# Make changes
+cargo bench -- --baseline before
+</code></pre>
+<h3 id="cpu-profiling"><a class="header" href="#cpu-profiling">CPU Profiling</a></h3>
+<pre><code class="language-bash"># Install profiling tools
+cargo install flamegraph
+
+# Generate flamegraph
+cargo flamegraph --bin swissarmyhammer -- serve
+
+# Using perf (Linux)
+perf record --call-graph=dwarf cargo run --release -- serve
+perf report
+</code></pre>
+<h3 id="memory-profiling"><a class="header" href="#memory-profiling">Memory Profiling</a></h3>
+<pre><code class="language-bash"># Install valgrind (Linux/macOS)
+# macOS: brew install valgrind
+# Linux: apt-get install valgrind
+
+# Run with valgrind
+valgrind --leak-check=full \
+         --show-leak-kinds=all \
+         target/debug/swissarmyhammer serve
+
+# Use heaptrack (Linux)
+heaptrack cargo run -- serve
+heaptrack_gui heaptrack.*.gz
+</code></pre>
+<h2 id="testing-strategies"><a class="header" href="#testing-strategies">Testing Strategies</a></h2>
+<h3 id="unit-testing"><a class="header" href="#unit-testing">Unit Testing</a></h3>
+<pre><code class="language-rust">#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_prompt_parsing() {
+        let content = r#"---
+name: test
+title: Test Prompt
+---
+Content"#;
+        
+        let prompt = Prompt::parse(content).unwrap();
+        assert_eq!(prompt.name, "test");
+        assert_eq!(prompt.title, "Test Prompt");
+    }
+}</code></pre>
+<h3 id="integration-testing"><a class="header" href="#integration-testing">Integration Testing</a></h3>
+<p>In <code>tests/integration/</code>:</p>
+<pre><code class="language-rust">use swissarmyhammer::PromptManager;
+use tempfile::tempdir;
+
+#[test]
+fn test_full_workflow() {
+    let temp_dir = tempdir().unwrap();
+    
+    // Create test prompts
+    std::fs::write(
+        temp_dir.path().join("test.md"),
+        "---\nname: test\n---\nContent"
+    ).unwrap();
+    
+    // Test loading
+    let mut manager = PromptManager::new();
+    manager.add_directory(temp_dir.path());
+    manager.load_prompts().unwrap();
+    
+    // Test retrieval
+    assert!(manager.get_prompt("test").is_some());
+}</code></pre>
+<h3 id="property-testing"><a class="header" href="#property-testing">Property Testing</a></h3>
+<p>Using <code>proptest</code>:</p>
+<pre><code class="language-rust">use proptest::prelude::*;
+
+proptest! {
+    #[test]
+    fn test_prompt_name_validation(name in "[a-z][a-z0-9-]*") {
+        assert!(is_valid_prompt_name(&amp;name));
+    }
+}</code></pre>
+<h2 id="common-development-tasks"><a class="header" href="#common-development-tasks">Common Development Tasks</a></h2>
+<h3 id="adding-a-new-command"><a class="header" href="#adding-a-new-command">Adding a New Command</a></h3>
+<ol>
+<li>
+<p>Create command module in <code>src/cli/</code>:</p>
+<pre><code class="language-rust">// src/cli/new_command.rs
+use clap::Args;
+
+#[derive(Args)]
+pub struct NewCommand {
+    #[arg(short, long)]
+    option: String,
+}
+
+impl NewCommand {
+    pub fn run(&amp;self) -&gt; Result&lt;()&gt; {
+        // Implementation
+        Ok(())
+    }
+}</code></pre>
+</li>
+<li>
+<p>Add to CLI enum:</p>
+<pre><code class="language-rust">// src/cli/mod.rs
+#[derive(Subcommand)]
+pub enum Commands {
+    NewCommand(NewCommand),
+    // ...
+}</code></pre>
+</li>
+</ol>
+<h3 id="adding-a-feature"><a class="header" href="#adding-a-feature">Adding a Feature</a></h3>
+<ol>
+<li>
+<p>Define feature in <code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[features]
+experimental = ["dep:experimental-lib"]
+</code></pre>
+</li>
+<li>
+<p>Conditionally compile code:</p>
+<pre><code class="language-rust">#[cfg(feature = "experimental")]
+pub mod experimental {
+    // Experimental features
+}</code></pre>
+</li>
+</ol>
+<h3 id="updating-dependencies"><a class="header" href="#updating-dependencies">Updating Dependencies</a></h3>
+<pre><code class="language-bash"># Check outdated dependencies
+cargo outdated
+
+# Update specific dependency
+cargo update -p serde
+
+# Update all dependencies
+cargo update
+
+# Edit dependency version
+cargo upgrade serde --version 1.0.150
+</code></pre>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h3>
+<h4 id="compilation-errors"><a class="header" href="#compilation-errors">Compilation Errors</a></h4>
+<pre><code class="language-bash"># Clean build artifacts
+cargo clean
+
+# Check for missing dependencies
+cargo check
+
+# Verify toolchain
+rustup show
+</code></pre>
+<h4 id="test-failures"><a class="header" href="#test-failures">Test Failures</a></h4>
+<pre><code class="language-bash"># Run single test with output
+cargo test test_name -- --nocapture
+
+# Run tests serially
+cargo test -- --test-threads=1
+
+# Skip slow tests
+cargo test --lib
+</code></pre>
+<h4 id="performance-issues"><a class="header" href="#performance-issues">Performance Issues</a></h4>
+<pre><code class="language-bash"># Build with debug symbols in release
+cargo build --release --features debug
+
+# Check binary size
+cargo bloat --release
+
+# Analyze dependencies
+cargo tree --duplicates
+</code></pre>
+<h2 id="cicd-integration"><a class="header" href="#cicd-integration">CI/CD Integration</a></h2>
+<h3 id="github-actions"><a class="header" href="#github-actions">GitHub Actions</a></h3>
+<p><code>.github/workflows/ci.yml</code>:</p>
+<pre><code class="language-yaml">name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        rust: [stable, beta]
+    
+    steps:
+    - uses: actions/checkout@v3
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+        components: rustfmt, clippy
+    
+    - name: Cache
+      uses: Swatinem/rust-cache@v2
+    
+    - name: Check
+      run: cargo check --all-features
+    
+    - name: Test
+      run: cargo test --all-features
+    
+    - name: Clippy
+      run: cargo clippy -- -D warnings
+    
+    - name: Format
+      run: cargo fmt -- --check
+</code></pre>
+<h3 id="pre-commit-hooks"><a class="header" href="#pre-commit-hooks">Pre-commit Hooks</a></h3>
+<p><code>.pre-commit-config.yaml</code>:</p>
+<pre><code class="language-yaml">repos:
+  - repo: local
+    hooks:
+      - id: fmt
+        name: Format
+        entry: cargo fmt -- --check
+        language: system
+        types: [rust]
+        pass_filenames: false
+      
+      - id: clippy
+        name: Clippy
+        entry: cargo clippy -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
+      
+      - id: test
+        name: Test
+        entry: cargo test
+        language: system
+        types: [rust]
+        pass_filenames: false
+</code></pre>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ul>
+<li>Read <a href="./contributing.html">Contributing</a> for contribution guidelines</li>
+<li>Check <a href="./testing.html">Testing</a> for detailed testing practices</li>
+<li>See <a href="./release-process.html">Release Process</a> for release procedures</li>
+<li>Review <a href="./architecture.html">Architecture</a> for system design</li>
+</ul>
 
                     </main>
 

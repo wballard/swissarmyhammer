@@ -173,6 +173,191 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="changelog"><a class="header" href="#changelog">Changelog</a></h1>
+<p>All notable changes to SwissArmyHammer will be documented in this file.</p>
+<p>The format is based on <a href="https://keepachangelog.com/en/1.0.0/">Keep a Changelog</a>,
+and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
+<h2 id="unreleased"><a class="header" href="#unreleased"><a href="https://github.com/wballard/swissarmyhammer/compare/v0.2.0...HEAD">Unreleased</a></a></h2>
+<h3 id="added"><a class="header" href="#added">Added</a></h3>
+<ul>
+<li>Comprehensive documentation with mdBook</li>
+<li>GitHub Pages deployment for documentation</li>
+<li>Enhanced error messages with context</li>
+<li>Validation for prompt arguments</li>
+<li>Support for YAML anchors in prompts</li>
+<li>Performance benchmarks</li>
+</ul>
+<h3 id="changed"><a class="header" href="#changed">Changed</a></h3>
+<ul>
+<li>Improved template rendering performance</li>
+<li>Better error handling in MCP server</li>
+<li>Enhanced file watching efficiency</li>
+</ul>
+<h3 id="fixed"><a class="header" href="#fixed">Fixed</a></h3>
+<ul>
+<li>Memory leak in file watcher</li>
+<li>Prompt loading on Windows paths</li>
+<li>Template escaping for special characters</li>
+</ul>
+<h2 id="020---2024-03-01"><a class="header" href="#020---2024-03-01"><a href="https://github.com/wballard/swissarmyhammer/compare/v0.1.0...v0.2.0">0.2.0</a> - 2024-03-01</a></h2>
+<h3 id="added-1"><a class="header" href="#added-1">Added</a></h3>
+<ul>
+<li>MCP (Model Context Protocol) server implementation</li>
+<li>File watching for automatic prompt reloading</li>
+<li>Export/import functionality for prompt bundles</li>
+<li>Doctor command for system health checks</li>
+<li>Liquid template engine integration</li>
+<li>Support for prompt arguments and validation</li>
+<li>Recursive directory scanning</li>
+<li>YAML front matter parsing</li>
+</ul>
+<h3 id="changed-1"><a class="header" href="#changed-1">Changed</a></h3>
+<ul>
+<li>Migrated from simple templates to Liquid engine</li>
+<li>Improved prompt discovery algorithm</li>
+<li>Enhanced CLI output formatting</li>
+<li>Better error messages and diagnostics</li>
+</ul>
+<h3 id="fixed-1"><a class="header" href="#fixed-1">Fixed</a></h3>
+<ul>
+<li>Cross-platform path handling</li>
+<li>Unicode support in prompts</li>
+<li>Memory usage optimization</li>
+</ul>
+<h3 id="security"><a class="header" href="#security">Security</a></h3>
+<ul>
+<li>Added input sanitization for templates</li>
+<li>Implemented secure file access controls</li>
+</ul>
+<h2 id="010---2024-01-15"><a class="header" href="#010---2024-01-15"><a href="https://github.com/wballard/swissarmyhammer/releases/tag/v0.1.0">0.1.0</a> - 2024-01-15</a></h2>
+<h3 id="added-2"><a class="header" href="#added-2">Added</a></h3>
+<ul>
+<li>Initial release</li>
+<li>Basic prompt management functionality</li>
+<li>CLI interface with subcommands</li>
+<li>List command to show available prompts</li>
+<li>Serve command for MCP integration</li>
+<li>Simple template substitution</li>
+<li>Configuration file support</li>
+<li>Basic documentation</li>
+</ul>
+<h3 id="changed-2"><a class="header" href="#changed-2">Changed</a></h3>
+<ul>
+<li>N/A (initial release)</li>
+</ul>
+<h3 id="fixed-2"><a class="header" href="#fixed-2">Fixed</a></h3>
+<ul>
+<li>N/A (initial release)</li>
+</ul>
+<h3 id="deprecated"><a class="header" href="#deprecated">Deprecated</a></h3>
+<ul>
+<li>N/A (initial release)</li>
+</ul>
+<h3 id="removed"><a class="header" href="#removed">Removed</a></h3>
+<ul>
+<li>N/A (initial release)</li>
+</ul>
+<h3 id="security-1"><a class="header" href="#security-1">Security</a></h3>
+<ul>
+<li>N/A (initial release)</li>
+</ul>
+<h2 id="version-history"><a class="header" href="#version-history">Version History</a></h2>
+<h3 id="versioning-policy"><a class="header" href="#versioning-policy">Versioning Policy</a></h3>
+<p>SwissArmyHammer follows <a href="https://semver.org/">Semantic Versioning</a>:</p>
+<ul>
+<li><strong>MAJOR</strong> version for incompatible API changes</li>
+<li><strong>MINOR</strong> version for backwards-compatible functionality additions</li>
+<li><strong>PATCH</strong> version for backwards-compatible bug fixes</li>
+</ul>
+<h3 id="pre-10-versions"><a class="header" href="#pre-10-versions">Pre-1.0 Versions</a></h3>
+<p>During the 0.x series:</p>
+<ul>
+<li>Minor version bumps may include breaking changes</li>
+<li>The API is considered unstable</li>
+<li>Features may be experimental</li>
+</ul>
+<h3 id="migration-guides"><a class="header" href="#migration-guides">Migration Guides</a></h3>
+<h4 id="01x-to-02x"><a class="header" href="#01x-to-02x">0.1.x to 0.2.x</a></h4>
+<p><strong>Breaking Changes:</strong></p>
+<ol>
+<li>
+<p><strong>Template Engine Change</strong></p>
+<ul>
+<li>Old: Simple <code>{variable}</code> substitution</li>
+<li>New: Liquid templates with <code>{{variable}}</code></li>
+<li>Migration: Update all prompts to use double braces</li>
+</ul>
+</li>
+<li>
+<p><strong>Configuration Format</strong></p>
+<ul>
+<li>Old: JSON configuration</li>
+<li>New: TOML configuration</li>
+<li>Migration: Convert config.json to config.toml</li>
+</ul>
+</li>
+<li>
+<p><strong>Prompt Metadata</strong></p>
+<ul>
+<li>Old: Optional metadata</li>
+<li>New: Required YAML front matter</li>
+<li>Migration: Add minimal front matter to all prompts</li>
+</ul>
+</li>
+</ol>
+<p><strong>Example Migration:</strong></p>
+<p>Old prompt (0.1.x):</p>
+<pre><code class="language-markdown"># Code Review
+
+Review this {language} code:
+{code}
+</code></pre>
+<p>New prompt (0.2.x):</p>
+<pre><code class="language-markdown">---
+name: code-review
+title: Code Review
+arguments:
+  - name: language
+    required: true
+  - name: code
+    required: true
+---
+
+# Code Review
+
+Review this {{language}} code:
+{{code}}
+</code></pre>
+<h3 id="release-schedule"><a class="header" href="#release-schedule">Release Schedule</a></h3>
+<ul>
+<li><strong>Patch releases</strong>: As needed for bug fixes</li>
+<li><strong>Minor releases</strong>: Monthly with new features</li>
+<li><strong>Major releases</strong>: When breaking changes are necessary</li>
+</ul>
+<h3 id="support-policy"><a class="header" href="#support-policy">Support Policy</a></h3>
+<ul>
+<li>Latest version: Full support</li>
+<li>Previous minor version: Security fixes only</li>
+<li>Older versions: No support</li>
+</ul>
+<h2 id="contributing-to-changelog"><a class="header" href="#contributing-to-changelog">Contributing to Changelog</a></h2>
+<p>When contributing, please:</p>
+<ol>
+<li>Add entries under “Unreleased”</li>
+<li>Use the appropriate section</li>
+<li>Reference issue/PR numbers</li>
+<li>Keep descriptions concise</li>
+<li>Sort entries by importance</li>
+</ol>
+<p>Example entry:</p>
+<pre><code class="language-markdown">### Fixed
+- Fix memory leak in file watcher (#123)
+</code></pre>
+<h2 id="links"><a class="header" href="#links">Links</a></h2>
+<ul>
+<li><a href="https://github.com/wballard/swissarmyhammer/releases">GitHub Releases</a></li>
+<li><a href="./release-process.html">Release Process</a></li>
+<li><a href="./contributing.html">Contributing Guide</a></li>
+</ul>
 
                     </main>
 

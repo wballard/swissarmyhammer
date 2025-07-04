@@ -3,6 +3,9 @@
 #[cfg(feature = "mcp")]
 use swissarmyhammer::{mcp::McpServer, Prompt, PromptLibrary};
 
+#[cfg(feature = "mcp")]
+use rmcp::ServerHandler;
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "mcp")]
@@ -36,9 +39,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let server = McpServer::new(library);
 
         println!("MCP Server Information:");
-        let info = server.info();
-        println!("  Name: {}", info.name);
-        println!("  Version: {}", info.version);
+        let info = server.get_info();
+        println!("  Name: {}", info.server_info.name);
+        println!("  Version: {}", info.server_info.version);
+        println!("  Protocol Version: {:?}", info.protocol_version);
+        println!("  Has Prompt Capabilities: {}", info.capabilities.prompts.is_some());
 
         // In a real application, you would run the server like this:
         // server.run().await?;

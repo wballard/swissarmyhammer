@@ -75,8 +75,9 @@ impl PromptResolver {
                 crate::prompts::Prompt::new(name, content)
             };
 
+            // Track the prompt source using the actual prompt name
             self.prompt_sources
-                .insert(name.to_string(), PromptSource::Builtin);
+                .insert(prompt.name.clone(), PromptSource::Builtin);
             library.add(prompt)?;
         }
 
@@ -88,18 +89,15 @@ impl PromptResolver {
         if let Some(home) = dirs::home_dir() {
             let user_prompts_dir = home.join(".swissarmyhammer").join("prompts");
             if user_prompts_dir.exists() {
-                // Get the count before and after to track new prompts
-                let before_count = library.list()?.len();
-                library.add_directory(&user_prompts_dir)?;
-                let after_count = library.list()?.len();
-
-                // Mark all newly added prompts as user prompts
-                let prompts = library.list()?;
-                for i in before_count..after_count {
-                    if let Some(prompt) = prompts.get(i) {
-                        self.prompt_sources
-                            .insert(prompt.name.clone(), PromptSource::User);
-                    }
+                // Load user prompts from the directory
+                let loader = crate::prompts::PromptLoader::new();
+                let user_prompts = loader.load_directory(&user_prompts_dir)?;
+                
+                // Add each user prompt and track it
+                for prompt in user_prompts {
+                    // User prompts override any existing prompt with the same name
+                    self.prompt_sources.insert(prompt.name.clone(), PromptSource::User);
+                    library.add(prompt)?;
                 }
             }
         }
@@ -117,6 +115,19 @@ impl PromptResolver {
         loop {
             let swissarmyhammer_dir = path.join(".swissarmyhammer");
             if swissarmyhammer_dir.exists() && swissarmyhammer_dir.is_dir() {
+                // Skip the user's home .swissarmyhammer directory to avoid duplicate loading
+                // Get the user's home directory dynamically to handle test cases
+                if let Some(home) = dirs::home_dir() {
+                    let user_swissarmyhammer_dir = home.join(".swissarmyhammer");
+                    if swissarmyhammer_dir == user_swissarmyhammer_dir {
+                        match path.parent() {
+                            Some(parent) => path = parent,
+                            None => break,
+                        }
+                        continue;
+                    }
+                }
+
                 let prompts_dir = swissarmyhammer_dir.join("prompts");
                 if prompts_dir.exists() && prompts_dir.is_dir() {
                     prompt_dirs.push(prompts_dir);
@@ -131,17 +142,15 @@ impl PromptResolver {
 
         // Load in reverse order (root to current) so deeper paths override
         for prompts_dir in prompt_dirs.into_iter().rev() {
-            let before_count = library.list()?.len();
-            library.add_directory(&prompts_dir)?;
-            let after_count = library.list()?.len();
-
-            // Mark all newly added prompts as local prompts
-            let prompts = library.list()?;
-            for i in before_count..after_count {
-                if let Some(prompt) = prompts.get(i) {
-                    self.prompt_sources
-                        .insert(prompt.name.clone(), PromptSource::Local);
-                }
+            // Load local prompts from the directory
+            let loader = crate::prompts::PromptLoader::new();
+            let local_prompts = loader.load_directory(&prompts_dir)?;
+            
+            // Add each local prompt and track it
+            for prompt in local_prompts {
+                // Local prompts override any existing prompt with the same name
+                self.prompt_sources.insert(prompt.name.clone(), PromptSource::Local);
+                library.add(prompt)?;
             }
         }
 
@@ -217,5 +226,88 @@ mod tests {
             resolver.prompt_sources.get("local_prompt"),
             Some(&PromptSource::Local)
         );
+    }
+
+    #[test]
+    fn test_debug_error_prompt_is_correctly_tracked_as_builtin() {
+        let mut resolver = PromptResolver::new();
+        let mut library = PromptLibrary::new();
+
+        // Load builtin prompts
+        resolver.load_builtin_prompts(&mut library).unwrap();
+
+        // The debug/error prompt should be loaded and tracked as builtin
+        // First check that it exists in the library
+        let prompts = library.list().unwrap();
+        let debug_error_prompt = prompts.iter().find(|p| p.name == "debug/error");
+        
+        if let Some(_prompt) = debug_error_prompt {
+            // Check that it's tracked as a builtin
+            assert_eq!(
+                resolver.prompt_sources.get("debug/error"),
+                Some(&PromptSource::Builtin),
+                "debug/error prompt should be tracked as Builtin, but was tracked as: {:?}",
+                resolver.prompt_sources.get("debug/error")
+            );
+        } else {
+            // If debug/error doesn't exist, check if debug-error exists instead
+            let debug_hyphen_error_prompt = prompts.iter().find(|p| p.name == "debug-error");
+            if let Some(_prompt) = debug_hyphen_error_prompt {
+                // This would indicate the bug where frontmatter name overrides build script name
+                panic!("Found prompt named 'debug-error' instead of 'debug/error'. This indicates the frontmatter is overriding the build script name.");
+            } else {
+                // Check what builtin prompts actually exist
+                let builtin_prompt_names: Vec<String> = prompts.iter().map(|p| p.name.clone()).collect();
+                panic!("debug/error prompt not found. Available builtin prompts: {:?}", builtin_prompt_names);
+            }
+        }
+    }
+
+    #[test]
+    fn test_user_prompt_overrides_builtin_source_tracking() {
+        let temp_dir = TempDir::new().unwrap();
+        let user_prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
+        fs::create_dir_all(&user_prompts_dir).unwrap();
+
+        // Create a user prompt with the same name as a builtin prompt
+        let prompt_file = user_prompts_dir.join("debug").join("error.md");
+        fs::create_dir_all(prompt_file.parent().unwrap()).unwrap();
+        let user_prompt_content = r#"---
+title: User Debug Error
+description: User-defined error debugging prompt
+---
+
+This is a user-defined debug/error prompt that should override the builtin one.
+"#;
+        fs::write(&prompt_file, user_prompt_content).unwrap();
+
+        let mut resolver = PromptResolver::new();
+        let mut library = PromptLibrary::new();
+
+        // Temporarily change home directory for test
+        std::env::set_var("HOME", temp_dir.path());
+
+        // Load builtin prompts first
+        resolver.load_builtin_prompts(&mut library).unwrap();
+        
+        // Verify it's initially tracked as builtin
+        assert_eq!(
+            resolver.prompt_sources.get("debug/error"),
+            Some(&PromptSource::Builtin)
+        );
+
+        // Load user prompts (should override the builtin)
+        resolver.load_user_prompts(&mut library).unwrap();
+
+        // Now it should be tracked as a user prompt
+        assert_eq!(
+            resolver.prompt_sources.get("debug/error"),
+            Some(&PromptSource::User),
+            "debug/error should now be tracked as User prompt after being overridden"
+        );
+
+        // Verify the prompt content was updated
+        let prompt = library.get("debug/error").unwrap();
+        assert!(prompt.template.contains("user-defined"), "Prompt should contain user-defined content");
     }
 }

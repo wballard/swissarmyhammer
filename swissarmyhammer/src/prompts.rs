@@ -952,6 +952,82 @@ impl PromptLoader {
         false
     }
 
+    /// Load a prompt from a string
+    pub fn load_from_string(&self, name: &str, content: &str) -> Result<Prompt> {
+        let (metadata, template) = self.parse_front_matter(content)?;
+
+        let mut prompt = Prompt::new(name, template);
+
+        // Check if this is a partial template before processing metadata
+        let has_partial_marker = content.trim_start().starts_with("{% partial %}");
+
+        // Parse metadata
+        if let Some(ref metadata_value) = metadata {
+            if let Some(title) = metadata_value.get("title").and_then(|v| v.as_str()) {
+                prompt.metadata.insert(
+                    "title".to_string(),
+                    serde_json::Value::String(title.to_string()),
+                );
+            }
+            if let Some(desc) = metadata_value.get("description").and_then(|v| v.as_str()) {
+                prompt.description = Some(desc.to_string());
+            }
+            if let Some(cat) = metadata_value.get("category").and_then(|v| v.as_str()) {
+                prompt.category = Some(cat.to_string());
+            }
+            if let Some(tags) = metadata_value.get("tags").and_then(|v| v.as_array()) {
+                prompt.tags = tags
+                    .iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect();
+            }
+
+            // Parse arguments
+            if let Some(args) = metadata_value.get("arguments").and_then(|v| v.as_array()) {
+                for arg in args {
+                    if let Some(arg_obj) = arg.as_object() {
+                        let arg_spec = ArgumentSpec {
+                            name: arg_obj
+                                .get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                            description: arg_obj
+                                .get("description")
+                                .and_then(|v| v.as_str())
+                                .map(String::from),
+                            required: arg_obj
+                                .get("required")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false),
+                            default: arg_obj
+                                .get("default")
+                                .and_then(|v| v.as_str())
+                                .map(String::from),
+                            type_hint: arg_obj
+                                .get("type")
+                                .and_then(|v| v.as_str())
+                                .map(String::from),
+                        };
+
+                        prompt.arguments.push(arg_spec);
+                    }
+                }
+            }
+        }
+
+        // If this is a partial template (no metadata), set appropriate description
+        if metadata.is_none() && has_partial_marker {
+            prompt.description = Some("Partial template for reuse in other prompts".to_string());
+        } else if prompt.description.is_none()
+            && self.is_likely_partial(&prompt.name, &prompt.template)
+        {
+            prompt.description = Some("Partial template for reuse in other prompts".to_string());
+        }
+
+        Ok(prompt)
+    }
+
     /// Check if a path is a prompt file
     fn is_prompt_file(&self, path: &Path) -> bool {
         let path_str = path.to_string_lossy().to_lowercase();

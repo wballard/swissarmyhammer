@@ -1,6 +1,9 @@
-use crate::PromptLibrary;
+use crate::{PromptLibrary, PromptLoader};
 use anyhow::Result;
 use std::collections::HashMap;
+
+// Include the generated builtin prompts
+include!(concat!(env!("OUT_DIR"), "/builtin_prompts.rs"));
 
 /// Source of a prompt (builtin, user, local, or dynamic)
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -57,27 +60,24 @@ impl PromptResolver {
         Ok(())
     }
 
-    /// Load builtin prompts (these should be embedded in binary when available)
+    /// Load builtin prompts from embedded binary data
     pub fn load_builtin_prompts(&mut self, library: &mut PromptLibrary) -> Result<()> {
-        // For now, try loading from data directory if it exists
-        // In the future, this should load embedded prompts
-        let builtin_dir = dirs::data_dir()
-            .map(|d| d.join("swissarmyhammer").join("prompts"))
-            .filter(|p| p.exists());
+        let builtin_prompts = get_builtin_prompts();
+        let loader = PromptLoader::new();
 
-        if let Some(dir) = builtin_dir {
-            let before_count = library.list()?.len();
-            library.add_directory(&dir)?;
-            let after_count = library.list()?.len();
+        // Add each embedded prompt to the library
+        for (name, content) in builtin_prompts {
+            let prompt = if content.starts_with("---\n") {
+                // Parse as a prompt file with frontmatter
+                loader.load_from_string(name, content)?
+            } else {
+                // Treat as a simple template
+                crate::prompts::Prompt::new(name, content)
+            };
 
-            // Mark all newly added prompts as builtin prompts
-            let prompts = library.list()?;
-            for i in before_count..after_count {
-                if let Some(prompt) = prompts.get(i) {
-                    self.prompt_sources
-                        .insert(prompt.name.clone(), PromptSource::Builtin);
-                }
-            }
+            self.prompt_sources
+                .insert(name.to_string(), PromptSource::Builtin);
+            library.add(prompt)?;
         }
 
         Ok(())

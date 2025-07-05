@@ -207,3 +207,86 @@ async fn test_mcp_server_prompt_loading() {
     println!("✅ MCP prompt loading test passed!");
 }
 
+/// Test that MCP server loads built-in prompts
+#[tokio::test]
+async fn test_mcp_server_builtin_prompts() {
+    // Start MCP server
+    let mut child = Command::new("cargo")
+        .args(&["run", "--", "serve"])
+        .current_dir("..")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to start MCP server");
+
+    std::thread::sleep(Duration::from_millis(1000));
+
+    let mut stdin = child.stdin.take().expect("Failed to get stdin");
+    let stdout = child.stdout.take().expect("Failed to get stdout");
+    let mut reader = BufReader::new(stdout);
+
+    // Initialize
+    let init_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"prompts": {}},
+            "clientInfo": {"name": "test", "version": "1.0"}
+        }
+    });
+
+    writeln!(stdin, "{}", serde_json::to_string(&init_request).unwrap()).unwrap();
+    stdin.flush().unwrap();
+
+    let mut response_line = String::new();
+    reader.read_line(&mut response_line).unwrap();
+
+    // Send initialized notification
+    let initialized = json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
+    writeln!(stdin, "{}", serde_json::to_string(&initialized).unwrap()).unwrap();
+    stdin.flush().unwrap();
+
+    std::thread::sleep(Duration::from_millis(100));
+
+    // List prompts
+    let list_request = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "prompts/list"
+    });
+
+    writeln!(stdin, "{}", serde_json::to_string(&list_request).unwrap()).unwrap();
+    stdin.flush().unwrap();
+
+    let mut response_line = String::new();
+    reader.read_line(&mut response_line).unwrap();
+    let response: Value = serde_json::from_str(&response_line).unwrap();
+
+    // Verify we have built-in prompts
+    let prompts = response["result"]["prompts"].as_array().unwrap();
+
+    // Look for some known built-in prompts
+    let has_help = prompts.iter().any(|p| p["name"].as_str() == Some("help"));
+    let has_example = prompts
+        .iter()
+        .any(|p| p["name"].as_str() == Some("example"));
+
+    assert!(
+        has_help || has_example,
+        "MCP server should load built-in prompts like 'help' or 'example'"
+    );
+    assert!(
+        prompts.len() > 5,
+        "MCP server should load multiple built-in prompts, found: {}",
+        prompts.len()
+    );
+
+    // Clean up
+    child.kill().expect("Failed to kill server");
+    child.wait().expect("Failed to wait for server");
+
+    println!("✅ MCP built-in prompts test passed!");
+}

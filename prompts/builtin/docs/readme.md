@@ -5,10 +5,12 @@ description: Create comprehensive README documentation for a project
 arguments:
   - name: project_name
     description: Name of the project
-    required: true
+    required: false
+    default: "auto-detect"
   - name: project_description
     description: Brief description of what the project does
-    required: true
+    required: false
+    default: "auto-detect"
   - name: language
     description: Primary programming language
     required: false

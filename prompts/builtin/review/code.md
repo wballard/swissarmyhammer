@@ -3,20 +3,17 @@ name: code-review
 title: Code Review
 description: Review code for quality, bugs, and improvements
 arguments:
-  - name: file_path
-    description: Path to the file being reviewed
-    required: true
   - name: context
     description: Additional context about the code review focus
     required: false
     default: "general review"
 ---
 
-# Code Review for {{file_path}}
+## Code Under Review
 
-Please review the following code file with a focus on: {{context}}
+Please review the all code in this project with a focus on: {{context}}
 
-## Review Checklist:
+## Review Checklist
 
 1. **Code Quality**
    - Is the code readable and well-structured?
@@ -44,3 +41,14 @@ Please review the following code file with a focus on: {{context}}
    - Are design patterns used appropriately?
 
 Please provide specific feedback for each area of concern, including line numbers where applicable.
+
+## Process
+
+- list all source files in the project and create a markdown scratchpad file, this is your todo list
+- create a CODE_REVIEW.md markdown file, this is your code review output
+- for each file in the todo list
+  - perform the Review Checklist
+  - summarize your findings
+  - write your findings to the code review output
+
+{% render review_format %}

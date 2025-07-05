@@ -113,6 +113,12 @@ jobs:
       - name: Generate code coverage
         run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: lcov.info
+          fail_ci_if_error: true
+
       - name: Check coverage threshold
         run: |
           COVERAGE=$(cargo llvm-cov --all-features --workspace --summary-only | grep -E "TOTAL.*%" | awk '{print $10}' | sed 's/%//')
@@ -122,9 +128,3 @@ jobs:
             exit 1
           fi
           echo "Coverage check passed!"
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          files: lcov.info
-          fail_ci_if_error: true

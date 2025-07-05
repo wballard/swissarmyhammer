@@ -20,8 +20,6 @@
   - [serve](./cli-serve.md)
   - [search](./cli-search.md)
   - [test](./cli-test.md)
-  - [export](./cli-export.md)
-  - [import](./cli-import.md)
   - [doctor](./cli-doctor.md)
   - [completion](./cli-completion.md)
 

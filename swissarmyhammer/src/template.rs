@@ -78,18 +78,62 @@ impl std::fmt::Debug for PromptPartialSource {
 impl PromptPartialSource {
     /// Create a new partial source that loads partials from the given prompt library
     pub fn new(library: Arc<PromptLibrary>) -> Self {
-        let names = if let Ok(prompts) = library.list() {
-            prompts.iter().map(|p| p.name.clone()).collect()
-        } else {
-            Vec::new()
-        };
+        let mut names = Vec::new();
+        if let Ok(prompts) = library.list() {
+            for prompt in prompts.iter() {
+                names.push(prompt.name.clone());
+                
+                // Strip common prompt extensions to make them available as partials
+                let extensions = [".md", ".markdown", ".liquid", ".md.liquid"];
+                for ext in &extensions {
+                    if let Some(name_without_ext) = prompt.name.strip_suffix(ext) {
+                        names.push(name_without_ext.to_string());
+                    }
+                }
+            }
+        }
         Self { library, names }
     }
 }
 
 impl liquid::partials::PartialSource for PromptPartialSource {
     fn contains(&self, name: &str) -> bool {
-        self.library.get(name).is_ok()
+        // Try exact name first
+        if self.library.get(name).is_ok() {
+            return true;
+        }
+        
+        // Try with various prompt file extensions
+        let extensions = [".md", ".markdown", ".liquid", ".md.liquid"];
+        for ext in &extensions {
+            let name_with_ext = format!("{}{}", name, ext);
+            if self.library.get(&name_with_ext).is_ok() {
+                return true;
+            }
+        }
+        
+        // If the name already has an extension, try stripping it
+        if name.contains('.') {
+            // Try stripping each known extension
+            for ext in &extensions {
+                if let Some(name_without_ext) = name.strip_suffix(ext) {
+                    if self.library.get(name_without_ext).is_ok() {
+                        return true;
+                    }
+                    // Also try with other extensions
+                    for other_ext in &extensions {
+                        if ext != other_ext {
+                            let name_with_other_ext = format!("{}{}", name_without_ext, other_ext);
+                            if self.library.get(&name_with_other_ext).is_ok() {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        false
     }
 
     fn names(&self) -> Vec<&str> {
@@ -97,12 +141,42 @@ impl liquid::partials::PartialSource for PromptPartialSource {
     }
 
     fn try_get(&self, name: &str) -> Option<Cow<'_, str>> {
+        // Try exact name first
         if let Ok(prompt) = self.library.get(name) {
-            // Extract just the template content without front matter
-            Some(Cow::Owned(prompt.template))
-        } else {
-            None
+            return Some(Cow::Owned(prompt.template));
         }
+        
+        // Try with various prompt file extensions
+        let extensions = [".md", ".markdown", ".liquid", ".md.liquid"];
+        for ext in &extensions {
+            let name_with_ext = format!("{}{}", name, ext);
+            if let Ok(prompt) = self.library.get(&name_with_ext) {
+                return Some(Cow::Owned(prompt.template));
+            }
+        }
+        
+        // If the name already has an extension, try stripping it
+        if name.contains('.') {
+            // Try stripping each known extension
+            for ext in &extensions {
+                if let Some(name_without_ext) = name.strip_suffix(ext) {
+                    if let Ok(prompt) = self.library.get(name_without_ext) {
+                        return Some(Cow::Owned(prompt.template));
+                    }
+                    // Also try with other extensions
+                    for other_ext in &extensions {
+                        if ext != other_ext {
+                            let name_with_other_ext = format!("{}{}", name_without_ext, other_ext);
+                            if let Ok(prompt) = self.library.get(&name_with_other_ext) {
+                                return Some(Cow::Owned(prompt.template));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        None
     }
 }
 

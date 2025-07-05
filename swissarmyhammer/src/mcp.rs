@@ -80,7 +80,7 @@ impl McpServer {
 
         // Handle arguments if provided
         let content = if let Some(args) = arguments {
-            prompt.render(args)?
+            library.render_prompt(name, args)?
         } else {
             prompt.template.clone()
         };
@@ -177,7 +177,7 @@ impl ServerHandler for McpServer {
                         template_args.insert(key.clone(), value_str);
                     }
 
-                    match prompt.render(&template_args) {
+                    match library.render_prompt(&request.name, &template_args) {
                         Ok(rendered) => rendered,
                         Err(e) => {
                             return Err(McpError::internal_error(

@@ -2,8 +2,6 @@ use std::process;
 mod cli;
 mod completions;
 mod doctor;
-mod export;
-mod import;
 mod list;
 // prompt_loader module removed - using SDK's PromptResolver directly
 mod search;
@@ -13,7 +11,7 @@ mod validate;
 
 use clap::CommandFactory;
 use cli::{
-    Cli, Commands, ExportFormat, ImportStrategy, OutputFormat, PromptSource, ValidateFormat,
+    Cli, Commands, OutputFormat, PromptSource, ValidateFormat,
 };
 
 #[tokio::main]
@@ -120,50 +118,6 @@ async fn main() {
                 highlight,
                 limit,
             )
-        }
-        Some(Commands::Export {
-            prompt_name,
-            all,
-            category,
-            source,
-            format,
-            output,
-            metadata,
-            exclude,
-        }) => {
-            tracing::info!("Exporting prompts");
-            run_export(
-                prompt_name,
-                all,
-                category,
-                source,
-                format,
-                output,
-                metadata,
-                exclude,
-            )
-            .await
-        }
-        Some(Commands::Import {
-            source,
-            dry_run,
-            strategy,
-            target,
-            no_validate,
-            no_backup,
-            verbose,
-        }) => {
-            tracing::info!("Importing prompts");
-            run_import(
-                source,
-                dry_run,
-                strategy,
-                target,
-                !no_validate,
-                !no_backup,
-                verbose,
-            )
-            .await
         }
         Some(Commands::Completion { shell }) => {
             tracing::info!("Generating completion for {:?}", shell);
@@ -320,60 +274,6 @@ fn run_search(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn run_export(
-    prompt_name: Option<String>,
-    all: bool,
-    category: Option<String>,
-    source: Option<PromptSource>,
-    format: ExportFormat,
-    output: Option<String>,
-    metadata: bool,
-    exclude: Vec<String>,
-) -> i32 {
-    use export;
-
-    match export::run_export_command(
-        prompt_name,
-        all,
-        category,
-        source,
-        format,
-        output,
-        metadata,
-        exclude,
-    )
-    .await
-    {
-        Ok(_) => 0,
-        Err(e) => {
-            eprintln!("Export error: {}", e);
-            1
-        }
-    }
-}
-
-async fn run_import(
-    source: String,
-    dry_run: bool,
-    strategy: ImportStrategy,
-    target: Option<String>,
-    validate: bool,
-    backup: bool,
-    verbose: bool,
-) -> i32 {
-    use import;
-
-    match import::run_import_command(source, dry_run, strategy, target, validate, backup, verbose)
-        .await
-    {
-        Ok(_) => 0,
-        Err(e) => {
-            eprintln!("Import error: {}", e);
-            1
-        }
-    }
-}
 
 fn run_completions(shell: clap_complete::Shell) -> i32 {
     use completions;

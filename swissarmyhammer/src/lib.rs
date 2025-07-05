@@ -40,6 +40,9 @@
 /// Prompt management and storage
 pub mod prompts;
 
+/// Prompt loading and resolution
+pub mod prompt_resolver;
+
 /// Template engine and rendering
 pub mod template;
 
@@ -59,6 +62,7 @@ pub mod plugins;
 
 // Re-export core types
 pub use plugins::{CustomLiquidFilter, PluginRegistry, SwissArmyHammerPlugin};
+pub use prompt_resolver::{PromptResolver, PromptSource};
 pub use prompts::{ArgumentSpec, Prompt, PromptLibrary, PromptLoader};
 pub use storage::{PromptStorage, StorageBackend};
 pub use template::{Template, TemplateEngine};

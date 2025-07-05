@@ -122,13 +122,12 @@ impl Validator {
         Self { quiet }
     }
 
-
     pub fn validate_all(&self) -> Result<ValidationResult> {
         let mut result = ValidationResult::new();
 
         // Load all prompts using the centralized PromptResolver
         let mut library = swissarmyhammer::PromptLibrary::new();
-        let mut resolver = crate::prompt_loader::PromptResolver::new();
+        let mut resolver = swissarmyhammer::PromptResolver::new();
         resolver.load_all_prompts(&mut library)?;
 
         // Validate each loaded prompt
@@ -178,9 +177,6 @@ impl Validator {
         Ok(result)
     }
 
-
-
-
     fn validate_prompt_fields_and_variables(
         &self,
         prompt: &Prompt,
@@ -189,7 +185,8 @@ impl Validator {
         let file_path = PathBuf::from(&prompt.source_path);
 
         // Check if this is a partial template by looking at the description
-        let is_partial = prompt.description
+        let is_partial = prompt
+            .description
             .as_ref()
             .map(|desc| desc == "Partial template for reuse in other prompts")
             .unwrap_or(false);
@@ -215,7 +212,9 @@ impl Validator {
                     line: None,
                     column: None,
                     message: "Missing required field: description".to_string(),
-                    suggestion: Some("Add a description field to the YAML front matter".to_string()),
+                    suggestion: Some(
+                        "Add a description field to the YAML front matter".to_string(),
+                    ),
                 });
             }
         }
@@ -729,10 +728,7 @@ impl Validator {
     }
 }
 
-pub fn run_validate_command(
-    quiet: bool,
-    format: ValidateFormat,
-) -> Result<i32> {
+pub fn run_validate_command(quiet: bool, format: ValidateFormat) -> Result<i32> {
     let validator = Validator::new(quiet);
 
     // Always validate all prompts
@@ -819,20 +815,25 @@ mod tests {
         // This test verifies that .liquid files with {% partial %} marker
         // don't generate errors for missing title/description
         let validator = Validator::new(false);
-        
+
         // Note: This test relies on the actual prompt loading mechanism
         // which will load test files from the test environment
         let result = validator.validate_all().unwrap();
-        
+
         // Check that partial templates don't cause title/description errors
-        let partial_errors = result.issues.iter().filter(|issue| {
-            issue.file_path.to_string_lossy().ends_with(".liquid") &&
-            (issue.message.contains("Missing required field: title") ||
-             issue.message.contains("Missing required field: description"))
-        }).count();
-        
-        assert_eq!(partial_errors, 0, 
+        let partial_errors = result
+            .issues
+            .iter()
+            .filter(|issue| {
+                issue.file_path.to_string_lossy().ends_with(".liquid")
+                    && (issue.message.contains("Missing required field: title")
+                        || issue
+                            .message
+                            .contains("Missing required field: description"))
+            })
+            .count();
+
+        assert_eq!(partial_errors, 0,
             "Partial templates (with {{% partial %}} marker) should not have title/description errors");
     }
 }
-

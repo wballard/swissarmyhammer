@@ -13,8 +13,8 @@ use tar::Builder;
 use zip::write::{FileOptions, ZipWriter};
 
 use crate::cli::{ExportFormat, PromptSource};
-use crate::prompt_loader::PromptResolver;
 use swissarmyhammer::PromptLibrary;
+use swissarmyhammer::PromptResolver;
 
 #[derive(Serialize, Deserialize)]
 pub struct ExportManifest {
@@ -91,7 +91,7 @@ pub async fn run_export_command(
 
 pub struct Exporter {
     library: PromptLibrary,
-    prompt_sources: HashMap<String, PromptSource>,
+    prompt_sources: HashMap<String, swissarmyhammer::PromptSource>,
 }
 
 impl Exporter {
@@ -140,9 +140,16 @@ impl Exporter {
                     .prompt_sources
                     .get(&prompt.name)
                     .cloned()
-                    .unwrap_or(PromptSource::Dynamic);
+                    .unwrap_or(swissarmyhammer::PromptSource::Dynamic);
 
-                if filter_source != &prompt_source && filter_source != &PromptSource::Dynamic {
+                let cli_source = match prompt_source {
+                    swissarmyhammer::PromptSource::Builtin => PromptSource::Builtin,
+                    swissarmyhammer::PromptSource::User => PromptSource::User,
+                    swissarmyhammer::PromptSource::Local => PromptSource::Local,
+                    swissarmyhammer::PromptSource::Dynamic => PromptSource::Dynamic,
+                };
+
+                if filter_source != &cli_source && filter_source != &PromptSource::Dynamic {
                     continue;
                 }
             }

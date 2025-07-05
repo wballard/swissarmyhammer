@@ -5,7 +5,7 @@ mod doctor;
 mod export;
 mod import;
 mod list;
-mod prompt_loader;
+// prompt_loader module removed - using SDK's PromptResolver directly
 mod search;
 mod signal_handler;
 mod test;
@@ -29,8 +29,12 @@ async fn main() {
     // Only initialize heavy dependencies when actually needed
     use tracing::Level;
 
-    // Configure logging based on verbosity flags
-    let log_level = if cli.quiet {
+    // Configure logging based on verbosity flags and MCP mode detection
+    use is_terminal::IsTerminal;
+    let is_mcp_mode =
+        matches!(cli.command, Some(Commands::Serve)) && !std::io::stdin().is_terminal();
+
+    let log_level = if is_mcp_mode || cli.quiet {
         Level::ERROR
     } else if cli.verbose {
         Level::DEBUG
@@ -62,10 +66,7 @@ async fn main() {
             tracing::info!("Listing prompts");
             run_list(format, verbose, source, category, search)
         }
-        Some(Commands::Validate {
-            quiet,
-            format,
-        }) => {
+        Some(Commands::Validate { quiet, format }) => {
             tracing::info!("Validating prompts");
             run_validate(quiet, format)
         }
@@ -178,40 +179,40 @@ async fn main() {
 }
 
 async fn run_server() -> i32 {
-    use swissarmyhammer::{PromptLibrary, mcp::McpServer};
     use rmcp::serve_server;
     use rmcp::transport::io::stdio;
+    use swissarmyhammer::{mcp::McpServer, PromptLibrary};
     use tokio_util::sync::CancellationToken;
-    
+
     // Create library and server
     let library = PromptLibrary::new();
     let server = McpServer::new(library);
-    
+
     // Initialize prompts
     if let Err(e) = server.initialize().await {
         tracing::error!("Failed to initialize MCP server: {}", e);
         return 1;
     }
-    
+
     // Set up cancellation token
     let ct = CancellationToken::new();
     let ct_clone = ct.clone();
-    
+
     // Set up signal handlers
     tokio::spawn(async move {
         tokio::signal::ctrl_c()
             .await
             .expect("failed to listen for ctrl+c");
-        
+
         tracing::info!("Shutdown signal received");
         ct_clone.cancel();
     });
-    
+
     // Start the rmcp SDK server with stdio transport
     match serve_server(server, stdio()).await {
         Ok(_running_service) => {
             tracing::info!("MCP server started successfully");
-            
+
             // Wait for cancellation
             ct.cancelled().await;
             tracing::info!("MCP server exited successfully");
@@ -255,10 +256,7 @@ fn run_list(
     }
 }
 
-fn run_validate(
-    quiet: bool,
-    format: ValidateFormat,
-) -> i32 {
+fn run_validate(quiet: bool, format: ValidateFormat) -> i32 {
     use validate;
 
     match validate::run_validate_command(quiet, format) {

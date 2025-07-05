@@ -842,7 +842,7 @@ impl PromptLoader {
 
         // Check if this is a partial template before processing metadata
         let has_partial_marker = content.trim_start().starts_with("{% partial %}");
-        
+
         // Parse metadata
         if let Some(ref metadata_value) = metadata {
             if let Some(title) = metadata_value.get("title").and_then(|v| v.as_str()) {
@@ -902,7 +902,9 @@ impl PromptLoader {
         // If this is a partial template (no metadata), set appropriate description
         if metadata.is_none() && has_partial_marker {
             prompt.description = Some("Partial template for reuse in other prompts".to_string());
-        } else if prompt.description.is_none() && self.is_likely_partial(&prompt.name, &prompt.template) {
+        } else if prompt.description.is_none()
+            && self.is_likely_partial(&prompt.name, &prompt.template)
+        {
             prompt.description = Some("Partial template for reuse in other prompts".to_string());
         }
 
@@ -930,7 +932,14 @@ impl PromptLoader {
         let lines: Vec<&str> = content.lines().collect();
         let content_lines: Vec<&str> = if has_front_matter {
             // Skip YAML front matter
-            lines.iter().skip_while(|line| **line != "---").skip(1).skip_while(|line| **line != "---").skip(1).copied().collect()
+            lines
+                .iter()
+                .skip_while(|line| **line != "---")
+                .skip(1)
+                .skip_while(|line| **line != "---")
+                .skip(1)
+                .copied()
+                .collect()
         } else {
             lines
         };
@@ -958,7 +967,7 @@ impl PromptLoader {
             // This is a partial template, no front matter expected
             return Ok((None, content.to_string()));
         }
-        
+
         if content.starts_with("---\n") {
             let parts: Vec<&str> = content.splitn(3, "---\n").collect();
             if parts.len() >= 3 {
@@ -1061,7 +1070,7 @@ mod tests {
     #[test]
     fn test_extension_stripping() {
         let loader = PromptLoader::new();
-        
+
         // Test various extensions
         let test_cases = vec![
             ("test.md", "test"),
@@ -1070,11 +1079,14 @@ mod tests {
             ("test.liquid", "test"),
             ("partials/header.liquid.md", "header"),
         ];
-        
+
         for (filename, expected) in test_cases {
             let path = std::path::Path::new(filename);
             let result = loader.extract_prompt_name(path);
-            println!("File: {} -> Name: {} (expected: {})", filename, result, expected);
+            println!(
+                "File: {} -> Name: {} (expected: {})",
+                filename, result, expected
+            );
             assert_eq!(result, expected, "Failed for {}", filename);
         }
     }
@@ -1155,18 +1167,34 @@ This is another prompt.
             5,
             "All 5 prompts should have descriptions (2 from metadata, 3 default for partials)"
         );
-        
+
         // Check that the invalid ones (now treated as partials) have the default description
-        let partials: Vec<&Prompt> = prompts.iter()
-            .filter(|p| p.description.as_deref() == Some("Partial template for reuse in other prompts"))
+        let partials: Vec<&Prompt> = prompts
+            .iter()
+            .filter(|p| {
+                p.description.as_deref() == Some("Partial template for reuse in other prompts")
+            })
             .collect();
-        assert_eq!(partials.len(), 3, "Should have 3 partials with default description");
-        
+        assert_eq!(
+            partials.len(),
+            3,
+            "Should have 3 partials with default description"
+        );
+
         // Check that the valid ones have their original descriptions
-        let prompts_with_custom_desc: Vec<&Prompt> = prompts.iter()
-            .filter(|p| p.description.is_some() && p.description.as_deref() != Some("Partial template for reuse in other prompts"))
+        let prompts_with_custom_desc: Vec<&Prompt> = prompts
+            .iter()
+            .filter(|p| {
+                p.description.is_some()
+                    && p.description.as_deref()
+                        != Some("Partial template for reuse in other prompts")
+            })
             .collect();
-        assert_eq!(prompts_with_custom_desc.len(), 2, "Should have 2 prompts with custom descriptions");
+        assert_eq!(
+            prompts_with_custom_desc.len(),
+            2,
+            "Should have 2 prompts with custom descriptions"
+        );
 
         let prompt_names: Vec<String> = prompts.iter().map(|p| p.name.clone()).collect();
         assert!(prompt_names.contains(&"valid".to_string()));
@@ -1179,7 +1207,7 @@ This is another prompt.
         use tempfile::TempDir;
 
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create a partial template without front matter (common for partials)
         let partial_path = temp_dir.path().join("_header.liquid.md");
         let partial_content = r#"<div class="header">
@@ -1187,25 +1215,25 @@ This is another prompt.
   <p>{{subtitle}}</p>
 </div>"#;
         fs::write(&partial_path, partial_content).unwrap();
-        
+
         // Create another partial with underscore naming pattern
         let partial2_path = temp_dir.path().join("_footer.md");
         let partial2_content = r#"<footer>
   Copyright {{year}} {{company}}
 </footer>"#;
         fs::write(&partial2_path, partial2_content).unwrap();
-        
+
         // Create a partial with "partial" in the name
         let partial3_path = temp_dir.path().join("header-partial.md");
         let partial3_content = r#"## {{section_title}}
 {{section_content}}"#;
         fs::write(&partial3_path, partial3_content).unwrap();
-        
+
         let loader = PromptLoader::new();
         let prompts = loader.load_directory(temp_dir.path()).unwrap();
-        
+
         assert_eq!(prompts.len(), 3, "Should load 3 partial templates");
-        
+
         // Check that partials now have default descriptions
         for prompt in &prompts {
             assert_eq!(

@@ -325,15 +325,15 @@ fn test_partial_rendering() {
     let prompts_dir = temp_dir.path().join("prompts");
     let partials_dir = prompts_dir.join("partials");
     fs::create_dir_all(&partials_dir).unwrap();
-    
+
     // Create a partial template
     let partial_content = r#"---
 description: "A partial template for headers"
 ---
 # Welcome to {{ app_name }}!"#;
-    
+
     fs::write(partials_dir.join("header.liquid.md"), partial_content).unwrap();
-    
+
     // Create a main template that uses the partial
     let main_content = r#"---
 description: "Main template using partial"
@@ -341,27 +341,30 @@ description: "Main template using partial"
 {% include "partials/header" %}
 
 This is the main content."#;
-    
+
     fs::write(prompts_dir.join("main.liquid.md"), main_content).unwrap();
-    
+
     // Load prompts from directory
     let mut library = PromptLibrary::new();
     let count = library.add_directory(&prompts_dir).unwrap();
     assert!(count > 0);
-    
+
     // Debug: show what partials are available
     let prompts = library.list().unwrap();
-    println!("Available partials: {:?}", prompts.iter().map(|p| &p.name).collect::<Vec<_>>());
-    
+    println!(
+        "Available partials: {:?}",
+        prompts.iter().map(|p| &p.name).collect::<Vec<_>>()
+    );
+
     // Debug: show partial content
     if let Ok(header_prompt) = library.get("partials/header") {
         println!("Header partial template: '{}'", header_prompt.template);
     }
-    
+
     // Get and render the main template with partial support
     let mut args = HashMap::new();
     args.insert("app_name".to_string(), "SwissArmyHammer".to_string());
-    
+
     let rendered = library.render_prompt("main", &args).unwrap();
     let expected = "# Welcome to SwissArmyHammer!\n\nThis is the main content.";
     assert_eq!(rendered, expected);
@@ -372,15 +375,15 @@ fn test_partial_rendering_with_md_extension() {
     let temp_dir = TempDir::new().unwrap();
     let prompts_dir = temp_dir.path().join("prompts");
     fs::create_dir_all(&prompts_dir).unwrap();
-    
+
     // Create a partial template with .md extension
     let partial_content = r#"---
 description: "A partial template for footers"
 ---
 Footer content: {{ year }}"#;
-    
+
     fs::write(prompts_dir.join("footer.md"), partial_content).unwrap();
-    
+
     // Create a main template that uses the partial
     let main_content = r#"---
 description: "Main template using .md partial"
@@ -388,17 +391,17 @@ description: "Main template using .md partial"
 Main content here.
 
 {% include "footer" %}"#;
-    
+
     fs::write(prompts_dir.join("main.md"), main_content).unwrap();
-    
+
     // Load prompts from directory
     let mut library = PromptLibrary::new();
     library.add_directory(&prompts_dir).unwrap();
-    
+
     // Get and render the main template with partial support
     let mut args = HashMap::new();
     args.insert("year".to_string(), "2024".to_string());
-    
+
     let rendered = library.render_prompt("main", &args).unwrap();
     let expected = "Main content here.\n\nFooter content: 2024";
     assert_eq!(rendered, expected);
@@ -409,50 +412,53 @@ fn test_liquid_file_extension_loading() {
     let temp_dir = TempDir::new().unwrap();
     let prompts_dir = temp_dir.path().join("prompts");
     fs::create_dir_all(&prompts_dir).unwrap();
-    
+
     // Create files with different extensions
     let liquid_md_content = r#"---
 description: "A liquid.md file"
 ---
 This is a liquid.md file"#;
-    
+
     let md_content = r#"---
 description: "A regular md file"
 ---
 This is a regular md file"#;
-    
+
     fs::write(prompts_dir.join("test.liquid.md"), liquid_md_content).unwrap();
     fs::write(prompts_dir.join("test2.md"), md_content).unwrap();
-    
+
     // Load prompts from directory
     let mut library = PromptLibrary::new();
     let count = library.add_directory(&prompts_dir).unwrap();
-    
+
     println!("Loaded {} prompts", count);
-    
+
     // List all loaded prompts
     let prompts = library.list().unwrap();
     for prompt in &prompts {
         println!("Loaded prompt: {} from {:?}", prompt.name, prompt.source);
     }
-    
+
     // Debug: show what partials are available
-    println!("Available partials: {:?}", prompts.iter().map(|p| &p.name).collect::<Vec<_>>());
-    
+    println!(
+        "Available partials: {:?}",
+        prompts.iter().map(|p| &p.name).collect::<Vec<_>>()
+    );
+
     // We should have loaded both files
     assert!(count >= 2, "Expected at least 2 prompts, found {}", count);
-    
+
     // Check that both prompts are accessible
     let test_prompt = library.get("test");
     let test2_prompt = library.get("test2");
-    
+
     if let Err(ref e) = test_prompt {
         println!("Could not find 'test' prompt: {:?}", e);
     }
     if let Err(ref e) = test2_prompt {
         println!("Could not find 'test2' prompt: {:?}", e);
     }
-    
+
     assert!(test_prompt.is_ok(), "test.liquid.md file should be loaded");
     assert!(test2_prompt.is_ok(), "test2.md file should be loaded");
 }
@@ -463,15 +469,15 @@ fn test_md_liquid_extension() {
     let prompts_dir = temp_dir.path().join("prompts");
     let partials_dir = prompts_dir.join("partials");
     fs::create_dir_all(&partials_dir).unwrap();
-    
+
     // Create a file with .md.liquid extension as specified in the issue
     let partial_content = r#"---
 description: "A partial with .md.liquid extension"
 ---
 This is from partials/top!"#;
-    
+
     fs::write(partials_dir.join("top.md.liquid"), partial_content).unwrap();
-    
+
     // Create a main template that uses the partial
     let main_content = r#"---
 description: "Main template using .md.liquid partial"
@@ -479,20 +485,26 @@ description: "Main template using .md.liquid partial"
 Before partial
 {% render "partials/top" %}
 After partial"#;
-    
+
     fs::write(prompts_dir.join("main.md"), main_content).unwrap();
-    
+
     // Load prompts from directory
     let mut library = PromptLibrary::new();
     library.add_directory(&prompts_dir).unwrap();
-    
+
     // Debug: List what prompts were loaded
     let prompts = library.list().unwrap();
-    println!("Loaded prompts: {:?}", prompts.iter().map(|p| &p.name).collect::<Vec<_>>());
-    
+    println!(
+        "Loaded prompts: {:?}",
+        prompts.iter().map(|p| &p.name).collect::<Vec<_>>()
+    );
+
     // Verify the partial was loaded with correct name
-    assert!(library.get("partials/top").is_ok(), "partials/top should be accessible");
-    
+    assert!(
+        library.get("partials/top").is_ok(),
+        "partials/top should be accessible"
+    );
+
     // Render the main template
     let args = HashMap::new();
     let rendered = library.render_prompt("main", &args).unwrap();
@@ -505,15 +517,15 @@ fn test_partial_rendering_without_variables() {
     let temp_dir = TempDir::new().unwrap();
     let prompts_dir = temp_dir.path().join("prompts");
     fs::create_dir_all(&prompts_dir).unwrap();
-    
+
     // Create a partial template without variables
     let partial_content = r#"---
 description: "A simple partial"
 ---
 This is a static partial."#;
-    
+
     fs::write(prompts_dir.join("simple.md"), partial_content).unwrap();
-    
+
     // Create a main template that uses the partial
     let main_content = r#"---
 description: "Main template using static partial"
@@ -521,16 +533,16 @@ description: "Main template using static partial"
 Before partial
 {% render "simple" %}
 After partial"#;
-    
+
     fs::write(prompts_dir.join("main.md"), main_content).unwrap();
-    
+
     // Load prompts from directory
     let mut library = PromptLibrary::new();
     library.add_directory(&prompts_dir).unwrap();
-    
+
     // Get and render the main template with partial support
     let args = HashMap::new(); // No variables needed
-    
+
     let rendered = library.render_prompt("main", &args).unwrap();
     let expected = "Before partial\nThis is a static partial.\nAfter partial";
     assert_eq!(rendered, expected);

@@ -1,12 +1,12 @@
 //! Template engine and rendering functionality
 
-use crate::{plugins::PluginRegistry, Result, SwissArmyHammerError, PromptLibrary};
+use crate::{plugins::PluginRegistry, PromptLibrary, Result, SwissArmyHammerError};
 use liquid::{Object, Parser};
 use liquid_core::{Language, ParseTag, Renderable, Runtime, TagReflection, TagTokenIter};
-use std::collections::HashMap;
-use std::sync::Arc;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::io::Write;
+use std::sync::Arc;
 
 /// Custom partial tag that acts as a no-op marker for liquid partial files
 #[derive(Clone, Debug, Default)]
@@ -36,7 +36,7 @@ impl ParseTag for PartialTag {
     ) -> liquid_core::Result<Box<dyn Renderable>> {
         // Consume any arguments (though we expect none)
         arguments.expect_nothing()?;
-        
+
         // Return a no-op renderable
         Ok(Box::new(PartialRenderable))
     }
@@ -51,7 +51,11 @@ impl ParseTag for PartialTag {
 struct PartialRenderable;
 
 impl Renderable for PartialRenderable {
-    fn render_to(&self, _output: &mut dyn Write, _context: &dyn Runtime) -> liquid_core::Result<()> {
+    fn render_to(
+        &self,
+        _output: &mut dyn Write,
+        _context: &dyn Runtime,
+    ) -> liquid_core::Result<()> {
         // No-op: this tag doesn't render anything
         Ok(())
     }

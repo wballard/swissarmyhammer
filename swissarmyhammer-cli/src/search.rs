@@ -10,7 +10,7 @@ use tabled::{
 };
 
 use crate::cli::{OutputFormat, PromptSource};
-use crate::prompt_loader::PromptResolver;
+use swissarmyhammer::PromptResolver;
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SearchResult {
@@ -75,11 +75,13 @@ pub fn run_search_command(
 
     for prompt in all_prompts {
         // Get the source from the resolver
-        let prompt_source = resolver
-            .prompt_sources
-            .get(&prompt.name)
-            .cloned()
-            .unwrap_or(PromptSource::Dynamic);
+        let prompt_source = match resolver.prompt_sources.get(&prompt.name) {
+            Some(swissarmyhammer::PromptSource::Builtin) => PromptSource::Builtin,
+            Some(swissarmyhammer::PromptSource::User) => PromptSource::User,
+            Some(swissarmyhammer::PromptSource::Local) => PromptSource::Local,
+            Some(swissarmyhammer::PromptSource::Dynamic) => PromptSource::Dynamic,
+            None => PromptSource::Dynamic,
+        };
         let source_str = prompt_source.to_string();
 
         // Apply source filter

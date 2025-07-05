@@ -43,7 +43,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  Name: {}", info.server_info.name);
         println!("  Version: {}", info.server_info.version);
         println!("  Protocol Version: {:?}", info.protocol_version);
-        println!("  Has Prompt Capabilities: {}", info.capabilities.prompts.is_some());
+        println!(
+            "  Has Prompt Capabilities: {}",
+            info.capabilities.prompts.is_some()
+        );
 
         // In a real application, you would run the server like this:
         // server.run().await?;

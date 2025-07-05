@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::fs;
 
 use crate::cli::Commands;
-use crate::prompt_loader::PromptResolver;
+use swissarmyhammer::PromptResolver;
 use swissarmyhammer::{Prompt, PromptLibrary};
 
 pub struct TestRunner {

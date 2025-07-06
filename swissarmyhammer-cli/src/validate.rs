@@ -47,6 +47,7 @@ pub enum ValidationLevel {
 pub struct ValidationIssue {
     pub level: ValidationLevel,
     pub file_path: PathBuf,
+    pub prompt_title: Option<String>,
     pub line: Option<usize>,
     pub column: Option<usize>,
     pub message: String,
@@ -135,12 +136,21 @@ impl Validator {
         for prompt in prompts {
             result.files_checked += 1;
 
+            // Store prompt title for error reporting
+            let prompt_title = prompt
+                .metadata
+                .get("title")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .or_else(|| Some(prompt.name.clone()));
+
             // Validate template syntax with partials support
             self.validate_liquid_syntax_with_partials(
                 &prompt,
                 &library,
                 prompt.source.as_ref().unwrap_or(&PathBuf::new()),
                 &mut result,
+                prompt_title.clone(),
             );
 
             // Create local prompt for field validation
@@ -171,7 +181,7 @@ impl Validator {
             };
 
             // Validate fields and variables (but skip liquid syntax since we did it above)
-            self.validate_prompt_fields_and_variables(&local_prompt, &mut result)?;
+            self.validate_prompt_fields_and_variables(&local_prompt, &mut result, prompt_title)?;
         }
 
         Ok(result)
@@ -181,6 +191,7 @@ impl Validator {
         &self,
         prompt: &Prompt,
         result: &mut ValidationResult,
+        prompt_title: Option<String>,
     ) -> Result<()> {
         let file_path = PathBuf::from(&prompt.source_path);
 
@@ -198,6 +209,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,
                     file_path: file_path.clone(),
+                    prompt_title: prompt_title.clone(),
                     line: None,
                     column: None,
                     message: "Missing required field: title".to_string(),
@@ -209,6 +221,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,
                     file_path: file_path.clone(),
+                    prompt_title: prompt_title.clone(),
                     line: None,
                     column: None,
                     message: "Missing required field: description".to_string(),
@@ -220,7 +233,7 @@ impl Validator {
         }
 
         // Validate template variables (without liquid syntax validation)
-        self.validate_variable_usage(&prompt.content, &prompt.arguments, &file_path, result);
+        self.validate_variable_usage(&prompt.content, &prompt.arguments, &file_path, result, prompt_title);
 
         Ok(())
     }
@@ -233,6 +246,7 @@ impl Validator {
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Warning,
                 file_path: file_path.to_path_buf(),
+                prompt_title: None,
                 line: Some(1),
                 column: Some(1),
                 message: "File contains UTF-8 BOM".to_string(),
@@ -255,6 +269,7 @@ impl Validator {
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Warning,
                 file_path: file_path.to_path_buf(),
+                prompt_title: None,
                 line: None,
                 column: None,
                 message: "Mixed line endings detected (both CRLF and LF)".to_string(),
@@ -284,6 +299,7 @@ impl Validator {
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Error,
                 file_path: file_path.to_path_buf(),
+                prompt_title: None,
                 line: Some(1),
                 column: Some(1),
                 message: "Missing YAML front matter delimiter".to_string(),
@@ -319,6 +335,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,
                     file_path: file_path.to_path_buf(),
+                    prompt_title: None,
                     line: Some(1),
                     column: Some(1),
                     message: "Missing closing YAML front matter delimiter".to_string(),
@@ -352,6 +369,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,
                     file_path: file_path.to_path_buf(),
+                    prompt_title: None,
                     line: Some(e.location().map(|l| l.line()).unwrap_or(1)),
                     column: Some(e.location().map(|l| l.column()).unwrap_or(1)),
                     message: format!("YAML syntax error: {}", e),
@@ -383,6 +401,7 @@ impl Validator {
                     result.add_issue(ValidationIssue {
                         level: ValidationLevel::Warning,
                         file_path: file_path.to_path_buf(),
+                        prompt_title: None,
                         line: None,
                         column: None,
                         message: format!("Possible typo: '{}' should be '{}'", typo, correct),
@@ -405,7 +424,7 @@ impl Validator {
         self.validate_liquid_syntax(content, file_path, result);
 
         // Then validate variable usage
-        self.validate_variable_usage(content, arguments, file_path, result);
+        self.validate_variable_usage(content, arguments, file_path, result, None);
     }
 
     fn validate_liquid_syntax(
@@ -428,6 +447,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,
                     file_path: file_path.to_path_buf(),
+                    prompt_title: None,
                     line: None,
                     column: None,
                     message: format!("Liquid template syntax error: {}", error_msg),
@@ -443,6 +463,7 @@ impl Validator {
         library: &swissarmyhammer::PromptLibrary,
         file_path: &Path,
         result: &mut ValidationResult,
+        prompt_title: Option<String>,
     ) {
         // Try to render the template with partials support using the same path as test/serve
         let empty_args = std::collections::HashMap::new();
@@ -456,6 +477,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,
                     file_path: file_path.to_path_buf(),
+                    prompt_title,
                     line: None,
                     column: None,
                     message: format!("Liquid template syntax error: {}", error_msg),
@@ -473,6 +495,7 @@ impl Validator {
         arguments: &[PromptArgument],
         file_path: &Path,
         result: &mut ValidationResult,
+        prompt_title: Option<String>,
     ) {
         use regex::Regex;
 
@@ -571,6 +594,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,
                     file_path: file_path.to_path_buf(),
+                    prompt_title: prompt_title.clone(),
                     line: None,
                     column: None,
                     message: format!("Undefined template variable: '{}'", used_var),
@@ -588,6 +612,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Warning,
                     file_path: file_path.to_path_buf(),
+                    prompt_title: prompt_title.clone(),
                     line: None,
                     column: None,
                     message: format!("Unused argument: '{}'", arg.name),
@@ -604,6 +629,7 @@ impl Validator {
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Warning,
                 file_path: file_path.to_path_buf(),
+                prompt_title,
                 line: None,
                 column: None,
                 message: "Template uses variables but no arguments are defined".to_string(),
@@ -646,7 +672,21 @@ impl Validator {
         // Print issues grouped by file
         for (file_path, issues) in issues_by_file {
             if !self.quiet {
-                println!("\n{}", file_path.display().to_string().bold());
+                // Get the prompt title from the first issue (all issues for a file should have the same title)
+                let prompt_title = issues.first()
+                    .and_then(|issue| issue.prompt_title.as_ref());
+                
+                if let Some(title) = prompt_title {
+                    // Show the prompt title
+                    println!("\n{}", title.bold());
+                    // Show the file path in smaller text if it's a user prompt
+                    if file_path.to_string_lossy() != "" && !file_path.to_string_lossy().contains("PathBuf") {
+                        println!("  {}", file_path.display().to_string().dimmed());
+                    }
+                } else {
+                    // Fallback to file path if no title
+                    println!("\n{}", file_path.display().to_string().bold());
+                }
             }
 
             for issue in issues {
@@ -769,6 +809,7 @@ mod tests {
         let issue = ValidationIssue {
             level: ValidationLevel::Error,
             file_path: PathBuf::from("test.md"),
+            prompt_title: Some("Test Prompt".to_string()),
             line: Some(1),
             column: Some(1),
             message: "Test error".to_string(),
@@ -788,6 +829,7 @@ mod tests {
         let issue = ValidationIssue {
             level: ValidationLevel::Warning,
             file_path: PathBuf::from("test.md"),
+            prompt_title: Some("Test Prompt".to_string()),
             line: Some(1),
             column: Some(1),
             message: "Test warning".to_string(),

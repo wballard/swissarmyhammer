@@ -2,7 +2,6 @@
 
 use swissarmyhammer::{Prompt, PromptLibrary};
 
-#[cfg(feature = "search")]
 use swissarmyhammer::search::SearchEngine;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -85,7 +84,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    #[cfg(feature = "search")]
     {
         // Advanced search using SearchEngine
         let mut search_engine = SearchEngine::new()?;
@@ -153,11 +151,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    #[cfg(not(feature = "search"))]
-    {
-        println!("\nAdvanced search requires the 'search' feature to be enabled.");
-        println!("Run with: cargo run --example search_example --features search");
-    }
 
     Ok(())
 }

@@ -16,7 +16,7 @@ categories = ["template-engine", "development-tools"]
 
 [dependencies]
 # Core dependencies
-tokio = { workspace = true, optional = true }
+tokio = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
 serde_json = { workspace = true }
@@ -30,7 +30,7 @@ liquid-core = { version = "0.26" }
 
 # File system
 walkdir = { workspace = true }
-notify = { workspace = true, optional = true }
+notify = { workspace = true }
 
 # Data structures
 dashmap = { workspace = true }
@@ -38,21 +38,14 @@ regex = { workspace = true }
 chrono = { workspace = true }
 
 # Search functionality
-tantivy = { workspace = true, optional = true }
-fuzzy-matcher = { workspace = true, optional = true }
+tantivy = { workspace = true }
+fuzzy-matcher = { workspace = true }
 
 # MCP support
-rmcp = { workspace = true, optional = true }
-schemars = { version = "0.8", optional = true }
-dirs = { workspace = true, optional = true }
+rmcp = { workspace = true }
+schemars = { version = "0.8" }
+dirs = { workspace = true }
 
-[features]
-default = ["async", "search", "watch"]
-async = ["tokio"]
-search = ["tantivy", "fuzzy-matcher"]
-watch = ["notify", "async"]
-mcp = ["rmcp", "schemars", "dirs", "async"]
-full = ["async", "search", "watch", "mcp"]
 
 [dev-dependencies]
 tempfile = { workspace = true }

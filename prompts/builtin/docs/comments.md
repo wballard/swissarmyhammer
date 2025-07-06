@@ -19,11 +19,7 @@ arguments:
 
 # Code Documentation: {{comment_style}}
 
-## Code to Document
-
-If the IDE is connected, comment on the currently open file in the editor.
-
-Otherwise, ask the user for the file name they want to comment.
+{% render code %}
 
 ## Documentation Parameters
 - **Style**: {{comment_style}}

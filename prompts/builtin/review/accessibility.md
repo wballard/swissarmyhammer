@@ -130,7 +130,6 @@ Provide specific code changes to:
 - Add proper ARIA attributes
 - Enhance keyboard support
 
-
 ## Process
 
 - list all source files in the project and create a markdown scratchpad file, this is your todo list

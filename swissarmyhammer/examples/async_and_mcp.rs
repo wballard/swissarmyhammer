@@ -1,14 +1,10 @@
 //! Example showing async usage and MCP server integration
 
-#[cfg(feature = "mcp")]
 use swissarmyhammer::{mcp::McpServer, Prompt, PromptLibrary};
-
-#[cfg(feature = "mcp")]
 use rmcp::ServerHandler;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    #[cfg(feature = "mcp")]
     {
         // Create and populate a prompt library
         let mut library = PromptLibrary::new();
@@ -60,17 +56,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // - Rendering prompts with arguments
     }
 
-    #[cfg(not(feature = "mcp"))]
-    {
-        println!("This example requires the 'mcp' feature to be enabled.");
-        println!("Run with: cargo run --example async_and_mcp --features mcp");
-    }
 
     Ok(())
 }
 
 // Example of a custom storage backend (async)
-#[cfg(feature = "async")]
 mod custom_storage {
     use std::collections::HashMap;
     use swissarmyhammer::{Prompt, Result, SwissArmyHammerError};

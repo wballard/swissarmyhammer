@@ -35,7 +35,8 @@ clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 colored = "2"
 is-terminal = "0.4"
-rmcp = { version = "0.1.5", features = ["server", "transport-io"] }
+
+rmcp = { version = "0.2.1", features = ["server", "transport-io"] }
 dirs = "5"
 rust-embed = "8"
 tabled = "0.15"
@@ -65,7 +66,7 @@ criterion = "0.5"
 
 [profile.release]
 # Enable Link Time Optimization for smaller binaries
-lto = "thin"  # Use thin LTO for faster builds and startup
+lto = "thin" # Use thin LTO for faster builds and startup
 # Strip debug symbols
 strip = true
 # Optimize for speed over size for faster startup
@@ -79,6 +80,6 @@ panic = "abort"
 [profile.release-fast]
 inherits = "release"
 # Optimize specifically for startup time
-lto = false  # Disable LTO for faster startup
-codegen-units = 256  # Maximum parallelization
+lto = false         # Disable LTO for faster startup
+codegen-units = 256 # Maximum parallelization
 incremental = true

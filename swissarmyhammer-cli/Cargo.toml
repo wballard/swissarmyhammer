@@ -17,7 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Library dependency
-swissarmyhammer = { path = "../swissarmyhammer", features = ["full"] }
+swissarmyhammer = { path = "../swissarmyhammer" }
 
 # CLI dependencies
 clap = { workspace = true }

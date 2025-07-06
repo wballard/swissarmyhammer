@@ -43,6 +43,59 @@ impl PromptResolver {
         }
     }
 
+    /// Get all directories that prompts are loaded from
+    /// Returns paths in the same order as loading precedence
+    pub fn get_prompt_directories(&self) -> Result<Vec<std::path::PathBuf>> {
+        let mut directories = Vec::new();
+
+        // User prompts directory
+        if let Some(home) = dirs::home_dir() {
+            let user_prompts_dir = home.join(".swissarmyhammer").join("prompts");
+            if user_prompts_dir.exists() {
+                directories.push(user_prompts_dir);
+            }
+        }
+
+        // Local prompts directories (using same logic as load_local_prompts)
+        let current_dir = std::env::current_dir()?;
+        let mut prompt_dirs = Vec::new();
+        let mut path = current_dir.as_path();
+
+        loop {
+            let swissarmyhammer_dir = path.join(".swissarmyhammer");
+            if swissarmyhammer_dir.exists() && swissarmyhammer_dir.is_dir() {
+                // Skip the user's home .swissarmyhammer directory to avoid duplicate
+                if let Some(home) = dirs::home_dir() {
+                    let user_swissarmyhammer_dir = home.join(".swissarmyhammer");
+                    if swissarmyhammer_dir == user_swissarmyhammer_dir {
+                        match path.parent() {
+                            Some(parent) => path = parent,
+                            None => break,
+                        }
+                        continue;
+                    }
+                }
+
+                let prompts_dir = swissarmyhammer_dir.join("prompts");
+                if prompts_dir.exists() && prompts_dir.is_dir() {
+                    prompt_dirs.push(prompts_dir);
+                }
+            }
+
+            match path.parent() {
+                Some(parent) => path = parent,
+                None => break,
+            }
+        }
+
+        // Add local directories in reverse order (root to current) to match loading order
+        for prompts_dir in prompt_dirs.into_iter().rev() {
+            directories.push(prompts_dir);
+        }
+
+        Ok(directories)
+    }
+
     /// Load all prompts following the correct precedence:
     /// 1. Builtin prompts (least specific, embedded in binary)
     /// 2. User prompts from ~/.swissarmyhammer/prompts
@@ -260,6 +313,23 @@ mod tests {
                 let builtin_prompt_names: Vec<String> = prompts.iter().map(|p| p.name.clone()).collect();
                 panic!("debug/error prompt not found. Available builtin prompts: {:?}", builtin_prompt_names);
             }
+        }
+    }
+
+    #[test]
+    fn test_get_prompt_directories() {
+        let resolver = PromptResolver::new();
+        let directories = resolver.get_prompt_directories().unwrap();
+        
+        // Should return a vector of PathBuf (may be empty if no directories exist)
+        // At minimum, should not panic and should return a valid result
+        // Note: Vec::len() is always >= 0, so no need to test this
+        
+        // All returned paths should be absolute and existing
+        for dir in directories {
+            assert!(dir.is_absolute());
+            assert!(dir.exists());
+            assert!(dir.is_dir());
         }
     }
 

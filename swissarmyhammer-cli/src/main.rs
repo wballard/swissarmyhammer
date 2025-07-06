@@ -32,7 +32,9 @@ async fn main() {
     let is_mcp_mode =
         matches!(cli.command, Some(Commands::Serve)) && !std::io::stdin().is_terminal();
 
-    let log_level = if is_mcp_mode || cli.quiet {
+    let log_level = if is_mcp_mode {
+        Level::DEBUG // More verbose for MCP mode to help with debugging
+    } else if cli.quiet {
         Level::ERROR
     } else if cli.verbose {
         Level::DEBUG
@@ -40,10 +42,52 @@ async fn main() {
         Level::INFO
     };
 
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .with_max_level(log_level)
-        .init();
+    if is_mcp_mode {
+        // In MCP mode, write logs to .swissarmyhammer/log for debugging
+        use std::fs;
+        use std::path::PathBuf;
+        
+        let log_dir = if let Some(home) = dirs::home_dir() {
+            home.join(".swissarmyhammer")
+        } else {
+            PathBuf::from(".swissarmyhammer")
+        };
+        
+        // Ensure the directory exists
+        if let Err(e) = fs::create_dir_all(&log_dir) {
+            eprintln!("Warning: Failed to create log directory: {}", e);
+        }
+        
+        let log_file = log_dir.join("mcp.log");
+        
+        // Try to open the log file
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_file)
+        {
+            Ok(file) => {
+                tracing_subscriber::fmt()
+                    .with_writer(file)
+                    .with_max_level(log_level)
+                    .with_ansi(false) // No color codes in file
+                    .init();
+            }
+            Err(e) => {
+                // Fallback to stderr if file logging fails
+                eprintln!("Warning: Failed to open log file, using stderr: {}", e);
+                tracing_subscriber::fmt()
+                    .with_writer(std::io::stderr)
+                    .with_max_level(log_level)
+                    .init();
+            }
+        }
+    } else {
+        tracing_subscriber::fmt()
+            .with_writer(std::io::stderr)
+            .with_max_level(log_level)
+            .init();
+    }
 
     let exit_code = match cli.command {
         Some(Commands::Serve) => {
@@ -148,6 +192,10 @@ async fn run_server() -> i32 {
         return 1;
     }
 
+    // Don't start file watching here - it will be started when MCP client connects
+    // File watching is started in the ServerHandler::initialize method
+    tracing::info!("MCP server initialized, file watching will start when client connects");
+
     // Set up cancellation token
     let ct = CancellationToken::new();
     let ct_clone = ct.clone();
@@ -169,6 +217,7 @@ async fn run_server() -> i32 {
 
             // Wait for cancellation
             ct.cancelled().await;
+            
             tracing::info!("MCP server exited successfully");
             0
         }

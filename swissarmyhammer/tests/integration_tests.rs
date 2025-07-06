@@ -4,7 +4,6 @@ use swissarmyhammer::prelude::*;
 use swissarmyhammer::ArgumentSpec;
 use tempfile::TempDir;
 
-#[cfg(feature = "mcp")]
 use rmcp::ServerHandler;
 
 #[test]
@@ -234,7 +233,6 @@ This is test prompt {}!"#,
     }
 }
 
-#[cfg(feature = "search")]
 #[test]
 fn test_search_engine() {
     use swissarmyhammer::search::SearchEngine;
@@ -264,7 +262,6 @@ fn test_search_engine() {
     assert_eq!(results[0].prompt.name, "documentation");
 }
 
-#[cfg(feature = "mcp")]
 #[tokio::test]
 async fn test_mcp_server() {
     use swissarmyhammer::mcp::McpServer;

@@ -14,7 +14,7 @@ struct PartialTag;
 
 impl PartialTag {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 }
 

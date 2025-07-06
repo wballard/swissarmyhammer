@@ -47,14 +47,12 @@ pub mod prompt_resolver;
 pub mod template;
 
 /// Model Context Protocol (MCP) server support
-#[cfg(feature = "mcp")]
 pub mod mcp;
 
 /// Storage abstractions and implementations
 pub mod storage;
 
 /// Search functionality
-#[cfg(feature = "search")]
 pub mod search;
 
 /// Plugin system for extensibility
@@ -120,9 +118,6 @@ pub mod prelude {
         TemplateEngine,
     };
 
-    #[cfg(feature = "mcp")]
     pub use crate::mcp::McpServer;
-
-    #[cfg(feature = "search")]
     pub use crate::search::{SearchEngine, SearchResult};
 }

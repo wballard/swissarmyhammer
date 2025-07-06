@@ -7,7 +7,6 @@ This guide covers how to share SwissArmyHammer prompts with your team, collabora
 SwissArmyHammer supports multiple collaboration workflows:
 - **File Sharing** - Share prompt files directly
 - **Git Integration** - Version control for prompts
-- **Export/Import** - Bundle and distribute prompts
 - **Team Directories** - Shared network folders
 - **Package Management** - Distribute as packages
 
@@ -46,63 +45,6 @@ cp ~/.swissarmyhammer/prompts/pytest-*.md python-toolkit/
 
 # Share as zip
 zip -r python-toolkit.zip python-toolkit/
-```
-
-### Export/Import Bundles
-
-#### Creating Bundles
-
-Use the export command to create shareable bundles:
-
-```bash
-# Export all prompts
-swissarmyhammer export team-prompts.tar.gz
-
-# Export specific categories
-swissarmyhammer export --filter "category:development" dev-prompts.tar.gz
-
-# Export with metadata
-swissarmyhammer export --include-metadata project-prompts.tar.gz
-```
-
-#### Bundle Structure
-
-```
-team-prompts.tar.gz
-├── manifest.json
-├── prompts/
-│   ├── code-review.md
-│   ├── api-design.md
-│   └── test-writer.md
-├── templates/
-│   └── shared-components.md
-└── README.md
-```
-
-#### Distributing Bundles
-
-```bash
-# Share via cloud storage
-aws s3 cp team-prompts.tar.gz s3://team-bucket/prompts/
-
-# Share via internal package repository
-curl -X POST https://packages.company.com/upload \
-  -F "file=@team-prompts.tar.gz" \
-  -F "name=team-prompts" \
-  -F "version=1.0.0"
-```
-
-#### Installing Bundles
-
-```bash
-# Import bundle
-swissarmyhammer import team-prompts.tar.gz
-
-# Import with namespace
-swissarmyhammer import team-prompts.tar.gz --namespace team
-
-# Preview before importing
-swissarmyhammer import team-prompts.tar.gz --dry-run
 ```
 
 ## Git-Based Collaboration
@@ -765,24 +707,23 @@ Create onboarding bundle:
 #!/bin/bash
 # create-onboarding-bundle.sh
 
-# Create bundle
-swissarmyhammer export \
-  --filter "tag:onboarding,tag:essential" \
-  onboarding-prompts.tar.gz
+# Create directory structure
+mkdir -p onboarding-prompts/prompts
+
+# Copy essential prompts
+cp ~/.swissarmyhammer/prompts/*onboarding*.md onboarding-prompts/prompts/
+cp ~/.swissarmyhammer/prompts/*essential*.md onboarding-prompts/prompts/
 
 # Add setup script
-cat > setup.sh << 'EOF'
+cat > onboarding-prompts/setup.sh << 'EOF'
 #!/bin/bash
 echo "Welcome to the team! Setting up your prompts..."
-swissarmyhammer import onboarding-prompts.tar.gz
+cp -r prompts/* ~/.swissarmyhammer/prompts/
 echo "Run 'swissarmyhammer list' to see your new prompts!"
 EOF
 
 # Create welcome package
-tar -czf welcome-pack.tar.gz \
-  onboarding-prompts.tar.gz \
-  setup.sh \
-  README.md
+tar -czf welcome-pack.tar.gz onboarding-prompts/
 ```
 
 ### Project Templates
@@ -809,7 +750,7 @@ install_script: |
 
 ## Next Steps
 
-- Learn about [Export Command](./cli-export.md) for creating bundles
-- Explore [Import Command](./cli-import.md) for installing shared prompts
 - Read [Prompt Organization](./prompt-organization.md) for structure best practices
 - See [Contributing](./contributing.md) for contribution guidelines
+- Explore [Git Integration](./development.md) for version control workflows
+- Learn about [Configuration](./configuration.md) for team setup

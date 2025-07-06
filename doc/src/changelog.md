@@ -30,7 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - MCP (Model Context Protocol) server implementation
 - File watching for automatic prompt reloading
-- Export/import functionality for prompt bundles
 - Doctor command for system health checks
 - Liquid template engine integration
 - Support for prompt arguments and validation

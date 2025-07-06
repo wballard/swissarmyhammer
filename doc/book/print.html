@@ -263,25 +263,23 @@ Focus on:
 <h2 id="license"><a class="header" href="#license">License</a></h2>
 <p>SwissArmyHammer is open source software licensed under the MIT License. See the <a href="./license.html">License</a> page for details.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
-<p>For complete installation instructions with all platform options, see the <a href="https://wballard.github.io/swissarmyhammer/installation.html">Installation Guide</a> on GitHub Pages.</p>
-<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
-<p>Before installing SwissArmyHammer, you need:</p>
+<h2 id="quick-install-recommended"><a class="header" href="#quick-install-recommended">Quick Install (Recommended)</a></h2>
+<h3 id="unix-like-systems-linuxmacos"><a class="header" href="#unix-like-systems-linuxmacos">Unix-like Systems (Linux/macOS)</a></h3>
+<pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/swissarmyhammer/swissarmyhammer/main/install.sh | sh
+</code></pre>
+<p>This script will:</p>
+<ul>
+<li>Detect your platform automatically</li>
+<li>Download the latest release</li>
+<li>Install to <code>/usr/local/bin</code></li>
+<li>Verify the installation</li>
+</ul>
+<h2 id="clone-and-build"><a class="header" href="#clone-and-build">Clone and Build</a></h2>
+<p>If you are installing from source:</p>
 <ul>
 <li><strong>Rust 1.70 or later</strong> - Install from <a href="https://rustup.rs/">rustup.rs</a></li>
 <li><strong>Git</strong> - For cloning the repository</li>
 </ul>
-<h2 id="path-configuration"><a class="header" href="#path-configuration">PATH Configuration</a></h2>
-<p>Make sure <code>~/.cargo/bin</code> is in your PATH. Add this to your shell configuration file:</p>
-<pre><code class="language-bash"># For bash (~/.bashrc or ~/.bash_profile)
-export PATH="$HOME/.cargo/bin:$PATH"
-
-# For zsh (~/.zshrc)
-export PATH="$HOME/.cargo/bin:$PATH"
-
-# For fish (~/.config/fish/config.fish)
-set -gx PATH $HOME/.cargo/bin $PATH
-</code></pre>
-<h2 id="alternative-clone-and-build"><a class="header" href="#alternative-clone-and-build">Alternative: Clone and Build</a></h2>
 <p>If you want to build from source or contribute to development:</p>
 <pre><code class="language-bash"># Clone the repository
 git clone https://github.com/wballard/swissarmyhammer.git
@@ -358,7 +356,7 @@ cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyham
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h1>
 <p>Get up and running with SwissArmyHammer in just a few minutes.</p>
-<h2 id="prerequisites-1"><a class="header" href="#prerequisites-1">Prerequisites</a></h2>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
 <p>Before you begin, make sure you have:</p>
 <ul>
 <li>SwissArmyHammer installed (see <a href="./installation.html">Installation</a>)</li>
@@ -3472,8 +3470,6 @@ export PATH="$HOME/.cargo/bin:$PATH"
 <tr><td><a href="./cli-serve.html"><code>serve</code></a></td><td>Run as MCP server for Claude Code integration</td></tr>
 <tr><td><a href="./cli-search.html"><code>search</code></a></td><td>Search and discover prompts with powerful filtering</td></tr>
 <tr><td><a href="./cli-test.html"><code>test</code></a></td><td>Interactively test prompts with arguments</td></tr>
-<tr><td><a href="./cli-export.html"><code>export</code></a></td><td>Export prompts for sharing and backup</td></tr>
-<tr><td><a href="./cli-import.html"><code>import</code></a></td><td>Import prompts from various sources</td></tr>
 <tr><td><a href="./cli-doctor.html"><code>doctor</code></a></td><td>Diagnose configuration and setup issues</td></tr>
 <tr><td><a href="./cli-completion.html"><code>completion</code></a></td><td>Generate shell completion scripts</td></tr>
 </tbody></table>
@@ -3496,13 +3492,6 @@ swissarmyhammer test code-review
 
 # Test with predefined arguments
 swissarmyhammer test code-review --arg code="fn main() { println!(\"Hello\"); }"
-</code></pre>
-<h3 id="export-and-import-prompts"><a class="header" href="#export-and-import-prompts">Export and Import Prompts</a></h3>
-<pre><code class="language-bash"># Export all prompts to a tar.gz file
-swissarmyhammer export --all --format tar.gz my-prompts.tar.gz
-
-# Import prompts from URL
-swissarmyhammer import https://example.com/prompts.tar.gz
 </code></pre>
 <h3 id="check-setup"><a class="header" href="#check-setup">Check Setup</a></h3>
 <pre><code class="language-bash"># Diagnose any configuration issues
@@ -4339,577 +4328,6 @@ fi
 <li><a href="./testing-guide.html">Testing Guide</a> - Advanced testing strategies</li>
 <li><a href="./custom-filters.html">Custom Filters</a> - Available template filters</li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="export---export-prompts-for-sharing"><a class="header" href="#export---export-prompts-for-sharing">export - Export Prompts for Sharing</a></h1>
-<p>The <code>export</code> command allows you to package and share prompts in various formats for backup, distribution, or collaboration.</p>
-<h2 id="synopsis-2"><a class="header" href="#synopsis-2">Synopsis</a></h2>
-<pre><code class="language-bash">swissarmyhammer export [OPTIONS] [PROMPTS...] &lt;OUTPUT&gt;
-</code></pre>
-<h2 id="description-3"><a class="header" href="#description-3">Description</a></h2>
-<p>Export prompts to archives, directories, or other formats for sharing, backup, or deployment. Supports exporting individual prompts, categories, or entire collections.</p>
-<h2 id="arguments-5"><a class="header" href="#arguments-5">Arguments</a></h2>
-<ul>
-<li><code>PROMPTS...</code> - Specific prompt IDs to export (optional if using <code>--all</code> or <code>--category</code>)</li>
-<li><code>OUTPUT</code> - Output path (file for archives, directory for directory format)</li>
-</ul>
-<h2 id="options-3"><a class="header" href="#options-3">Options</a></h2>
-<h3 id="selection"><a class="header" href="#selection">Selection</a></h3>
-<ul>
-<li><code>--all, -a</code> - Export all prompts</li>
-<li><code>--category, -c CATEGORY</code> - Export prompts from specific category</li>
-<li><code>--source SOURCE</code> - Export prompts from specific source (builtin, user, local)</li>
-</ul>
-<h3 id="format"><a class="header" href="#format">Format</a></h3>
-<ul>
-<li><code>--format, -f FORMAT</code> - Output format (tar.gz, zip, directory)
-<ul>
-<li><code>tar.gz</code> - Compressed tar archive (default)</li>
-<li><code>zip</code> - ZIP archive</li>
-<li><code>directory</code> - Plain directory structure</li>
-</ul>
-</li>
-</ul>
-<h3 id="content-control"><a class="header" href="#content-control">Content Control</a></h3>
-<ul>
-<li><code>--include-metadata</code> - Include metadata files (manifest, checksums)</li>
-<li><code>--no-validation</code> - Skip prompt validation before export</li>
-<li><code>--exclude-builtin</code> - Exclude built-in prompts from export</li>
-</ul>
-<h3 id="output-control-2"><a class="header" href="#output-control-2">Output Control</a></h3>
-<ul>
-<li><code>--dry-run</code> - Show what would be exported without creating files</li>
-<li><code>--quiet, -q</code> - Suppress progress output</li>
-<li><code>--verbose, -v</code> - Show detailed export progress</li>
-</ul>
-<h2 id="examples-7"><a class="header" href="#examples-7">Examples</a></h2>
-<h3 id="basic-export"><a class="header" href="#basic-export">Basic Export</a></h3>
-<pre><code class="language-bash"># Export specific prompts to tar.gz
-swissarmyhammer export code-review debug-helper exported-prompts.tar.gz
-
-# Export all prompts
-swissarmyhammer export --all my-prompts.tar.gz
-
-# Export to directory
-swissarmyhammer export --all --format directory ./prompt-backup/
-</code></pre>
-<h3 id="category-and-source-export"><a class="header" href="#category-and-source-export">Category and Source Export</a></h3>
-<pre><code class="language-bash"># Export all review-related prompts
-swissarmyhammer export --category review review-prompts.zip
-
-# Export only user-created prompts
-swissarmyhammer export --source user --format tar.gz user-prompts.tar.gz
-
-# Export local project prompts
-swissarmyhammer export --source local project-prompts.tar.gz
-</code></pre>
-<h3 id="advanced-options"><a class="header" href="#advanced-options">Advanced Options</a></h3>
-<pre><code class="language-bash"># Dry run to see what would be exported
-swissarmyhammer export --all --dry-run backup.tar.gz
-
-# Export with metadata and validation
-swissarmyhammer export --all --include-metadata --verbose complete-backup.tar.gz
-
-# Export excluding built-ins
-swissarmyhammer export --all --exclude-builtin custom-prompts.tar.gz
-</code></pre>
-<h2 id="export-formats"><a class="header" href="#export-formats">Export Formats</a></h2>
-<h3 id="targz-default"><a class="header" href="#targz-default">tar.gz (Default)</a></h3>
-<ul>
-<li><strong>Benefits</strong>: Widely supported, good compression, preserves permissions</li>
-<li><strong>Use case</strong>: Sharing collections, backup, CI/CD pipelines</li>
-<li><strong>File structure</strong>: Flat or hierarchical based on source organization</li>
-</ul>
-<h3 id="zip"><a class="header" href="#zip">zip</a></h3>
-<ul>
-<li><strong>Benefits</strong>: Native support on Windows, good tool ecosystem</li>
-<li><strong>Use case</strong>: Sharing with Windows users, web distribution</li>
-<li><strong>File structure</strong>: Same as tar.gz but in ZIP format</li>
-</ul>
-<h3 id="directory"><a class="header" href="#directory">directory</a></h3>
-<ul>
-<li><strong>Benefits</strong>: Easy to browse, no extraction needed, version control friendly</li>
-<li><strong>Use case</strong>: Local backup, development, manual inspection</li>
-<li><strong>File structure</strong>: Mirrors the original prompt directory organization</li>
-</ul>
-<h2 id="output-structure"><a class="header" href="#output-structure">Output Structure</a></h2>
-<h3 id="archive-formats-targz-zip"><a class="header" href="#archive-formats-targz-zip">Archive Formats (tar.gz, zip)</a></h3>
-<pre><code>exported-prompts.tar.gz/
-├── manifest.json                 # Export metadata
-├── checksums.sha256             # File integrity checks
-├── prompts/
-│   ├── review/
-│   │   ├── code.md
-│   │   └── security.md
-│   ├── debug/
-│   │   └── error.md
-│   └── docs/
-│       └── api.md
-└── README.md                    # Export information
-</code></pre>
-<h3 id="directory-format"><a class="header" href="#directory-format">Directory Format</a></h3>
-<pre><code>prompt-backup/
-├── .swissarmyhammer/
-│   ├── manifest.json           # Export metadata
-│   └── checksums.sha256        # File integrity
-├── prompts/
-│   ├── review/
-│   │   ├── code.md
-│   │   └── security.md
-│   └── debug/
-│       └── error.md
-└── README.md                   # Export information
-</code></pre>
-<h2 id="metadata-files"><a class="header" href="#metadata-files">Metadata Files</a></h2>
-<h3 id="manifestjson"><a class="header" href="#manifestjson">manifest.json</a></h3>
-<pre><code class="language-json">{
-  "exported_at": "2024-01-15T10:30:00Z",
-  "swissarmyhammer_version": "0.1.0",
-  "export_options": {
-    "format": "tar.gz",
-    "include_builtin": false,
-    "sources": ["user", "local"]
-  },
-  "prompts": [
-    {
-      "id": "code-review",
-      "title": "Code Review Helper",
-      "source": "user",
-      "path": "prompts/review/code.md",
-      "checksum": "sha256:abc123...",
-      "arguments": ["code", "language"]
-    }
-  ],
-  "statistics": {
-    "total_prompts": 15,
-    "total_size": "45.2KB",
-    "categories": ["review", "debug", "docs"]
-  }
-}
-</code></pre>
-<h3 id="checksumssha256"><a class="header" href="#checksumssha256">checksums.sha256</a></h3>
-<pre><code>abc123... prompts/review/code.md
-def456... prompts/debug/error.md
-ghi789... prompts/docs/api.md
-</code></pre>
-<h2 id="export-validation"><a class="header" href="#export-validation">Export Validation</a></h2>
-<p>Before export, prompts are validated for:</p>
-<ul>
-<li><strong>Syntax</strong>: Valid YAML front matter and Markdown structure</li>
-<li><strong>Templates</strong>: Liquid template syntax correctness</li>
-<li><strong>Arguments</strong>: Argument definitions match template usage</li>
-<li><strong>References</strong>: No broken internal references or includes</li>
-</ul>
-<p>Skip validation with <code>--no-validation</code> for faster exports or when dealing with known issues.</p>
-<h2 id="performance-and-size"><a class="header" href="#performance-and-size">Performance and Size</a></h2>
-<h3 id="compression-ratios"><a class="header" href="#compression-ratios">Compression Ratios</a></h3>
-<ul>
-<li><strong>tar.gz</strong>: 70-80% size reduction for typical prompt collections</li>
-<li><strong>zip</strong>: 65-75% size reduction, faster compression</li>
-<li><strong>directory</strong>: No compression, fastest export</li>
-</ul>
-<h3 id="performance-tips"><a class="header" href="#performance-tips">Performance Tips</a></h3>
-<pre><code class="language-bash"># For large collections, use parallel processing
-export RAYON_NUM_THREADS=4
-swissarmyhammer export --all large-collection.tar.gz
-
-# For frequent exports, skip validation
-swissarmyhammer export --all --no-validation quick-backup.tar.gz
-</code></pre>
-<h2 id="integration-examples-1"><a class="header" href="#integration-examples-1">Integration Examples</a></h2>
-<h3 id="backup-script"><a class="header" href="#backup-script">Backup Script</a></h3>
-<pre><code class="language-bash">#!/bin/bash
-# backup-prompts.sh
-
-DATE=$(date +%Y%m%d)
-BACKUP_DIR="$HOME/prompt-backups"
-mkdir -p "$BACKUP_DIR"
-
-echo "Creating daily prompt backup..."
-swissarmyhammer export --all \
-  --include-metadata \
-  --format tar.gz \
-  "$BACKUP_DIR/prompts-$DATE.tar.gz"
-
-# Keep only last 30 days
-find "$BACKUP_DIR" -name "prompts-*.tar.gz" -mtime +30 -delete
-
-echo "Backup complete: $BACKUP_DIR/prompts-$DATE.tar.gz"
-</code></pre>
-<h3 id="cicd-pipeline"><a class="header" href="#cicd-pipeline">CI/CD Pipeline</a></h3>
-<pre><code class="language-yaml"># .github/workflows/export-prompts.yml
-name: Export Prompts
-on:
-  push:
-    tags: ['v*']
-
-jobs:
-  export:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Install SwissArmyHammer
-        run: cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
-      - name: Export prompts
-        run: |
-          swissarmyhammer export --all \
-            --exclude-builtin \
-            --format tar.gz \
-            prompts-${GITHUB_REF#refs/tags/}.tar.gz
-      - name: Upload release asset
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./prompts-*.tar.gz
-          asset_name: prompts-${{ github.ref }}.tar.gz
-          asset_content_type: application/gzip
-</code></pre>
-<h3 id="team-sharing"><a class="header" href="#team-sharing">Team Sharing</a></h3>
-<pre><code class="language-bash"># Export team prompts for sharing
-swissarmyhammer export \
-  --category "team" \
-  --include-metadata \
-  team-prompts-$(date +%Y%m%d).tar.gz
-
-# Upload to shared location
-scp team-prompts-*.tar.gz team@shared-server:/shared/prompts/
-</code></pre>
-<h2 id="see-also-2"><a class="header" href="#see-also-2">See Also</a></h2>
-<ul>
-<li><a href="./cli-import.html"><code>import</code></a> - Import exported prompts</li>
-<li><a href="./sharing-guide.html">Sharing Guide</a> - Collaboration workflows</li>
-<li><a href="./cli-search.html"><code>search</code></a> - Find prompts to export</li>
-</ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="import---import-prompts-from-various-sources"><a class="header" href="#import---import-prompts-from-various-sources">import - Import Prompts from Various Sources</a></h1>
-<p>The <code>import</code> command allows you to import prompts from archives, URLs, Git repositories, and other sources into your local prompt collection.</p>
-<h2 id="synopsis-3"><a class="header" href="#synopsis-3">Synopsis</a></h2>
-<pre><code class="language-bash">swissarmyhammer import [OPTIONS] &lt;SOURCE&gt;
-</code></pre>
-<h2 id="description-4"><a class="header" href="#description-4">Description</a></h2>
-<p>Import prompts from various sources including local files, URLs, Git repositories, and other SwissArmyHammer installations. Supports conflict resolution, validation, and backup creation.</p>
-<h2 id="arguments-6"><a class="header" href="#arguments-6">Arguments</a></h2>
-<ul>
-<li><code>SOURCE</code> - Import source (file path, URL, Git repository, or directory)</li>
-</ul>
-<h2 id="options-4"><a class="header" href="#options-4">Options</a></h2>
-<h3 id="conflict-resolution"><a class="header" href="#conflict-resolution">Conflict Resolution</a></h3>
-<ul>
-<li><code>--strategy STRATEGY</code> - Conflict resolution strategy
-<ul>
-<li><code>ask</code> - Prompt for each conflict (default)</li>
-<li><code>overwrite</code> - Overwrite existing prompts</li>
-<li><code>skip</code> - Skip conflicting prompts</li>
-<li><code>rename</code> - Rename conflicting prompts</li>
-<li><code>abort</code> - Abort on first conflict</li>
-</ul>
-</li>
-</ul>
-<h3 id="source-options"><a class="header" href="#source-options">Source Options</a></h3>
-<ul>
-<li><code>--git-branch BRANCH</code> - Git branch to import from (for Git sources)</li>
-<li><code>--git-path PATH</code> - Path within Git repository to import</li>
-<li><code>--extract-to DIR</code> - Extract archives to specific directory first</li>
-</ul>
-<h3 id="validation-and-safety"><a class="header" href="#validation-and-safety">Validation and Safety</a></h3>
-<ul>
-<li><code>--dry-run</code> - Show what would be imported without making changes</li>
-<li><code>--no-backup</code> - Skip creating backup before import</li>
-<li><code>--no-validation</code> - Skip prompt validation during import</li>
-<li><code>--force</code> - Force import even with validation errors</li>
-</ul>
-<h3 id="output-control-3"><a class="header" href="#output-control-3">Output Control</a></h3>
-<ul>
-<li><code>--quiet, -q</code> - Suppress progress output</li>
-<li><code>--verbose, -v</code> - Show detailed import progress</li>
-<li><code>--json</code> - Output results in JSON format</li>
-</ul>
-<h2 id="examples-8"><a class="header" href="#examples-8">Examples</a></h2>
-<h3 id="file-import"><a class="header" href="#file-import">File Import</a></h3>
-<pre><code class="language-bash"># Import from local archive
-swissarmyhammer import prompts-backup.tar.gz
-
-# Import from directory
-swissarmyhammer import ./shared-prompts/
-
-# Import with specific conflict strategy
-swissarmyhammer import --strategy overwrite team-prompts.zip
-</code></pre>
-<h3 id="url-import"><a class="header" href="#url-import">URL Import</a></h3>
-<pre><code class="language-bash"># Import from URL
-swissarmyhammer import https://example.com/prompts.tar.gz
-
-# Import from GitHub release
-swissarmyhammer import https://github.com/team/prompts/releases/download/v1.0/prompts.tar.gz
-</code></pre>
-<h3 id="git-repository-import"><a class="header" href="#git-repository-import">Git Repository Import</a></h3>
-<pre><code class="language-bash"># Import from Git repository
-swissarmyhammer import https://github.com/team/prompt-library.git
-
-# Import specific branch
-swissarmyhammer import --git-branch develop https://github.com/team/prompts.git
-
-# Import specific path within repository
-swissarmyhammer import --git-path prompts/ https://github.com/team/project.git
-</code></pre>
-<h3 id="advanced-import"><a class="header" href="#advanced-import">Advanced Import</a></h3>
-<pre><code class="language-bash"># Dry run to preview import
-swissarmyhammer import --dry-run team-prompts.tar.gz
-
-# Import with validation and backup
-swissarmyhammer import --verbose --strategy ask prompts.tar.gz
-
-# Force import with errors
-swissarmyhammer import --force --no-validation broken-prompts.tar.gz
-</code></pre>
-<h2 id="import-sources"><a class="header" href="#import-sources">Import Sources</a></h2>
-<h3 id="supported-formats"><a class="header" href="#supported-formats">Supported Formats</a></h3>
-<ul>
-<li><strong>tar.gz</strong> - Compressed tar archives</li>
-<li><strong>zip</strong> - ZIP archives</li>
-<li><strong>directory</strong> - Local directories</li>
-<li><strong>Git repositories</strong> - Remote Git repositories</li>
-<li><strong>URLs</strong> - HTTP/HTTPS downloads</li>
-</ul>
-<h3 id="auto-detection"><a class="header" href="#auto-detection">Auto-Detection</a></h3>
-<p>SwissArmyHammer automatically detects source types:</p>
-<pre><code class="language-bash"># These are all detected automatically
-swissarmyhammer import prompts.tar.gz           # Archive
-swissarmyhammer import ./prompts/               # Directory
-swissarmyhammer import https://example.com/prompts.tar.gz  # URL
-swissarmyhammer import git@github.com:team/prompts.git     # Git SSH
-swissarmyhammer import https://github.com/team/prompts.git # Git HTTPS
-</code></pre>
-<h2 id="conflict-resolution-1"><a class="header" href="#conflict-resolution-1">Conflict Resolution</a></h2>
-<h3 id="interactive-mode-ask"><a class="header" href="#interactive-mode-ask">Interactive Mode (ask)</a></h3>
-<pre><code class="language-bash">$ swissarmyhammer import team-prompts.tar.gz
-Found 3 prompts to import, 1 conflict detected.
-
-Conflict: 'code-review' already exists
-Existing: User prompt from ~/.swissarmyhammer/prompts/review/code.md
-Incoming: Team prompt "Advanced Code Review Helper"
-
-? How should this conflict be resolved?
-  &gt; View differences
-    Overwrite existing
-    Skip this prompt  
-    Rename to 'code-review-team'
-    Rename to 'code-review-2'
-    Abort import
-</code></pre>
-<h3 id="automatic-strategies"><a class="header" href="#automatic-strategies">Automatic Strategies</a></h3>
-<pre><code class="language-bash"># Overwrite all conflicts
-swissarmyhammer import --strategy overwrite prompts.tar.gz
-
-# Skip all conflicts
-swissarmyhammer import --strategy skip prompts.tar.gz
-
-# Rename all conflicts
-swissarmyhammer import --strategy rename prompts.tar.gz
-</code></pre>
-<h2 id="validation-and-safety-1"><a class="header" href="#validation-and-safety-1">Validation and Safety</a></h2>
-<h3 id="pre-import-validation"><a class="header" href="#pre-import-validation">Pre-Import Validation</a></h3>
-<pre><code class="language-bash">$ swissarmyhammer import --dry-run prompts.tar.gz
-Import Analysis:
-✓ Archive format: tar.gz (valid)
-✓ Manifest present and valid
-✓ Checksums verified
-
-Prompts to import:
-  ✓ code-review (valid template)
-  ✓ debug-helper (valid template)  
-  ⚠ broken-prompt (warning: unused argument 'old_arg')
-  ✗ invalid-prompt (error: invalid YAML front matter)
-
-Conflicts:
-  ! code-review - conflicts with existing user prompt
-
-Summary: 2 valid, 1 warning, 1 error, 1 conflict
-Would import 3 prompts (excluding invalid)
-</code></pre>
-<h3 id="backup-creation"><a class="header" href="#backup-creation">Backup Creation</a></h3>
-<pre><code class="language-bash"># Automatic backup before import
-$ swissarmyhammer import prompts.tar.gz
-Creating backup: ~/.swissarmyhammer/backups/pre-import-20240115-103000.tar.gz
-Importing 3 prompts...
-✓ Import completed successfully
-
-# Restore from backup if needed
-swissarmyhammer import ~/.swissarmyhammer/backups/pre-import-20240115-103000.tar.gz --strategy overwrite
-</code></pre>
-<h2 id="import-structure"><a class="header" href="#import-structure">Import Structure</a></h2>
-<h3 id="expected-directory-structure"><a class="header" href="#expected-directory-structure">Expected Directory Structure</a></h3>
-<pre><code>prompts-archive.tar.gz/
-├── manifest.json              # Optional metadata
-├── prompts/                   # Prompt files
-│   ├── review/
-│   │   └── code.md
-│   └── debug/
-│       └── error.md
-└── README.md                  # Optional documentation
-</code></pre>
-<h3 id="flexible-structure-support"><a class="header" href="#flexible-structure-support">Flexible Structure Support</a></h3>
-<p>SwissArmyHammer handles various directory structures:</p>
-<pre><code class="language-bash"># All these structures are supported:
-./prompts/*.md                 # Flat structure
-./category/*/prompt.md         # Nested categories
-./src/prompts/**/*.md         # Deep nesting
-./random-structure/**/*.md     # Any structure with .md files
-</code></pre>
-<h2 id="git-integration"><a class="header" href="#git-integration">Git Integration</a></h2>
-<h3 id="authentication"><a class="header" href="#authentication">Authentication</a></h3>
-<pre><code class="language-bash"># SSH key authentication (recommended)
-swissarmyhammer import git@github.com:team/prompts.git
-
-# HTTPS with credentials
-export GIT_USERNAME=user
-export GIT_PASSWORD=token
-swissarmyhammer import https://github.com/team/prompts.git
-
-# GitHub CLI integration
-gh auth login
-swissarmyhammer import https://github.com/private/prompts.git
-</code></pre>
-<h3 id="branch-and-path-selection"><a class="header" href="#branch-and-path-selection">Branch and Path Selection</a></h3>
-<pre><code class="language-bash"># Import from specific branch
-swissarmyhammer import --git-branch feature/new-prompts \
-  https://github.com/team/prompts.git
-
-# Import only specific directory
-swissarmyhammer import --git-path specialized-prompts/ \
-  https://github.com/team/monorepo.git
-
-# Combine branch and path
-swissarmyhammer import \
-  --git-branch develop \
-  --git-path prompts/production/ \
-  https://github.com/team/project.git
-</code></pre>
-<h2 id="output-and-logging"><a class="header" href="#output-and-logging">Output and Logging</a></h2>
-<h3 id="progress-output"><a class="header" href="#progress-output">Progress Output</a></h3>
-<pre><code class="language-bash">$ swissarmyhammer import --verbose prompts.tar.gz
-Downloading: prompts.tar.gz (1.2MB) [████████████████████] 100%
-Extracting archive...
-Validating 5 prompts...
-  ✓ code-review (valid)
-  ✓ debug-helper (valid)
-  ✓ api-docs (valid)
-  ⚠ legacy-prompt (deprecated syntax)
-  ✗ broken-template (invalid liquid syntax)
-
-Importing valid prompts:
-  → code-review (new)
-  → debug-helper (conflict: renamed to debug-helper-imported)
-  → api-docs (new)
-  → legacy-prompt (new, with warnings)
-
-Skipped: 1 invalid prompt
-Imported: 4 prompts
-Conflicts resolved: 1
-</code></pre>
-<h3 id="json-output-1"><a class="header" href="#json-output-1">JSON Output</a></h3>
-<pre><code class="language-bash">$ swissarmyhammer import --json prompts.tar.gz
-{
-  "success": true,
-  "imported": 4,
-  "skipped": 1,
-  "conflicts": 1,
-  "backup_created": "~/.swissarmyhammer/backups/pre-import-20240115-103000.tar.gz",
-  "prompts": [
-    {
-      "id": "code-review",
-      "action": "imported",
-      "source_path": "prompts/review/code.md",
-      "target_path": "~/.swissarmyhammer/prompts/review/code.md"
-    },
-    {
-      "id": "debug-helper", 
-      "action": "renamed",
-      "original_id": "debug-helper",
-      "new_id": "debug-helper-imported",
-      "reason": "conflict_resolution"
-    }
-  ],
-  "errors": [
-    {
-      "prompt": "broken-template",
-      "error": "Invalid Liquid syntax at line 15",
-      "action": "skipped"
-    }
-  ]
-}
-</code></pre>
-<h2 id="integration-examples-2"><a class="header" href="#integration-examples-2">Integration Examples</a></h2>
-<h3 id="team-onboarding"><a class="header" href="#team-onboarding">Team Onboarding</a></h3>
-<pre><code class="language-bash">#!/bin/bash
-# onboard-developer.sh
-
-echo "Setting up SwissArmyHammer with team prompts..."
-
-# Import base team prompts
-swissarmyhammer import \
-  --strategy ask \
-  https://github.com/company/team-prompts.git
-
-# Import project-specific prompts  
-swissarmyhammer import \
-  --strategy skip \
-  https://github.com/company/project-prompts/releases/latest/download/prompts.tar.gz
-
-echo "✓ Prompt setup complete"
-echo "Use 'swissarmyhammer doctor' to verify installation"
-</code></pre>
-<h3 id="continuous-integration"><a class="header" href="#continuous-integration">Continuous Integration</a></h3>
-<pre><code class="language-yaml"># .github/workflows/sync-prompts.yml
-name: Sync Team Prompts
-on:
-  schedule:
-    - cron: '0 9 * * MON'  # Weekly sync
-
-jobs:
-  sync:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install SwissArmyHammer
-        run: cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
-      
-      - name: Import latest team prompts
-        run: |
-          swissarmyhammer import \
-            --strategy overwrite \
-            --no-backup \
-            https://github.com/company/team-prompts.git
-      
-      - name: Validate imported prompts
-        run: swissarmyhammer doctor
-</code></pre>
-<h3 id="migration-script"><a class="header" href="#migration-script">Migration Script</a></h3>
-<pre><code class="language-bash">#!/bin/bash
-# migrate-from-old-system.sh
-
-OLD_PROMPTS="/old-system/prompts"
-BACKUP_DIR="/backup/prompts-$(date +%Y%m%d)"
-
-echo "Migrating prompts from old system..."
-
-# Create backup
-mkdir -p "$BACKUP_DIR"
-cp -r "$OLD_PROMPTS" "$BACKUP_DIR/"
-
-# Convert and import
-for file in "$OLD_PROMPTS"/*.txt; do
-  # Convert old format to SwissArmyHammer format
-  ./convert-prompt.py "$file" &gt; "converted/$(basename "$file" .txt).md"
-done
-
-# Import converted prompts
-swissarmyhammer import converted/ --strategy ask
-
-echo "Migration complete. Backup at: $BACKUP_DIR"
-</code></pre>
-<h2 id="see-also-3"><a class="header" href="#see-also-3">See Also</a></h2>
-<ul>
-<li><a href="./cli-export.html"><code>export</code></a> - Export prompts for sharing</li>
-<li><a href="./sharing-guide.html">Sharing Guide</a> - Collaboration workflows</li>
-<li><a href="./cli-doctor.html"><code>doctor</code></a> - Validate installation after import</li>
-</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="doctor-command"><a class="header" href="#doctor-command">doctor Command</a></h1>
 <p>The <code>doctor</code> command performs comprehensive health checks on your SwissArmyHammer installation and configuration. It identifies issues and provides recommendations for optimal operation.</p>
 <h2 id="usage-1"><a class="header" href="#usage-1">Usage</a></h2>
@@ -4925,7 +4343,7 @@ echo "Migration complete. Backup at: $BACKUP_DIR"
 <li>MCP server functionality</li>
 <li>System dependencies and environment</li>
 </ul>
-<h2 id="options-5"><a class="header" href="#options-5">Options</a></h2>
+<h2 id="options-3"><a class="header" href="#options-3">Options</a></h2>
 <h3 id="--verbose"><a class="header" href="#--verbose"><code>--verbose</code></a></h3>
 <ul>
 <li><strong>Description</strong>: Enable detailed output with additional diagnostic information</li>
@@ -5388,7 +4806,7 @@ swissarmyhammer doctor --verbose
 <h2 id="usage-2"><a class="header" href="#usage-2">Usage</a></h2>
 <pre><code class="language-bash">swissarmyhammer completion &lt;SHELL&gt;
 </code></pre>
-<h3 id="arguments-7"><a class="header" href="#arguments-7">Arguments</a></h3>
+<h3 id="arguments-5"><a class="header" href="#arguments-5">Arguments</a></h3>
 <ul>
 <li><code>&lt;SHELL&gt;</code> - The shell to generate completions for (<code>bash</code>, <code>zsh</code>, <code>fish</code>, <code>powershell</code>, <code>elvish</code>)</li>
 </ul>
@@ -5657,7 +5075,7 @@ swissarmyhammer completion bash | head -20
 </code></pre>
 </li>
 </ol>
-<h2 id="examples-9"><a class="header" href="#examples-9">Examples</a></h2>
+<h2 id="examples-7"><a class="header" href="#examples-7">Examples</a></h2>
 <h3 id="complete-workflow"><a class="header" href="#complete-workflow">Complete Workflow</a></h3>
 <pre><code class="language-bash"># Install completions
 swissarmyhammer completion bash &gt; ~/.local/share/bash-completion/completions/swissarmyhammer
@@ -5699,7 +5117,7 @@ mkdir -p "$COMPLETION_DIR"
 swissarmyhammer completion "$SHELL_NAME" &gt; "$COMPLETION_DIR/swissarmyhammer"
 echo "Completions installed to $COMPLETION_DIR"
 </code></pre>
-<h2 id="see-also-4"><a class="header" href="#see-also-4">See Also</a></h2>
+<h2 id="see-also-2"><a class="header" href="#see-also-2">See Also</a></h2>
 <ul>
 <li><a href="./cli-reference.html">CLI Reference</a> - Complete command documentation</li>
 <li><a href="./configuration.html">Configuration</a> - Configuration options</li>
@@ -5974,7 +5392,7 @@ let _watcher = FileWatcher::new("./prompts", move |event| {
 
 // Keep the watcher alive
 std::thread::sleep(std::time::Duration::from_secs(60));</code></pre>
-<h2 id="integration-examples-3"><a class="header" href="#integration-examples-3">Integration Examples</a></h2>
+<h2 id="integration-examples-1"><a class="header" href="#integration-examples-1">Integration Examples</a></h2>
 <h3 id="web-server-integration"><a class="header" href="#web-server-integration">Web Server Integration</a></h3>
 <pre><code class="language-rust">use axum::{extract::Path, http::StatusCode, response::Json, routing::get, Router};
 use swissarmyhammer::PromptLibrary;
@@ -6168,7 +5586,7 @@ let rendered = prompt.render(&amp;args)?;
 
 // CLI equivalent: swissarmyhammer export --all output.tar.gz
 library.export_all("output.tar.gz", ExportFormat::TarGz)?;</code></pre>
-<h2 id="see-also-5"><a class="header" href="#see-also-5">See Also</a></h2>
+<h2 id="see-also-3"><a class="header" href="#see-also-3">See Also</a></h2>
 <ul>
 <li><a href="./library-api.html">Library API Reference</a> - Complete API documentation</li>
 <li><a href="./library-examples.html">Integration Examples</a> - More integration patterns</li>
@@ -8209,7 +7627,7 @@ swissarmyhammer search --in content "{% if"
 swissarmyhammer search --in content "| capitalize"
 </code></pre>
 <h3 id="search-optimization"><a class="header" href="#search-optimization">Search Optimization</a></h3>
-<h4 id="performance-tips-1"><a class="header" href="#performance-tips-1">Performance Tips</a></h4>
+<h4 id="performance-tips"><a class="header" href="#performance-tips">Performance Tips</a></h4>
 <pre><code class="language-bash"># Limit results for faster response
 swissarmyhammer search --limit 10 query
 
@@ -8430,7 +7848,7 @@ swissarmyhammer search --no-args --limit 50
 swissarmyhammer search --json "" --limit 100 | \
   jq '.results[] | select(.arguments | length &gt; 5)'
 </code></pre>
-<h2 id="see-also-6"><a class="header" href="#see-also-6">See Also</a></h2>
+<h2 id="see-also-4"><a class="header" href="#see-also-4">See Also</a></h2>
 <ul>
 <li><a href="./cli-search.html"><code>search</code> command</a> - Command reference</li>
 <li><a href="./cli-test.html"><code>test</code> command</a> - Testing found prompts</li>
@@ -8613,7 +8031,7 @@ swissarmyhammer test template-name --debug | grep "Performance:"
   ]
 }
 </code></pre>
-<h3 id="continuous-integration-1"><a class="header" href="#continuous-integration-1">Continuous Integration</a></h3>
+<h3 id="continuous-integration"><a class="header" href="#continuous-integration">Continuous Integration</a></h3>
 <p>Add prompt testing to CI pipelines:</p>
 <pre><code class="language-yaml"># .github/workflows/test-prompts.yml
 name: Test Prompts
@@ -8634,7 +8052,7 @@ jobs:
             swissarmyhammer test "$name" --arg test="ci_validation"
           done
 </code></pre>
-<h2 id="see-also-7"><a class="header" href="#see-also-7">See Also</a></h2>
+<h2 id="see-also-5"><a class="header" href="#see-also-5">See Also</a></h2>
 <ul>
 <li><a href="./cli-test.html"><code>test</code> command</a> - Command reference</li>
 <li><a href="./template-variables.html">Template Variables</a> - Template syntax</li>
@@ -8647,7 +8065,6 @@ jobs:
 <ul>
 <li><strong>File Sharing</strong> - Share prompt files directly</li>
 <li><strong>Git Integration</strong> - Version control for prompts</li>
-<li><strong>Export/Import</strong> - Bundle and distribute prompts</li>
 <li><strong>Team Directories</strong> - Shared network folders</li>
 <li><strong>Package Management</strong> - Distribute as packages</li>
 </ul>
@@ -8674,49 +8091,6 @@ cp ~/.swissarmyhammer/prompts/pytest-*.md python-toolkit/
 
 # Share as zip
 zip -r python-toolkit.zip python-toolkit/
-</code></pre>
-<h3 id="exportimport-bundles"><a class="header" href="#exportimport-bundles">Export/Import Bundles</a></h3>
-<h4 id="creating-bundles"><a class="header" href="#creating-bundles">Creating Bundles</a></h4>
-<p>Use the export command to create shareable bundles:</p>
-<pre><code class="language-bash"># Export all prompts
-swissarmyhammer export team-prompts.tar.gz
-
-# Export specific categories
-swissarmyhammer export --filter "category:development" dev-prompts.tar.gz
-
-# Export with metadata
-swissarmyhammer export --include-metadata project-prompts.tar.gz
-</code></pre>
-<h4 id="bundle-structure"><a class="header" href="#bundle-structure">Bundle Structure</a></h4>
-<pre><code>team-prompts.tar.gz
-├── manifest.json
-├── prompts/
-│   ├── code-review.md
-│   ├── api-design.md
-│   └── test-writer.md
-├── templates/
-│   └── shared-components.md
-└── README.md
-</code></pre>
-<h4 id="distributing-bundles"><a class="header" href="#distributing-bundles">Distributing Bundles</a></h4>
-<pre><code class="language-bash"># Share via cloud storage
-aws s3 cp team-prompts.tar.gz s3://team-bucket/prompts/
-
-# Share via internal package repository
-curl -X POST https://packages.company.com/upload \
-  -F "file=@team-prompts.tar.gz" \
-  -F "name=team-prompts" \
-  -F "version=1.0.0"
-</code></pre>
-<h4 id="installing-bundles"><a class="header" href="#installing-bundles">Installing Bundles</a></h4>
-<pre><code class="language-bash"># Import bundle
-swissarmyhammer import team-prompts.tar.gz
-
-# Import with namespace
-swissarmyhammer import team-prompts.tar.gz --namespace team
-
-# Preview before importing
-swissarmyhammer import team-prompts.tar.gz --dry-run
 </code></pre>
 <h2 id="git-based-collaboration"><a class="header" href="#git-based-collaboration">Git-Based Collaboration</a></h2>
 <h3 id="repository-structure"><a class="header" href="#repository-structure">Repository Structure</a></h3>
@@ -9263,30 +8637,29 @@ git pull origin main
 <li>Consolidate duplicates</li>
 <li>Archive deprecated</li>
 </ul>
-<h2 id="examples-10"><a class="header" href="#examples-10">Examples</a></h2>
-<h3 id="team-onboarding-1"><a class="header" href="#team-onboarding-1">Team Onboarding</a></h3>
+<h2 id="examples-8"><a class="header" href="#examples-8">Examples</a></h2>
+<h3 id="team-onboarding"><a class="header" href="#team-onboarding">Team Onboarding</a></h3>
 <p>Create onboarding bundle:</p>
 <pre><code class="language-bash">#!/bin/bash
 # create-onboarding-bundle.sh
 
-# Create bundle
-swissarmyhammer export \
-  --filter "tag:onboarding,tag:essential" \
-  onboarding-prompts.tar.gz
+# Create directory structure
+mkdir -p onboarding-prompts/prompts
+
+# Copy essential prompts
+cp ~/.swissarmyhammer/prompts/*onboarding*.md onboarding-prompts/prompts/
+cp ~/.swissarmyhammer/prompts/*essential*.md onboarding-prompts/prompts/
 
 # Add setup script
-cat &gt; setup.sh &lt;&lt; 'EOF'
+cat &gt; onboarding-prompts/setup.sh &lt;&lt; 'EOF'
 #!/bin/bash
 echo "Welcome to the team! Setting up your prompts..."
-swissarmyhammer import onboarding-prompts.tar.gz
+cp -r prompts/* ~/.swissarmyhammer/prompts/
 echo "Run 'swissarmyhammer list' to see your new prompts!"
 EOF
 
 # Create welcome package
-tar -czf welcome-pack.tar.gz \
-  onboarding-prompts.tar.gz \
-  setup.sh \
-  README.md
+tar -czf welcome-pack.tar.gz onboarding-prompts/
 </code></pre>
 <h3 id="project-templates"><a class="header" href="#project-templates">Project Templates</a></h3>
 <p>Share project-specific prompts:</p>
@@ -9308,10 +8681,10 @@ install_script: |
 </code></pre>
 <h2 id="next-steps-10"><a class="header" href="#next-steps-10">Next Steps</a></h2>
 <ul>
-<li>Learn about <a href="./cli-export.html">Export Command</a> for creating bundles</li>
-<li>Explore <a href="./cli-import.html">Import Command</a> for installing shared prompts</li>
 <li>Read <a href="./prompt-organization.html">Prompt Organization</a> for structure best practices</li>
 <li>See <a href="./contributing.html">Contributing</a> for contribution guidelines</li>
+<li>Explore <a href="./development.html">Git Integration</a> for version control workflows</li>
+<li>Learn about <a href="./configuration.html">Configuration</a> for team setup</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="mcp-protocol"><a class="header" href="#mcp-protocol">MCP Protocol</a></h1>
 <p>SwissArmyHammer implements the Model Context Protocol (MCP) to provide prompts to AI assistants like Claude. This guide covers the protocol details and implementation specifics.</p>
@@ -9674,7 +9047,7 @@ async fn handle_websocket(ws: WebSocket, server: Arc&lt;MCPServer&gt;) {
     }).await;
 }</code></pre>
 <h2 id="security-considerations"><a class="header" href="#security-considerations">Security Considerations</a></h2>
-<h3 id="authentication-1"><a class="header" href="#authentication-1">Authentication</a></h3>
+<h3 id="authentication"><a class="header" href="#authentication">Authentication</a></h3>
 <p>MCP doesn’t specify authentication, but SwissArmyHammer supports:</p>
 <pre><code class="language-json">// With API key
 {
@@ -9814,7 +9187,7 @@ export MCP_PROXY=http://localhost:3334
 <li><code>~/.swissarmyhammer/config.toml</code> (user directory)</li>
 <li><code>/etc/swissarmyhammer/config.toml</code> (system-wide)</li>
 </ol>
-<h3 id="format-1"><a class="header" href="#format-1">Format</a></h3>
+<h3 id="format"><a class="header" href="#format">Format</a></h3>
 <p>Configuration uses TOML format:</p>
 <pre><code class="language-toml"># ~/.swissarmyhammer/config.toml
 
@@ -9890,7 +9263,7 @@ compression = true
 <li>Nested values use underscores: <code>SECTION_KEY</code></li>
 <li>Arrays use comma separation</li>
 </ul>
-<h3 id="examples-11"><a class="header" href="#examples-11">Examples</a></h3>
+<h3 id="examples-9"><a class="header" href="#examples-9">Examples</a></h3>
 <pre><code class="language-bash"># Server settings
 export SWISSARMYHAMMER_SERVER_HOST=0.0.0.0
 export SWISSARMYHAMMER_SERVER_PORT=9000
@@ -10520,7 +9893,7 @@ swissarmyhammer serve --config new-config.toml --dry-run
   # Maximum files to process per cycle
   batch_size: 100
 </code></pre>
-<h3 id="advanced-options-1"><a class="header" href="#advanced-options-1">Advanced Options</a></h3>
+<h3 id="advanced-options"><a class="header" href="#advanced-options">Advanced Options</a></h3>
 <pre><code class="language-yaml">watch:
   # File patterns to watch
   patterns:
@@ -11193,7 +10566,7 @@ overrides:
 <li><strong>Pattern match</strong>: <code>*-review</code> matches <code>code-review</code>, <code>security-review</code></li>
 <li><strong>Category match</strong>: <code>category:development</code> matches all development prompts</li>
 </ol>
-<h3 id="conflict-resolution-2"><a class="header" href="#conflict-resolution-2">Conflict Resolution</a></h3>
+<h3 id="conflict-resolution"><a class="header" href="#conflict-resolution">Conflict Resolution</a></h3>
 <p>When multiple overrides apply:</p>
 <pre><code class="language-yaml"># Resolution rules
 conflict_resolution:
@@ -11712,7 +11085,7 @@ swissarmyhammer test test/unit --code "$(cat auth.js)" --focus "security edge ca
 </ol>
 <p>For more information on creating custom prompts, see <a href="./creating-prompts.html">Creating Prompts</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="custom-filters-reference-1"><a class="header" href="#custom-filters-reference-1">Custom Filters Reference</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="examples-12"><a class="header" href="#examples-12">Examples</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="examples-10"><a class="header" href="#examples-10">Examples</a></h1>
 <p>This page provides real-world examples of using SwissArmyHammer for various development tasks.</p>
 <h2 id="basic-prompt-usage"><a class="header" href="#basic-prompt-usage">Basic Prompt Usage</a></h2>
 <h3 id="simple-code-review"><a class="header" href="#simple-code-review">Simple Code Review</a></h3>
@@ -12061,7 +11434,7 @@ claude mcp add ${PROJECT_NAME}_sah swissarmyhammer serve --prompts ./prompts
 
 echo "Project $PROJECT_NAME setup complete!"
 </code></pre>
-<h2 id="integration-examples-4"><a class="header" href="#integration-examples-4">Integration Examples</a></h2>
+<h2 id="integration-examples-2"><a class="header" href="#integration-examples-2">Integration Examples</a></h2>
 <h3 id="git-hooks"><a class="header" href="#git-hooks">Git Hooks</a></h3>
 <p><code>.git/hooks/pre-commit</code>:</p>
 <pre><code class="language-bash">#!/bin/bash
@@ -12925,7 +12298,7 @@ swissarmyhammer serve --debug &gt; server.log 2&gt;&amp;1 &amp;
 <li><strong>Feature requests</strong> - Ideas and suggestions</li>
 </ul>
 <h2 id="getting-started-1"><a class="header" href="#getting-started-1">Getting Started</a></h2>
-<h3 id="prerequisites-2"><a class="header" href="#prerequisites-2">Prerequisites</a></h3>
+<h3 id="prerequisites-1"><a class="header" href="#prerequisites-1">Prerequisites</a></h3>
 <ul>
 <li>Rust 1.70+ (check with <code>rustc --version</code>)</li>
 <li>Git</li>
@@ -13391,7 +12764,7 @@ cargo publish --dry-run     # Test publishing
 <p>Happy contributing! 🚀</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="development-setup-1"><a class="header" href="#development-setup-1">Development Setup</a></h1>
 <p>This guide covers setting up a development environment for working on SwissArmyHammer.</p>
-<h2 id="prerequisites-3"><a class="header" href="#prerequisites-3">Prerequisites</a></h2>
+<h2 id="prerequisites-2"><a class="header" href="#prerequisites-2">Prerequisites</a></h2>
 <h3 id="required-tools"><a class="header" href="#required-tools">Required Tools</a></h3>
 <ul>
 <li><strong>Rust</strong> 1.70 or later</li>
@@ -15170,7 +14543,6 @@ and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semant
 <ul>
 <li>MCP (Model Context Protocol) server implementation</li>
 <li>File watching for automatic prompt reloading</li>
-<li>Export/import functionality for prompt bundles</li>
 <li>Doctor command for system health checks</li>
 <li>Liquid template engine integration</li>
 <li>Support for prompt arguments and validation</li>

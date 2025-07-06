@@ -341,7 +341,7 @@ mod tests {
         // In production, builtin prompts would be embedded in the binary
 
         // If any builtin prompts were loaded, they should be marked as builtin
-        for (_, source) in &resolver.prompt_sources {
+        for source in resolver.prompt_sources.values() {
             if matches!(source, swissarmyhammer::PromptSource::Builtin) {
                 // This is good - builtin prompts are properly marked
                 break;

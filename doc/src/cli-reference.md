@@ -30,8 +30,6 @@ swissarmyhammer [COMMAND] [OPTIONS]
 | [`serve`](./cli-serve.md) | Run as MCP server for Claude Code integration |
 | [`search`](./cli-search.md) | Search and discover prompts with powerful filtering |
 | [`test`](./cli-test.md) | Interactively test prompts with arguments |
-| [`export`](./cli-export.md) | Export prompts for sharing and backup |
-| [`import`](./cli-import.md) | Import prompts from various sources |
 | [`doctor`](./cli-doctor.md) | Diagnose configuration and setup issues |
 | [`completion`](./cli-completion.md) | Generate shell completion scripts |
 
@@ -59,15 +57,6 @@ swissarmyhammer test code-review
 
 # Test with predefined arguments
 swissarmyhammer test code-review --arg code="fn main() { println!(\"Hello\"); }"
-```
-
-### Export and Import Prompts
-```bash
-# Export all prompts to a tar.gz file
-swissarmyhammer export --all --format tar.gz my-prompts.tar.gz
-
-# Import prompts from URL
-swissarmyhammer import https://example.com/prompts.tar.gz
 ```
 
 ### Check Setup

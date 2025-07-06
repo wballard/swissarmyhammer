@@ -238,7 +238,7 @@ SwissArmyHammer is actively developed and maintained. Current focus areas:
 - ✅ Built-in prompt library
 - ✅ CLI tools and diagnostics
 - ✅ Comprehensive documentation
-- ✅ Search and export/import commands
+- ✅ Search commands
 - ✅ Rust library with full API
 - 🚧 Pre-built binary releases
 - 🚧 Package manager distributions

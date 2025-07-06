@@ -179,7 +179,6 @@
 <ul>
 <li><strong>File Sharing</strong> - Share prompt files directly</li>
 <li><strong>Git Integration</strong> - Version control for prompts</li>
-<li><strong>Export/Import</strong> - Bundle and distribute prompts</li>
 <li><strong>Team Directories</strong> - Shared network folders</li>
 <li><strong>Package Management</strong> - Distribute as packages</li>
 </ul>
@@ -206,49 +205,6 @@ cp ~/.swissarmyhammer/prompts/pytest-*.md python-toolkit/
 
 # Share as zip
 zip -r python-toolkit.zip python-toolkit/
-</code></pre>
-<h3 id="exportimport-bundles"><a class="header" href="#exportimport-bundles">Export/Import Bundles</a></h3>
-<h4 id="creating-bundles"><a class="header" href="#creating-bundles">Creating Bundles</a></h4>
-<p>Use the export command to create shareable bundles:</p>
-<pre><code class="language-bash"># Export all prompts
-swissarmyhammer export team-prompts.tar.gz
-
-# Export specific categories
-swissarmyhammer export --filter "category:development" dev-prompts.tar.gz
-
-# Export with metadata
-swissarmyhammer export --include-metadata project-prompts.tar.gz
-</code></pre>
-<h4 id="bundle-structure"><a class="header" href="#bundle-structure">Bundle Structure</a></h4>
-<pre><code>team-prompts.tar.gz
-├── manifest.json
-├── prompts/
-│   ├── code-review.md
-│   ├── api-design.md
-│   └── test-writer.md
-├── templates/
-│   └── shared-components.md
-└── README.md
-</code></pre>
-<h4 id="distributing-bundles"><a class="header" href="#distributing-bundles">Distributing Bundles</a></h4>
-<pre><code class="language-bash"># Share via cloud storage
-aws s3 cp team-prompts.tar.gz s3://team-bucket/prompts/
-
-# Share via internal package repository
-curl -X POST https://packages.company.com/upload \
-  -F "file=@team-prompts.tar.gz" \
-  -F "name=team-prompts" \
-  -F "version=1.0.0"
-</code></pre>
-<h4 id="installing-bundles"><a class="header" href="#installing-bundles">Installing Bundles</a></h4>
-<pre><code class="language-bash"># Import bundle
-swissarmyhammer import team-prompts.tar.gz
-
-# Import with namespace
-swissarmyhammer import team-prompts.tar.gz --namespace team
-
-# Preview before importing
-swissarmyhammer import team-prompts.tar.gz --dry-run
 </code></pre>
 <h2 id="git-based-collaboration"><a class="header" href="#git-based-collaboration">Git-Based Collaboration</a></h2>
 <h3 id="repository-structure"><a class="header" href="#repository-structure">Repository Structure</a></h3>
@@ -801,24 +757,23 @@ git pull origin main
 <pre><code class="language-bash">#!/bin/bash
 # create-onboarding-bundle.sh
 
-# Create bundle
-swissarmyhammer export \
-  --filter "tag:onboarding,tag:essential" \
-  onboarding-prompts.tar.gz
+# Create directory structure
+mkdir -p onboarding-prompts/prompts
+
+# Copy essential prompts
+cp ~/.swissarmyhammer/prompts/*onboarding*.md onboarding-prompts/prompts/
+cp ~/.swissarmyhammer/prompts/*essential*.md onboarding-prompts/prompts/
 
 # Add setup script
-cat &gt; setup.sh &lt;&lt; 'EOF'
+cat &gt; onboarding-prompts/setup.sh &lt;&lt; 'EOF'
 #!/bin/bash
 echo "Welcome to the team! Setting up your prompts..."
-swissarmyhammer import onboarding-prompts.tar.gz
+cp -r prompts/* ~/.swissarmyhammer/prompts/
 echo "Run 'swissarmyhammer list' to see your new prompts!"
 EOF
 
 # Create welcome package
-tar -czf welcome-pack.tar.gz \
-  onboarding-prompts.tar.gz \
-  setup.sh \
-  README.md
+tar -czf welcome-pack.tar.gz onboarding-prompts/
 </code></pre>
 <h3 id="project-templates"><a class="header" href="#project-templates">Project Templates</a></h3>
 <p>Share project-specific prompts:</p>
@@ -840,10 +795,10 @@ install_script: |
 </code></pre>
 <h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
 <ul>
-<li>Learn about <a href="./cli-export.html">Export Command</a> for creating bundles</li>
-<li>Explore <a href="./cli-import.html">Import Command</a> for installing shared prompts</li>
 <li>Read <a href="./prompt-organization.html">Prompt Organization</a> for structure best practices</li>
 <li>See <a href="./contributing.html">Contributing</a> for contribution guidelines</li>
+<li>Explore <a href="./development.html">Git Integration</a> for version control workflows</li>
+<li>Learn about <a href="./configuration.html">Configuration</a> for team setup</li>
 </ul>
 
                     </main>

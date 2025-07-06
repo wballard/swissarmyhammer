@@ -194,8 +194,6 @@ export PATH="$HOME/.cargo/bin:$PATH"
 <tr><td><a href="./cli-serve.html"><code>serve</code></a></td><td>Run as MCP server for Claude Code integration</td></tr>
 <tr><td><a href="./cli-search.html"><code>search</code></a></td><td>Search and discover prompts with powerful filtering</td></tr>
 <tr><td><a href="./cli-test.html"><code>test</code></a></td><td>Interactively test prompts with arguments</td></tr>
-<tr><td><a href="./cli-export.html"><code>export</code></a></td><td>Export prompts for sharing and backup</td></tr>
-<tr><td><a href="./cli-import.html"><code>import</code></a></td><td>Import prompts from various sources</td></tr>
 <tr><td><a href="./cli-doctor.html"><code>doctor</code></a></td><td>Diagnose configuration and setup issues</td></tr>
 <tr><td><a href="./cli-completion.html"><code>completion</code></a></td><td>Generate shell completion scripts</td></tr>
 </tbody></table>
@@ -218,13 +216,6 @@ swissarmyhammer test code-review
 
 # Test with predefined arguments
 swissarmyhammer test code-review --arg code="fn main() { println!(\"Hello\"); }"
-</code></pre>
-<h3 id="export-and-import-prompts"><a class="header" href="#export-and-import-prompts">Export and Import Prompts</a></h3>
-<pre><code class="language-bash"># Export all prompts to a tar.gz file
-swissarmyhammer export --all --format tar.gz my-prompts.tar.gz
-
-# Import prompts from URL
-swissarmyhammer import https://example.com/prompts.tar.gz
 </code></pre>
 <h3 id="check-setup"><a class="header" href="#check-setup">Check Setup</a></h3>
 <pre><code class="language-bash"># Diagnose any configuration issues

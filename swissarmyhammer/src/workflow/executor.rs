@@ -1,8 +1,8 @@
 //! Workflow execution engine
 
 use crate::workflow::{
-    ConditionType, StateId, TransitionCondition, Workflow, WorkflowRun,
-    WorkflowRunStatus,
+    parse_action_from_description, ActionError, ConditionType, StateId, TransitionCondition,
+    Workflow, WorkflowRun, WorkflowRunStatus,
 };
 use serde_json::Value;
 use std::collections::HashMap;
@@ -22,9 +22,9 @@ pub enum ExecutorError {
     ValidationFailed(String),
     /// Maximum transition limit exceeded to prevent infinite loops
     #[error("Maximum transition limit of {limit} exceeded")]
-    TransitionLimitExceeded { 
+    TransitionLimitExceeded {
         /// The maximum number of transitions that was exceeded
-        limit: usize 
+        limit: usize,
     },
     /// Generic workflow execution failure
     #[error("Execution failed: {0}")]
@@ -35,6 +35,9 @@ pub enum ExecutorError {
     /// Expression evaluation failed
     #[error("Expression evaluation failed: {0}")]
     ExpressionError(String),
+    /// Action execution failed
+    #[error("Action execution failed: {0}")]
+    ActionError(#[from] ActionError),
 }
 
 /// Result type for executor operations
@@ -95,36 +98,44 @@ impl WorkflowExecutor {
     }
 
     /// Start a new workflow run
-    pub fn start_workflow(&mut self, workflow: Workflow) -> ExecutorResult<WorkflowRun> {
+    pub async fn start_workflow(&mut self, workflow: Workflow) -> ExecutorResult<WorkflowRun> {
         // Validate workflow before starting
         workflow
             .validate()
             .map_err(|errors| ExecutorError::ValidationFailed(errors.join("; ")))?;
 
         let mut run = WorkflowRun::new(workflow);
-        
-        self.log_event(ExecutionEventType::Started, format!("Started workflow: {}", run.workflow.name));
-        
+
+        self.log_event(
+            ExecutionEventType::Started,
+            format!("Started workflow: {}", run.workflow.name),
+        );
+
         // Execute the initial state with transition limit
-        self.execute_state_with_limit(&mut run, MAX_TRANSITIONS)?;
-        
+        self.execute_state_with_limit(&mut run, MAX_TRANSITIONS)
+            .await?;
+
         Ok(run)
     }
 
     /// Resume a workflow from saved state
-    pub fn resume_workflow(&mut self, mut run: WorkflowRun) -> ExecutorResult<WorkflowRun> {
+    pub async fn resume_workflow(&mut self, mut run: WorkflowRun) -> ExecutorResult<WorkflowRun> {
         if run.status == WorkflowRunStatus::Completed || run.status == WorkflowRunStatus::Failed {
             return Err(ExecutorError::WorkflowCompleted);
         }
 
         self.log_event(
             ExecutionEventType::Started,
-            format!("Resumed workflow: {} from state: {}", run.workflow.name, run.current_state),
+            format!(
+                "Resumed workflow: {} from state: {}",
+                run.workflow.name, run.current_state
+            ),
         );
 
         // Continue execution from current state with transition limit
-        self.execute_state_with_limit(&mut run, MAX_TRANSITIONS)?;
-        
+        self.execute_state_with_limit(&mut run, MAX_TRANSITIONS)
+            .await?;
+
         Ok(run)
     }
 
@@ -134,14 +145,14 @@ impl WorkflowExecutor {
     }
 
     /// Execute a single execution cycle: state execution and potential transition
-    fn execute_single_cycle(&mut self, run: &mut WorkflowRun) -> ExecutorResult<bool> {
-        self.execute_single_state(run)?;
-        
+    async fn execute_single_cycle(&mut self, run: &mut WorkflowRun) -> ExecutorResult<bool> {
+        self.execute_single_state(run).await?;
+
         // Check if workflow is complete after state execution
         if self.is_workflow_finished(run) {
             return Ok(false); // No transition needed, workflow finished
         }
-        
+
         // Evaluate and perform transition
         if let Some(next_state) = self.evaluate_transitions(run)? {
             self.perform_transition(run, next_state)?;
@@ -153,43 +164,47 @@ impl WorkflowExecutor {
     }
 
     /// Execute states with a maximum transition limit to prevent infinite loops
-    fn execute_state_with_limit(&mut self, run: &mut WorkflowRun, remaining_transitions: usize) -> ExecutorResult<()> {
+    async fn execute_state_with_limit(
+        &mut self,
+        run: &mut WorkflowRun,
+        remaining_transitions: usize,
+    ) -> ExecutorResult<()> {
         if remaining_transitions == 0 {
-            return Err(ExecutorError::TransitionLimitExceeded { 
-                limit: MAX_TRANSITIONS 
+            return Err(ExecutorError::TransitionLimitExceeded {
+                limit: MAX_TRANSITIONS,
             });
         }
-        
+
         let mut current_remaining = remaining_transitions;
-        
+
         loop {
-            let transition_performed = self.execute_single_cycle(run)?;
-            
+            let transition_performed = self.execute_single_cycle(run).await?;
+
             if !transition_performed {
                 // Either workflow finished or no transitions available
                 break;
             }
-            
+
             current_remaining -= 1;
             if current_remaining == 0 {
-                return Err(ExecutorError::TransitionLimitExceeded { 
-                    limit: MAX_TRANSITIONS 
+                return Err(ExecutorError::TransitionLimitExceeded {
+                    limit: MAX_TRANSITIONS,
                 });
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Execute the current state and evaluate transitions
-    pub fn execute_state(&mut self, run: &mut WorkflowRun) -> ExecutorResult<()> {
-        self.execute_state_with_limit(run, MAX_TRANSITIONS)
+    pub async fn execute_state(&mut self, run: &mut WorkflowRun) -> ExecutorResult<()> {
+        self.execute_state_with_limit(run, MAX_TRANSITIONS).await
     }
-    
+
     /// Execute a single state without transitioning
-    fn execute_single_state(&mut self, run: &mut WorkflowRun) -> ExecutorResult<()> {
+    async fn execute_single_state(&mut self, run: &mut WorkflowRun) -> ExecutorResult<()> {
         let current_state_id = &run.current_state;
-        
+
         // Get the current state
         let current_state = run
             .workflow
@@ -197,17 +212,28 @@ impl WorkflowExecutor {
             .get(current_state_id)
             .ok_or_else(|| ExecutorError::StateNotFound(current_state_id.clone()))?;
 
+        // Extract values we need before the mutable borrow
+        let state_description = current_state.description.clone();
+        let is_terminal = current_state.is_terminal;
+
         self.log_event(
             ExecutionEventType::StateExecution,
-            format!("Executing state: {} - {}", current_state.id, current_state.description),
+            format!(
+                "Executing state: {} - {}",
+                current_state.id, current_state.description
+            ),
         );
 
-        // Execute state action (placeholder for future action system implementation)
+        // Execute state action if one can be parsed from the description
+        self.execute_state_action(run, &state_description).await?;
 
         // Check if this is a terminal state
-        if current_state.is_terminal {
+        if is_terminal {
             run.complete();
-            self.log_event(ExecutionEventType::Completed, "Workflow completed".to_string());
+            self.log_event(
+                ExecutionEventType::Completed,
+                "Workflow completed".to_string(),
+            );
             return Ok(());
         }
 
@@ -217,7 +243,7 @@ impl WorkflowExecutor {
     /// Evaluate all transitions from the current state
     pub fn evaluate_transitions(&mut self, run: &WorkflowRun) -> ExecutorResult<Option<StateId>> {
         let current_state = &run.current_state;
-        
+
         // Find all transitions from current state
         let transitions: Vec<_> = run
             .workflow
@@ -232,7 +258,9 @@ impl WorkflowExecutor {
                     ExecutionEventType::ConditionEvaluated,
                     format!(
                         "Condition '{}' evaluated to true for transition: {} -> {}",
-                        transition.condition.condition_type.as_str(), transition.from_state, transition.to_state
+                        transition.condition.condition_type.as_str(),
+                        transition.from_state,
+                        transition.to_state
                     ),
                 );
                 return Ok(Some(transition.to_state.clone()));
@@ -260,18 +288,18 @@ impl WorkflowExecutor {
 
         // Update the run
         run.transition_to(next_state);
-        
+
         Ok(())
     }
-    
+
     /// Transition to a new state (public API that includes execution)
-    pub fn transition_to(
+    pub async fn transition_to(
         &mut self,
         run: &mut WorkflowRun,
         next_state: StateId,
     ) -> ExecutorResult<()> {
         self.perform_transition(run, next_state)?;
-        self.execute_state(run)
+        self.execute_state(run).await
     }
 
     /// Helper function to evaluate action-based conditions (success/failure)
@@ -283,7 +311,13 @@ impl WorkflowExecutor {
     ) -> bool {
         if let Some(last_action_result) = context.get(LAST_ACTION_RESULT_KEY) {
             match last_action_result {
-                Value::Bool(success) => if expect_success { *success } else { !*success },
+                Value::Bool(success) => {
+                    if expect_success {
+                        *success
+                    } else {
+                        !*success
+                    }
+                }
                 _ => default_value, // Default value if not a boolean
             }
         } else {
@@ -300,12 +334,8 @@ impl WorkflowExecutor {
         match &condition.condition_type {
             ConditionType::Always => Ok(true),
             ConditionType::Never => Ok(false),
-            ConditionType::OnSuccess => {
-                Ok(self.evaluate_action_condition(context, true, true))
-            }
-            ConditionType::OnFailure => {
-                Ok(self.evaluate_action_condition(context, false, false))
-            }
+            ConditionType::OnSuccess => Ok(self.evaluate_action_condition(context, true, true)),
+            ConditionType::OnFailure => Ok(self.evaluate_action_condition(context, false, false)),
             ConditionType::Custom => {
                 if let Some(expression) = &condition.expression {
                     // Expression evaluation not yet implemented
@@ -322,6 +352,46 @@ impl WorkflowExecutor {
         }
     }
 
+    /// Execute action parsed from state description
+    async fn execute_state_action(
+        &mut self,
+        run: &mut WorkflowRun,
+        state_description: &str,
+    ) -> ExecutorResult<()> {
+        // Parse action from state description
+        if let Some(action) = parse_action_from_description(state_description)? {
+            self.log_event(
+                ExecutionEventType::StateExecution,
+                format!("Executing action: {}", action.description()),
+            );
+
+            // Execute the action and update context
+            match action.execute(&mut run.context).await {
+                Ok(result) => {
+                    self.log_event(
+                        ExecutionEventType::StateExecution,
+                        format!("Action completed successfully with result: {}", result),
+                    );
+                }
+                Err(action_error) => {
+                    // Mark action as failed in context
+                    run.context
+                        .insert("last_action_result".to_string(), Value::Bool(false));
+
+                    self.log_event(
+                        ExecutionEventType::Failed,
+                        format!("Action failed: {}", action_error),
+                    );
+
+                    // Propagate the error
+                    return Err(ExecutorError::ActionError(action_error));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Log an execution event
     fn log_event(&mut self, event_type: ExecutionEventType, details: String) {
         let event = ExecutionEvent {
@@ -331,7 +401,7 @@ impl WorkflowExecutor {
         };
         // Could add logging here when log crate is available
         self.execution_history.push(event);
-        
+
         // Trim history if it exceeds max size
         if self.execution_history.len() > self.max_history_size {
             let trim_count = self.execution_history.len() - self.max_history_size;
@@ -354,7 +424,7 @@ impl Default for WorkflowExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workflow::{WorkflowName, State, Transition};
+    use crate::workflow::{State, Transition, WorkflowName};
 
     fn create_test_workflow() -> Workflow {
         let mut workflow = Workflow::new(
@@ -412,13 +482,13 @@ mod tests {
         workflow
     }
 
-    #[test]
-    fn test_start_workflow() {
+    #[tokio::test]
+    async fn test_start_workflow() {
         let mut executor = WorkflowExecutor::new();
         let workflow = create_test_workflow();
-        
-        let run = executor.start_workflow(workflow).unwrap();
-        
+
+        let run = executor.start_workflow(workflow).await.unwrap();
+
         assert_eq!(run.workflow.name.as_str(), "Test Workflow");
         // The workflow executes through to completion immediately
         assert_eq!(run.status, WorkflowRunStatus::Completed);
@@ -426,21 +496,25 @@ mod tests {
         assert!(!executor.get_history().is_empty());
     }
 
-    #[test]
-    fn test_workflow_execution_to_completion() {
+    #[tokio::test]
+    async fn test_workflow_execution_to_completion() {
         let mut executor = WorkflowExecutor::new();
         let workflow = create_test_workflow();
-        
-        let run = executor.start_workflow(workflow).unwrap();
-        
+
+        let run = executor.start_workflow(workflow).await.unwrap();
+
         // The workflow should have executed through to completion
         assert_eq!(run.status, WorkflowRunStatus::Completed);
         assert_eq!(run.current_state.as_str(), "end");
-        
+
         // Check execution history
         let history = executor.get_history();
-        assert!(history.iter().any(|e| matches!(e.event_type, ExecutionEventType::Started)));
-        assert!(history.iter().any(|e| matches!(e.event_type, ExecutionEventType::Completed)));
+        assert!(history
+            .iter()
+            .any(|e| matches!(e.event_type, ExecutionEventType::Started)));
+        assert!(history
+            .iter()
+            .any(|e| matches!(e.event_type, ExecutionEventType::Completed)));
     }
 
     #[test]
@@ -448,45 +522,46 @@ mod tests {
         let mut executor = WorkflowExecutor::new();
         let workflow = create_test_workflow();
         let run = WorkflowRun::new(workflow);
-        
+
         let next_state = executor.evaluate_transitions(&run).unwrap();
         assert_eq!(next_state, Some(StateId::new("processing")));
     }
 
-    #[test]
-    fn test_resume_completed_workflow_fails() {
+    #[tokio::test]
+    async fn test_resume_completed_workflow_fails() {
         let mut executor = WorkflowExecutor::new();
         let workflow = create_test_workflow();
         let mut run = WorkflowRun::new(workflow);
         run.complete();
-        
-        let result = executor.resume_workflow(run);
+
+        let result = executor.resume_workflow(run).await;
         assert!(matches!(result, Err(ExecutorError::WorkflowCompleted)));
     }
 
-    #[test]
-    fn test_transition_to_invalid_state() {
+    #[tokio::test]
+    async fn test_transition_to_invalid_state() {
         let mut executor = WorkflowExecutor::new();
         let workflow = create_test_workflow();
         let mut run = WorkflowRun::new(workflow);
-        
+
         let result = executor
-            .transition_to(&mut run, StateId::new("non_existent"));
-        
+            .transition_to(&mut run, StateId::new("non_existent"))
+            .await;
+
         assert!(matches!(result, Err(ExecutorError::StateNotFound(_))));
     }
 
-    #[test]
-    fn test_max_transition_limit() {
+    #[tokio::test]
+    async fn test_max_transition_limit() {
         let mut executor = WorkflowExecutor::new();
-        
+
         // Create a workflow with infinite loop
         let mut workflow = Workflow::new(
             WorkflowName::new("Infinite Loop"),
             "A workflow that loops forever".to_string(),
             StateId::new("loop_state"),
         );
-        
+
         workflow.add_state(State {
             id: StateId::new("loop_state"),
             description: "State that loops to itself".to_string(),
@@ -494,7 +569,7 @@ mod tests {
             allows_parallel: false,
             metadata: HashMap::new(),
         });
-        
+
         // Add a terminal state to pass validation
         workflow.add_state(State {
             id: StateId::new("terminal"),
@@ -503,7 +578,7 @@ mod tests {
             allows_parallel: false,
             metadata: HashMap::new(),
         });
-        
+
         workflow.add_transition(Transition {
             from_state: StateId::new("loop_state"),
             to_state: StateId::new("loop_state"),
@@ -514,9 +589,11 @@ mod tests {
             action: None,
             metadata: HashMap::new(),
         });
-        
-        let result = executor.start_workflow(workflow);
-        assert!(matches!(result, Err(ExecutorError::TransitionLimitExceeded { limit }) if limit == MAX_TRANSITIONS));
+
+        let result = executor.start_workflow(workflow).await;
+        assert!(
+            matches!(result, Err(ExecutorError::TransitionLimitExceeded { limit }) if limit == MAX_TRANSITIONS)
+        );
     }
 
     #[test]
@@ -524,13 +601,15 @@ mod tests {
         let executor = WorkflowExecutor::new();
         let workflow = create_test_workflow();
         let run = WorkflowRun::new(workflow);
-        
+
         let condition = TransitionCondition {
             condition_type: ConditionType::Never,
             expression: None,
         };
-        
-        let result = executor.evaluate_condition(&condition, &run.context).unwrap();
+
+        let result = executor
+            .evaluate_condition(&condition, &run.context)
+            .unwrap();
         assert!(!result);
     }
 
@@ -538,27 +617,28 @@ mod tests {
     fn test_custom_condition_without_expression() {
         let executor = WorkflowExecutor::new();
         let run = WorkflowRun::new(create_test_workflow());
-        
+
         let condition = TransitionCondition {
             condition_type: ConditionType::Custom,
             expression: None,
         };
-        
-        let result = executor.evaluate_condition(&condition, &run.context);
-        assert!(matches!(result, Err(ExecutorError::ExpressionError(msg)) if msg.contains("requires an expression")));
-    }
 
+        let result = executor.evaluate_condition(&condition, &run.context);
+        assert!(
+            matches!(result, Err(ExecutorError::ExpressionError(msg)) if msg.contains("requires an expression"))
+        );
+    }
 
     #[test]
     fn test_execution_history_limit() {
         let mut executor = WorkflowExecutor::new();
         executor.max_history_size = 10; // Set small limit for testing
-        
+
         // Add many events to trigger trimming
         for i in 0..20 {
             executor.log_event(ExecutionEventType::Started, format!("Event {}", i));
         }
-        
+
         // History should be trimmed to stay under limit
         assert!(executor.get_history().len() <= executor.max_history_size);
     }
@@ -568,15 +648,15 @@ mod tests {
         let executor = WorkflowExecutor::new();
         let mut context = HashMap::new();
         context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
-        
+
         let condition = TransitionCondition {
             condition_type: ConditionType::OnSuccess,
             expression: None,
         };
-        
+
         let result = executor.evaluate_condition(&condition, &context).unwrap();
         assert!(result);
-        
+
         // Test with false result
         context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(false));
         let result = executor.evaluate_condition(&condition, &context).unwrap();
@@ -588,15 +668,15 @@ mod tests {
         let executor = WorkflowExecutor::new();
         let mut context = HashMap::new();
         context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(false));
-        
+
         let condition = TransitionCondition {
             condition_type: ConditionType::OnFailure,
             expression: None,
         };
-        
+
         let result = executor.evaluate_condition(&condition, &context).unwrap();
         assert!(result);
-        
+
         // Test with true result
         context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
         let result = executor.evaluate_condition(&condition, &context).unwrap();

@@ -3,26 +3,29 @@
 //! This module provides the core types for representing and executing workflows
 //! based on Mermaid state diagrams.
 
-mod state;
-mod transition;
+mod actions;
 mod definition;
-mod run;
-mod parser;
-mod storage;
 mod executor;
+mod parser;
+mod run;
+mod state;
+mod storage;
+mod transition;
 
-pub use state::{State, StateId};
-pub use transition::{ConditionType, Transition, TransitionCondition};
+pub use actions::{
+    parse_action_from_description, Action, ActionError, ActionResult, LogAction, LogLevel,
+    PromptAction, SetVariableAction, WaitAction,
+};
 pub use definition::{Workflow, WorkflowName};
-pub use run::{WorkflowRun, WorkflowRunId, WorkflowRunStatus};
-pub use parser::{MermaidParser, ParseError, ParseResult};
-pub use storage::{
-    WorkflowStorage, WorkflowStorageBackend, WorkflowRunStorageBackend,
-    MemoryWorkflowStorage, MemoryWorkflowRunStorage,
-    FileSystemWorkflowStorage, FileSystemWorkflowRunStorage,
-    WorkflowResolver, WorkflowSource,
-};
 pub use executor::{
-    WorkflowExecutor, ExecutorError, ExecutorResult, 
-    ExecutionEvent, ExecutionEventType,
+    ExecutionEvent, ExecutionEventType, ExecutorError, ExecutorResult, WorkflowExecutor,
 };
+pub use parser::{MermaidParser, ParseError, ParseResult};
+pub use run::{WorkflowRun, WorkflowRunId, WorkflowRunStatus};
+pub use state::{State, StateId};
+pub use storage::{
+    FileSystemWorkflowRunStorage, FileSystemWorkflowStorage, MemoryWorkflowRunStorage,
+    MemoryWorkflowStorage, WorkflowResolver, WorkflowRunStorageBackend, WorkflowSource,
+    WorkflowStorage, WorkflowStorageBackend,
+};
+pub use transition::{ConditionType, Transition, TransitionCondition};

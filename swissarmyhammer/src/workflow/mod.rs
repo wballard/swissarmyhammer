@@ -7,8 +7,10 @@ mod state;
 mod transition;
 mod workflow;
 mod run;
+mod parser;
 
 pub use state::{State, StateId};
 pub use transition::{Transition, TransitionCondition};
 pub use workflow::{Workflow, WorkflowName};
 pub use run::{WorkflowRun, WorkflowRunId, WorkflowRunStatus};
+pub use parser::{MermaidParser, ParseError, ParseResult};

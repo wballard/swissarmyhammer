@@ -9,6 +9,7 @@ mod definition;
 mod run;
 mod parser;
 mod storage;
+mod executor;
 
 pub use state::{State, StateId};
 pub use transition::{Transition, TransitionCondition};
@@ -20,4 +21,8 @@ pub use storage::{
     MemoryWorkflowStorage, MemoryWorkflowRunStorage,
     FileSystemWorkflowStorage, FileSystemWorkflowRunStorage,
     WorkflowResolver, WorkflowSource,
+};
+pub use executor::{
+    WorkflowExecutor, ExecutorError, ExecutorResult, 
+    ExecutionEvent, ExecutionEventType,
 };

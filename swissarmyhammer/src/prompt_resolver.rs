@@ -145,11 +145,12 @@ impl PromptResolver {
                 // Load user prompts from the directory
                 let loader = crate::prompts::PromptLoader::new();
                 let user_prompts = loader.load_directory(&user_prompts_dir)?;
-                
+
                 // Add each user prompt and track it
                 for prompt in user_prompts {
                     // User prompts override any existing prompt with the same name
-                    self.prompt_sources.insert(prompt.name.clone(), PromptSource::User);
+                    self.prompt_sources
+                        .insert(prompt.name.clone(), PromptSource::User);
                     library.add(prompt)?;
                 }
             }
@@ -198,11 +199,12 @@ impl PromptResolver {
             // Load local prompts from the directory
             let loader = crate::prompts::PromptLoader::new();
             let local_prompts = loader.load_directory(&prompts_dir)?;
-            
+
             // Add each local prompt and track it
             for prompt in local_prompts {
                 // Local prompts override any existing prompt with the same name
-                self.prompt_sources.insert(prompt.name.clone(), PromptSource::Local);
+                self.prompt_sources
+                    .insert(prompt.name.clone(), PromptSource::Local);
                 library.add(prompt)?;
             }
         }
@@ -293,7 +295,7 @@ mod tests {
         // First check that it exists in the library
         let prompts = library.list().unwrap();
         let debug_error_prompt = prompts.iter().find(|p| p.name == "debug/error");
-        
+
         if let Some(_prompt) = debug_error_prompt {
             // Check that it's tracked as a builtin
             assert_eq!(
@@ -310,8 +312,12 @@ mod tests {
                 panic!("Found prompt named 'debug-error' instead of 'debug/error'. This indicates the frontmatter is overriding the build script name.");
             } else {
                 // Check what builtin prompts actually exist
-                let builtin_prompt_names: Vec<String> = prompts.iter().map(|p| p.name.clone()).collect();
-                panic!("debug/error prompt not found. Available builtin prompts: {:?}", builtin_prompt_names);
+                let builtin_prompt_names: Vec<String> =
+                    prompts.iter().map(|p| p.name.clone()).collect();
+                panic!(
+                    "debug/error prompt not found. Available builtin prompts: {:?}",
+                    builtin_prompt_names
+                );
             }
         }
     }
@@ -320,11 +326,11 @@ mod tests {
     fn test_get_prompt_directories() {
         let resolver = PromptResolver::new();
         let directories = resolver.get_prompt_directories().unwrap();
-        
+
         // Should return a vector of PathBuf (may be empty if no directories exist)
         // At minimum, should not panic and should return a valid result
         // Note: Vec::len() is always >= 0, so no need to test this
-        
+
         // All returned paths should be absolute and existing
         for dir in directories {
             assert!(dir.is_absolute());
@@ -357,16 +363,16 @@ This is a user-defined debug/error prompt that should override the builtin one.
 
         // Store original HOME value to restore later
         let original_home = std::env::var("HOME").ok();
-        
+
         // Temporarily change home directory for test
         std::env::set_var("HOME", temp_dir.path());
 
         // Load builtin prompts first
         resolver.load_builtin_prompts(&mut library).unwrap();
-        
+
         // Check if debug/error exists as builtin (it might not always exist)
         let has_builtin_debug_error = resolver.prompt_sources.contains_key("debug/error");
-        
+
         // Load user prompts (should override the builtin if it exists, or just add it if not)
         resolver.load_user_prompts(&mut library).unwrap();
 
@@ -379,14 +385,17 @@ This is a user-defined debug/error prompt that should override the builtin one.
 
         // Verify the prompt content was updated/loaded
         let prompt = library.get("debug/error").unwrap();
-        assert!(prompt.template.contains("user-defined"), "Prompt should contain user-defined content");
+        assert!(
+            prompt.template.contains("user-defined"),
+            "Prompt should contain user-defined content"
+        );
 
         // Restore original HOME environment variable
         match original_home {
             Some(home) => std::env::set_var("HOME", home),
             None => std::env::remove_var("HOME"),
         }
-        
+
         // If we had a builtin debug/error, verify it was actually overridden
         if has_builtin_debug_error {
             assert_eq!(

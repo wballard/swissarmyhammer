@@ -107,32 +107,48 @@ async fn test_mcp_server_partial_rendering() {
         .expect("Timeout")
         .expect("Failed to read get prompt response");
 
-    println!("Get example prompt response: {}", serde_json::to_string_pretty(&response).unwrap());
+    println!(
+        "Get example prompt response: {}",
+        serde_json::to_string_pretty(&response).unwrap()
+    );
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 2);
-    
+
     // Check if we got an error
     if let Some(error) = response.get("error") {
-        panic!("MCP error: {}", serde_json::to_string_pretty(&error).unwrap());
+        panic!(
+            "MCP error: {}",
+            serde_json::to_string_pretty(&error).unwrap()
+        );
     }
-    
+
     // Verify the result contains rendered content
     let result = &response["result"];
     assert!(result.is_object(), "Expected result to be an object");
-    
-    let messages = result["messages"].as_array().expect("Expected messages array");
+
+    let messages = result["messages"]
+        .as_array()
+        .expect("Expected messages array");
     assert!(!messages.is_empty(), "Expected at least one message");
-    
+
     let message = &messages[0];
-    let content = message["content"]["text"].as_str().expect("Expected text content");
-    
+    let content = message["content"]["text"]
+        .as_str()
+        .expect("Expected text content");
+
     println!("Rendered content:\n{}", content);
-    
+
     // Verify that the partial was successfully rendered
-    assert!(content.contains("Example Prompt"), "Should contain main prompt content");
-    assert!(content.contains("testing partials"), "Should contain the argument value");
-    
+    assert!(
+        content.contains("Example Prompt"),
+        "Should contain main prompt content"
+    );
+    assert!(
+        content.contains("testing partials"),
+        "Should contain the argument value"
+    );
+
     // Step 4: Test getting 'do_next_issue' prompt if available (uses principals partial)
     send_request(
         &mut stdin,
@@ -152,19 +168,31 @@ async fn test_mcp_server_partial_rendering() {
         .expect("Timeout");
 
     if let Ok(response) = response {
-        println!("Get do_next_issue prompt response: {}", serde_json::to_string_pretty(&response).unwrap());
-        
+        println!(
+            "Get do_next_issue prompt response: {}",
+            serde_json::to_string_pretty(&response).unwrap()
+        );
+
         if response.get("error").is_none() {
             let result = &response["result"];
-            let messages = result["messages"].as_array().expect("Expected messages array");
+            let messages = result["messages"]
+                .as_array()
+                .expect("Expected messages array");
             let message = &messages[0];
-            let content = message["content"]["text"].as_str().expect("Expected text content");
-            
-            println!("do_next_issue rendered content:\n{}", &content[..content.len().min(500)]);
-            
+            let content = message["content"]["text"]
+                .as_str()
+                .expect("Expected text content");
+
+            println!(
+                "do_next_issue rendered content:\n{}",
+                &content[..content.len().min(500)]
+            );
+
             // Verify principals partial was included
-            assert!(content.contains("Principals") || content.contains("principals"), 
-                    "Should contain principals content");
+            assert!(
+                content.contains("Principals") || content.contains("principals"),
+                "Should contain principals content"
+            );
         }
     }
 

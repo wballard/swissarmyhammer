@@ -1,8 +1,20 @@
 //! Main workflow type and validation
 
-use crate::workflow::{ConditionType, State, StateId, Transition};
+use crate::workflow::{State, StateId, Transition};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use thiserror::Error;
+
+/// Errors that can occur when creating workflow-related types
+#[derive(Debug, Error)]
+pub enum WorkflowError {
+    /// Workflow name cannot be empty or whitespace only
+    #[error("Workflow name cannot be empty or whitespace only")]
+    EmptyWorkflowName,
+}
+
+/// Result type for workflow operations
+pub type WorkflowResult<T> = Result<T, WorkflowError>;
 
 /// Unique identifier for workflows
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -10,12 +22,23 @@ pub struct WorkflowName(String);
 
 impl WorkflowName {
     /// Create a new workflow name
+    /// 
+    /// # Panics
+    /// Panics if the name is empty or whitespace only. For non-panicking creation,
+    /// use `try_new` instead.
     pub fn new(name: impl Into<String>) -> Self {
-        let name = name.into();
-        assert!(!name.trim().is_empty(), "Workflow name cannot be empty");
-        Self(name)
+        Self::try_new(name).expect("Workflow name cannot be empty or whitespace only")
     }
-    
+
+    /// Create a new workflow name, returning an error for invalid input
+    pub fn try_new(name: impl Into<String>) -> WorkflowResult<Self> {
+        let name = name.into();
+        if name.trim().is_empty() {
+            return Err(WorkflowError::EmptyWorkflowName);
+        }
+        Ok(Self(name))
+    }
+
     /// Get the inner string value
     pub fn as_str(&self) -> &str {
         &self.0
@@ -59,18 +82,14 @@ pub struct Workflow {
 
 impl Workflow {
     /// Create a new workflow with basic validation
-    pub fn new(
-        name: WorkflowName,
-        description: String,
-        initial_state: StateId,
-    ) -> Self {
+    pub fn new(name: WorkflowName, description: String, initial_state: StateId) -> Self {
         Self {
             name,
             description,
-            states: HashMap::new(),
+            states: Default::default(),
             transitions: Vec::new(),
             initial_state,
-            metadata: HashMap::new(),
+            metadata: Default::default(),
         }
     }
 
@@ -101,7 +120,7 @@ impl Workflow {
             if transition.to_state.as_str().trim().is_empty() {
                 errors.push(format!("Transition #{} has empty target state ID. All transitions must have valid non-empty state IDs", self.transitions.iter().position(|t| t == transition).unwrap_or(0)));
             }
-            
+
             if !self.states.contains_key(&transition.from_state) {
                 errors.push(format!(
                     "Transition references non-existent source state: '{}'",
@@ -143,43 +162,11 @@ impl Workflow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workflow::TransitionCondition;
+    use crate::workflow::test_helpers::*;
 
     #[test]
     fn test_workflow_validation_success() {
-        let mut workflow = Workflow::new(
-            WorkflowName::new("Test Workflow"),
-            "A test workflow".to_string(),
-            StateId::new("start"),
-        );
-
-        workflow.add_state(State {
-            id: StateId::new("start"),
-            description: "Start state".to_string(),
-            is_terminal: false,
-            allows_parallel: false,
-            metadata: HashMap::new(),
-        });
-
-        workflow.add_state(State {
-            id: StateId::new("end"),
-            description: "End state".to_string(),
-            is_terminal: true,
-            allows_parallel: false,
-            metadata: HashMap::new(),
-        });
-
-        workflow.add_transition(Transition {
-            from_state: StateId::new("start"),
-            to_state: StateId::new("end"),
-            condition: TransitionCondition {
-                condition_type: ConditionType::Always,
-                expression: None,
-            },
-            action: None,
-            metadata: HashMap::new(),
-        });
-
+        let workflow = create_basic_workflow();
         assert!(workflow.validate().is_ok());
     }
 
@@ -205,13 +192,7 @@ mod tests {
             StateId::new("start"),
         );
 
-        workflow.add_state(State {
-            id: StateId::new("start"),
-            description: "Start state".to_string(),
-            is_terminal: false,
-            allows_parallel: false,
-            metadata: HashMap::new(),
-        });
+        workflow.add_state(create_state("start", "Start state", false));
 
         let result = workflow.validate();
         assert!(result.is_err());

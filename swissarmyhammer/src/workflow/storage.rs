@@ -1,6 +1,6 @@
 //! Storage abstractions and implementations for workflows and workflow runs
 
-use crate::workflow::{Workflow, WorkflowName, WorkflowRun, WorkflowRunId, MermaidParser};
+use crate::workflow::{MermaidParser, Workflow, WorkflowName, WorkflowRun, WorkflowRunId};
 use crate::{Result, SwissArmyHammerError};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -115,7 +115,10 @@ impl WorkflowResolver {
     }
 
     /// Load builtin workflows from embedded binary data or resource directories
-    pub fn load_builtin_workflows(&mut self, _storage: &mut dyn WorkflowStorageBackend) -> Result<()> {
+    pub fn load_builtin_workflows(
+        &mut self,
+        _storage: &mut dyn WorkflowStorageBackend,
+    ) -> Result<()> {
         // For now, no builtin workflows are embedded
         // In the future, this could load from embedded workflow files
         // similar to how builtin prompts work
@@ -127,7 +130,11 @@ impl WorkflowResolver {
         if let Some(home) = dirs::home_dir() {
             let user_workflows_dir = home.join(".swissarmyhammer").join("workflows");
             if user_workflows_dir.exists() {
-                self.load_workflows_from_directory(&user_workflows_dir, WorkflowSource::User, storage)?;
+                self.load_workflows_from_directory(
+                    &user_workflows_dir,
+                    WorkflowSource::User,
+                    storage,
+                )?;
             }
         }
         Ok(())
@@ -193,8 +200,9 @@ impl WorkflowResolver {
                     if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                         if let Ok(workflow) = MermaidParser::parse(&content, stem) {
                             // Track the workflow source
-                            self.workflow_sources.insert(workflow.name.clone(), source.clone());
-                            
+                            self.workflow_sources
+                                .insert(workflow.name.clone(), source.clone());
+
                             // Store the workflow (this will override any existing workflow with the same name)
                             storage.store_workflow(workflow)?;
                         }
@@ -426,7 +434,7 @@ impl FileSystemWorkflowStorage {
 
         // Create a temporary memory storage to collect workflows
         let mut temp_storage = MemoryWorkflowStorage::new();
-        
+
         // Use the resolver to load workflows with proper precedence
         self.resolver.load_all_workflows(&mut temp_storage)?;
 
@@ -473,28 +481,32 @@ impl FileSystemWorkflowStorage {
 impl WorkflowStorageBackend for FileSystemWorkflowStorage {
     fn store_workflow(&mut self, workflow: Workflow) -> Result<()> {
         let path = self.workflow_storage_path(&workflow.name)?;
-        
+
         // Ensure the directory exists
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        
+
         // For now, store as JSON since we don't have mermaid serialization
         // In practice, this would serialize back to mermaid format
         let content = serde_json::to_string_pretty(&workflow)?;
         std::fs::write(&path, content)?;
-        
+
         // Update cache and source tracking
         self.cache.insert(workflow.name.clone(), workflow.clone());
-        
+
         // Determine source based on storage location
-        let source = if path.starts_with(dirs::home_dir().unwrap_or_default().join(".swissarmyhammer")) {
+        let source = if path.starts_with(
+            dirs::home_dir()
+                .unwrap_or_default()
+                .join(".swissarmyhammer"),
+        ) {
             WorkflowSource::User
         } else {
             WorkflowSource::Local
         };
         self.resolver.workflow_sources.insert(workflow.name, source);
-        
+
         Ok(())
     }
 
@@ -521,7 +533,7 @@ impl WorkflowStorageBackend for FileSystemWorkflowStorage {
         if path.exists() {
             std::fs::remove_file(path)?;
         }
-        
+
         // Remove from cache and source tracking
         self.cache.remove(name);
         self.resolver.workflow_sources.remove(name);
@@ -534,15 +546,17 @@ impl WorkflowStorageBackend for FileSystemWorkflowStorage {
             cache: dashmap::DashMap::new(),
             resolver: WorkflowResolver::new(),
         };
-        
+
         // Copy current cache state
         for entry in self.cache.iter() {
-            new_storage.cache.insert(entry.key().clone(), entry.value().clone());
+            new_storage
+                .cache
+                .insert(entry.key().clone(), entry.value().clone());
         }
-        
+
         // Copy resolver state
         new_storage.resolver.workflow_sources = self.resolver.workflow_sources.clone();
-        
+
         Box::new(new_storage)
     }
 }
@@ -607,9 +621,7 @@ impl FileSystemWorkflowRunStorage {
     }
 
     fn run_dir(&self, id: &WorkflowRunId) -> PathBuf {
-        self.base_path
-            .join("runs")
-            .join(format!("{:?}", id))
+        self.base_path.join("runs").join(format!("{:?}", id))
     }
 }
 
@@ -623,7 +635,7 @@ impl WorkflowRunStorageBackend for FileSystemWorkflowRunStorage {
         let path = self.run_path(&run.id);
         let content = serde_json::to_string_pretty(run)?;
         std::fs::write(&path, content)?;
-        
+
         self.cache.insert(run.id, run.clone());
         Ok(())
     }
@@ -635,7 +647,10 @@ impl WorkflowRunStorageBackend for FileSystemWorkflowRunStorage {
 
         let path = self.run_path(id);
         if !path.exists() {
-            return Err(SwissArmyHammerError::WorkflowRunNotFound(format!("{:?}", id)));
+            return Err(SwissArmyHammerError::WorkflowRunNotFound(format!(
+                "{:?}",
+                id
+            )));
         }
 
         let content = std::fs::read_to_string(&path)?;
@@ -656,7 +671,10 @@ impl WorkflowRunStorageBackend for FileSystemWorkflowRunStorage {
     fn remove_run(&mut self, id: &WorkflowRunId) -> Result<()> {
         let run_dir = self.run_dir(id);
         if !run_dir.exists() {
-            return Err(SwissArmyHammerError::WorkflowRunNotFound(format!("{:?}", id)));
+            return Err(SwissArmyHammerError::WorkflowRunNotFound(format!(
+                "{:?}",
+                id
+            )));
         }
 
         std::fs::remove_dir_all(run_dir)?;
@@ -728,15 +746,19 @@ impl WorkflowStorage {
     pub fn file_system() -> Result<Self> {
         // Use a user directory as base path for workflow runs
         let base_path = dirs::home_dir()
-            .ok_or_else(|| SwissArmyHammerError::Storage("Cannot find home directory. Please ensure HOME environment variable is set".to_string()))?
+            .ok_or_else(|| {
+                SwissArmyHammerError::Storage(
+                    "Cannot find home directory. Please ensure HOME environment variable is set"
+                        .to_string(),
+                )
+            })?
             .join(".swissarmyhammer");
-            
+
         Ok(Self::new(
             Arc::new(FileSystemWorkflowStorage::new()?),
             Arc::new(FileSystemWorkflowRunStorage::new(&base_path)?),
         ))
     }
-
 
     /// Store a workflow
     pub fn store_workflow(&mut self, workflow: Workflow) -> Result<()> {
@@ -892,11 +914,11 @@ mod tests {
     fn test_cleanup_old_runs() {
         let mut storage = MemoryWorkflowRunStorage::new();
         let workflow = create_test_workflow();
-        
+
         // Create an old run
         let mut old_run = WorkflowRun::new(workflow.clone());
         old_run.started_at = chrono::Utc::now() - chrono::Duration::days(10);
-        
+
         // Create a recent run
         let recent_run = WorkflowRun::new(workflow);
 
@@ -934,8 +956,8 @@ mod tests {
 
     #[test]
     fn test_workflow_resolver_user_workflows() {
-        use tempfile::TempDir;
         use std::fs;
+        use tempfile::TempDir;
 
         let temp_dir = TempDir::new().unwrap();
         let user_workflows_dir = temp_dir.path().join(".swissarmyhammer").join("workflows");
@@ -969,8 +991,8 @@ mod tests {
 
     #[test]
     fn test_workflow_resolver_local_workflows() {
-        use tempfile::TempDir;
         use std::fs;
+        use tempfile::TempDir;
 
         let temp_dir = TempDir::new().unwrap();
         let local_workflows_dir = temp_dir.path().join(".swissarmyhammer").join("workflows");
@@ -1008,17 +1030,21 @@ mod tests {
 
     #[test]
     fn test_workflow_resolver_precedence() {
-        use tempfile::TempDir;
         use std::fs;
+        use tempfile::TempDir;
 
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create user workflow directory
         let user_workflows_dir = temp_dir.path().join(".swissarmyhammer").join("workflows");
         fs::create_dir_all(&user_workflows_dir).unwrap();
 
         // Create local workflow directory
-        let local_workflows_dir = temp_dir.path().join("project").join(".swissarmyhammer").join("workflows");
+        let local_workflows_dir = temp_dir
+            .path()
+            .join("project")
+            .join(".swissarmyhammer")
+            .join("workflows");
         fs::create_dir_all(&local_workflows_dir).unwrap();
 
         // Create same-named workflow in both locations
@@ -1033,8 +1059,16 @@ mod tests {
             LocalState --> [*]
         "#;
 
-        fs::write(user_workflows_dir.join("same_name.mermaid"), workflow_content_user).unwrap();
-        fs::write(local_workflows_dir.join("same_name.mermaid"), workflow_content_local).unwrap();
+        fs::write(
+            user_workflows_dir.join("same_name.mermaid"),
+            workflow_content_user,
+        )
+        .unwrap();
+        fs::write(
+            local_workflows_dir.join("same_name.mermaid"),
+            workflow_content_local,
+        )
+        .unwrap();
 
         let mut resolver = WorkflowResolver::new();
         let mut storage = MemoryWorkflowStorage::new();
@@ -1054,15 +1088,17 @@ mod tests {
         let workflows = storage.list_workflows().unwrap();
         assert_eq!(workflows.len(), 1);
         assert_eq!(workflows[0].name.as_str(), "same_name");
-        
+
         // Local should have overridden user
         assert_eq!(
             resolver.workflow_sources.get(&workflows[0].name),
             Some(&WorkflowSource::Local)
         );
-        
+
         // Verify the workflow content is from the local version
-        assert!(workflows[0].states.contains_key(&StateId::new("LocalState")));
+        assert!(workflows[0]
+            .states
+            .contains_key(&StateId::new("LocalState")));
         assert!(!workflows[0].states.contains_key(&StateId::new("UserState")));
     }
 
@@ -1070,7 +1106,7 @@ mod tests {
     fn test_workflow_directories() {
         let resolver = WorkflowResolver::new();
         let directories = resolver.get_workflow_directories().unwrap();
-        
+
         // Should return a vector of PathBuf (may be empty if no directories exist)
         // All returned paths should be absolute and existing
         for dir in directories {

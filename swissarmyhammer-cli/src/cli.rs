@@ -34,7 +34,6 @@ pub enum ValidateFormat {
     Json,
 }
 
-
 #[derive(Parser, Debug)]
 #[command(name = "swissarmyhammer")]
 #[command(version)]
@@ -684,5 +683,4 @@ mod tests {
             panic!("Expected Search command");
         }
     }
-
 }

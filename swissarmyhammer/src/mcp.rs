@@ -167,7 +167,9 @@ impl McpServer {
                             tokio::spawn(async move {
                                 match peer_clone.notify_prompt_list_changed().await {
                                     Ok(_) => {
-                                        tracing::info!("📢 Sent prompts/listChanged notification to client");
+                                        tracing::info!(
+                                            "📢 Sent prompts/listChanged notification to client"
+                                        );
                                     }
                                     Err(e) => {
                                         tracing::error!("❌ Failed to send notification: {}", e);
@@ -219,7 +221,6 @@ impl McpServer {
 
         Ok(())
     }
-
 }
 
 impl ServerHandler for McpServer {
@@ -521,7 +522,10 @@ mod tests {
 
         // File watching now requires a peer connection from the MCP client
         // The important thing is that both use get_prompt_directories() method
-        println!("File watching would watch {} directories when started with a peer connection", resolver_dirs.len());
+        println!(
+            "File watching would watch {} directories when started with a peer connection",
+            resolver_dirs.len()
+        );
 
         // The fix ensures both use get_prompt_directories() method
         // This test verifies the API consistency

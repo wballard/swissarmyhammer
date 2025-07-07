@@ -331,8 +331,7 @@ mod tests {
     #[test]
     fn test_index_single_prompt() {
         let mut engine = SearchEngine::new().unwrap();
-        let prompt = Prompt::new("test", "Test template")
-            .with_description("Test description");
+        let prompt = Prompt::new("test", "Test template").with_description("Test description");
 
         engine.index_prompt(&prompt).unwrap();
         engine.commit().unwrap();
@@ -576,7 +575,7 @@ mod tests {
 
         let results = engine.hybrid_search("test", &prompts).unwrap();
         assert!(!results.is_empty());
-        
+
         // Should include results from both fuzzy and full-text search
         let prompt_names: Vec<&str> = results.iter().map(|r| r.prompt.name.as_str()).collect();
         assert!(prompt_names.contains(&"test-generation"));
@@ -585,9 +584,8 @@ mod tests {
     #[test]
     fn test_hybrid_search_score_combination() {
         let mut engine = SearchEngine::new().unwrap();
-        let prompts = vec![
-            Prompt::new("exact-match", "Template").with_description("Test description"),
-        ];
+        let prompts =
+            vec![Prompt::new("exact-match", "Template").with_description("Test description")];
 
         engine.index_prompts(&prompts).unwrap();
 
@@ -635,15 +633,13 @@ mod tests {
     fn test_score_weighting_in_fuzzy_search() {
         let engine = SearchEngine::new().unwrap();
         let prompts = vec![
-            Prompt::new("test", "Template")
-                .with_description("This contains test keyword"),
-            Prompt::new("other", "Template")
-                .with_category("test category"),
+            Prompt::new("test", "Template").with_description("This contains test keyword"),
+            Prompt::new("other", "Template").with_category("test category"),
         ];
 
         let results = engine.fuzzy_search("test", &prompts);
         assert_eq!(results.len(), 2);
-        
+
         // Name matches should score higher than description/category matches
         let test_prompt_result = results.iter().find(|r| r.prompt.name == "test").unwrap();
         let other_prompt_result = results.iter().find(|r| r.prompt.name == "other").unwrap();
@@ -653,10 +649,8 @@ mod tests {
     #[test]
     fn test_multiple_tag_scoring() {
         let engine = SearchEngine::new().unwrap();
-        let prompts = vec![
-            Prompt::new("multi-tag", "Template")
-                .with_tags(vec!["test".to_string(), "other".to_string()]),
-        ];
+        let prompts = vec![Prompt::new("multi-tag", "Template")
+            .with_tags(vec!["test".to_string(), "other".to_string()])];
 
         let results = engine.fuzzy_search("test", &prompts);
         assert!(!results.is_empty());
@@ -666,12 +660,8 @@ mod tests {
     #[test]
     fn test_prompt_not_found_in_search_results() {
         let mut engine = SearchEngine::new().unwrap();
-        let indexed_prompts = vec![
-            Prompt::new("indexed", "Template"),
-        ];
-        let search_prompts = vec![
-            Prompt::new("different", "Template"),
-        ];
+        let indexed_prompts = vec![Prompt::new("indexed", "Template")];
+        let search_prompts = vec![Prompt::new("different", "Template")];
 
         engine.index_prompts(&indexed_prompts).unwrap();
 

@@ -67,7 +67,10 @@ pub use prompt_resolver::{PromptResolver, PromptSource};
 pub use prompts::{ArgumentSpec, Prompt, PromptLibrary, PromptLoader};
 pub use storage::{PromptStorage, StorageBackend};
 pub use template::{Template, TemplateEngine};
-pub use workflow::{State, StateId, Transition, Workflow, WorkflowName, WorkflowRun, WorkflowRunId, WorkflowRunStatus};
+pub use workflow::{
+    State, StateId, Transition, Workflow, WorkflowName, WorkflowRun, WorkflowRunId,
+    WorkflowRunStatus,
+};
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -136,5 +139,8 @@ pub mod prelude {
 
     pub use crate::mcp::McpServer;
     pub use crate::search::{SearchEngine, SearchResult};
-    pub use crate::workflow::{State, StateId, Transition, Workflow, WorkflowName, WorkflowRun, WorkflowRunId, WorkflowRunStatus};
+    pub use crate::workflow::{
+        State, StateId, Transition, Workflow, WorkflowName, WorkflowRun, WorkflowRunId,
+        WorkflowRunStatus,
+    };
 }

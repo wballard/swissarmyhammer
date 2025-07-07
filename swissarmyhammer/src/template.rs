@@ -82,7 +82,7 @@ impl PromptPartialSource {
         if let Ok(prompts) = library.list() {
             for prompt in prompts.iter() {
                 names.push(prompt.name.clone());
-                
+
                 // Strip common prompt extensions to make them available as partials
                 let extensions = [".md", ".markdown", ".liquid", ".md.liquid"];
                 for ext in &extensions {
@@ -102,7 +102,7 @@ impl liquid::partials::PartialSource for PromptPartialSource {
         if self.library.get(name).is_ok() {
             return true;
         }
-        
+
         // Try with various prompt file extensions
         let extensions = [".md", ".markdown", ".liquid", ".md.liquid"];
         for ext in &extensions {
@@ -111,7 +111,7 @@ impl liquid::partials::PartialSource for PromptPartialSource {
                 return true;
             }
         }
-        
+
         // If the name already has an extension, try stripping it
         if name.contains('.') {
             // Try stripping each known extension
@@ -132,7 +132,7 @@ impl liquid::partials::PartialSource for PromptPartialSource {
                 }
             }
         }
-        
+
         false
     }
 
@@ -145,7 +145,7 @@ impl liquid::partials::PartialSource for PromptPartialSource {
         if let Ok(prompt) = self.library.get(name) {
             return Some(Cow::Owned(prompt.template));
         }
-        
+
         // Try with various prompt file extensions
         let extensions = [".md", ".markdown", ".liquid", ".md.liquid"];
         for ext in &extensions {
@@ -154,7 +154,7 @@ impl liquid::partials::PartialSource for PromptPartialSource {
                 return Some(Cow::Owned(prompt.template));
             }
         }
-        
+
         // If the name already has an extension, try stripping it
         if name.contains('.') {
             // Try stripping each known extension
@@ -175,7 +175,7 @@ impl liquid::partials::PartialSource for PromptPartialSource {
                 }
             }
         }
-        
+
         None
     }
 }

@@ -125,7 +125,10 @@ fn test_mcp_notification_simple() -> Result<()> {
     server_process.kill()?;
     let notification_found = reader_thread.join().unwrap();
 
-    assert!(notification_found, "Should have received prompts/listChanged notification");
+    assert!(
+        notification_found,
+        "Should have received prompts/listChanged notification"
+    );
     println!("✅ Test passed!");
 
     Ok(())

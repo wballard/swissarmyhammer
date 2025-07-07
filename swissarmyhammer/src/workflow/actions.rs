@@ -381,7 +381,7 @@ fn substitute_variables_in_string(input: &str, context: &HashMap<String, Value>)
             let var_name = &result[start + 2..start + end];
             let replacement = context
                 .get(var_name)
-                .map(|v| value_to_string(v))
+                .map(value_to_string)
                 .unwrap_or_else(|| format!("${{{}}}", var_name)); // Keep original if not found
 
             result.replace_range(start..start + end + 1, &replacement);
@@ -411,10 +411,8 @@ fn parse_claude_response(output: &str) -> ActionResult<Value> {
 
     for line in output.lines() {
         if let Ok(json) = serde_json::from_str::<Value>(line) {
-            if let Some(content_part) = json.get("content") {
-                if let Value::String(text) = content_part {
-                    content.push_str(text);
-                }
+            if let Some(Value::String(text)) = json.get("content") {
+                content.push_str(text);
             }
         }
     }

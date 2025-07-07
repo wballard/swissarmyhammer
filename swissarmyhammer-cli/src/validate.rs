@@ -7,26 +7,32 @@ use crate::cli::ValidateFormat;
 
 // Local structs for validation
 #[derive(Debug, Clone, serde::Deserialize)]
-#[allow(dead_code)]
 struct PromptArgument {
     name: String,
+    // Fields used through Clone during mapping to main PromptArgument type
+    #[allow(dead_code)]
     description: Option<String>,
+    #[allow(dead_code)]
     required: bool,
+    #[allow(dead_code)]
     default: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
-#[allow(dead_code)]
 struct PromptFrontMatter {
+    // Used for YAML deserialization but not directly accessed
+    #[allow(dead_code)]
     title: String,
+    #[allow(dead_code)]
     description: String,
     #[serde(default)]
+    #[allow(dead_code)]
     arguments: Vec<PromptArgument>,
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct Prompt {
+    #[allow(dead_code)] // Only used during construction
     name: String,
     title: Option<String>,
     description: Option<String>,
@@ -36,10 +42,10 @@ struct Prompt {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)]
 pub enum ValidationLevel {
     Error,
     Warning,
+    #[allow(dead_code)] // Available for future use
     Info,
 }
 
@@ -233,7 +239,13 @@ impl Validator {
         }
 
         // Validate template variables (without liquid syntax validation)
-        self.validate_variable_usage(&prompt.content, &prompt.arguments, &file_path, result, prompt_title);
+        self.validate_variable_usage(
+            &prompt.content,
+            &prompt.arguments,
+            &file_path,
+            result,
+            prompt_title,
+        );
 
         Ok(())
     }
@@ -673,14 +685,15 @@ impl Validator {
         for (file_path, issues) in issues_by_file {
             if !self.quiet {
                 // Get the prompt title from the first issue (all issues for a file should have the same title)
-                let prompt_title = issues.first()
-                    .and_then(|issue| issue.prompt_title.as_ref());
-                
+                let prompt_title = issues.first().and_then(|issue| issue.prompt_title.as_ref());
+
                 if let Some(title) = prompt_title {
                     // Show the prompt title
                     println!("\n{}", title.bold());
                     // Show the file path in smaller text if it's a user prompt
-                    if file_path.to_string_lossy() != "" && !file_path.to_string_lossy().contains("PathBuf") {
+                    if file_path.to_string_lossy() != ""
+                        && !file_path.to_string_lossy().contains("PathBuf")
+                    {
                         println!("  {}", file_path.display().to_string().dimmed());
                     }
                 } else {

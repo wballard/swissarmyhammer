@@ -10,9 +10,7 @@ mod test;
 mod validate;
 
 use clap::CommandFactory;
-use cli::{
-    Cli, Commands, OutputFormat, PromptSource, ValidateFormat,
-};
+use cli::{Cli, Commands, OutputFormat, PromptSource, ValidateFormat};
 
 #[tokio::main]
 async fn main() {
@@ -46,20 +44,20 @@ async fn main() {
         // In MCP mode, write logs to .swissarmyhammer/log for debugging
         use std::fs;
         use std::path::PathBuf;
-        
+
         let log_dir = if let Some(home) = dirs::home_dir() {
             home.join(".swissarmyhammer")
         } else {
             PathBuf::from(".swissarmyhammer")
         };
-        
+
         // Ensure the directory exists
         if let Err(e) = fs::create_dir_all(&log_dir) {
             eprintln!("Warning: Failed to create log directory: {}", e);
         }
-        
+
         let log_file = log_dir.join("mcp.log");
-        
+
         // Try to open the log file
         match std::fs::OpenOptions::new()
             .create(true)
@@ -217,7 +215,7 @@ async fn run_server() -> i32 {
 
             // Wait for cancellation
             ct.cancelled().await;
-            
+
             tracing::info!("MCP server exited successfully");
             0
         }
@@ -322,7 +320,6 @@ fn run_search(
         }
     }
 }
-
 
 fn run_completions(shell: clap_complete::Shell) -> i32 {
     use completions;

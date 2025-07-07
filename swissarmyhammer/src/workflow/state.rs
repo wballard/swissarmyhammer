@@ -2,6 +2,18 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use thiserror::Error;
+
+/// Errors that can occur when creating state-related types
+#[derive(Debug, Error)]
+pub enum StateError {
+    /// State ID cannot be empty or whitespace only
+    #[error("State ID cannot be empty or whitespace only")]
+    EmptyStateId,
+}
+
+/// Result type for state operations
+pub type StateResult<T> = Result<T, StateError>;
 
 /// Unique identifier for workflow states
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -9,12 +21,23 @@ pub struct StateId(String);
 
 impl StateId {
     /// Create a new state ID
+    /// 
+    /// # Panics
+    /// Panics if the ID is empty or whitespace only. For non-panicking creation,
+    /// use `try_new` instead.
     pub fn new(id: impl Into<String>) -> Self {
-        let id = id.into();
-        assert!(!id.trim().is_empty(), "State ID cannot be empty");
-        Self(id)
+        Self::try_new(id).expect("State ID cannot be empty or whitespace only")
     }
-    
+
+    /// Create a new state ID, returning an error for invalid input
+    pub fn try_new(id: impl Into<String>) -> StateResult<Self> {
+        let id = id.into();
+        if id.trim().is_empty() {
+            return Err(StateError::EmptyStateId);
+        }
+        Ok(Self(id))
+    }
+
     /// Get the inner string value
     pub fn as_str(&self) -> &str {
         &self.0
@@ -63,10 +86,29 @@ mod tests {
         let id1 = StateId::new("start");
         let id2 = StateId::from("start");
         let id3: StateId = "start".into();
-        
+
         assert_eq!(id1, id2);
         assert_eq!(id2, id3);
         assert_eq!(id1.as_str(), "start");
+    }
+
+    #[test]
+    fn test_state_id_try_new_success() {
+        let id = StateId::try_new("valid_id").unwrap();
+        assert_eq!(id.as_str(), "valid_id");
+    }
+
+    #[test]
+    fn test_state_id_try_new_empty_error() {
+        assert!(StateId::try_new("").is_err());
+        assert!(StateId::try_new("   ").is_err());
+        assert!(StateId::try_new("\t\n").is_err());
+    }
+
+    #[test]
+    #[should_panic(expected = "State ID cannot be empty or whitespace only")]
+    fn test_state_id_new_panics_on_empty() {
+        StateId::new("");
     }
 
     #[test]
@@ -95,7 +137,7 @@ mod tests {
 
         let serialized = serde_json::to_string(&state).unwrap();
         let deserialized: State = serde_json::from_str(&serialized).unwrap();
-        
+
         assert_eq!(state, deserialized);
     }
 }

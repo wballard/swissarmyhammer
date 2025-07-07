@@ -26,7 +26,7 @@ impl ConditionType {
         match self {
             ConditionType::Always => "always",
             ConditionType::Never => "never",
-            ConditionType::OnSuccess => "on_success", 
+            ConditionType::OnSuccess => "on_success",
             ConditionType::OnFailure => "on_failure",
             ConditionType::Custom => "custom",
         }

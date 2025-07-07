@@ -70,11 +70,11 @@ impl WorkflowRun {
             workflow,
             current_state: initial_state.clone(),
             history: vec![(initial_state, now)],
-            context: HashMap::new(),
+            context: Default::default(),
             status: WorkflowRunStatus::Running,
             started_at: now,
             completed_at: None,
-            metadata: HashMap::new(),
+            metadata: Default::default(),
         }
     }
 
@@ -101,7 +101,7 @@ impl WorkflowRun {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workflow::{State, WorkflowName};
+    use crate::workflow::test_helpers::*;
 
     #[test]
     fn test_workflow_run_id_creation() {
@@ -112,22 +112,11 @@ mod tests {
 
     #[test]
     fn test_workflow_run_creation() {
-        let mut workflow = Workflow::new(
-            WorkflowName::new("Test Workflow"),
-            "A test workflow".to_string(),
-            StateId::new("start"),
-        );
-        
-        workflow.add_state(State {
-            id: StateId::new("start"),
-            description: "Start state".to_string(),
-            is_terminal: false,
-            allows_parallel: false,
-            metadata: HashMap::new(),
-        });
-        
+        let mut workflow = create_workflow("Test Workflow", "A test workflow", "start");
+        workflow.add_state(create_state("start", "Start state", false));
+
         let run = WorkflowRun::new(workflow);
-        
+
         assert_eq!(run.workflow.name.as_str(), "Test Workflow");
         assert_eq!(run.current_state.as_str(), "start");
         assert_eq!(run.status, WorkflowRunStatus::Running);
@@ -137,32 +126,14 @@ mod tests {
 
     #[test]
     fn test_workflow_run_transition() {
-        let mut workflow = Workflow::new(
-            WorkflowName::new("Test Workflow"),
-            "A test workflow".to_string(),
-            StateId::new("start"),
-        );
-        
-        workflow.add_state(State {
-            id: StateId::new("start"),
-            description: "Start state".to_string(),
-            is_terminal: false,
-            allows_parallel: false,
-            metadata: HashMap::new(),
-        });
-        
-        workflow.add_state(State {
-            id: StateId::new("processing"),
-            description: "Processing state".to_string(),
-            is_terminal: false,
-            allows_parallel: false,
-            metadata: HashMap::new(),
-        });
-        
+        let mut workflow = create_workflow("Test Workflow", "A test workflow", "start");
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state("processing", "Processing state", false));
+
         let mut run = WorkflowRun::new(workflow);
-        
+
         run.transition_to(StateId::new("processing"));
-        
+
         assert_eq!(run.current_state.as_str(), "processing");
         assert_eq!(run.history.len(), 2);
         assert_eq!(run.history[1].0.as_str(), "processing");
@@ -170,24 +141,13 @@ mod tests {
 
     #[test]
     fn test_workflow_run_completion() {
-        let mut workflow = Workflow::new(
-            WorkflowName::new("Test Workflow"),
-            "A test workflow".to_string(),
-            StateId::new("start"),
-        );
-        
-        workflow.add_state(State {
-            id: StateId::new("start"),
-            description: "Start state".to_string(),
-            is_terminal: false,
-            allows_parallel: false,
-            metadata: HashMap::new(),
-        });
-        
+        let mut workflow = create_workflow("Test Workflow", "A test workflow", "start");
+        workflow.add_state(create_state("start", "Start state", false));
+
         let mut run = WorkflowRun::new(workflow);
-        
+
         run.complete();
-        
+
         assert_eq!(run.status, WorkflowRunStatus::Completed);
         assert!(run.completed_at.is_some());
     }

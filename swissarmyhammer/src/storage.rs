@@ -310,6 +310,14 @@ impl PromptStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
+
+    fn create_test_prompt(name: &str, template: &str) -> Prompt {
+        Prompt::new(name, template)
+            .with_description(format!("Description for {}", name))
+            .with_category("test")
+            .with_tags(vec!["test".to_string(), name.to_string()])
+    }
 
     #[test]
     fn test_memory_storage() {
@@ -327,6 +335,66 @@ mod tests {
 
         storage.remove("test").unwrap();
         assert!(storage.get("test").is_err());
+    }
+
+    #[test]
+    fn test_memory_storage_default() {
+        let storage = MemoryStorage::default();
+        let list = storage.list().unwrap();
+        assert_eq!(list.len(), 0);
+    }
+
+    #[test]
+    fn test_memory_storage_exists() {
+        let mut storage = MemoryStorage::new();
+        let prompt = create_test_prompt("exists-test", "Template");
+        
+        assert!(!storage.exists("exists-test").unwrap());
+        storage.store(prompt).unwrap();
+        assert!(storage.exists("exists-test").unwrap());
+    }
+
+    #[test]
+    fn test_memory_storage_count() {
+        let mut storage = MemoryStorage::new();
+        assert_eq!(storage.count().unwrap(), 0);
+        
+        storage.store(create_test_prompt("prompt1", "Template 1")).unwrap();
+        assert_eq!(storage.count().unwrap(), 1);
+        
+        storage.store(create_test_prompt("prompt2", "Template 2")).unwrap();
+        assert_eq!(storage.count().unwrap(), 2);
+        
+        storage.remove("prompt1").unwrap();
+        assert_eq!(storage.count().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_memory_storage_clone_box() {
+        let mut storage = MemoryStorage::new();
+        let prompt = create_test_prompt("clone-test", "Template");
+        storage.store(prompt.clone()).unwrap();
+        
+        let cloned = storage.clone_box();
+        let retrieved = cloned.get("clone-test").unwrap();
+        assert_eq!(retrieved.name, prompt.name);
+        assert_eq!(retrieved.template, prompt.template);
+    }
+
+    #[test]
+    fn test_memory_storage_remove_nonexistent() {
+        let mut storage = MemoryStorage::new();
+        let result = storage.remove("nonexistent");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), SwissArmyHammerError::PromptNotFound(_)));
+    }
+
+    #[test]
+    fn test_memory_storage_get_nonexistent() {
+        let storage = MemoryStorage::new();
+        let result = storage.get("nonexistent");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), SwissArmyHammerError::PromptNotFound(_)));
     }
 
     #[test]
@@ -351,5 +419,320 @@ mod tests {
         let results = storage.search("bug").unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "bug-fix");
+    }
+
+    #[test]
+    fn test_search_by_description() {
+        let mut storage = MemoryStorage::new();
+        let prompt = Prompt::new("test", "Template")
+            .with_description("This is a unique description");
+        storage.store(prompt).unwrap();
+
+        let results = storage.search("unique").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "test");
+    }
+
+    #[test]
+    fn test_search_by_category() {
+        let mut storage = MemoryStorage::new();
+        let prompt = Prompt::new("test", "Template")
+            .with_category("special-category");
+        storage.store(prompt).unwrap();
+
+        let results = storage.search("special").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "test");
+    }
+
+    #[test]
+    fn test_search_by_tags() {
+        let mut storage = MemoryStorage::new();
+        let prompt = Prompt::new("test", "Template")
+            .with_tags(vec!["unique-tag".to_string()]);
+        storage.store(prompt).unwrap();
+
+        let results = storage.search("unique-tag").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "test");
+    }
+
+    #[test]
+    fn test_search_case_insensitive() {
+        let mut storage = MemoryStorage::new();
+        let prompt = Prompt::new("TEST-NAME", "Template")
+            .with_description("UPPER DESCRIPTION");
+        storage.store(prompt).unwrap();
+
+        let results = storage.search("test").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "TEST-NAME");
+
+        let results = storage.search("upper").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "TEST-NAME");
+    }
+
+    #[test]
+    fn test_search_no_matches() {
+        let mut storage = MemoryStorage::new();
+        storage.store(create_test_prompt("test", "Template")).unwrap();
+
+        let results = storage.search("nonexistent").unwrap();
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_search_empty_query() {
+        let mut storage = MemoryStorage::new();
+        storage.store(create_test_prompt("test", "Template")).unwrap();
+
+        let results = storage.search("").unwrap();
+        assert_eq!(results.len(), 1); // Empty string matches everything
+    }
+
+    #[test]
+    fn test_filesystem_storage_creation() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        assert!(temp_dir.path().exists());
+        assert_eq!(storage.list().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_filesystem_storage_nonexistent_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let nonexistent_path = temp_dir.path().join("nonexistent");
+        
+        let _storage = FileSystemStorage::new(&nonexistent_path).unwrap();
+        assert!(nonexistent_path.exists());
+    }
+
+    #[test]
+    fn test_filesystem_storage_store_and_get() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        
+        let prompt = create_test_prompt("fs-test", "Filesystem test template");
+        storage.store(prompt.clone()).unwrap();
+        
+        let retrieved = storage.get("fs-test").unwrap();
+        assert_eq!(retrieved.name, prompt.name);
+        assert_eq!(retrieved.template, prompt.template);
+        assert_eq!(retrieved.description, prompt.description);
+        
+        // Check that file was created
+        let prompt_file = temp_dir.path().join("fs-test.yaml");
+        assert!(prompt_file.exists());
+    }
+
+    #[test]
+    fn test_filesystem_storage_get_nonexistent() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        
+        let result = storage.get("nonexistent");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), SwissArmyHammerError::PromptNotFound(_)));
+    }
+
+    #[test]
+    fn test_filesystem_storage_remove() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        
+        let prompt = create_test_prompt("remove-test", "Template");
+        storage.store(prompt).unwrap();
+        
+        assert!(storage.get("remove-test").is_ok());
+        storage.remove("remove-test").unwrap();
+        assert!(storage.get("remove-test").is_err());
+        
+        // Check that file was removed
+        let prompt_file = temp_dir.path().join("remove-test.yaml");
+        assert!(!prompt_file.exists());
+    }
+
+    #[test]
+    fn test_filesystem_storage_remove_nonexistent() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        
+        let result = storage.remove("nonexistent");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), SwissArmyHammerError::PromptNotFound(_)));
+    }
+
+    #[test]
+    fn test_filesystem_storage_list() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        
+        assert_eq!(storage.list().unwrap().len(), 0);
+        
+        storage.store(create_test_prompt("prompt1", "Template 1")).unwrap();
+        storage.store(create_test_prompt("prompt2", "Template 2")).unwrap();
+        
+        let prompts = storage.list().unwrap();
+        assert_eq!(prompts.len(), 2);
+        
+        let names: Vec<String> = prompts.iter().map(|p| p.name.clone()).collect();
+        assert!(names.contains(&"prompt1".to_string()));
+        assert!(names.contains(&"prompt2".to_string()));
+    }
+
+    #[test]
+    fn test_filesystem_storage_search() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        
+        let prompt1 = Prompt::new("search-test-1", "Template")
+            .with_description("Contains keyword UNIQUE");
+        let prompt2 = Prompt::new("search-test-2", "Template")
+            .with_description("Different description");
+        
+        storage.store(prompt1).unwrap();
+        storage.store(prompt2).unwrap();
+        
+        let results = storage.search("unique").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "search-test-1");
+    }
+
+    #[test]
+    fn test_filesystem_storage_reload_cache() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        
+        let prompt = create_test_prompt("reload-test", "Template");
+        storage.store(prompt.clone()).unwrap();
+        
+        // Clear cache and reload
+        storage.cache.clear();
+        assert_eq!(storage.list().unwrap().len(), 0);
+        
+        storage.reload_cache().unwrap();
+        let retrieved = storage.get("reload-test").unwrap();
+        assert_eq!(retrieved.name, prompt.name);
+    }
+
+    #[test]
+    fn test_filesystem_storage_clone_box() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        
+        let prompt = create_test_prompt("clone-fs-test", "Template");
+        storage.store(prompt.clone()).unwrap();
+        
+        let cloned = storage.clone_box();
+        let retrieved = cloned.get("clone-fs-test").unwrap();
+        assert_eq!(retrieved.name, prompt.name);
+    }
+
+    #[test]
+    fn test_filesystem_storage_exists_and_count() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        
+        assert_eq!(storage.count().unwrap(), 0);
+        assert!(!storage.exists("test").unwrap());
+        
+        storage.store(create_test_prompt("test", "Template")).unwrap();
+        assert_eq!(storage.count().unwrap(), 1);
+        assert!(storage.exists("test").unwrap());
+    }
+
+    #[test]
+    fn test_prompt_storage_memory() {
+        let mut storage = PromptStorage::memory();
+        let prompt = create_test_prompt("memory-test", "Template");
+        
+        storage.store(prompt.clone()).unwrap();
+        
+        let retrieved = storage.get("memory-test").unwrap();
+        assert_eq!(retrieved.name, prompt.name);
+        
+        let prompts = storage.list().unwrap();
+        assert_eq!(prompts.len(), 1);
+        
+        let results = storage.search("memory").unwrap();
+        assert_eq!(results.len(), 1);
+        
+        storage.remove("memory-test").unwrap();
+        assert!(storage.get("memory-test").is_err());
+    }
+
+    #[test]
+    fn test_prompt_storage_file_system() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut storage = PromptStorage::file_system(temp_dir.path()).unwrap();
+        let prompt = create_test_prompt("fs-storage-test", "Template");
+        
+        storage.store(prompt.clone()).unwrap();
+        
+        let retrieved = storage.get("fs-storage-test").unwrap();
+        assert_eq!(retrieved.name, prompt.name);
+        
+        let prompts = storage.list().unwrap();
+        assert_eq!(prompts.len(), 1);
+        
+        let results = storage.search("fs-storage").unwrap();
+        assert_eq!(results.len(), 1);
+        
+        storage.remove("fs-storage-test").unwrap();
+        assert!(storage.get("fs-storage-test").is_err());
+    }
+
+    #[test]
+    fn test_prompt_storage_new_with_backend() {
+        let backend = Arc::new(MemoryStorage::new());
+        let storage = PromptStorage::new(backend);
+        
+        let prompts = storage.list().unwrap();
+        assert_eq!(prompts.len(), 0);
+    }
+
+    #[test]
+    fn test_storage_backend_exists_error_handling() {
+        let storage = MemoryStorage::new();
+        
+        // Test exists with non-PromptNotFound error would be complex to set up
+        // but we can at least test the happy paths
+        assert!(!storage.exists("nonexistent").unwrap());
+    }
+
+    #[test]
+    fn test_filesystem_storage_invalid_yaml_file() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        // Create an invalid YAML file manually
+        let invalid_file = temp_dir.path().join("invalid.yaml");
+        std::fs::write(&invalid_file, "invalid: yaml: content: [").unwrap();
+        
+        // Storage should handle invalid files gracefully during cache reload
+        let storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        assert_eq!(storage.list().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_filesystem_storage_non_yaml_files() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        // Create a non-YAML file
+        let text_file = temp_dir.path().join("readme.txt");
+        std::fs::write(&text_file, "This is not a YAML file").unwrap();
+        
+        // Storage should ignore non-YAML files
+        let storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        assert_eq!(storage.list().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_prompt_path_generation() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        
+        let path = storage.prompt_path("test-prompt");
+        assert_eq!(path, temp_dir.path().join("test-prompt.yaml"));
     }
 }

@@ -11,7 +11,9 @@ pub struct WorkflowName(String);
 impl WorkflowName {
     /// Create a new workflow name
     pub fn new(name: impl Into<String>) -> Self {
-        Self(name.into())
+        let name = name.into();
+        assert!(!name.trim().is_empty(), "Workflow name cannot be empty");
+        Self(name)
     }
     
     /// Get the inner string value
@@ -76,16 +78,30 @@ impl Workflow {
     pub fn validate(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
 
+        // Check if workflow name is not empty
+        if self.name.as_str().trim().is_empty() {
+            errors.push("Workflow name cannot be empty".to_string());
+        }
+
         // Check if initial state exists
         if !self.states.contains_key(&self.initial_state) {
             errors.push(format!(
-                "Initial state '{}' not found in workflow states",
-                self.initial_state
+                "Initial state '{}' not found in workflow states. Available states: {:?}",
+                self.initial_state,
+                self.states.keys().map(|k| k.as_str()).collect::<Vec<_>>()
             ));
         }
 
         // Check if all transitions reference existing states
         for transition in &self.transitions {
+            // Check for empty state IDs in transitions
+            if transition.from_state.as_str().trim().is_empty() {
+                errors.push(format!("Transition #{} has empty source state ID. All transitions must have valid non-empty state IDs", self.transitions.iter().position(|t| t == transition).unwrap_or(0)));
+            }
+            if transition.to_state.as_str().trim().is_empty() {
+                errors.push(format!("Transition #{} has empty target state ID. All transitions must have valid non-empty state IDs", self.transitions.iter().position(|t| t == transition).unwrap_or(0)));
+            }
+            
             if !self.states.contains_key(&transition.from_state) {
                 errors.push(format!(
                     "Transition references non-existent source state: '{}'",
@@ -103,7 +119,7 @@ impl Workflow {
         // Check for at least one terminal state
         let has_terminal = self.states.values().any(|s| s.is_terminal);
         if !has_terminal {
-            errors.push("Workflow must have at least one terminal state".to_string());
+            errors.push("Workflow must have at least one terminal state. Add 'is_terminal: true' to at least one state or create a transition to [*]".to_string());
         }
 
         if errors.is_empty() {

@@ -279,25 +279,404 @@ impl Default for SearchEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
+
+    fn create_test_prompts() -> Vec<Prompt> {
+        vec![
+            Prompt::new("code-review", "Review this code: {{ code }}")
+                .with_description("A prompt for reviewing code")
+                .with_category("development")
+                .with_tags(vec!["code".to_string(), "review".to_string()]),
+            Prompt::new("bug-fix", "Fix this bug: {{ error }}")
+                .with_description("A prompt for fixing bugs")
+                .with_category("debugging")
+                .with_tags(vec!["bug".to_string(), "fix".to_string()]),
+            Prompt::new("test-generation", "Generate tests for: {{ function }}")
+                .with_description("Generate unit tests")
+                .with_category("testing")
+                .with_tags(vec!["test".to_string(), "unit".to_string()]),
+        ]
+    }
 
     #[test]
     fn test_search_engine_creation() {
         let engine = SearchEngine::new().unwrap();
         assert!(engine.index.schema().fields().count() > 0);
+        assert_eq!(engine.index.schema().fields().count(), 5);
+    }
+
+    #[test]
+    fn test_search_engine_with_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let engine = SearchEngine::with_directory(temp_dir.path()).unwrap();
+        assert!(engine.index.schema().fields().count() > 0);
+        assert_eq!(engine.index.schema().fields().count(), 5);
+    }
+
+    #[test]
+    fn test_search_engine_with_directory_nonexistent_path() {
+        let temp_dir = TempDir::new().unwrap();
+        let nonexistent_path = temp_dir.path().join("nonexistent");
+        let engine = SearchEngine::with_directory(&nonexistent_path).unwrap();
+        assert!(nonexistent_path.exists());
+        assert_eq!(engine.index.schema().fields().count(), 5);
+    }
+
+    #[test]
+    fn test_default_search_engine() {
+        let engine = SearchEngine::default();
+        assert_eq!(engine.index.schema().fields().count(), 5);
+    }
+
+    #[test]
+    fn test_index_single_prompt() {
+        let mut engine = SearchEngine::new().unwrap();
+        let prompt = Prompt::new("test", "Test template")
+            .with_description("Test description");
+
+        engine.index_prompt(&prompt).unwrap();
+        engine.commit().unwrap();
+    }
+
+    #[test]
+    fn test_index_prompt_with_all_fields() {
+        let mut engine = SearchEngine::new().unwrap();
+        let prompt = Prompt::new("full-test", "Full test template")
+            .with_description("Full test description")
+            .with_category("testing")
+            .with_tags(vec!["tag1".to_string(), "tag2".to_string()]);
+
+        engine.index_prompt(&prompt).unwrap();
+        engine.commit().unwrap();
+    }
+
+    #[test]
+    fn test_index_prompt_minimal_fields() {
+        let mut engine = SearchEngine::new().unwrap();
+        let prompt = Prompt::new("minimal", "Minimal template");
+
+        engine.index_prompt(&prompt).unwrap();
+        engine.commit().unwrap();
+    }
+
+    #[test]
+    fn test_index_multiple_prompts() {
+        let mut engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        engine.index_prompts(&prompts).unwrap();
+    }
+
+    #[test]
+    fn test_commit() {
+        let mut engine = SearchEngine::new().unwrap();
+        let prompt = Prompt::new("test", "Test template");
+
+        engine.index_prompt(&prompt).unwrap();
+        engine.commit().unwrap();
     }
 
     #[test]
     fn test_fuzzy_search() {
         let engine = SearchEngine::new().unwrap();
-
-        let prompts = vec![
-            Prompt::new("code-review", "Review code")
-                .with_description("A prompt for reviewing code"),
-            Prompt::new("bug-fix", "Fix bugs").with_description("A prompt for fixing bugs"),
-        ];
+        let prompts = create_test_prompts();
 
         let results = engine.fuzzy_search("cod", &prompts);
         assert!(!results.is_empty());
         assert_eq!(results[0].prompt.name, "code-review");
+        assert!(results[0].score > 0.0);
+    }
+
+    #[test]
+    fn test_fuzzy_search_description_match() {
+        let engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        let results = engine.fuzzy_search("fixing", &prompts);
+        assert!(!results.is_empty());
+        assert_eq!(results[0].prompt.name, "bug-fix");
+    }
+
+    #[test]
+    fn test_fuzzy_search_category_match() {
+        let engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        let results = engine.fuzzy_search("debug", &prompts);
+        assert!(!results.is_empty());
+        assert_eq!(results[0].prompt.name, "bug-fix");
+    }
+
+    #[test]
+    fn test_fuzzy_search_tag_match() {
+        let engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        let results = engine.fuzzy_search("unit", &prompts);
+        assert!(!results.is_empty());
+        assert_eq!(results[0].prompt.name, "test-generation");
+    }
+
+    #[test]
+    fn test_fuzzy_search_no_match() {
+        let engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        let results = engine.fuzzy_search("nonexistent", &prompts);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_fuzzy_search_empty_query() {
+        let engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        let results = engine.fuzzy_search("", &prompts);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_fuzzy_search_empty_prompts() {
+        let engine = SearchEngine::new().unwrap();
+        let prompts = vec![];
+
+        let results = engine.fuzzy_search("test", &prompts);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_fuzzy_search_sorting() {
+        let engine = SearchEngine::new().unwrap();
+        let prompts = vec![
+            Prompt::new("code", "Test template"),
+            Prompt::new("code-review", "Test template"),
+            Prompt::new("review-code", "Test template"),
+        ];
+
+        let results = engine.fuzzy_search("code", &prompts);
+        assert!(results.len() >= 2);
+        // Results should be sorted by score descending
+        for i in 1..results.len() {
+            assert!(results[i - 1].score >= results[i].score);
+        }
+    }
+
+    #[test]
+    fn test_full_text_search() {
+        let mut engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        engine.index_prompts(&prompts).unwrap();
+
+        let results = engine.search("code", &prompts).unwrap();
+        assert!(!results.is_empty());
+        assert!(results.iter().any(|r| r.prompt.name == "code-review"));
+    }
+
+    #[test]
+    fn test_full_text_search_description() {
+        let mut engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        engine.index_prompts(&prompts).unwrap();
+
+        let results = engine.search("reviewing", &prompts).unwrap();
+        assert!(!results.is_empty());
+        assert_eq!(results[0].prompt.name, "code-review");
+    }
+
+    #[test]
+    fn test_full_text_search_category() {
+        let mut engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        engine.index_prompts(&prompts).unwrap();
+
+        let results = engine.search("development", &prompts).unwrap();
+        assert!(!results.is_empty());
+        assert_eq!(results[0].prompt.name, "code-review");
+    }
+
+    #[test]
+    fn test_full_text_search_tags() {
+        let mut engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        engine.index_prompts(&prompts).unwrap();
+
+        let results = engine.search("fix", &prompts).unwrap();
+        assert!(!results.is_empty());
+        assert_eq!(results[0].prompt.name, "bug-fix");
+    }
+
+    #[test]
+    fn test_full_text_search_template() {
+        let mut engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        engine.index_prompts(&prompts).unwrap();
+
+        let results = engine.search("error", &prompts).unwrap();
+        assert!(!results.is_empty());
+        assert_eq!(results[0].prompt.name, "bug-fix");
+    }
+
+    #[test]
+    fn test_full_text_search_no_match() {
+        let mut engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        engine.index_prompts(&prompts).unwrap();
+
+        let results = engine.search("nonexistent", &prompts).unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_full_text_search_empty_query() {
+        let mut engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        engine.index_prompts(&prompts).unwrap();
+
+        let results = engine.search("", &prompts).unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_full_text_search_complex_query() {
+        let mut engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        engine.index_prompts(&prompts).unwrap();
+
+        let results = engine.search("code AND review", &prompts).unwrap();
+        assert!(!results.is_empty());
+        assert_eq!(results[0].prompt.name, "code-review");
+    }
+
+    #[test]
+    fn test_hybrid_search() {
+        let mut engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        engine.index_prompts(&prompts).unwrap();
+
+        let results = engine.hybrid_search("cod", &prompts).unwrap();
+        assert!(!results.is_empty());
+        assert!(results.iter().any(|r| r.prompt.name == "code-review"));
+    }
+
+    #[test]
+    fn test_hybrid_search_combines_results() {
+        let mut engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        engine.index_prompts(&prompts).unwrap();
+
+        let results = engine.hybrid_search("test", &prompts).unwrap();
+        assert!(!results.is_empty());
+        
+        // Should include results from both fuzzy and full-text search
+        let prompt_names: Vec<&str> = results.iter().map(|r| r.prompt.name.as_str()).collect();
+        assert!(prompt_names.contains(&"test-generation"));
+    }
+
+    #[test]
+    fn test_hybrid_search_score_combination() {
+        let mut engine = SearchEngine::new().unwrap();
+        let prompts = vec![
+            Prompt::new("exact-match", "Template").with_description("Test description"),
+        ];
+
+        engine.index_prompts(&prompts).unwrap();
+
+        let results = engine.hybrid_search("exact-match", &prompts).unwrap();
+        assert!(!results.is_empty());
+        assert!(results[0].score > 0.0);
+    }
+
+    #[test]
+    fn test_hybrid_search_empty_index() {
+        let engine = SearchEngine::new().unwrap();
+        let prompts = create_test_prompts();
+
+        // Don't index any prompts
+        let results = engine.hybrid_search("test", &prompts).unwrap();
+        assert!(!results.is_empty()); // Should still have fuzzy results
+    }
+
+    #[test]
+    fn test_search_result_creation() {
+        let prompt = Prompt::new("test", "Test template");
+        let result = SearchResult {
+            prompt: prompt.clone(),
+            score: 1.5,
+        };
+
+        assert_eq!(result.prompt.name, "test");
+        assert_eq!(result.score, 1.5);
+    }
+
+    #[test]
+    fn test_search_result_clone() {
+        let prompt = Prompt::new("test", "Test template");
+        let result = SearchResult {
+            prompt: prompt.clone(),
+            score: 1.5,
+        };
+
+        let cloned = result.clone();
+        assert_eq!(cloned.prompt.name, result.prompt.name);
+        assert_eq!(cloned.score, result.score);
+    }
+
+    #[test]
+    fn test_score_weighting_in_fuzzy_search() {
+        let engine = SearchEngine::new().unwrap();
+        let prompts = vec![
+            Prompt::new("test", "Template")
+                .with_description("This contains test keyword"),
+            Prompt::new("other", "Template")
+                .with_category("test category"),
+        ];
+
+        let results = engine.fuzzy_search("test", &prompts);
+        assert_eq!(results.len(), 2);
+        
+        // Name matches should score higher than description/category matches
+        let test_prompt_result = results.iter().find(|r| r.prompt.name == "test").unwrap();
+        let other_prompt_result = results.iter().find(|r| r.prompt.name == "other").unwrap();
+        assert!(test_prompt_result.score > other_prompt_result.score);
+    }
+
+    #[test]
+    fn test_multiple_tag_scoring() {
+        let engine = SearchEngine::new().unwrap();
+        let prompts = vec![
+            Prompt::new("multi-tag", "Template")
+                .with_tags(vec!["test".to_string(), "other".to_string()]),
+        ];
+
+        let results = engine.fuzzy_search("test", &prompts);
+        assert!(!results.is_empty());
+        assert!(results[0].score > 0.0);
+    }
+
+    #[test]
+    fn test_prompt_not_found_in_search_results() {
+        let mut engine = SearchEngine::new().unwrap();
+        let indexed_prompts = vec![
+            Prompt::new("indexed", "Template"),
+        ];
+        let search_prompts = vec![
+            Prompt::new("different", "Template"),
+        ];
+
+        engine.index_prompts(&indexed_prompts).unwrap();
+
+        // Search with prompts that don't match indexed ones
+        let results = engine.search("indexed", &search_prompts).unwrap();
+        assert!(results.is_empty());
     }
 }

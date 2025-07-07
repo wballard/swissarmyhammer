@@ -465,7 +465,7 @@ impl FileSystemWorkflowStorage {
         }
 
         Err(SwissArmyHammerError::Storage(
-            "No suitable directory found for storing workflow".to_string(),
+            "No suitable directory found for storing workflow. Please create .swissarmyhammer/workflows in current directory or ensure HOME directory is accessible".to_string(),
         ))
     }
 }
@@ -728,7 +728,7 @@ impl WorkflowStorage {
     pub fn file_system() -> Result<Self> {
         // Use a user directory as base path for workflow runs
         let base_path = dirs::home_dir()
-            .ok_or_else(|| SwissArmyHammerError::Storage("Cannot find home directory".to_string()))?
+            .ok_or_else(|| SwissArmyHammerError::Storage("Cannot find home directory. Please ensure HOME environment variable is set".to_string()))?
             .join(".swissarmyhammer");
             
         Ok(Self::new(
@@ -736,6 +736,7 @@ impl WorkflowStorage {
             Arc::new(FileSystemWorkflowRunStorage::new(&base_path)?),
         ))
     }
+
 
     /// Store a workflow
     pub fn store_workflow(&mut self, workflow: Workflow) -> Result<()> {

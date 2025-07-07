@@ -10,7 +10,9 @@ pub struct StateId(String);
 impl StateId {
     /// Create a new state ID
     pub fn new(id: impl Into<String>) -> Self {
-        Self(id.into())
+        let id = id.into();
+        assert!(!id.trim().is_empty(), "State ID cannot be empty");
+        Self(id)
     }
     
     /// Get the inner string value

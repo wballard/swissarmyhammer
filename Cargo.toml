@@ -76,6 +76,9 @@ codegen-units = 16
 # Abort on panic for smaller binary size
 panic = "abort"
 
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
+
 # Additional profile for startup optimization
 [profile.release-fast]
 inherits = "release"

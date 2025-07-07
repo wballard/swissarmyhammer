@@ -23,15 +23,15 @@ pub enum ParseError {
     },
     
     /// No initial state found in diagram
-    #[error("No initial state found in state diagram")]
+    #[error("No initial state found in state diagram. Ensure your diagram has a transition from [*] to define the starting state")]
     NoInitialState,
     
     /// No terminal states found
-    #[error("No terminal states found in state diagram")]
+    #[error("No terminal states found in state diagram. At least one state must transition to [*] to mark workflow completion")]
     NoTerminalStates,
     
     /// Invalid state or transition structure
-    #[error("Invalid workflow structure: {message}")]
+    #[error("Invalid workflow structure: {message}. Please check your diagram syntax and state references")]
     InvalidStructure { 
         /// Description of the structural problem
         message: String 
@@ -99,11 +99,14 @@ impl MermaidParser {
                 metadata.insert("actions".to_string(), actions.join(";"));
             }
 
+            // Check if this state has substates or concurrent regions to enable parallel execution
+            let allows_parallel = !mermaid_state.substates.is_empty() || !mermaid_state.concurrent_regions.is_empty();
+            
             workflow.add_state(State {
                 id: StateId::new(state_id),
                 description: parsed_description,
                 is_terminal,
-                allows_parallel: false, // TODO: Detect parallel states from substates/concurrent_regions
+                allows_parallel,
                 metadata,
             });
         }

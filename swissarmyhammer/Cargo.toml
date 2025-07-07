@@ -11,6 +11,9 @@ readme = "../README.md"
 keywords = ["prompt", "template", "ai", "assistant", "liquid"]
 categories = ["template-engine", "development-tools"]
 
+[lints]
+workspace = true
+
 [build-dependencies]
 # None needed for build script
 

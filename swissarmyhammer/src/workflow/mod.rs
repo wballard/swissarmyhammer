@@ -5,12 +5,19 @@
 
 mod state;
 mod transition;
-mod workflow;
+mod definition;
 mod run;
 mod parser;
+mod storage;
 
 pub use state::{State, StateId};
 pub use transition::{Transition, TransitionCondition};
-pub use workflow::{Workflow, WorkflowName};
+pub use definition::{Workflow, WorkflowName};
 pub use run::{WorkflowRun, WorkflowRunId, WorkflowRunStatus};
 pub use parser::{MermaidParser, ParseError, ParseResult};
+pub use storage::{
+    WorkflowStorage, WorkflowStorageBackend, WorkflowRunStorageBackend,
+    MemoryWorkflowStorage, MemoryWorkflowRunStorage,
+    FileSystemWorkflowStorage, FileSystemWorkflowRunStorage,
+    WorkflowResolver, WorkflowSource,
+};

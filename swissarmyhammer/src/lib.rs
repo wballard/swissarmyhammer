@@ -99,9 +99,21 @@ pub mod error {
         #[error("Storage error: {0}")]
         Storage(String),
 
+        /// Workflow not found
+        #[error("Workflow not found: {0}")]
+        WorkflowNotFound(String),
+
+        /// Workflow run not found
+        #[error("Workflow run not found: {0}")]
+        WorkflowRunNotFound(String),
+
         /// Serialization/deserialization error
         #[error("Serialization error: {0}")]
         Serialization(#[from] serde_yaml::Error),
+
+        /// JSON serialization/deserialization error
+        #[error("JSON error: {0}")]
+        Json(#[from] serde_json::Error),
 
         /// Other errors
         #[error("{0}")]

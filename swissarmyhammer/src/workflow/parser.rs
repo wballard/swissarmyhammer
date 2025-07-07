@@ -3,7 +3,7 @@
 //! This module integrates the mermaid_parser library to parse Mermaid state diagrams
 //! and convert them to our internal Workflow types.
 
-use crate::workflow::{State, StateId, Transition, TransitionCondition, Workflow, WorkflowName};
+use crate::workflow::{ConditionType, State, StateId, Transition, TransitionCondition, Workflow, WorkflowName};
 use mermaid_parser::{parse_diagram, common::ast::{DiagramType, StateDiagram, StateTransition}};
 use std::collections::HashMap;
 use thiserror::Error;
@@ -202,26 +202,28 @@ impl MermaidParser {
                 // Analyze the event text to determine condition type
                 // Check negative conditions first to avoid substring issues
                 let condition_type = if event.contains("invalid") || event.contains("error") || event.contains("fail") {
-                    "on_failure"
+                    ConditionType::OnFailure
                 } else if event.contains("valid") || event.contains("success") {
-                    "on_success"
+                    ConditionType::OnSuccess
                 } else if event == "always" || event.is_empty() {
-                    "always"
+                    ConditionType::Always
                 } else {
-                    "custom"
+                    ConditionType::Custom
+                };
+
+                let expression = if matches!(condition_type, ConditionType::Custom) { 
+                    Some(event.clone()) 
+                } else { 
+                    None 
                 };
 
                 TransitionCondition {
-                    condition_type: condition_type.to_string(),
-                    expression: if condition_type == "custom" { 
-                        Some(event.clone()) 
-                    } else { 
-                        None 
-                    },
+                    condition_type,
+                    expression,
                 }
             }
             None => TransitionCondition {
-                condition_type: "always".to_string(),
+                condition_type: ConditionType::Always,
                 expression: None,
             },
         }
@@ -327,7 +329,7 @@ mod tests {
         let transition = &workflow.transitions[0];
         assert_eq!(transition.from_state.as_str(), "State1");
         assert_eq!(transition.to_state.as_str(), "State2");
-        assert_eq!(transition.condition.condition_type, "custom");
+        assert_eq!(transition.condition.condition_type, ConditionType::Custom);
         assert_eq!(transition.condition.expression, Some("condition".to_string()));
     }
 
@@ -373,12 +375,12 @@ mod tests {
         let valid_transition = workflow.transitions.iter()
             .find(|t| t.from_state.as_str() == "CheckingInput" && t.to_state.as_str() == "ProcessingData")
             .unwrap();
-        assert_eq!(valid_transition.condition.condition_type, "on_success");
+        assert_eq!(valid_transition.condition.condition_type, ConditionType::OnSuccess);
         
         let invalid_transition = workflow.transitions.iter()
             .find(|t| t.from_state.as_str() == "CheckingInput" && t.to_state.as_str() == "ErrorState")
             .unwrap();
-        assert_eq!(invalid_transition.condition.condition_type, "on_failure");
+        assert_eq!(invalid_transition.condition.condition_type, ConditionType::OnFailure);
     }
 
     #[test]
@@ -442,7 +444,7 @@ mod tests {
         };
         
         let condition = MermaidParser::parse_transition_condition(&transition);
-        assert_eq!(condition.condition_type, "on_success");
+        assert_eq!(condition.condition_type, ConditionType::OnSuccess);
         assert_eq!(condition.expression, None);
         
         let transition_custom = StateTransition {
@@ -454,7 +456,7 @@ mod tests {
         };
         
         let condition_custom = MermaidParser::parse_transition_condition(&transition_custom);
-        assert_eq!(condition_custom.condition_type, "custom");
+        assert_eq!(condition_custom.condition_type, ConditionType::Custom);
         assert_eq!(condition_custom.expression, Some("custom condition".to_string()));
     }
 }

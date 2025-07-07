@@ -12,7 +12,7 @@ mod storage;
 mod executor;
 
 pub use state::{State, StateId};
-pub use transition::{Transition, TransitionCondition};
+pub use transition::{ConditionType, Transition, TransitionCondition};
 pub use definition::{Workflow, WorkflowName};
 pub use run::{WorkflowRun, WorkflowRunId, WorkflowRunStatus};
 pub use parser::{MermaidParser, ParseError, ParseResult};

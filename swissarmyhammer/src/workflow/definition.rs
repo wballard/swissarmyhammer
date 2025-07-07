@@ -1,6 +1,6 @@
 //! Main workflow type and validation
 
-use crate::workflow::{State, StateId, Transition};
+use crate::workflow::{ConditionType, State, StateId, Transition};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -173,7 +173,7 @@ mod tests {
             from_state: StateId::new("start"),
             to_state: StateId::new("end"),
             condition: TransitionCondition {
-                condition_type: "always".to_string(),
+                condition_type: ConditionType::Always,
                 expression: None,
             },
             action: None,

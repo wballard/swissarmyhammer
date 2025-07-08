@@ -117,12 +117,6 @@ const MAX_EXECUTION_TIME: Duration = Duration::from_millis(100);
 const DEFAULT_VARIABLE_NAME: &str = "default";
 const RESULT_VARIABLE_NAME: &str = "result";
 
-// Allowed CEL operators and functions (whitelist)
-const ALLOWED_OPERATORS: &[&str] = &[
-    "&&", "||", "!", "==", "!=", "<", ">", "<=", ">=", "+", "-", "*", "/", "%",
-    "in", "size", "has", "matches", "startsWith", "endsWith", "contains"
-];
-
 // Forbidden patterns that could be dangerous
 const FORBIDDEN_PATTERNS: &[&str] = &[
     "import", "load", "eval", "exec", "system", "process", "file", "read", "write",
@@ -541,11 +535,6 @@ impl WorkflowExecutor {
         Ok(boolean_result)
     }
 
-    /// Extract result text from context for CEL evaluation
-    fn extract_result_text(&self, context: &HashMap<String, Value>) -> String {
-        Self::extract_result_text_static(context)
-    }
-
     /// Extract result text from context for CEL evaluation (static version)
     ///
     /// This function extracts result text from the workflow context for use in CEL
@@ -582,11 +571,6 @@ impl WorkflowExecutor {
         
         // Default empty string if no result found
         String::new()
-    }
-
-    /// Add JSON variable to CEL context
-    fn add_json_variable_to_cel_context(&self, cel_context: &mut Context, key: &str, value: &Value) -> Result<(), Box<dyn std::error::Error>> {
-        Self::add_json_variable_to_cel_context_static(cel_context, key, value)
     }
 
     /// Add JSON variable to CEL context (static version)
@@ -716,11 +700,6 @@ impl WorkflowExecutor {
                 Ok(cel_interpreter::Value::Map(cel_map.into()))
             }
         }
-    }
-
-    /// Convert CEL value to boolean
-    fn cel_value_to_bool(&self, value: &CelValue, expression: &str) -> ExecutorResult<bool> {
-        Self::cel_value_to_bool_static(value, expression)
     }
 
     /// Convert CEL value to boolean (static version)

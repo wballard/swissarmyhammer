@@ -6,9 +6,20 @@ use crate::workflow::{
 };
 use serde_json::Value;
 use super::{ExecutorError, ExecutorResult, ExecutionEvent, ExecutionEventType, MAX_TRANSITIONS, DEFAULT_MAX_HISTORY_SIZE, LAST_ACTION_RESULT_KEY};
-use std::time::Instant;
+use std::time::{Instant, Duration};
 use std::collections::HashMap;
 use cel_interpreter::Program;
+
+/// Configuration for retry behavior
+#[derive(Debug, Clone)]
+struct RetryConfig {
+    /// Maximum number of retry attempts
+    max_attempts: usize,
+    /// Initial backoff duration in milliseconds
+    backoff_ms: u64,
+    /// Multiplier for exponential backoff
+    backoff_multiplier: f64,
+}
 
 /// Workflow execution engine
 pub struct WorkflowExecutor {
@@ -106,7 +117,20 @@ impl WorkflowExecutor {
 
     /// Execute a single execution cycle: state execution and potential transition
     pub async fn execute_single_cycle(&mut self, run: &mut WorkflowRun) -> ExecutorResult<bool> {
-        self.execute_single_state(run).await?;
+        // Execute the state, but don't propagate action errors immediately
+        // We need to check for OnFailure transitions first
+        let state_result = self.execute_single_state(run).await;
+        
+        // If it's an action error, we'll handle it after checking transitions
+        let state_error = match state_result {
+            Err(ExecutorError::ActionError(e)) => Some(ExecutorError::ActionError(e)),
+            Err(ExecutorError::ExecutionFailed(msg)) if msg.contains("Manual intervention required") => {
+                // Special case: manual intervention required, don't treat as error
+                return Ok(false);
+            }
+            Err(other) => return Err(other), // Propagate non-action errors
+            Ok(()) => None,
+        };
 
         // Check if workflow is complete after state execution
         if self.is_workflow_finished(run) {
@@ -117,6 +141,9 @@ impl WorkflowExecutor {
         if let Some(next_state) = self.evaluate_transitions(run)? {
             self.perform_transition(run, next_state)?;
             Ok(true) // Transition performed
+        } else if let Some(error) = state_error {
+            // No valid transitions found and we had an error
+            Err(error)
         } else {
             // No valid transitions found, workflow is stuck
             Ok(false)
@@ -209,6 +236,26 @@ impl WorkflowExecutor {
         let state_duration = state_start_time.elapsed();
         self.metrics.record_state_execution(&run.id, current_state_id.clone(), state_duration);
 
+        // Check if this state requires manual intervention
+        if self.requires_manual_intervention(run) {
+            self.log_event(
+                ExecutionEventType::StateExecution,
+                format!("State {} requires manual intervention", current_state_id),
+            );
+            
+            // Check if manual approval has been provided
+            if !run.context.get("manual_approval")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false) {
+                // Pause execution here - workflow will need to be resumed
+                // Mark workflow as paused by returning a special error that the
+                // execution loop will recognize
+                return Err(ExecutorError::ExecutionFailed(
+                    "Manual intervention required".to_string()
+                ));
+            }
+        }
+
         // Check if this is a terminal state
         if is_terminal {
             run.complete();
@@ -231,6 +278,18 @@ impl WorkflowExecutor {
         // Verify the state exists
         if !run.workflow.states.contains_key(&next_state) {
             return Err(ExecutorError::StateNotFound(next_state.clone()));
+        }
+
+        // Track compensation states from transition metadata
+        if let Some(transition) = run.workflow.transitions
+            .iter()
+            .find(|t| t.from_state == run.current_state && t.to_state == next_state) {
+            
+            if let Some(comp_state) = transition.metadata.get("compensation_state") {
+                // Store compensation state in context for this transition
+                let comp_key = format!("compensation_for_{}", run.current_state);
+                run.context.insert(comp_key, Value::String(comp_state.clone()));
+            }
         }
 
         self.log_event(
@@ -257,6 +316,88 @@ impl WorkflowExecutor {
         self.execute_state(run).await
     }
 
+    /// Get retry configuration from current transition metadata
+    fn get_retry_config(&self, run: &WorkflowRun) -> Option<RetryConfig> {
+        // Find transitions TO the current state (the transition that brought us here)
+        let transitions: Vec<_> = run
+            .workflow
+            .transitions
+            .iter()
+            .filter(|t| t.to_state == run.current_state)
+            .collect();
+
+        // Look for retry configuration in transition metadata
+        for transition in transitions {
+            if let Some(max_attempts) = transition.metadata.get("retry_max_attempts") {
+                let config = RetryConfig {
+                    max_attempts: max_attempts.parse().unwrap_or(0),
+                    backoff_ms: transition.metadata.get("retry_backoff_ms")
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(100),
+                    backoff_multiplier: transition.metadata.get("retry_backoff_multiplier")
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(2.0),
+                };
+                
+                if config.max_attempts > 0 {
+                    return Some(config);
+                }
+            }
+        }
+        
+        None
+    }
+
+    /// Execute action with retry logic
+    async fn execute_action_with_retry(
+        &mut self,
+        run: &mut WorkflowRun,
+        action: Box<dyn crate::workflow::Action>,
+        retry_config: &RetryConfig,
+    ) -> Result<Value, ActionError> {
+        let mut last_error = None;
+        let mut backoff_ms = retry_config.backoff_ms;
+
+        for attempt in 1..=retry_config.max_attempts {
+            self.log_event(
+                ExecutionEventType::StateExecution,
+                format!("Retry attempt {} of {}", attempt, retry_config.max_attempts),
+            );
+
+            match action.execute(&mut run.context).await {
+                Ok(result) => {
+                    if attempt > 1 {
+                        self.log_event(
+                            ExecutionEventType::StateExecution,
+                            format!("Action succeeded on retry attempt {}", attempt),
+                        );
+                    }
+                    // Record retry attempts in context
+                    run.context.insert("retry_attempts".to_string(), Value::Number(attempt.into()));
+                    return Ok(result);
+                }
+                Err(error) => {
+                    last_error = Some(error);
+                    
+                    if attempt < retry_config.max_attempts {
+                        self.log_event(
+                            ExecutionEventType::Failed,
+                            format!("Action failed, waiting {}ms before retry", backoff_ms),
+                        );
+                        
+                        // Wait with exponential backoff
+                        tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+                        backoff_ms = (backoff_ms as f64 * retry_config.backoff_multiplier) as u64;
+                    }
+                }
+            }
+        }
+
+        // All retries exhausted
+        run.context.insert("retry_attempts".to_string(), Value::Number(retry_config.max_attempts.into()));
+        Err(last_error.unwrap())
+    }
+
     /// Execute action parsed from state description
     pub async fn execute_state_action(
         &mut self,
@@ -270,18 +411,32 @@ impl WorkflowExecutor {
                 format!("Executing action: {}", action.description()),
             );
 
-            // Execute the action and update context
-            match action.execute(&mut run.context).await {
-                Ok(result) => {
+            // Check for retry configuration
+            let retry_config = self.get_retry_config(run);
+            
+            // Execute the action (with retry if configured)
+            let result = if let Some(config) = retry_config {
+                self.execute_action_with_retry(run, action, &config).await
+            } else {
+                action.execute(&mut run.context).await
+            };
+
+            match result {
+                Ok(result_value) => {
                     self.log_event(
                         ExecutionEventType::StateExecution,
-                        format!("Action completed successfully with result: {}", result),
+                        format!("Action completed successfully with result: {}", result_value),
                     );
                 }
                 Err(action_error) => {
                     // Mark action as failed in context
                     run.context
                         .insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(false));
+
+                    // Capture error context
+                    run.context.insert("last_error".to_string(), Value::String(action_error.to_string()));
+                    run.context.insert("error_state".to_string(), Value::String(run.current_state.to_string()));
+                    run.context.insert("error_timestamp".to_string(), Value::String(chrono::Utc::now().to_rfc3339()));
 
                     // Categorize the error for appropriate handling
                     match &action_error {
@@ -329,10 +484,137 @@ impl WorkflowExecutor {
                         }
                     }
 
+                    // Check for dead letter state configuration
+                    if let Some(dead_letter_state) = self.get_dead_letter_state(run) {
+                        // Add dead letter reason to context
+                        run.context.insert("dead_letter_reason".to_string(), 
+                            Value::String(format!("Max retries exhausted: {}", action_error)));
+                        
+                        // Transition to dead letter state
+                        self.log_event(
+                            ExecutionEventType::StateTransition,
+                            format!("Transitioning to dead letter state: {}", dead_letter_state),
+                        );
+                        self.perform_transition(run, dead_letter_state)?;
+                        // Mark action as successful to allow workflow to continue
+                        run.context
+                            .insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
+                        return Ok(());
+                    }
+
+                    // Note: Error handling via OnFailure transitions is handled by normal
+                    // transition evaluation in the main execution loop
+
+                    // Execute compensation if needed
+                    if let Err(comp_error) = self.execute_compensation(run).await {
+                        self.log_event(
+                            ExecutionEventType::Failed,
+                            format!("Compensation failed: {}", comp_error),
+                        );
+                    }
+
+                    // Check if this state should be skipped on failure
+                    if self.should_skip_on_failure(run) {
+                        self.log_event(
+                            ExecutionEventType::StateExecution,
+                            "Skipped failed state due to skip_on_failure configuration".to_string(),
+                        );
+                        run.context
+                            .insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true)); // Mark as success to continue
+                        return Ok(());
+                    }
+
                     // Propagate the error
                     return Err(ExecutorError::ActionError(action_error));
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    /// Get dead letter state from transition metadata
+    fn get_dead_letter_state(&self, run: &WorkflowRun) -> Option<StateId> {
+        // Find transitions TO the current state
+        let transitions: Vec<_> = run
+            .workflow
+            .transitions
+            .iter()
+            .filter(|t| t.to_state == run.current_state)
+            .collect();
+
+        // Look for dead letter state in transition metadata
+        for transition in transitions {
+            if let Some(dead_letter) = transition.metadata.get("dead_letter_state") {
+                return Some(StateId::new(dead_letter));
+            }
+        }
+        
+        None
+    }
+
+
+    /// Check if state should be skipped on failure
+    fn should_skip_on_failure(&self, run: &WorkflowRun) -> bool {
+        // Find transitions TO the current state
+        let transitions: Vec<_> = run
+            .workflow
+            .transitions
+            .iter()
+            .filter(|t| t.to_state == run.current_state)
+            .collect();
+
+        // Look for skip_on_failure in transition metadata
+        for transition in transitions {
+            if let Some(skip) = transition.metadata.get("skip_on_failure") {
+                return skip == "true";
+            }
+        }
+        
+        false
+    }
+
+    /// Check if current state requires manual intervention
+    pub fn requires_manual_intervention(&self, run: &WorkflowRun) -> bool {
+        if let Some(state) = run.workflow.states.get(&run.current_state) {
+            if let Some(intervention) = state.metadata.get("requires_manual_intervention") {
+                return intervention == "true";
+            }
+        }
+        false
+    }
+
+    /// Execute compensation states in reverse order
+    async fn execute_compensation(&mut self, run: &mut WorkflowRun) -> ExecutorResult<()> {
+        self.log_event(
+            ExecutionEventType::StateExecution,
+            "Starting compensation/rollback".to_string(),
+        );
+
+        // Find all compensation states stored in context
+        let mut compensation_states: Vec<(String, StateId)> = Vec::new();
+        
+        for (key, value) in &run.context {
+            if key.starts_with("compensation_for_") {
+                if let Value::String(comp_state) = value {
+                    compensation_states.push((key.clone(), StateId::new(comp_state)));
+                }
+            }
+        }
+
+        // Execute compensation states
+        if let Some((key, comp_state)) = compensation_states.into_iter().next() {
+            self.log_event(
+                ExecutionEventType::StateExecution,
+                format!("Executing compensation state: {}", comp_state),
+            );
+
+            // Just transition to the compensation state, don't execute it
+            // The normal workflow execution will handle it
+            self.perform_transition(run, comp_state)?;
+            
+            // Remove from context after execution
+            run.context.remove(&key);
         }
 
         Ok(())

@@ -4,6 +4,7 @@ use super::*;
 use crate::workflow::test_helpers::*;
 use crate::workflow::{Transition, WorkflowName, ConditionType, TransitionCondition, StateType, Workflow, WorkflowRun, WorkflowRunStatus};
 use std::collections::HashMap;
+use serde_json::Value;
 
     fn create_test_workflow() -> Workflow {
         let mut workflow = Workflow::new(
@@ -1013,4 +1014,325 @@ use std::collections::HashMap;
             Err(ExecutorError::ExpressionError(_)) => {}, // Expected for some cases
             _ => panic!("Unexpected error type")
         }
+    }
+
+    // ========== Error Handling and Recovery Tests ==========
+
+    #[tokio::test]
+    async fn test_retry_with_exponential_backoff() {
+        let mut executor = WorkflowExecutor::new();
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Retry Test"),
+            "Test retry with backoff".to_string(),
+            StateId::new("start"),
+        );
+
+        workflow.add_state(create_state("start", "Start state", false));
+        // Use an invalid prompt that will fail
+        workflow.add_state(create_state("failing", "Execute prompt \"nonexistent-prompt\" with test=\"value\"", false));
+        workflow.add_state(create_state("end", "End state", true));
+
+        // Add transition with retry policy
+        let mut metadata = HashMap::new();
+        metadata.insert("retry_max_attempts".to_string(), "3".to_string());
+        metadata.insert("retry_backoff_ms".to_string(), "10".to_string()); // Short backoff for tests
+        metadata.insert("retry_backoff_multiplier".to_string(), "2".to_string());
+
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("failing"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata,
+        });
+
+        workflow.add_transition(create_transition("failing", "end", ConditionType::OnSuccess));
+
+        let result = executor.start_workflow(workflow).await;
+        
+        // Should fail after retries
+        assert!(result.is_err());
+        
+        // Check that retries occurred
+        let history = executor.get_history();
+        let retry_events: Vec<_> = history.iter()
+            .filter(|e| e.details.contains("Retry attempt"))
+            .collect();
+        
+        // Should have 3 retry attempts
+        assert_eq!(retry_events.len(), 3);
+        
+        // Verify exponential backoff timing
+        assert!(history.iter().any(|e| e.details.contains("waiting 10ms")));
+        assert!(history.iter().any(|e| e.details.contains("waiting 20ms")));
+    }
+
+    #[tokio::test]
+    async fn test_fallback_state_on_error() {
+        let mut executor = WorkflowExecutor::new();
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Fallback Test"),
+            "Test fallback state".to_string(),
+            StateId::new("start"),
+        );
+
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state("primary", "Execute prompt \"nonexistent-prompt\"", false)); // This will fail
+        workflow.add_state(create_state("fallback", "Log \"Executing fallback\"", false));
+        workflow.add_state(create_state("end", "End state", true));
+
+        workflow.add_transition(create_transition("start", "primary", ConditionType::Always));
+        workflow.add_transition(create_transition("primary", "end", ConditionType::OnSuccess));
+        workflow.add_transition(create_transition("primary", "fallback", ConditionType::OnFailure));
+        workflow.add_transition(create_transition("fallback", "end", ConditionType::Always));
+
+        let run = executor.start_workflow(workflow).await.unwrap();
+        
+        // Should have executed through fallback path
+        assert_eq!(run.status, WorkflowRunStatus::Completed);
+        
+        // Check that fallback was executed
+        let history = executor.get_history();
+        assert!(history.iter().any(|e| e.details.contains("fallback")));
+    }
+
+    #[tokio::test]
+    async fn test_error_handler_state() {
+        let mut executor = WorkflowExecutor::new();
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Error Handler Test"),
+            "Test error handler state".to_string(),
+            StateId::new("start"),
+        );
+
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state("process", "Execute prompt \"nonexistent-prompt\"", false)); // This will fail
+        workflow.add_state(create_state_with_type(
+            "process_error",
+            "Handle error",
+            StateType::Normal,
+            false,
+        ));
+        workflow.add_state(create_state("end", "End state", true));
+
+        workflow.add_transition(create_transition("start", "process", ConditionType::Always));
+        workflow.add_transition(create_transition("process", "end", ConditionType::OnSuccess));
+        workflow.add_transition(create_transition("process", "process_error", ConditionType::OnFailure));
+        workflow.add_transition(create_transition("process_error", "end", ConditionType::Always));
+
+        let run = executor.start_workflow(workflow).await.unwrap();
+        
+        assert_eq!(run.status, WorkflowRunStatus::Completed);
+        
+        // Verify error handler was executed
+        let history = executor.get_history();
+        assert!(history.iter().any(|e| e.details.contains("process_error")));
+    }
+
+    #[tokio::test]
+    async fn test_compensation_rollback() {
+        let mut executor = WorkflowExecutor::new();
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Compensation Test"),
+            "Test compensation/rollback".to_string(),
+            StateId::new("start"),
+        );
+
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state("step1", "Log \"Step 1 executed\"", false));
+        workflow.add_state(create_state("step2", "Execute prompt \"nonexistent-prompt\"", false)); // This will fail
+        workflow.add_state(create_state("compensate_step1", "Log \"Compensating step 1\"", false));
+        workflow.add_state(create_state("failed", "Failed state", true));
+
+        // Define compensation metadata
+        let mut comp_metadata = HashMap::new();
+        comp_metadata.insert("compensation_state".to_string(), 
+            "compensate_step1".to_string());
+
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("step1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: comp_metadata,
+        });
+
+        workflow.add_transition(create_transition("step1", "step2", ConditionType::OnSuccess));
+        workflow.add_transition(create_transition("step2", "failed", ConditionType::OnFailure));
+        workflow.add_transition(create_transition("compensate_step1", "failed", ConditionType::Always));
+
+        let _run = executor.start_workflow(workflow).await.unwrap();
+        
+        // Verify compensation was executed
+        let history = executor.get_history();
+        assert!(history.iter().any(|e| e.details.contains("compensate_step1")));
+    }
+
+    #[tokio::test]
+    async fn test_error_context_capture() {
+        let mut executor = WorkflowExecutor::new();
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Error Context Test"),
+            "Test error context capture".to_string(),
+            StateId::new("start"),
+        );
+
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state("failing", "Execute prompt \"nonexistent-prompt\"", false));
+        workflow.add_state(create_state("error_handler", "Log \"Handling error\"", false));
+        workflow.add_state(create_state("end", "End state", true));
+
+        workflow.add_transition(create_transition("start", "failing", ConditionType::Always));
+        workflow.add_transition(create_transition("failing", "end", ConditionType::OnSuccess));
+        workflow.add_transition(create_transition("failing", "error_handler", ConditionType::OnFailure));
+        workflow.add_transition(create_transition("error_handler", "end", ConditionType::Always));
+
+        let run = executor.start_workflow(workflow).await.unwrap();
+        
+        // Check error context was captured
+        assert!(run.context.contains_key("last_error"));
+        assert!(run.context.contains_key("error_state"));
+        assert!(run.context.contains_key("error_timestamp"));
+        
+        // Verify error message is present
+        if let Some(last_error) = run.context.get("last_error") {
+            assert!(matches!(last_error, Value::String(_)));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_manual_intervention_recovery() {
+        let mut executor = WorkflowExecutor::new();
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Manual Recovery Test"),
+            "Test manual intervention".to_string(),
+            StateId::new("start"),
+        );
+
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state("process", "Process data", false));
+        
+        // Manual intervention state
+        let mut metadata = HashMap::new();
+        metadata.insert("requires_manual_intervention".to_string(), "true".to_string());
+        
+        let mut intervention_state = create_state("manual_check", "Manual intervention required", false);
+        intervention_state.metadata = metadata;
+        workflow.add_state(intervention_state);
+        
+        workflow.add_state(create_state("end", "End state", true));
+
+        workflow.add_transition(create_transition("start", "process", ConditionType::Always));
+        workflow.add_transition(create_transition("process", "manual_check", ConditionType::Always));
+        workflow.add_transition(create_transition("manual_check", "end", ConditionType::Always));
+
+        let mut run = executor.start_workflow(workflow).await.unwrap();
+        
+        // Should pause at manual intervention
+        assert_eq!(run.status, WorkflowRunStatus::Running);
+        assert_eq!(run.current_state, StateId::new("manual_check"));
+        
+        // Simulate manual approval
+        run.context.insert("manual_approval".to_string(), Value::Bool(true));
+        
+        // Resume workflow
+        let completed_run = executor.resume_workflow(run).await.unwrap();
+        assert_eq!(completed_run.status, WorkflowRunStatus::Completed);
+    }
+
+    #[tokio::test]
+    async fn test_skip_failed_state() {
+        let mut executor = WorkflowExecutor::new();
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Skip Failed Test"),
+            "Test skip failed state".to_string(),
+            StateId::new("start"),
+        );
+
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state("optional_step", "Execute prompt \"nonexistent-prompt\"", false));
+        workflow.add_state(create_state("continue", "Log \"Continuing after skip\"", false));
+        workflow.add_state(create_state("end", "End state", true));
+
+        // Mark optional step as skippable on failure
+        let mut metadata = HashMap::new();
+        metadata.insert("skip_on_failure".to_string(), "true".to_string());
+        
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("optional_step"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata,
+        });
+
+        workflow.add_transition(create_transition("optional_step", "continue", ConditionType::Always));
+        workflow.add_transition(create_transition("continue", "end", ConditionType::Always));
+
+        let run = executor.start_workflow(workflow).await.unwrap();
+        
+        // Should complete despite failure in optional step
+        assert_eq!(run.status, WorkflowRunStatus::Completed);
+        
+        // Verify skip was recorded
+        let history = executor.get_history();
+        assert!(history.iter().any(|e| e.details.contains("Skipped failed state")));
+    }
+
+    #[tokio::test]
+    async fn test_dead_letter_state() {
+        let mut executor = WorkflowExecutor::new();
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Dead Letter Test"),
+            "Test dead letter state".to_string(),
+            StateId::new("start"),
+        );
+
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state("process", "Execute prompt \"nonexistent-prompt\"", false));
+        workflow.add_state(create_state_with_type(
+            "dead_letter",
+            "Log \"Message sent to dead letter queue\"",
+            StateType::Normal,
+            true,
+        ));
+
+        // Configure dead letter after max retries
+        let mut metadata = HashMap::new();
+        metadata.insert("retry_max_attempts".to_string(), "2".to_string());
+        metadata.insert("dead_letter_state".to_string(), 
+            "dead_letter".to_string());
+
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("process"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata,
+        });
+
+        let mut run = executor.start_workflow(workflow).await.unwrap();
+        
+        // Should have transitioned to dead letter state
+        assert_eq!(run.current_state, StateId::new("dead_letter"));
+        
+        // Verify error details are preserved
+        assert!(run.context.contains_key("dead_letter_reason"));
+        assert!(run.context.contains_key("retry_attempts"));
+        
+        // Resume to complete the dead letter state execution
+        run = executor.resume_workflow(run).await.unwrap();
+        assert_eq!(run.status, WorkflowRunStatus::Completed);
     }

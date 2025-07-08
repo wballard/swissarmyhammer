@@ -4,6 +4,29 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
 
+/// Types of workflow states
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub enum StateType {
+    /// Normal workflow state
+    #[default]
+    Normal,
+    /// Fork state for parallel execution
+    Fork,
+    /// Join state for merging parallel branches
+    Join,
+}
+
+impl StateType {
+    /// Get the string representation of the state type
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            StateType::Normal => "Normal",
+            StateType::Fork => "Fork",
+            StateType::Join => "Join",
+        }
+    }
+}
+
 /// Errors that can occur when creating state-related types
 #[derive(Debug, Error)]
 pub enum StateError {
@@ -21,7 +44,7 @@ pub struct StateId(String);
 
 impl StateId {
     /// Create a new state ID
-    /// 
+    ///
     /// # Panics
     /// Panics if the ID is empty or whitespace only. For non-panicking creation,
     /// use `try_new` instead.
@@ -69,6 +92,8 @@ pub struct State {
     pub id: StateId,
     /// Description of what should happen in this state
     pub description: String,
+    /// Type of state (normal, fork, join)
+    pub state_type: StateType,
     /// Whether this is a terminal state
     pub is_terminal: bool,
     /// Whether this state allows parallel execution
@@ -116,6 +141,7 @@ mod tests {
         let state = State {
             id: StateId::new("start"),
             description: "Initial state of the workflow".to_string(),
+            state_type: StateType::Normal,
             is_terminal: false,
             allows_parallel: false,
             metadata: HashMap::new(),
@@ -123,6 +149,7 @@ mod tests {
 
         assert_eq!(state.id.as_str(), "start");
         assert!(!state.is_terminal);
+        assert_eq!(state.state_type, StateType::Normal);
     }
 
     #[test]
@@ -130,6 +157,7 @@ mod tests {
         let state = State {
             id: StateId::new("test"),
             description: "A test state".to_string(),
+            state_type: StateType::Fork,
             is_terminal: false,
             allows_parallel: true,
             metadata: HashMap::new(),
@@ -139,5 +167,6 @@ mod tests {
         let deserialized: State = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(state, deserialized);
+        assert_eq!(deserialized.state_type, StateType::Fork);
     }
 }

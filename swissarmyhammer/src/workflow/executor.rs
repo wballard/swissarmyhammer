@@ -1,8 +1,8 @@
 //! Workflow execution engine
 
 use crate::workflow::{
-    parse_action_from_description, ActionError, ConditionType, StateId, TransitionCondition,
-    Workflow, WorkflowRun, WorkflowRunStatus,
+    parse_action_from_description, ActionError, ConditionType, StateId, StateType,
+    TransitionCondition, Workflow, WorkflowRun, WorkflowRunStatus,
 };
 use serde_json::Value;
 use std::collections::HashMap;
@@ -52,6 +52,17 @@ const DEFAULT_MAX_HISTORY_SIZE: usize = 10000;
 /// Context key for last action result
 const LAST_ACTION_RESULT_KEY: &str = "last_action_result";
 
+/// Represents a parallel execution branch
+#[derive(Debug)]
+struct ParallelBranch {
+    /// The state this branch is currently in
+    current_state: StateId,
+    /// The execution context for this branch
+    context: HashMap<String, Value>,
+    /// History for this branch
+    history: Vec<(StateId, chrono::DateTime<chrono::Utc>)>,
+}
+
 /// Workflow execution engine
 pub struct WorkflowExecutor {
     /// Execution history for debugging
@@ -72,7 +83,7 @@ pub struct ExecutionEvent {
 }
 
 /// Types of events that can occur during workflow execution
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum ExecutionEventType {
     /// Workflow execution started
     Started,
@@ -204,6 +215,16 @@ impl WorkflowExecutor {
     /// Execute a single state without transitioning
     async fn execute_single_state(&mut self, run: &mut WorkflowRun) -> ExecutorResult<()> {
         let current_state_id = &run.current_state;
+
+        // Check if this is a fork state
+        if self.is_fork_state(run, current_state_id) {
+            return self.execute_fork_state(run).await;
+        }
+
+        // Check if this is a join state
+        if self.is_join_state(run, current_state_id) {
+            return self.execute_join_state(run).await;
+        }
 
         // Get the current state
         let current_state = run
@@ -376,12 +397,53 @@ impl WorkflowExecutor {
                 Err(action_error) => {
                     // Mark action as failed in context
                     run.context
-                        .insert("last_action_result".to_string(), Value::Bool(false));
+                        .insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(false));
 
-                    self.log_event(
-                        ExecutionEventType::Failed,
-                        format!("Action failed: {}", action_error),
-                    );
+                    // Categorize the error for appropriate handling
+                    match &action_error {
+                        ActionError::Timeout { timeout } => {
+                            self.log_event(
+                                ExecutionEventType::Failed,
+                                format!("Action timed out after {:?}", timeout),
+                            );
+                        }
+                        ActionError::ClaudeError(msg) => {
+                            self.log_event(
+                                ExecutionEventType::Failed,
+                                format!("Claude command failed: {}", msg),
+                            );
+                        }
+                        ActionError::VariableError(msg) => {
+                            self.log_event(
+                                ExecutionEventType::Failed,
+                                format!("Variable operation failed: {}", msg),
+                            );
+                        }
+                        ActionError::IoError(io_err) => {
+                            self.log_event(
+                                ExecutionEventType::Failed,
+                                format!("IO operation failed: {}", io_err),
+                            );
+                        }
+                        ActionError::JsonError(json_err) => {
+                            self.log_event(
+                                ExecutionEventType::Failed,
+                                format!("JSON parsing failed: {}", json_err),
+                            );
+                        }
+                        ActionError::ParseError(msg) => {
+                            self.log_event(
+                                ExecutionEventType::Failed,
+                                format!("Action parsing failed: {}", msg),
+                            );
+                        }
+                        ActionError::ExecutionError(msg) => {
+                            self.log_event(
+                                ExecutionEventType::Failed,
+                                format!("Action execution failed: {}", msg),
+                            );
+                        }
+                    }
 
                     // Propagate the error
                     return Err(ExecutorError::ActionError(action_error));
@@ -413,6 +475,346 @@ impl WorkflowExecutor {
     pub fn get_history(&self) -> &[ExecutionEvent] {
         &self.execution_history
     }
+
+    /// Check if a state matches a specific state type
+    fn is_state_type(&self, run: &WorkflowRun, state_id: &StateId, state_type: StateType) -> bool {
+        run.workflow
+            .states
+            .get(state_id)
+            .map(|state| state.state_type == state_type)
+            .unwrap_or(false)
+    }
+
+    /// Check if a state is a fork state
+    fn is_fork_state(&self, run: &WorkflowRun, state_id: &StateId) -> bool {
+        self.is_state_type(run, state_id, StateType::Fork)
+    }
+
+    /// Check if a state is a join state
+    fn is_join_state(&self, run: &WorkflowRun, state_id: &StateId) -> bool {
+        self.is_state_type(run, state_id, StateType::Join)
+    }
+
+    /// Find all outgoing transitions from a fork state
+    fn find_fork_transitions(&self, run: &WorkflowRun, fork_state: &StateId) -> Vec<StateId> {
+        run.workflow
+            .transitions
+            .iter()
+            .filter(|t| &t.from_state == fork_state)
+            .map(|t| t.to_state.clone())
+            .collect()
+    }
+
+    /// Find the join state for a set of parallel branches
+    ///
+    /// Locates the join state where all parallel branches converge.
+    /// A valid join state must:
+    /// 1. Be of type StateType::Join
+    /// 2. Have incoming transitions from ALL branch states
+    ///
+    /// # Algorithm
+    /// - Examines all transitions in the workflow
+    /// - For each transition from a branch state to a join-type state
+    /// - Verifies all other branches also transition to the same state
+    /// - Returns the first valid join state found
+    ///
+    /// # Returns
+    /// - `Some(StateId)` if a valid join state is found
+    /// - `None` if no join state exists for all branches
+    fn find_join_state(&self, run: &WorkflowRun, branch_states: &[StateId]) -> Option<StateId> {
+        // Find a state that all branches transition to
+        for transition in &run.workflow.transitions {
+            if branch_states.contains(&transition.from_state) {
+                // Check if this target state is a join state
+                if self.is_join_state(run, &transition.to_state) {
+                    // Verify all branches lead to this join state
+                    let all_branches_lead_here = branch_states.iter().all(|branch| {
+                        run.workflow
+                            .transitions
+                            .iter()
+                            .any(|t| &t.from_state == branch && t.to_state == transition.to_state)
+                    });
+
+                    if all_branches_lead_here {
+                        return Some(transition.to_state.clone());
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Execute a fork state - spawn parallel branches
+    ///
+    /// Fork states enable parallel execution by spawning multiple execution branches.
+    /// Each branch starts from a different state and executes independently until
+    /// they all converge at a join state. The algorithm:
+    ///
+    /// 1. Validates the fork state has at least 2 outgoing transitions
+    /// 2. Finds the join state where all branches converge
+    /// 3. Creates isolated contexts for each branch (copy of parent context)
+    /// 4. Executes each branch sequentially (future: parallel with tokio tasks)
+    /// 5. Merges branch contexts using last-write-wins strategy
+    /// 6. Transitions to the join state with merged context
+    ///
+    /// # Errors
+    /// - Fork state has no outgoing transitions
+    /// - Fork state has only one outgoing transition
+    /// - No join state found for the fork branches
+    /// - Branch execution fails or doesn't reach join state
+    async fn execute_fork_state(&mut self, run: &mut WorkflowRun) -> ExecutorResult<()> {
+        let fork_state = run.current_state.clone();
+
+        self.log_event(
+            ExecutionEventType::StateExecution,
+            format!("Executing fork state: {}", fork_state),
+        );
+
+        // Find all outgoing transitions from the fork state
+        let branch_states = self.find_fork_transitions(run, &fork_state);
+
+        if branch_states.is_empty() {
+            return Err(ExecutorError::ExecutionFailed(
+                format!(
+                    "Fork state '{}' has no outgoing transitions. Fork states must have at least two outgoing transitions to parallel branches",
+                    fork_state
+                ),
+            ));
+        }
+
+        if branch_states.len() < 2 {
+            return Err(ExecutorError::ExecutionFailed(
+                format!(
+                    "Fork state '{}' has only {} outgoing transition. Fork states must have at least two outgoing transitions for parallel execution",
+                    fork_state,
+                    branch_states.len()
+                ),
+            ));
+        }
+
+        // Find the join state where branches will converge
+        let join_state = self.find_join_state(run, &branch_states).ok_or_else(|| {
+            ExecutorError::ExecutionFailed(
+                format!(
+                    "No join state found for fork '{}' with branches: {:?}. All fork branches must eventually converge at a join state",
+                    fork_state,
+                    branch_states
+                ),
+            )
+        })?;
+
+        self.log_event(
+            ExecutionEventType::StateExecution,
+            format!(
+                "Fork {} spawning {} branches to join at {}",
+                fork_state,
+                branch_states.len(),
+                join_state
+            ),
+        );
+
+        // For simplicity in this initial implementation, we'll execute branches sequentially
+        // but track them as if they were parallel for the context merging logic
+        let mut completed_branches = Vec::new();
+
+        for branch_state in branch_states {
+            // Create a branch with a copy of the current context
+            let mut branch = ParallelBranch {
+                current_state: branch_state.clone(),
+                context: run.context.clone(),
+                history: vec![(branch_state.clone(), chrono::Utc::now())],
+            };
+
+            // Execute this branch until it reaches the join state
+            self.execute_branch_to_join(&run.workflow, &mut branch, &join_state)
+                .await?;
+
+            self.log_event(
+                ExecutionEventType::StateExecution,
+                format!("Branch {} completed", branch_state),
+            );
+
+            completed_branches.push(branch);
+        }
+
+        // Merge contexts from all branches
+        self.merge_branch_contexts(run, completed_branches)?;
+
+        // Transition to the join state
+        run.transition_to(join_state);
+
+        Ok(())
+    }
+
+    /// Execute a join state - merge parallel contexts
+    async fn execute_join_state(&mut self, run: &mut WorkflowRun) -> ExecutorResult<()> {
+        let join_state = run.current_state.clone();
+
+        self.log_event(
+            ExecutionEventType::StateExecution,
+            format!("Executing join state: {}", join_state),
+        );
+
+        // Join state execution is mostly handled in the fork state
+        // Here we just log that we've reached the join point
+        self.log_event(
+            ExecutionEventType::StateExecution,
+            format!("All branches joined at: {}", join_state),
+        );
+
+        Ok(())
+    }
+
+    /// Execute a single branch until it reaches the join state
+    ///
+    /// Executes a parallel branch in isolation with its own context copy.
+    /// The branch executes state actions and follows transitions until it
+    /// reaches the target join state. Branch execution is sequential but
+    /// isolated from other branches.
+    ///
+    /// # Arguments
+    /// - `workflow`: The workflow definition containing states and transitions
+    /// - `branch`: Mutable branch state with context and execution history
+    /// - `join_state`: Target join state where this branch should converge
+    ///
+    /// # Errors
+    /// - State not found in workflow
+    /// - Transition limit exceeded (prevents infinite loops)
+    /// - Branch doesn't reach join state (stuck or missing transitions)
+    async fn execute_branch_to_join(
+        &mut self,
+        workflow: &Workflow,
+        branch: &mut ParallelBranch,
+        join_state: &StateId,
+    ) -> ExecutorResult<()> {
+        let mut transitions = 0;
+        const MAX_BRANCH_TRANSITIONS: usize = 100;
+
+        while &branch.current_state != join_state && transitions < MAX_BRANCH_TRANSITIONS {
+            // Get the current state
+            let current_state = workflow
+                .states
+                .get(&branch.current_state)
+                .ok_or_else(|| ExecutorError::StateNotFound(branch.current_state.clone()))?;
+
+            // Execute state action if one can be parsed from the description
+            if let Some(action) = parse_action_from_description(&current_state.description)? {
+                self.log_event(
+                    ExecutionEventType::StateExecution,
+                    format!("Branch executing action: {}", action.description()),
+                );
+
+                match action.execute(&mut branch.context).await {
+                    Ok(_result) => {
+                        // Mark action as successful
+                        branch
+                            .context
+                            .insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
+                    }
+                    Err(_action_error) => {
+                        // Mark action as failed
+                        branch
+                            .context
+                            .insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(false));
+                    }
+                }
+            }
+
+            // Find next transition based on conditions
+            let next_state = workflow
+                .transitions
+                .iter()
+                .filter(|t| t.from_state == branch.current_state)
+                .find(|t| {
+                    // Evaluate the condition (simplified version)
+                    match &t.condition.condition_type {
+                        ConditionType::Always => true,
+                        ConditionType::OnSuccess => branch
+                            .context
+                            .get(LAST_ACTION_RESULT_KEY)
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(true),
+                        ConditionType::OnFailure => !branch
+                            .context
+                            .get(LAST_ACTION_RESULT_KEY)
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false),
+                        _ => false, // Skip custom conditions for now
+                    }
+                })
+                .map(|t| t.to_state.clone());
+
+            if let Some(next) = next_state {
+                branch.current_state = next.clone();
+                branch.history.push((next, chrono::Utc::now()));
+                transitions += 1;
+            } else {
+                break;
+            }
+        }
+
+        if transitions >= MAX_BRANCH_TRANSITIONS {
+            return Err(ExecutorError::TransitionLimitExceeded {
+                limit: MAX_BRANCH_TRANSITIONS,
+            });
+        }
+
+        // Check if the branch reached the join state
+        if &branch.current_state != join_state {
+            return Err(ExecutorError::ExecutionFailed(
+                format!(
+                    "Branch execution stopped at state '{}' without reaching join state '{}'. Branch may be stuck or missing required transitions",
+                    branch.current_state,
+                    join_state
+                ),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Merge contexts from parallel branches
+    ///
+    /// Combines execution contexts from all parallel branches using a
+    /// last-write-wins strategy. Variables from later branches override
+    /// variables from earlier branches if there are conflicts.
+    ///
+    /// The merge strategy:
+    /// 1. Iterates through branches in order
+    /// 2. For each branch, copies all variables to main context
+    /// 3. Skips execution-specific keys (last_action_result)
+    /// 4. Merges branch execution history into main history
+    ///
+    /// # Future Improvements
+    /// - Configurable merge strategies (first-wins, explicit conflict resolution)
+    /// - Type-aware merging for complex data structures
+    /// - Conflict detection and reporting
+    fn merge_branch_contexts(
+        &mut self,
+        run: &mut WorkflowRun,
+        branches: Vec<ParallelBranch>,
+    ) -> ExecutorResult<()> {
+        self.log_event(
+            ExecutionEventType::StateExecution,
+            format!("Merging contexts from {} branches", branches.len()),
+        );
+
+        // Simple merge strategy: combine all variables from all branches
+        // In case of conflicts, later branches override earlier ones
+        for branch in branches {
+            for (key, value) in branch.context {
+                // Skip the last_action_result key as it's execution-specific
+                if key != LAST_ACTION_RESULT_KEY {
+                    run.context.insert(key, value);
+                }
+            }
+
+            // Merge history
+            run.history.extend(branch.history);
+        }
+
+        Ok(())
+    }
 }
 
 impl Default for WorkflowExecutor {
@@ -424,7 +826,8 @@ impl Default for WorkflowExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workflow::{State, Transition, WorkflowName};
+    use crate::workflow::test_helpers::*;
+    use crate::workflow::{Transition, WorkflowName};
 
     fn create_test_workflow() -> Workflow {
         let mut workflow = Workflow::new(
@@ -433,29 +836,9 @@ mod tests {
             StateId::new("start"),
         );
 
-        workflow.add_state(State {
-            id: StateId::new("start"),
-            description: "Start state".to_string(),
-            is_terminal: false,
-            allows_parallel: false,
-            metadata: HashMap::new(),
-        });
-
-        workflow.add_state(State {
-            id: StateId::new("processing"),
-            description: "Processing state".to_string(),
-            is_terminal: false,
-            allows_parallel: false,
-            metadata: HashMap::new(),
-        });
-
-        workflow.add_state(State {
-            id: StateId::new("end"),
-            description: "End state".to_string(),
-            is_terminal: true,
-            allows_parallel: false,
-            metadata: HashMap::new(),
-        });
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state("processing", "Processing state", false));
+        workflow.add_state(create_state("end", "End state", true));
 
         workflow.add_transition(Transition {
             from_state: StateId::new("start"),
@@ -562,22 +945,14 @@ mod tests {
             StateId::new("loop_state"),
         );
 
-        workflow.add_state(State {
-            id: StateId::new("loop_state"),
-            description: "State that loops to itself".to_string(),
-            is_terminal: false,
-            allows_parallel: false,
-            metadata: HashMap::new(),
-        });
+        workflow.add_state(create_state(
+            "loop_state",
+            "State that loops to itself",
+            false,
+        ));
 
         // Add a terminal state to pass validation
-        workflow.add_state(State {
-            id: StateId::new("terminal"),
-            description: "Terminal state".to_string(),
-            is_terminal: true,
-            allows_parallel: false,
-            metadata: HashMap::new(),
-        });
+        workflow.add_state(create_state("terminal", "Terminal state", true));
 
         workflow.add_transition(Transition {
             from_state: StateId::new("loop_state"),
@@ -641,6 +1016,228 @@ mod tests {
 
         // History should be trimmed to stay under limit
         assert!(executor.get_history().len() <= executor.max_history_size);
+    }
+
+    #[tokio::test]
+    async fn test_fork_join_parallel_execution() {
+        let mut executor = WorkflowExecutor::new();
+
+        // Create a workflow with fork and join
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Fork Join Test"),
+            "Test parallel execution".to_string(),
+            StateId::new("start"),
+        );
+
+        // Add states
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state_with_type(
+            "fork1",
+            "Fork state",
+            StateType::Fork,
+            false,
+        ));
+        workflow.add_state(create_state("branch1", "Branch 1", false));
+        workflow.add_state(create_state("branch2", "Branch 2", false));
+        workflow.add_state(create_state_with_type(
+            "join1",
+            "Join state",
+            StateType::Join,
+            false,
+        ));
+        workflow.add_state(create_state("end", "End state", true));
+
+        // Add transitions
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("fork1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        workflow.add_transition(Transition {
+            from_state: StateId::new("fork1"),
+            to_state: StateId::new("branch1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        workflow.add_transition(Transition {
+            from_state: StateId::new("fork1"),
+            to_state: StateId::new("branch2"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        workflow.add_transition(Transition {
+            from_state: StateId::new("branch1"),
+            to_state: StateId::new("join1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        workflow.add_transition(Transition {
+            from_state: StateId::new("branch2"),
+            to_state: StateId::new("join1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        workflow.add_transition(Transition {
+            from_state: StateId::new("join1"),
+            to_state: StateId::new("end"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        let run = executor.start_workflow(workflow).await.unwrap();
+
+        // After execution, workflow should be completed
+        assert_eq!(run.status, WorkflowRunStatus::Completed);
+        assert_eq!(run.current_state.as_str(), "end");
+
+        // History should show parallel branch execution
+        let history = executor.get_history();
+
+        // Should have events for both branches
+        assert!(history.iter().any(|e| e.details.contains("branch1")));
+        assert!(history.iter().any(|e| e.details.contains("branch2")));
+    }
+
+    #[tokio::test]
+    async fn test_fork_join_context_merging() {
+        let mut executor = WorkflowExecutor::new();
+
+        // Create a workflow with fork and join that sets variables in parallel branches
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Context Merge Test"),
+            "Test context merging at join".to_string(),
+            StateId::new("start"),
+        );
+
+        // Add states with actions that set variables
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state_with_type(
+            "fork1",
+            "Fork state",
+            StateType::Fork,
+            false,
+        ));
+        workflow.add_state(create_state(
+            "branch1",
+            "Set branch1_result=\"success\"",
+            false,
+        ));
+        workflow.add_state(create_state(
+            "branch2",
+            "Set branch2_result=\"success\"",
+            false,
+        ));
+        workflow.add_state(create_state_with_type(
+            "join1",
+            "Join state",
+            StateType::Join,
+            false,
+        ));
+        workflow.add_state(create_state("end", "End state", true));
+
+        // Add transitions (same as previous test)
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("fork1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        workflow.add_transition(Transition {
+            from_state: StateId::new("fork1"),
+            to_state: StateId::new("branch1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        workflow.add_transition(Transition {
+            from_state: StateId::new("fork1"),
+            to_state: StateId::new("branch2"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        workflow.add_transition(Transition {
+            from_state: StateId::new("branch1"),
+            to_state: StateId::new("join1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        workflow.add_transition(Transition {
+            from_state: StateId::new("branch2"),
+            to_state: StateId::new("join1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        workflow.add_transition(Transition {
+            from_state: StateId::new("join1"),
+            to_state: StateId::new("end"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        let run = executor.start_workflow(workflow).await.unwrap();
+
+        // After execution, both branch variables should be in the final context
+        assert!(run.context.contains_key("branch1_result"));
+        assert!(run.context.contains_key("branch2_result"));
+        assert_eq!(run.status, WorkflowRunStatus::Completed);
     }
 
     #[test]

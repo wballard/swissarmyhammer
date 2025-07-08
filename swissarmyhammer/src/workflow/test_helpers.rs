@@ -6,7 +6,8 @@
 #![cfg(test)]
 
 use crate::workflow::{
-    ConditionType, State, StateId, Transition, TransitionCondition, Workflow, WorkflowName,
+    ConditionType, State, StateId, StateType, Transition, TransitionCondition, Workflow,
+    WorkflowName,
 };
 
 /// Test helper to create a basic state
@@ -14,13 +15,14 @@ pub fn create_state(id: &str, description: &str, is_terminal: bool) -> State {
     State {
         id: StateId::new(id),
         description: description.to_string(),
+        state_type: StateType::Normal,
         is_terminal,
         allows_parallel: false,
         metadata: Default::default(),
     }
 }
 
-/// Test helper to create a state with custom parallel setting
+/// Test helper to create a state with custom parallel setting and state type
 #[allow(dead_code)]
 pub fn create_state_with_parallel(
     id: &str,
@@ -31,8 +33,27 @@ pub fn create_state_with_parallel(
     State {
         id: StateId::new(id),
         description: description.to_string(),
+        state_type: StateType::Normal,
         is_terminal,
         allows_parallel,
+        metadata: Default::default(),
+    }
+}
+
+/// Test helper to create a state with specific type
+#[allow(dead_code)]
+pub fn create_state_with_type(
+    id: &str,
+    description: &str,
+    state_type: StateType,
+    is_terminal: bool,
+) -> State {
+    State {
+        id: StateId::new(id),
+        description: description.to_string(),
+        state_type,
+        is_terminal,
+        allows_parallel: matches!(state_type, StateType::Fork | StateType::Join),
         metadata: Default::default(),
     }
 }

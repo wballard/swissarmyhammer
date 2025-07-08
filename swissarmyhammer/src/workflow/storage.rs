@@ -125,13 +125,25 @@ impl WorkflowResolver {
         Ok(())
     }
 
+    /// Find workflow directories in a given base path
+    fn find_workflow_directories(&self, base_path: &Path) -> Vec<PathBuf> {
+        let mut dirs = Vec::new();
+        let swissarmyhammer_dir = base_path.join(".swissarmyhammer");
+        if swissarmyhammer_dir.exists() && swissarmyhammer_dir.is_dir() {
+            let workflows_dir = swissarmyhammer_dir.join("workflows");
+            if workflows_dir.exists() && workflows_dir.is_dir() {
+                dirs.push(workflows_dir);
+            }
+        }
+        dirs
+    }
+
     /// Load user workflows from ~/.swissarmyhammer/workflows
     pub fn load_user_workflows(&mut self, storage: &mut dyn WorkflowStorageBackend) -> Result<()> {
         if let Some(home) = dirs::home_dir() {
-            let user_workflows_dir = home.join(".swissarmyhammer").join("workflows");
-            if user_workflows_dir.exists() {
+            for workflows_dir in self.find_workflow_directories(&home) {
                 self.load_workflows_from_directory(
-                    &user_workflows_dir,
+                    &workflows_dir,
                     WorkflowSource::User,
                     storage,
                 )?;
@@ -143,30 +155,25 @@ impl WorkflowResolver {
     /// Load local workflows by recursively searching up for .swissarmyhammer directories
     fn load_local_workflows(&mut self, storage: &mut dyn WorkflowStorageBackend) -> Result<()> {
         let current_dir = std::env::current_dir()?;
-
-        // Find all .swissarmyhammer directories from root to current
         let mut workflow_dirs = Vec::new();
         let mut path = current_dir.as_path();
 
+        // Skip the user's home directory to avoid duplicates
+        let user_home_swissarmyhammer = dirs::home_dir().map(|h| h.join(".swissarmyhammer"));
+
         loop {
-            let swissarmyhammer_dir = path.join(".swissarmyhammer");
-            if swissarmyhammer_dir.exists() && swissarmyhammer_dir.is_dir() {
-                // Skip the user's home .swissarmyhammer directory to avoid duplicate loading
-                if let Some(home) = dirs::home_dir() {
-                    let user_swissarmyhammer_dir = home.join(".swissarmyhammer");
-                    if swissarmyhammer_dir == user_swissarmyhammer_dir {
-                        match path.parent() {
-                            Some(parent) => path = parent,
-                            None => break,
-                        }
-                        continue;
+            // Find workflow directories at this level
+            let found_dirs = self.find_workflow_directories(path);
+            
+            // Only add if not the user's home .swissarmyhammer directory
+            for dir in found_dirs {
+                let parent_swissarmyhammer = dir.parent();
+                if let (Some(parent), Some(ref user_dir)) = (parent_swissarmyhammer, &user_home_swissarmyhammer) {
+                    if parent == user_dir {
+                        continue; // Skip user's home .swissarmyhammer/workflows
                     }
                 }
-
-                let workflows_dir = swissarmyhammer_dir.join("workflows");
-                if workflows_dir.exists() && workflows_dir.is_dir() {
-                    workflow_dirs.push(workflows_dir);
-                }
+                workflow_dirs.push(dir);
             }
 
             match path.parent() {
@@ -219,6 +226,52 @@ impl Default for WorkflowResolver {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Helper function to walk a directory and load JSON files
+fn load_json_files_from_directory<T, F>(
+    directory: &Path,
+    filename_filter: Option<&str>,
+    mut loader: F,
+) -> Result<Vec<T>>
+where
+    T: for<'de> serde::Deserialize<'de>,
+    F: FnMut(T, &Path) -> bool,
+{
+    let mut items = Vec::new();
+
+    if !directory.exists() {
+        return Ok(items);
+    }
+
+    for entry in walkdir::WalkDir::new(directory)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if path.is_file() {
+            // Check filename filter if provided
+            if let Some(filter) = filename_filter {
+                if path.file_name().and_then(|s| s.to_str()) != Some(filter) {
+                    continue;
+                }
+            }
+
+            // Try to load and parse the JSON file
+            if let Ok(content) = std::fs::read_to_string(path) {
+                if let Ok(item) = serde_json::from_str::<T>(&content) {
+                    if loader(item, path) {
+                        // Loader returned true, meaning we should keep this item
+                        if let Ok(item) = serde_json::from_str::<T>(&content) {
+                            items.push(item);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(items)
 }
 
 /// Trait for workflow storage backends
@@ -596,19 +649,16 @@ impl FileSystemWorkflowRunStorage {
             std::fs::create_dir_all(&runs_dir)?;
         }
 
-        for entry in walkdir::WalkDir::new(&runs_dir)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            let path = entry.path();
-            if path.is_file() && path.file_name().and_then(|s| s.to_str()) == Some("run.json") {
-                if let Ok(content) = std::fs::read_to_string(path) {
-                    if let Ok(run) = serde_json::from_str::<WorkflowRun>(&content) {
-                        self.cache.insert(run.id, run);
-                    }
-                }
-            }
-        }
+        // Use the helper function to load workflow runs
+        let cache_ref = &self.cache;
+        load_json_files_from_directory::<WorkflowRun, _>(
+            &runs_dir,
+            Some("run.json"),
+            |run, _path| {
+                cache_ref.insert(run.id, run);
+                true
+            },
+        )?;
 
         Ok(())
     }
@@ -844,7 +894,7 @@ impl WorkflowStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workflow::{State, StateId};
+    use crate::workflow::{State, StateId, StateType};
 
     fn create_test_workflow() -> Workflow {
         let mut workflow = Workflow::new(
@@ -856,6 +906,7 @@ mod tests {
         workflow.add_state(State {
             id: StateId::new("start"),
             description: "Start state".to_string(),
+            state_type: StateType::Normal,
             is_terminal: false,
             allows_parallel: false,
             metadata: HashMap::new(),
@@ -864,6 +915,7 @@ mod tests {
         workflow.add_state(State {
             id: StateId::new("end"),
             description: "End state".to_string(),
+            state_type: StateType::Normal,
             is_terminal: true,
             allows_parallel: false,
             metadata: HashMap::new(),

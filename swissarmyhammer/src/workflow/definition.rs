@@ -22,7 +22,7 @@ pub struct WorkflowName(String);
 
 impl WorkflowName {
     /// Create a new workflow name
-    /// 
+    ///
     /// # Panics
     /// Panics if the name is empty or whitespace only. For non-panicking creation,
     /// use `try_new` instead.

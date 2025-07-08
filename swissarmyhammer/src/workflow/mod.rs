@@ -24,7 +24,7 @@ pub use executor::{
 };
 pub use parser::{MermaidParser, ParseError, ParseResult};
 pub use run::{WorkflowRun, WorkflowRunId, WorkflowRunStatus};
-pub use state::{State, StateError, StateId, StateResult};
+pub use state::{State, StateError, StateId, StateResult, StateType};
 pub use storage::{
     FileSystemWorkflowRunStorage, FileSystemWorkflowStorage, MemoryWorkflowRunStorage,
     MemoryWorkflowStorage, WorkflowResolver, WorkflowRunStorageBackend, WorkflowSource,

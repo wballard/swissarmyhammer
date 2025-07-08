@@ -42,6 +42,12 @@ pub enum ActionError {
 /// Result type for action operations
 pub type ActionResult<T> = Result<T, ActionError>;
 
+/// Context key for Claude response
+const CLAUDE_RESPONSE_KEY: &str = "claude_response";
+
+/// Context key for last action result
+const LAST_ACTION_RESULT_KEY: &str = "last_action_result";
+
 /// Trait for all workflow actions
 #[async_trait::async_trait]
 pub trait Action: Send + Sync {
@@ -124,21 +130,45 @@ impl Action for PromptAction {
             .arg("stream-json")
             .arg(&self.prompt_name);
 
-        // Add arguments
+        // Add arguments with validation
         for (key, value) in args {
+            // Validate key to prevent injection
+            if !is_valid_argument_key(&key) {
+                return Err(ActionError::ParseError(
+                    format!("Invalid argument key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
+                ));
+            }
             cmd.arg(format!("--{}", key));
             cmd.arg(value);
         }
 
+        // Spawn process with proper cleanup on timeout
+        cmd.stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .stdin(std::process::Stdio::null());
+        
+        let child = cmd.spawn().map_err(|e| {
+            ActionError::ClaudeError(format!("Failed to spawn claude command: {}", e))
+        })?;
+
         // Execute with timeout
-        let output = timeout(self.timeout, cmd.output())
-            .await
-            .map_err(|_| ActionError::Timeout {
-                timeout: self.timeout,
-            })?
-            .map_err(|e| {
-                ActionError::ClaudeError(format!("Failed to execute claude command: {}", e))
-            })?;
+        let output = match timeout(self.timeout, child.wait_with_output()).await {
+            Ok(Ok(output)) => output,
+            Ok(Err(e)) => {
+                return Err(ActionError::ClaudeError(format!(
+                    "Failed to execute claude command: {}",
+                    e
+                )))
+            }
+            Err(_) => {
+                // Timeout occurred
+                // Note: The child process should be automatically killed when dropped
+                // tokio::process::Child implements Drop that kills the process
+                return Err(ActionError::Timeout {
+                    timeout: self.timeout,
+                });
+            }
+        };
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -158,8 +188,8 @@ impl Action for PromptAction {
         }
 
         // Always store in special last_action_result key
-        context.insert("last_action_result".to_string(), Value::Bool(true));
-        context.insert("claude_response".to_string(), response.clone());
+        context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
+        context.insert(CLAUDE_RESPONSE_KEY.to_string(), response.clone());
 
         Ok(response)
     }
@@ -226,16 +256,31 @@ impl Action for WaitAction {
                     .unwrap_or("Press Enter to continue...");
                 eprintln!("{}", message);
 
-                // Read from stdin
+                // Read from stdin with a reasonable timeout
                 use tokio::io::{stdin, AsyncBufReadExt, BufReader};
                 let mut reader = BufReader::new(stdin());
                 let mut line = String::new();
-                reader.read_line(&mut line).await?;
+                
+                // Use a 5-minute timeout for user input
+                const USER_INPUT_TIMEOUT: Duration = Duration::from_secs(300);
+                match timeout(USER_INPUT_TIMEOUT, reader.read_line(&mut line)).await {
+                    Ok(Ok(_)) => {
+                        // Successfully read input
+                    }
+                    Ok(Err(e)) => {
+                        return Err(ActionError::IoError(e));
+                    }
+                    Err(_) => {
+                        return Err(ActionError::Timeout {
+                            timeout: USER_INPUT_TIMEOUT,
+                        });
+                    }
+                }
             }
         }
 
         // Mark action as successful
-        context.insert("last_action_result".to_string(), Value::Bool(true));
+        context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
 
         Ok(Value::Null)
     }
@@ -307,7 +352,7 @@ impl Action for LogAction {
         }
 
         // Mark action as successful
-        context.insert("last_action_result".to_string(), Value::Bool(true));
+        context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
 
         Ok(Value::String(message))
     }
@@ -356,7 +401,7 @@ impl Action for SetVariableAction {
         context.insert(self.variable_name.clone(), json_value.clone());
 
         // Mark action as successful
-        context.insert("last_action_result".to_string(), Value::Bool(true));
+        context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
 
         Ok(json_value)
     }
@@ -370,26 +415,59 @@ impl Action for SetVariableAction {
     }
 }
 
+/// Validate that an argument key is safe for command-line use
+fn is_valid_argument_key(key: &str) -> bool {
+    !key.is_empty() && 
+    key.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+}
+
 /// Helper function to substitute variables in a string
 /// Variables are referenced as ${variable_name}
 fn substitute_variables_in_string(input: &str, context: &HashMap<String, Value>) -> String {
-    let mut result = input.to_string();
-
-    // Simple variable substitution - find ${variable_name} patterns
-    while let Some(start) = result.find("${") {
-        if let Some(end) = result[start..].find('}') {
-            let var_name = &result[start + 2..start + end];
-            let replacement = context
-                .get(var_name)
-                .map(value_to_string)
-                .unwrap_or_else(|| format!("${{{}}}", var_name)); // Keep original if not found
-
-            result.replace_range(start..start + end + 1, &replacement);
+    let mut result = String::new();
+    let mut chars = input.char_indices().peekable();
+    
+    while let Some((i, ch)) = chars.next() {
+        if ch == '$' && chars.peek().map(|(_, c)| *c) == Some('{') {
+            // Found potential variable start
+            chars.next(); // Skip '{'
+            let var_start = i + 2;
+            let mut var_end = var_start;
+            let mut var_name = String::new();
+            let mut found_closing = false;
+            
+            // Collect variable name until we find '}'
+            for (j, ch) in chars.by_ref() {
+                if ch == '}' {
+                    var_end = j;
+                    found_closing = true;
+                    break;
+                }
+                var_name.push(ch);
+            }
+            
+            if found_closing && !var_name.is_empty() {
+                // Validate variable name contains only safe characters
+                if var_name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.') {
+                    // Valid variable found, substitute it
+                    let replacement = context
+                        .get(&var_name)
+                        .map(value_to_string)
+                        .unwrap_or_else(|| format!("${{{}}}", var_name));
+                    result.push_str(&replacement);
+                } else {
+                    // Invalid variable name, keep original
+                    result.push_str(&input[i..=var_end]);
+                }
+            } else {
+                // Invalid variable syntax, keep original
+                result.push_str(&input[i..=var_end]);
+            }
         } else {
-            break; // No closing brace found
+            result.push(ch);
         }
     }
-
+    
     result
 }
 
@@ -408,18 +486,45 @@ fn value_to_string(value: &Value) -> String {
 fn parse_claude_response(output: &str) -> ActionResult<Value> {
     // Claude outputs streaming JSON, we need to collect all content
     let mut content = String::new();
+    let mut parse_errors = Vec::new();
+    let mut valid_json_found = false;
 
-    for line in output.lines() {
-        if let Ok(json) = serde_json::from_str::<Value>(line) {
-            if let Some(Value::String(text)) = json.get("content") {
-                content.push_str(text);
+    for (line_num, line) in output.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        
+        match serde_json::from_str::<Value>(line) {
+            Ok(json) => {
+                valid_json_found = true;
+                if let Some(Value::String(text)) = json.get("content") {
+                    content.push_str(text);
+                }
+            }
+            Err(e) => {
+                // Collect parse errors for potential debugging
+                parse_errors.push((line_num + 1, e.to_string()));
             }
         }
     }
 
     if content.is_empty() {
-        // If no content found, return the raw output
-        Ok(Value::String(output.to_string()))
+        if valid_json_found {
+            // Valid JSON was found but no content field
+            Ok(Value::String(String::new()))
+        } else if !parse_errors.is_empty() {
+            // No valid JSON found and we have parse errors
+            Err(ActionError::ParseError(
+                format!("Failed to parse Claude response. Found {} parse errors. First error at line {}: {}",
+                    parse_errors.len(),
+                    parse_errors[0].0,
+                    parse_errors[0].1
+                )
+            ))
+        } else {
+            // No JSON lines found at all, return raw output
+            Ok(Value::String(output.to_string()))
+        }
     } else {
         Ok(Value::String(content))
     }
@@ -460,22 +565,29 @@ fn parse_prompt_action(description: &str) -> ActionResult<Option<PromptAction>> 
     let start_quote = description
         .find('"')
         .ok_or_else(|| ActionError::ParseError("Expected quoted prompt name".to_string()))?;
-    let end_quote = description[start_quote + 1..].find('"').ok_or_else(|| {
-        ActionError::ParseError("Expected closing quote for prompt name".to_string())
-    })? + start_quote
-        + 1;
-
-    let prompt_name = description[start_quote + 1..end_quote].to_string();
+    
+    let remaining = description.get(start_quote + 1..)
+        .ok_or_else(|| ActionError::ParseError("Invalid prompt name position".to_string()))?;
+    
+    let relative_end = remaining.find('"')
+        .ok_or_else(|| ActionError::ParseError("Expected closing quote for prompt name".to_string()))?;
+    
+    let prompt_name = remaining.get(..relative_end)
+        .ok_or_else(|| ActionError::ParseError("Invalid prompt name range".to_string()))?
+        .to_string();
     let mut action = PromptAction::new(prompt_name);
 
     // Parse arguments if present
     if let Some(with_pos) = description.find(" with ") {
-        let args_part = &description[with_pos + 6..];
-        for arg_pair in args_part.split_whitespace() {
-            if let Some(eq_pos) = arg_pair.find('=') {
-                let key = arg_pair[..eq_pos].to_string();
-                let value = arg_pair[eq_pos + 1..].trim_matches('"').to_string();
-                action.arguments.insert(key, value);
+        if let Some(args_part) = description.get(with_pos + 6..) {
+            for arg_pair in args_part.split_whitespace() {
+                if let Some(eq_pos) = arg_pair.find('=') {
+                    if let (Some(key), Some(value_part)) = (arg_pair.get(..eq_pos), arg_pair.get(eq_pos + 1..)) {
+                        let key = key.to_string();
+                        let value = value_part.trim_matches('"').to_string();
+                        action.arguments.insert(key, value);
+                    }
+                }
             }
         }
     }
@@ -535,8 +647,14 @@ fn parse_set_variable_action(description: &str) -> ActionResult<Option<SetVariab
 
     // Find the equals sign
     if let Some(eq_pos) = description.find('=') {
-        let var_name = description[4..eq_pos].trim().to_string();
-        let value = description[eq_pos + 1..].trim_matches('"').to_string();
+        let var_name = description.get(4..eq_pos)
+            .ok_or_else(|| ActionError::ParseError("Invalid variable name range".to_string()))?
+            .trim()
+            .to_string();
+        let value = description.get(eq_pos + 1..)
+            .ok_or_else(|| ActionError::ParseError("Invalid value range".to_string()))?
+            .trim_matches('"')
+            .to_string();
 
         return Ok(Some(SetVariableAction::new(var_name, value)));
     }
@@ -547,8 +665,9 @@ fn parse_set_variable_action(description: &str) -> ActionResult<Option<SetVariab
 /// Helper to extract quoted text from a string
 fn extract_quoted_text(text: &str) -> Option<String> {
     let start_quote = text.find('"')?;
-    let end_quote = text[start_quote + 1..].find('"')? + start_quote + 1;
-    Some(text[start_quote + 1..end_quote].to_string())
+    let remaining = text.get(start_quote + 1..)?;
+    let relative_end = remaining.find('"')?;
+    remaining.get(..relative_end).map(|s| s.to_string())
 }
 
 /// Helper to extract duration in seconds from text
@@ -632,19 +751,25 @@ mod tests {
 
         let result = action.execute(&mut context).await.unwrap();
         assert_eq!(result, Value::String("Test message".to_string()));
-        assert_eq!(context.get("last_action_result"), Some(&Value::Bool(true)));
+        assert_eq!(
+            context.get(LAST_ACTION_RESULT_KEY),
+            Some(&Value::Bool(true))
+        );
     }
 
     #[tokio::test]
     async fn test_set_variable_action_execution() {
-        let action = SetVariableAction::new("test_var".to_string(), "test_value".to_string());
+        const TEST_VAR: &str = "test_var";
+        const TEST_VALUE: &str = "test_value";
+
+        let action = SetVariableAction::new(TEST_VAR.to_string(), TEST_VALUE.to_string());
         let mut context = HashMap::new();
 
         let result = action.execute(&mut context).await.unwrap();
-        assert_eq!(result, Value::String("test_value".to_string()));
+        assert_eq!(result, Value::String(TEST_VALUE.to_string()));
         assert_eq!(
-            context.get("test_var"),
-            Some(&Value::String("test_value".to_string()))
+            context.get(TEST_VAR),
+            Some(&Value::String(TEST_VALUE.to_string()))
         );
     }
 }

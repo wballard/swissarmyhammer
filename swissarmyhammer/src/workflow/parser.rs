@@ -4,7 +4,8 @@
 //! and convert them to our internal Workflow types.
 
 use crate::workflow::{
-    ConditionType, State, StateId, Transition, TransitionCondition, Workflow, WorkflowName,
+    ConditionType, State, StateId, StateType, Transition, TransitionCondition, Workflow,
+    WorkflowName,
 };
 use mermaid_parser::{
     common::ast::{DiagramType, StateDiagram, StateTransition},
@@ -101,18 +102,28 @@ impl MermaidParser {
                 format!("{:?}", mermaid_state.state_type),
             );
 
+            // Check if this is a fork or join state based on state type
+            let state_type = match mermaid_state.state_type {
+                mermaid_parser::common::ast::StateType::Fork => StateType::Fork,
+                mermaid_parser::common::ast::StateType::Join => StateType::Join,
+                _ => StateType::Normal,
+            };
+
             // Add any extracted actions as metadata
             if !actions.is_empty() {
                 metadata.insert("actions".to_string(), actions.join(";"));
             }
 
             // Check if this state has substates or concurrent regions to enable parallel execution
-            let allows_parallel =
-                !mermaid_state.substates.is_empty() || !mermaid_state.concurrent_regions.is_empty();
+            // Also enable parallel execution for fork and join states
+            let allows_parallel = !mermaid_state.substates.is_empty()
+                || !mermaid_state.concurrent_regions.is_empty()
+                || matches!(state_type, StateType::Fork | StateType::Join);
 
             workflow.add_state(State {
                 id: StateId::new(state_id),
                 description: parsed_description,
+                state_type,
                 is_terminal,
                 allows_parallel,
                 metadata,
@@ -505,5 +516,80 @@ mod tests {
             condition_custom.expression,
             Some("custom condition".to_string())
         );
+    }
+
+    #[test]
+    fn test_parse_fork_join_diagram() {
+        let input = r#"
+        stateDiagram-v2
+            [*] --> Process
+            state Fork1 <<fork>>
+            Process --> Fork1
+            Fork1 --> Branch1: path1
+            Fork1 --> Branch2: path2
+            state Join1 <<join>>
+            Branch1 --> Join1: complete
+            Branch2 --> Join1: complete
+            Join1 --> Complete
+            Complete --> [*]
+        "#;
+
+        let result = MermaidParser::parse(input, "fork_join_workflow");
+        assert!(result.is_ok());
+
+        let workflow = result.unwrap();
+        assert_eq!(workflow.name.as_str(), "fork_join_workflow");
+
+        // Check that fork and join states exist
+        assert!(workflow.states.contains_key(&StateId::new("Fork1")));
+        assert!(workflow.states.contains_key(&StateId::new("Join1")));
+
+        // Check that fork state is identified as fork type
+        let fork_state = &workflow.states[&StateId::new("Fork1")];
+        assert_eq!(fork_state.state_type, StateType::Fork);
+
+        // Check that join state is identified as join type
+        let join_state = &workflow.states[&StateId::new("Join1")];
+        assert_eq!(join_state.state_type, StateType::Join);
+
+        // Check that parallel execution is enabled for these states
+        assert!(fork_state.allows_parallel);
+        assert!(join_state.allows_parallel);
+    }
+
+    #[test]
+    fn test_parse_nested_fork_join_diagram() {
+        let input = r#"
+        stateDiagram-v2
+            [*] --> Start
+            state OuterFork <<fork>>
+            Start --> OuterFork
+            OuterFork --> Branch1: outer1
+            OuterFork --> Branch2: outer2
+            state InnerFork <<fork>>
+            Branch1 --> InnerFork
+            InnerFork --> SubBranch1: inner1
+            InnerFork --> SubBranch2: inner2
+            state InnerJoin <<join>>
+            SubBranch1 --> InnerJoin
+            SubBranch2 --> InnerJoin
+            InnerJoin --> Branch1Complete
+            state OuterJoin <<join>>
+            Branch1Complete --> OuterJoin
+            Branch2 --> OuterJoin
+            OuterJoin --> End
+            End --> [*]
+        "#;
+
+        let result = MermaidParser::parse(input, "nested_fork_join_workflow");
+        assert!(result.is_ok());
+
+        let workflow = result.unwrap();
+
+        // Check nested fork/join states exist
+        assert!(workflow.states.contains_key(&StateId::new("OuterFork")));
+        assert!(workflow.states.contains_key(&StateId::new("OuterJoin")));
+        assert!(workflow.states.contains_key(&StateId::new("InnerFork")));
+        assert!(workflow.states.contains_key(&StateId::new("InnerJoin")));
     }
 }

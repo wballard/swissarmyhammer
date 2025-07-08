@@ -12,6 +12,9 @@ use swissarmyhammer::{Result, SwissArmyHammerError};
 use tokio::signal;
 use tokio::time::timeout;
 
+/// Default timeout for workflow test mode execution in seconds
+const DEFAULT_TEST_MODE_TIMEOUT_SECS: u64 = 60;
+
 /// Main entry point for flow command
 pub async fn run_flow_command(subcommand: FlowSubcommand) -> Result<()> {
     match subcommand {
@@ -122,15 +125,31 @@ async fn run_workflow_command(
         
         // Generate coverage report
         println!("\n📊 Coverage Report:");
+        
+        // Calculate state coverage percentage safely
+        let state_percentage = if coverage.total_states > 0 {
+            (coverage.visited_states.len() as f64 / coverage.total_states as f64) * 100.0
+        } else {
+            100.0 // Consider empty workflow as 100% covered
+        };
+        
         println!("  States visited: {}/{} ({:.1}%)", 
             coverage.visited_states.len(), 
             coverage.total_states,
-            (coverage.visited_states.len() as f64 / coverage.total_states as f64) * 100.0
+            state_percentage
         );
+        
+        // Calculate transition coverage percentage safely
+        let transition_percentage = if coverage.total_transitions > 0 {
+            (coverage.visited_transitions.len() as f64 / coverage.total_transitions as f64) * 100.0
+        } else {
+            100.0 // Consider workflow with no transitions as 100% covered
+        };
+        
         println!("  Transitions used: {}/{} ({:.1}%)",
             coverage.visited_transitions.len(),
             coverage.total_transitions,
-            (coverage.visited_transitions.len() as f64 / coverage.total_transitions as f64) * 100.0
+            transition_percentage
         );
         
         // Show unvisited states
@@ -646,6 +665,18 @@ fn workflow_run_id_to_string(id: &WorkflowRunId) -> String {
 }
 
 /// Coverage tracking for workflow test execution
+/// 
+/// This struct tracks which parts of a workflow were exercised during test execution,
+/// providing metrics for test coverage analysis.
+/// 
+/// # Fields
+/// 
+/// * `visited_states` - Set of states that were entered during execution
+/// * `visited_transitions` - Set of transitions that were taken during execution
+/// * `total_states` - Total number of states in the workflow
+/// * `total_transitions` - Total number of transitions in the workflow
+/// * `unvisited_states` - List of states that were not visited (for reporting)
+/// * `unvisited_transitions` - List of transitions that were not taken (for reporting)
 struct WorkflowCoverage {
     visited_states: HashSet<StateId>,
     visited_transitions: HashSet<TransitionKey>,
@@ -656,6 +687,30 @@ struct WorkflowCoverage {
 }
 
 /// Execute workflow in test mode with mocked actions
+/// 
+/// This function simulates workflow execution without performing actual actions,
+/// allowing for testing workflow logic and generating coverage reports.
+/// 
+/// # Algorithm
+/// 
+/// 1. Start from the initial state
+/// 2. For each state, find available transitions
+/// 3. Prefer unvisited transitions to maximize coverage
+/// 4. Mock action execution by setting success results
+/// 5. Track visited states and transitions for coverage reporting
+/// 
+/// # Parameters
+/// 
+/// * `workflow` - The workflow to test
+/// * `initial_variables` - Initial context variables for the workflow
+/// * `timeout_duration` - Optional timeout for execution (defaults to 60 seconds)
+/// 
+/// # Returns
+/// 
+/// Returns a `WorkflowCoverage` struct containing:
+/// * Lists of visited and unvisited states
+/// * Lists of visited and unvisited transitions
+/// * Total counts for percentage calculations
 async fn execute_workflow_test_mode(
     workflow: Workflow,
     initial_variables: HashMap<String, serde_json::Value>,
@@ -684,7 +739,7 @@ async fn execute_workflow_test_mode(
     
     // Simple execution loop - try to visit all states
     let start_time = std::time::Instant::now();
-    let timeout = timeout_duration.unwrap_or(Duration::from_secs(60));
+    let timeout = timeout_duration.unwrap_or(Duration::from_secs(DEFAULT_TEST_MODE_TIMEOUT_SECS));
     
     while !workflow.states.get(&current_state).map(|s| s.is_terminal).unwrap_or(false) {
         if start_time.elapsed() > timeout {
@@ -795,5 +850,297 @@ mod tests {
         let invalid_id = "invalid-ulid-string";
         let result = parse_workflow_run_id(invalid_id);
         assert!(result.is_err());
+    }
+    
+    #[tokio::test]
+    async fn test_execute_workflow_test_mode_simple_workflow() {
+        use swissarmyhammer::workflow::{State, StateType, WorkflowName, Transition, TransitionCondition, ConditionType};
+        
+        // Create a simple workflow: Start -> End
+        let mut workflow = Workflow::new(
+            WorkflowName::new("test"),
+            "Test workflow".to_string(),
+            StateId::new("start"),
+        );
+        
+        workflow.add_state(State {
+            id: StateId::new("start"),
+            description: "Start state".to_string(),
+            state_type: StateType::Normal,
+            is_terminal: false,
+            allows_parallel: false,
+            metadata: HashMap::new(),
+        });
+        
+        workflow.add_state(State {
+            id: StateId::new("end"),
+            description: "End state".to_string(),
+            state_type: StateType::Normal,
+            is_terminal: true,
+            allows_parallel: false,
+            metadata: HashMap::new(),
+        });
+        
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("end"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: Some("log \"Moving to end\"".to_string()),
+            metadata: HashMap::new(),
+        });
+        
+        let variables = HashMap::new();
+        let coverage = execute_workflow_test_mode(workflow, variables, None).await.unwrap();
+        
+        // Check coverage
+        assert_eq!(coverage.visited_states.len(), 2);
+        assert_eq!(coverage.visited_transitions.len(), 1);
+        assert_eq!(coverage.total_states, 2);
+        assert_eq!(coverage.total_transitions, 1);
+        assert!(coverage.unvisited_states.is_empty());
+        assert!(coverage.unvisited_transitions.is_empty());
+    }
+    
+    #[tokio::test]
+    async fn test_execute_workflow_test_mode_with_conditions() {
+        use swissarmyhammer::workflow::{State, StateType, WorkflowName, Transition, TransitionCondition, ConditionType};
+        
+        // Create workflow with conditional transitions
+        let mut workflow = Workflow::new(
+            WorkflowName::new("conditional"),
+            "Conditional workflow".to_string(),
+            StateId::new("start"),
+        );
+        
+        workflow.add_state(State {
+            id: StateId::new("start"),
+            description: "Start state".to_string(),
+            state_type: StateType::Normal,
+            is_terminal: false,
+            allows_parallel: false,
+            metadata: HashMap::new(),
+        });
+        
+        workflow.add_state(State {
+            id: StateId::new("success"),
+            description: "Success state".to_string(),
+            state_type: StateType::Normal,
+            is_terminal: true,
+            allows_parallel: false,
+            metadata: HashMap::new(),
+        });
+        
+        workflow.add_state(State {
+            id: StateId::new("failure"),
+            description: "Failure state".to_string(),
+            state_type: StateType::Normal,
+            is_terminal: true,
+            allows_parallel: false,
+            metadata: HashMap::new(),
+        });
+        
+        // OnSuccess transition (should be taken in test mode)
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("success"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::OnSuccess,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+        
+        // OnFailure transition (should NOT be taken in test mode)
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("failure"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::OnFailure,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+        
+        let variables = HashMap::new();
+        let coverage = execute_workflow_test_mode(workflow, variables, None).await.unwrap();
+        
+        // Should visit start and success, but not failure
+        assert_eq!(coverage.visited_states.len(), 2);
+        assert!(coverage.visited_states.contains(&StateId::new("start")));
+        assert!(coverage.visited_states.contains(&StateId::new("success")));
+        assert!(!coverage.visited_states.contains(&StateId::new("failure")));
+        
+        // Should have one unvisited state and transition
+        assert_eq!(coverage.unvisited_states.len(), 1);
+        assert_eq!(coverage.unvisited_transitions.len(), 1);
+    }
+    
+    #[tokio::test]
+    async fn test_execute_workflow_test_mode_timeout() {
+        use swissarmyhammer::workflow::{State, StateType, WorkflowName, Transition, TransitionCondition, ConditionType};
+        
+        // Create an infinite loop workflow
+        let mut workflow = Workflow::new(
+            WorkflowName::new("loop"),
+            "Loop workflow".to_string(),
+            StateId::new("state1"),
+        );
+        
+        workflow.add_state(State {
+            id: StateId::new("state1"),
+            description: "State 1".to_string(),
+            state_type: StateType::Normal,
+            is_terminal: false,
+            allows_parallel: false,
+            metadata: HashMap::new(),
+        });
+        
+        workflow.add_state(State {
+            id: StateId::new("state2"),
+            description: "State 2".to_string(),
+            state_type: StateType::Normal,
+            is_terminal: false,
+            allows_parallel: false,
+            metadata: HashMap::new(),
+        });
+        
+        // Create a loop
+        workflow.add_transition(Transition {
+            from_state: StateId::new("state1"),
+            to_state: StateId::new("state2"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+        
+        workflow.add_transition(Transition {
+            from_state: StateId::new("state2"),
+            to_state: StateId::new("state1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+        
+        let variables = HashMap::new();
+        // Use a very short timeout
+        let timeout = Some(Duration::from_millis(100));
+        let coverage = execute_workflow_test_mode(workflow, variables, timeout).await.unwrap();
+        
+        // Should have visited both states
+        assert_eq!(coverage.visited_states.len(), 2);
+        assert_eq!(coverage.visited_transitions.len(), 2);
+    }
+    
+    #[tokio::test]
+    async fn test_execute_workflow_test_mode_no_transitions() {
+        use swissarmyhammer::workflow::{State, StateType, WorkflowName};
+        
+        // Create workflow with isolated state
+        let mut workflow = Workflow::new(
+            WorkflowName::new("isolated"),
+            "Isolated workflow".to_string(),
+            StateId::new("alone"),
+        );
+        
+        workflow.add_state(State {
+            id: StateId::new("alone"),
+            description: "Alone state".to_string(),
+            state_type: StateType::Normal,
+            is_terminal: false,
+            allows_parallel: false,
+            metadata: HashMap::new(),
+        });
+        
+        let variables = HashMap::new();
+        let coverage = execute_workflow_test_mode(workflow, variables, None).await.unwrap();
+        
+        // Should visit only the initial state
+        assert_eq!(coverage.visited_states.len(), 1);
+        assert_eq!(coverage.visited_transitions.len(), 0);
+        assert_eq!(coverage.total_transitions, 0);
+    }
+    
+    #[tokio::test]
+    async fn test_execute_workflow_test_mode_with_variables() {
+        use swissarmyhammer::workflow::{State, StateType, WorkflowName, Transition, TransitionCondition, ConditionType};
+        
+        // Create workflow that uses variables
+        let mut workflow = Workflow::new(
+            WorkflowName::new("vars"),
+            "Variables workflow".to_string(),
+            StateId::new("start"),
+        );
+        
+        workflow.add_state(State {
+            id: StateId::new("start"),
+            description: "Start state".to_string(),
+            state_type: StateType::Normal,
+            is_terminal: false,
+            allows_parallel: false,
+            metadata: HashMap::new(),
+        });
+        
+        workflow.add_state(State {
+            id: StateId::new("end"),
+            description: "End state".to_string(),
+            state_type: StateType::Normal,
+            is_terminal: true,
+            allows_parallel: false,
+            metadata: HashMap::new(),
+        });
+        
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("end"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Custom,
+                expression: Some("input == \"test\"".to_string()),
+            },
+            action: Some("set_variable output \"processed\"".to_string()),
+            metadata: HashMap::new(),
+        });
+        
+        let mut variables = HashMap::new();
+        variables.insert("input".to_string(), serde_json::json!("test"));
+        
+        let coverage = execute_workflow_test_mode(workflow, variables, None).await.unwrap();
+        
+        // Should complete the workflow
+        assert_eq!(coverage.visited_states.len(), 2);
+        assert_eq!(coverage.visited_transitions.len(), 1);
+        assert!(coverage.unvisited_states.is_empty());
+        assert!(coverage.unvisited_transitions.is_empty());
+    }
+    
+    #[tokio::test]
+    async fn test_execute_workflow_test_mode_empty_workflow() {
+        use swissarmyhammer::workflow::{WorkflowName};
+        
+        // Create empty workflow (will fail validation but test mode should handle it)
+        let workflow = Workflow::new(
+            WorkflowName::new("empty"),
+            "Empty workflow".to_string(),
+            StateId::new("nonexistent"),
+        );
+        
+        let variables = HashMap::new();
+        let coverage = execute_workflow_test_mode(workflow, variables, None).await.unwrap();
+        
+        // Should handle gracefully - initial state is tracked even if not in workflow
+        assert_eq!(coverage.visited_states.len(), 1);
+        assert_eq!(coverage.visited_transitions.len(), 0);
+        assert_eq!(coverage.total_states, 0);
+        assert_eq!(coverage.total_transitions, 0);
     }
 }

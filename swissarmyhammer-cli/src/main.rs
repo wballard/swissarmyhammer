@@ -107,9 +107,9 @@ async fn main() {
             tracing::info!("Listing prompts");
             run_list(format, verbose, source, category, search)
         }
-        Some(Commands::Validate { quiet, format }) => {
+        Some(Commands::Validate { quiet, format, workflow_dirs }) => {
             tracing::info!("Validating prompts");
-            run_validate(quiet, format)
+            run_validate(quiet, format, workflow_dirs)
         }
         Some(Commands::Test {
             prompt_name,
@@ -262,10 +262,10 @@ fn run_list(
     }
 }
 
-fn run_validate(quiet: bool, format: ValidateFormat) -> i32 {
+fn run_validate(quiet: bool, format: ValidateFormat, workflow_dirs: Vec<String>) -> i32 {
     use validate;
 
-    match validate::run_validate_command(quiet, format) {
+    match validate::run_validate_command(quiet, format, workflow_dirs) {
         Ok(exit_code) => exit_code,
         Err(e) => {
             eprintln!("Validation error: {}", e);

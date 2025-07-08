@@ -2,6 +2,7 @@
 
 use crate::workflow::{MermaidParser, Workflow, WorkflowName, WorkflowRun, WorkflowRunId};
 use crate::{Result, SwissArmyHammerError};
+use crate::security::MAX_DIRECTORY_DEPTH;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -61,8 +62,14 @@ impl WorkflowResolver {
         let current_dir = std::env::current_dir()?;
         let mut workflow_dirs = Vec::new();
         let mut path = current_dir.as_path();
+        let mut depth = 0;
 
         loop {
+            // Limit traversal depth for security
+            if depth >= MAX_DIRECTORY_DEPTH {
+                break;
+            }
+            
             let swissarmyhammer_dir = path.join(".swissarmyhammer");
             if swissarmyhammer_dir.exists() && swissarmyhammer_dir.is_dir() {
                 // Skip the user's home .swissarmyhammer directory to avoid duplicate
@@ -70,7 +77,10 @@ impl WorkflowResolver {
                     let user_swissarmyhammer_dir = home.join(".swissarmyhammer");
                     if swissarmyhammer_dir == user_swissarmyhammer_dir {
                         match path.parent() {
-                            Some(parent) => path = parent,
+                            Some(parent) => {
+                                path = parent;
+                                depth += 1;
+                            }
                             None => break,
                         }
                         continue;
@@ -84,7 +94,10 @@ impl WorkflowResolver {
             }
 
             match path.parent() {
-                Some(parent) => path = parent,
+                Some(parent) => {
+                    path = parent;
+                    depth += 1;
+                }
                 None => break,
             }
         }

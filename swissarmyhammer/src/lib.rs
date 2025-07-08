@@ -61,6 +61,9 @@ pub mod plugins;
 /// Workflow system for state-based execution
 pub mod workflow;
 
+/// Security utilities for path validation and resource limits
+pub mod security;
+
 // Re-export core types
 pub use plugins::{CustomLiquidFilter, PluginRegistry, SwissArmyHammerPlugin};
 pub use prompt_resolver::{PromptResolver, PromptSource};

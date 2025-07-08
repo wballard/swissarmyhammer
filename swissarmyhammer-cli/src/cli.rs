@@ -162,6 +162,10 @@ Examples:
         /// Output format
         #[arg(long, value_enum, default_value = "text")]
         format: ValidateFormat,
+        
+        /// Specific workflow directories to validate (can be specified multiple times)
+        #[arg(long = "workflow-dir", value_name = "DIR")]
+        workflow_dirs: Vec<String>,
     },
     /// Test prompts interactively with sample arguments
     #[command(long_about = "

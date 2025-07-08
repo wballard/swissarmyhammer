@@ -39,6 +39,11 @@ impl WorkflowExecutor {
         self.is_state_type(run, state_id, StateType::Join)
     }
 
+    /// Check if a state is a choice state
+    pub fn is_choice_state(&self, run: &WorkflowRun, state_id: &StateId) -> bool {
+        self.is_state_type(run, state_id, StateType::Choice)
+    }
+
     /// Find all outgoing transitions from a fork state
     pub fn find_fork_transitions(&self, run: &WorkflowRun, fork_state: &StateId) -> Vec<StateId> {
         run.workflow
@@ -257,6 +262,32 @@ impl WorkflowExecutor {
         self.log_event(
             ExecutionEventType::StateExecution,
             format!("All branches joined at: {}", join_state),
+        );
+
+        Ok(())
+    }
+
+    /// Execute a choice state - choice states don't perform any actions
+    ///
+    /// Choice states are decision points that enable conditional branching.
+    /// The actual conditional evaluation and transition logic is handled by
+    /// the normal transition evaluation process in evaluate_transitions.
+    ///
+    /// Choice states simply log their execution and return, allowing the
+    /// normal execution cycle to handle the conditional transitions.
+    pub async fn execute_choice_state(&mut self, run: &mut WorkflowRun) -> ExecutorResult<()> {
+        let choice_state = run.current_state.clone();
+
+        self.log_event(
+            ExecutionEventType::StateExecution,
+            format!("Executing choice state: {}", choice_state),
+        );
+
+        // Choice states don't perform any actions themselves
+        // The conditional transitions are handled by the normal transition evaluation
+        self.log_event(
+            ExecutionEventType::StateExecution,
+            format!("Choice state '{}' ready for conditional transition evaluation", choice_state),
         );
 
         Ok(())

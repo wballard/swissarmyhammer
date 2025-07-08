@@ -14,6 +14,8 @@ pub enum StateType {
     Fork,
     /// Join state for merging parallel branches
     Join,
+    /// Choice state for conditional branching
+    Choice,
 }
 
 impl StateType {
@@ -23,6 +25,7 @@ impl StateType {
             StateType::Normal => "Normal",
             StateType::Fork => "Fork",
             StateType::Join => "Join",
+            StateType::Choice => "Choice",
         }
     }
 }

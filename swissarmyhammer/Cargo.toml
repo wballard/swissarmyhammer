@@ -54,6 +54,9 @@ dirs = { workspace = true }
 # Mermaid parsing
 mermaid-parser = { git = "https://github.com/wballard/mermaid_parser" }
 
+# CEL expression evaluation
+cel-interpreter = "0.8"
+
 
 [dev-dependencies]
 tempfile = { workspace = true }

@@ -170,6 +170,11 @@ impl WorkflowExecutor {
             return self.execute_join_state(run).await;
         }
 
+        // Check if this is a choice state
+        if self.is_choice_state(run, &current_state_id) {
+            return self.execute_choice_state(run).await;
+        }
+
         // Get the current state
         let current_state = run
             .workflow

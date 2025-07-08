@@ -455,3 +455,338 @@ use std::collections::HashMap;
         let result = executor.evaluate_condition(&condition, &context).unwrap();
         assert!(!result);
     }
+
+    #[test]
+    fn test_cel_expression_evaluation() {
+        let executor = WorkflowExecutor::new();
+        let mut context = HashMap::new();
+        context.insert("result".to_string(), serde_json::Value::String("ok".to_string()));
+
+        // Test simple string comparison
+        let condition = TransitionCondition {
+            condition_type: ConditionType::Custom,
+            expression: Some("result == \"ok\"".to_string()),
+        };
+
+        let result = executor.evaluate_condition(&condition, &context).unwrap();
+        assert!(result);
+
+        // Test default condition
+        let condition = TransitionCondition {
+            condition_type: ConditionType::Custom,
+            expression: Some("default".to_string()),
+        };
+
+        let result = executor.evaluate_condition(&condition, &context).unwrap();
+        assert!(result);
+    }
+
+    #[test]
+    fn test_cel_expression_with_variables() {
+        let executor = WorkflowExecutor::new();
+        let mut context = HashMap::new();
+        context.insert("count".to_string(), serde_json::Value::Number(serde_json::Number::from(5)));
+        context.insert("status".to_string(), serde_json::Value::String("active".to_string()));
+
+        // Test numeric comparison
+        let condition = TransitionCondition {
+            condition_type: ConditionType::Custom,
+            expression: Some("count > 3".to_string()),
+        };
+
+        let result = executor.evaluate_condition(&condition, &context).unwrap();
+        assert!(result);
+
+        // Test string comparison
+        let condition = TransitionCondition {
+            condition_type: ConditionType::Custom,
+            expression: Some("status == \"active\"".to_string()),
+        };
+
+        let result = executor.evaluate_condition(&condition, &context).unwrap();
+        assert!(result);
+
+        // Test complex expression
+        let condition = TransitionCondition {
+            condition_type: ConditionType::Custom,
+            expression: Some("count > 3 && status == \"active\"".to_string()),
+        };
+
+        let result = executor.evaluate_condition(&condition, &context).unwrap();
+        assert!(result);
+    }
+
+    #[test]
+    fn test_cel_expression_invalid_syntax() {
+        let executor = WorkflowExecutor::new();
+        let context = HashMap::new();
+
+        let condition = TransitionCondition {
+            condition_type: ConditionType::Custom,
+            expression: Some("invalid == == syntax".to_string()),
+        };
+
+        let result = executor.evaluate_condition(&condition, &context);
+        assert!(matches!(result, Err(ExecutorError::ExpressionError(_))));
+    }
+
+    #[tokio::test]
+    async fn test_choice_state_execution() {
+        let mut executor = WorkflowExecutor::new();
+
+        // Create a workflow with a choice state
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Choice State Test"),
+            "Test choice state execution".to_string(),
+            StateId::new("start"),
+        );
+
+        // Add states
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state_with_type(
+            "choice1",
+            "Choice state",
+            StateType::Choice,
+            false,
+        ));
+        workflow.add_state(create_state("success", "Success state", true));
+        workflow.add_state(create_state("failure", "Failure state", true));
+
+        // Add transitions
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("choice1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        // Choice state with success condition first
+        workflow.add_transition(Transition {
+            from_state: StateId::new("choice1"),
+            to_state: StateId::new("success"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::OnSuccess,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        // Choice state with default condition as fallback
+        workflow.add_transition(Transition {
+            from_state: StateId::new("choice1"),
+            to_state: StateId::new("failure"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Custom,
+                expression: Some("default".to_string()),
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        let run = executor.start_workflow(workflow).await.unwrap();
+
+        // Should go to success state since OnSuccess defaults to true
+        assert_eq!(run.status, WorkflowRunStatus::Completed);
+        assert_eq!(run.current_state.as_str(), "success");
+    }
+
+    #[tokio::test]
+    async fn test_choice_state_with_cel_conditions() {
+        let mut executor = WorkflowExecutor::new();
+
+        // Create a workflow with a choice state using CEL expressions
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Choice State CEL Test"),
+            "Test choice state with CEL conditions".to_string(),
+            StateId::new("start"),
+        );
+
+        // Add states
+        workflow.add_state(create_state("start", "Set result=\"ok\"", false));
+        workflow.add_state(create_state_with_type(
+            "choice1",
+            "Choice state with CEL",
+            StateType::Choice,
+            false,
+        ));
+        workflow.add_state(create_state("success", "Success state", true));
+        workflow.add_state(create_state("failure", "Failure state", true));
+
+        // Add transitions
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("choice1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        // Choice state with CEL condition that checks result
+        workflow.add_transition(Transition {
+            from_state: StateId::new("choice1"),
+            to_state: StateId::new("success"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Custom,
+                expression: Some("result == \"ok\"".to_string()),
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        // Choice state with default condition as fallback
+        workflow.add_transition(Transition {
+            from_state: StateId::new("choice1"),
+            to_state: StateId::new("failure"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Custom,
+                expression: Some("default".to_string()),
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        let run = executor.start_workflow(workflow).await.unwrap();
+
+        // Should go to success state since start state sets result="ok"
+        assert_eq!(run.status, WorkflowRunStatus::Completed);
+        assert_eq!(run.current_state.as_str(), "success");
+    }
+
+    #[tokio::test]
+    async fn test_choice_state_no_matching_conditions() {
+        let mut executor = WorkflowExecutor::new();
+
+        // Create a workflow with a choice state where no conditions match
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Choice State No Match"),
+            "Test choice state with no matching conditions".to_string(),
+            StateId::new("start"),
+        );
+
+        // Add states
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state_with_type(
+            "choice1",
+            "Choice state",
+            StateType::Choice,
+            false,
+        ));
+        workflow.add_state(create_state("success", "Success state", true));
+
+        // Add transitions
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("choice1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        // Choice state with condition that will never match
+        workflow.add_transition(Transition {
+            from_state: StateId::new("choice1"),
+            to_state: StateId::new("success"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Never,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        let result = executor.start_workflow(workflow).await;
+        assert!(matches!(result, Err(ExecutorError::ExecutionFailed(_))));
+    }
+
+    #[tokio::test]
+    async fn test_choice_state_no_transitions() {
+        let mut executor = WorkflowExecutor::new();
+
+        // Create a workflow with a choice state that has no outgoing transitions
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Choice State No Transitions"),
+            "Test choice state with no transitions".to_string(),
+            StateId::new("start"),
+        );
+
+        // Add states
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state_with_type(
+            "choice1",
+            "Choice state",
+            StateType::Choice,
+            false,
+        ));
+        workflow.add_state(create_state("success", "Success state", true));
+
+        // Add transition to choice state but no transitions from it
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("choice1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        let result = executor.start_workflow(workflow).await;
+        assert!(matches!(result, Err(ExecutorError::ExecutionFailed(_))));
+    }
+
+    #[test]
+    fn test_transition_order_evaluation() {
+        let mut executor = WorkflowExecutor::new();
+
+        // Create a workflow with multiple transitions from the same state
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Transition Order Test"),
+            "Test transition order evaluation".to_string(),
+            StateId::new("start"),
+        );
+
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state("first", "First state", true));
+        workflow.add_state(create_state("second", "Second state", true));
+
+        // Add transitions in specific order - first should always win
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("first"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("second"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        let run = WorkflowRun::new(workflow);
+        let next_state = executor.evaluate_transitions(&run).unwrap();
+
+        // Should select the first transition (to "first" state)
+        assert_eq!(next_state, Some(StateId::new("first")));
+    }

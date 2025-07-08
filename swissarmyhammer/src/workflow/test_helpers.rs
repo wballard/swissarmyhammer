@@ -3,8 +3,6 @@
 //! This module provides common test utilities to reduce code duplication
 //! across workflow tests.
 
-#![cfg(test)]
-
 use crate::workflow::{
     ConditionType, State, StateId, StateType, Transition, TransitionCondition, Workflow,
     WorkflowName,

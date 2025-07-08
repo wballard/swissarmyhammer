@@ -1,11 +1,9 @@
 //! Tests for the workflow executor module
 
-#[cfg(test)]
-mod tests {
-    use super::super::*;
-    use crate::workflow::test_helpers::*;
-    use crate::workflow::{Transition, WorkflowName, ConditionType, TransitionCondition, StateType, Workflow, WorkflowRun, WorkflowRunStatus};
-    use std::collections::HashMap;
+use super::*;
+use crate::workflow::test_helpers::*;
+use crate::workflow::{Transition, WorkflowName, ConditionType, TransitionCondition, StateType, Workflow, WorkflowRun, WorkflowRunStatus};
+use std::collections::HashMap;
 
     fn create_test_workflow() -> Workflow {
         let mut workflow = Workflow::new(
@@ -457,4 +455,3 @@ mod tests {
         let result = executor.evaluate_condition(&condition, &context).unwrap();
         assert!(!result);
     }
-}

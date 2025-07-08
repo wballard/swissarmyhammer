@@ -12,6 +12,15 @@ use std::collections::HashSet;
 use std::fmt;
 use std::time::Duration;
 
+/// Maximum path length for full visualization
+const MAX_PATH_LENGTH_FULL: usize = 1000;
+
+/// Maximum path length for minimal visualization
+const MAX_PATH_LENGTH_MINIMAL: usize = 100;
+
+/// Maximum execution steps allowed in a trace to prevent DoS
+const MAX_EXECUTION_STEPS: usize = 500;
+
 /// Execution visualization generator
 #[derive(Debug, Clone)]
 pub struct ExecutionVisualizer {
@@ -117,7 +126,7 @@ impl ExecutionVisualizer {
             include_timing: true,
             include_counts: true,
             include_status: true,
-            max_path_length: 1000,
+            max_path_length: MAX_PATH_LENGTH_FULL,
         }
     }
 
@@ -127,7 +136,7 @@ impl ExecutionVisualizer {
             include_timing: false,
             include_counts: false,
             include_status: true,
-            max_path_length: 100,
+            max_path_length: MAX_PATH_LENGTH_MINIMAL,
         }
     }
 
@@ -161,9 +170,15 @@ impl ExecutionVisualizer {
             workflow_name: run.workflow.name.to_string(),
             execution_path,
             status: run.status,
-            total_duration: run.completed_at.map(|completed| 
-                completed.signed_duration_since(run.started_at).to_std().unwrap_or(Duration::ZERO)
-            ),
+            total_duration: run.completed_at.map(|completed| {
+                match completed.signed_duration_since(run.started_at).to_std() {
+                    Ok(duration) => duration,
+                    Err(e) => {
+                        eprintln!("Warning: Failed to calculate duration for run {}: {}", run.id, e);
+                        Duration::ZERO
+                    }
+                }
+            }),
             started_at: run.started_at,
             completed_at: run.completed_at,
             error_details: None,
@@ -223,8 +238,12 @@ impl ExecutionVisualizer {
         diagram.push_str("\n    %% Execution Path\n");
         for (i, step) in trace.execution_path.iter().enumerate() {
             let annotation = if self.include_timing && step.duration.is_some() {
-                format!("    note right of {}: Step {}: {:?}\n", 
-                    step.state_id, i + 1, step.duration.unwrap())
+                if let Some(duration) = step.duration {
+                    format!("    note right of {}: Step {}: {:?}\n", 
+                        step.state_id, i + 1, duration)
+                } else {
+                    format!("    note right of {}: Step {}\n", step.state_id, i + 1)
+                }
             } else {
                 format!("    note right of {}: Step {}\n", step.state_id, i + 1)
             };
@@ -241,8 +260,12 @@ impl ExecutionVisualizer {
         
         if let Some(step) = step {
             let status_icon = if step.success { "✓" } else { "✗" };
-            let timing_info = if self.include_timing && step.duration.is_some() {
-                format!(" ({:?})", step.duration.unwrap())
+            let timing_info = if self.include_timing {
+                if let Some(duration) = step.duration {
+                    format!(" ({:?})", duration)
+                } else {
+                    String::new()
+                }
             } else {
                 String::new()
             };
@@ -296,7 +319,21 @@ impl ExecutionVisualizer {
 
     /// Generate HTML visualization with embedded Mermaid
     pub fn generate_html(&self, workflow: &Workflow, trace: &ExecutionTrace) -> String {
+        // Validate execution trace size to prevent DoS attacks
+        if trace.execution_path.len() > MAX_EXECUTION_STEPS {
+            return format!(
+                "<html><body><h1>Error: Execution trace too large</h1><p>Trace contains {} steps, maximum allowed is {}</p></body></html>",
+                trace.execution_path.len(),
+                MAX_EXECUTION_STEPS
+            );
+        }
+        
         let mermaid_content = self.generate_mermaid_with_execution(workflow, trace);
+        
+        // Sanitize inputs to prevent XSS
+        let sanitized_workflow_name = Self::html_escape(&trace.workflow_name);
+        let sanitized_run_id = Self::html_escape(&trace.run_id);
+        let sanitized_mermaid_content = Self::html_escape(&mermaid_content);
         
         format!(r#"<!DOCTYPE html>
 <html>
@@ -309,7 +346,7 @@ impl ExecutionVisualizer {
     <div class="execution-info">
         <p><strong>Run ID:</strong> {}</p>
         <p><strong>Status:</strong> {:?}</p>
-        <p><strong>Duration:</strong> {:?}</p>
+        <p><strong>Duration:</strong> {}</p>
         <p><strong>Started:</strong> {}</p>
         {}
     </div>
@@ -323,14 +360,31 @@ impl ExecutionVisualizer {
     </script>
 </body>
 </html>"#,
-            trace.workflow_name,
-            trace.run_id,
+            sanitized_workflow_name,
+            sanitized_run_id,
             trace.status,
-            trace.total_duration.unwrap_or(Duration::ZERO),
+            match trace.total_duration {
+                Some(duration) => format!("{:?}", duration),
+                None => {
+                    eprintln!("Warning: No duration available for trace {}", trace.run_id);
+                    "N/A".to_string()
+                }
+            },
             trace.started_at.format("%Y-%m-%d %H:%M:%S UTC"),
             trace.completed_at.map(|t| format!("<p><strong>Completed:</strong> {}</p>", t.format("%Y-%m-%d %H:%M:%S UTC"))).unwrap_or_default(),
-            mermaid_content
+            sanitized_mermaid_content
         )
+    }
+
+    /// HTML escape function to prevent XSS attacks
+    fn html_escape(input: &str) -> String {
+        input
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
+            .replace('\'', "&#x27;")
+            .replace('/', "&#x2F;")
     }
 
     /// Export execution trace to JSON

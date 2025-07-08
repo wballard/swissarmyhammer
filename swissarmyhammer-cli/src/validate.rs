@@ -1415,7 +1415,7 @@ mod tests {
         let workflow_path = temp_dir.path().join("malformed.mermaid");
         
         // Various malformed Mermaid syntax
-        let test_cases = vec![
+        let test_cases = [
             // Missing diagram type
             "[*] --> Start",
             // Wrong diagram type

@@ -9,6 +9,24 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 
+/// Maximum number of data points to keep in resource trends
+pub const MAX_TREND_DATA_POINTS: usize = 100;
+
+/// Maximum number of run metrics to keep in memory
+pub const MAX_RUN_METRICS: usize = 1000;
+
+/// Maximum number of workflow metrics to keep in memory
+pub const MAX_WORKFLOW_METRICS: usize = 100;
+
+/// Maximum number of state durations per run
+pub const MAX_STATE_DURATIONS_PER_RUN: usize = 50;
+
+/// Maximum age of completed runs before cleanup (in days)
+pub const MAX_COMPLETED_RUN_AGE_DAYS: i64 = 7;
+
+/// Maximum age of workflow summary metrics before cleanup (in days)
+pub const MAX_WORKFLOW_SUMMARY_AGE_DAYS: i64 = 30;
+
 /// Metrics collector for workflow execution
 #[derive(Debug, Clone)]
 pub struct WorkflowMetrics {
@@ -142,6 +160,10 @@ impl WorkflowMetrics {
 
     /// Start tracking a new workflow run
     pub fn start_run(&mut self, run_id: WorkflowRunId, workflow_name: WorkflowName) {
+        // Validate inputs
+        if !Self::is_valid_workflow_name(&workflow_name) {
+            return;
+        }
         let run_metrics = RunMetrics {
             run_id,
             workflow_name: workflow_name.clone(),
@@ -156,12 +178,27 @@ impl WorkflowMetrics {
         };
 
         self.run_metrics.insert(run_id, run_metrics);
+        
+        // Enforce bounds checking - remove oldest run metrics if we exceed the limit
+        if self.run_metrics.len() > MAX_RUN_METRICS {
+            self.cleanup_old_run_metrics();
+        }
+        
         self.update_global_metrics();
     }
 
     /// Record state execution time
     pub fn record_state_execution(&mut self, run_id: &WorkflowRunId, state_id: StateId, duration: Duration) {
+        // Validate inputs
+        if !Self::is_valid_state_id(&state_id) {
+            return;
+        }
+        
         if let Some(run_metrics) = self.run_metrics.get_mut(run_id) {
+            // Enforce bounds checking - don't allow too many state durations per run
+            if run_metrics.state_durations.len() >= MAX_STATE_DURATIONS_PER_RUN {
+                return;
+            }
             run_metrics.state_durations.insert(state_id, duration);
         }
     }
@@ -217,6 +254,11 @@ impl WorkflowMetrics {
 
     /// Update workflow summary metrics
     fn update_workflow_summary(&mut self, workflow_name: &WorkflowName, run_metrics: &RunMetrics) {
+        // Enforce bounds checking for workflow metrics
+        if self.workflow_metrics.len() >= MAX_WORKFLOW_METRICS && !self.workflow_metrics.contains_key(workflow_name) {
+            return; // Skip if we would exceed the limit for a new workflow
+        }
+        
         let summary = self.workflow_metrics.entry(workflow_name.clone()).or_insert_with(|| WorkflowSummaryMetrics::new(workflow_name.clone()));
         
         summary.total_runs += 1;
@@ -253,6 +295,80 @@ impl WorkflowMetrics {
             let total_nanos = completed_runs.iter().map(|d| d.as_nanos()).sum::<u128>();
             let avg_nanos = total_nanos / completed_runs.len() as u128;
             self.global_metrics.average_execution_time = Duration::from_nanos(avg_nanos as u64);
+        }
+    }
+
+    /// Validate workflow name
+    fn is_valid_workflow_name(workflow_name: &WorkflowName) -> bool {
+        !workflow_name.as_str().trim().is_empty()
+    }
+
+    /// Validate state ID
+    fn is_valid_state_id(state_id: &StateId) -> bool {
+        !state_id.as_str().trim().is_empty()
+    }
+
+    /// Clean up old run metrics when limit is exceeded
+    fn cleanup_old_run_metrics(&mut self) {
+        // Find the oldest completed runs and remove them
+        let mut completed_runs: Vec<_> = self.run_metrics.iter()
+            .filter(|(_, run)| run.completed_at.is_some())
+            .map(|(id, run)| (*id, run.completed_at.unwrap()))
+            .collect();
+        
+        // Sort by completion time (oldest first)
+        completed_runs.sort_by_key(|(_, completed_at)| *completed_at);
+        
+        // Remove the oldest runs to get back under the limit
+        let excess_count = self.run_metrics.len() - MAX_RUN_METRICS;
+        for i in 0..excess_count.min(completed_runs.len()) {
+            let (run_id, _) = completed_runs[i];
+            self.run_metrics.remove(&run_id);
+        }
+    }
+
+    /// Comprehensive cleanup of old metrics data
+    pub fn cleanup_old_metrics(&mut self) {
+        let now = Utc::now();
+        let mut removed_runs = 0;
+        let mut removed_workflows = 0;
+        
+        // Clean up old completed runs
+        let cutoff_date = now - chrono::Duration::days(MAX_COMPLETED_RUN_AGE_DAYS);
+        let runs_to_remove: Vec<_> = self.run_metrics.iter()
+            .filter(|(_, run)| {
+                if let Some(completed_at) = run.completed_at {
+                    completed_at < cutoff_date
+                } else {
+                    false
+                }
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        
+        for run_id in runs_to_remove {
+            self.run_metrics.remove(&run_id);
+            removed_runs += 1;
+        }
+        
+        // Clean up old workflow summary metrics
+        let workflow_cutoff_date = now - chrono::Duration::days(MAX_WORKFLOW_SUMMARY_AGE_DAYS);
+        let workflows_to_remove: Vec<_> = self.workflow_metrics.iter()
+            .filter(|(_, summary)| summary.last_updated < workflow_cutoff_date)
+            .map(|(name, _)| name.clone())
+            .collect();
+        
+        for workflow_name in workflows_to_remove {
+            self.workflow_metrics.remove(&workflow_name);
+            removed_workflows += 1;
+        }
+        
+        // Update global metrics after cleanup
+        self.update_global_metrics();
+        
+        if removed_runs > 0 || removed_workflows > 0 {
+            eprintln!("Metrics cleanup completed: removed {} old runs and {} old workflow summaries", 
+                     removed_runs, removed_workflows);
         }
     }
 }
@@ -391,8 +507,8 @@ impl ResourceTrends {
     /// Add memory usage data point
     pub fn add_memory_point(&mut self, memory_bytes: u64) {
         self.memory_trend.push((Utc::now(), memory_bytes));
-        // Keep only last 100 data points
-        if self.memory_trend.len() > 100 {
+        // Keep only last MAX_TREND_DATA_POINTS data points
+        if self.memory_trend.len() > MAX_TREND_DATA_POINTS {
             self.memory_trend.remove(0);
         }
     }
@@ -400,8 +516,8 @@ impl ResourceTrends {
     /// Add CPU usage data point
     pub fn add_cpu_point(&mut self, cpu_percentage: f64) {
         self.cpu_trend.push((Utc::now(), cpu_percentage));
-        // Keep only last 100 data points
-        if self.cpu_trend.len() > 100 {
+        // Keep only last MAX_TREND_DATA_POINTS data points
+        if self.cpu_trend.len() > MAX_TREND_DATA_POINTS {
             self.cpu_trend.remove(0);
         }
     }
@@ -409,8 +525,8 @@ impl ResourceTrends {
     /// Add throughput data point
     pub fn add_throughput_point(&mut self, runs_per_hour: f64) {
         self.throughput_trend.push((Utc::now(), runs_per_hour));
-        // Keep only last 100 data points
-        if self.throughput_trend.len() > 100 {
+        // Keep only last MAX_TREND_DATA_POINTS data points
+        if self.throughput_trend.len() > MAX_TREND_DATA_POINTS {
             self.throughput_trend.remove(0);
         }
     }
@@ -456,12 +572,12 @@ mod tests {
         let run_id = WorkflowRunId::new();
         let workflow_name = WorkflowName::new("test_workflow");
         
-        metrics.start_run(run_id.clone(), workflow_name.clone());
+        metrics.start_run(run_id, workflow_name.clone());
         
         assert_eq!(metrics.run_metrics.len(), 1);
         assert!(metrics.run_metrics.contains_key(&run_id));
         
-        let run_metrics = metrics.run_metrics.get(&run_id).unwrap();
+        let run_metrics = metrics.run_metrics.get(&run_id).expect("Run metrics should exist after start_run");
         assert_eq!(run_metrics.workflow_name, workflow_name);
         assert_eq!(run_metrics.status, WorkflowRunStatus::Running);
         assert_eq!(run_metrics.transition_count, 0);
@@ -473,14 +589,14 @@ mod tests {
         let run_id = WorkflowRunId::new();
         let workflow_name = WorkflowName::new("test_workflow");
         
-        metrics.start_run(run_id.clone(), workflow_name);
+        metrics.start_run(run_id, workflow_name);
         
         let state_id = StateId::new("test_state");
         let duration = Duration::from_secs(2);
         
         metrics.record_state_execution(&run_id, state_id.clone(), duration);
         
-        let run_metrics = metrics.run_metrics.get(&run_id).unwrap();
+        let run_metrics = metrics.run_metrics.get(&run_id).expect("Run metrics should exist after start_run");
         assert_eq!(run_metrics.state_durations.get(&state_id), Some(&duration));
     }
 

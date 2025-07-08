@@ -173,9 +173,8 @@ mod tests {
         
         // Test with relative path
         let result = validate_path_security(Path::new("test.txt"), root);
-        match &result {
-            Err(e) => panic!("Expected Ok, got error: {}", e),
-            Ok(_) => {}
+        if let Err(e) = &result {
+            panic!("Expected Ok, got error: {}", e);
         }
         assert_eq!(result.unwrap(), safe_file.canonicalize().unwrap());
     }

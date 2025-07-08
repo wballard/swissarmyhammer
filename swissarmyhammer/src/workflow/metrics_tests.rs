@@ -1,9 +1,12 @@
 //! Tests for workflow metrics collection
 
 use super::metrics::*;
-use crate::workflow::{WorkflowName, WorkflowRunId, WorkflowRunStatus};
+use crate::workflow::{StateId, WorkflowName, WorkflowRunId, WorkflowRunStatus};
 use chrono::Utc;
 use std::time::Duration;
+
+// Import the constant from the parent module
+use super::metrics::MAX_TREND_DATA_POINTS;
 
 #[test]
 fn test_workflow_metrics_new() {
@@ -40,7 +43,7 @@ fn test_record_state_execution() {
     
     metrics.start_run(run_id.clone(), workflow_name);
     
-    let state_id = "test_state".to_string();
+    let state_id = StateId::new("test_state");
     let duration = Duration::from_secs(2);
     
     metrics.record_state_execution(&run_id, state_id.clone(), duration);
@@ -120,7 +123,7 @@ fn test_workflow_summary_metrics() {
         
         // Add some state executions
         for j in 0..3 {
-            let state_id = format!("state_{}", j);
+            let state_id = StateId::new(format!("state_{}", j));
             let duration = Duration::from_millis(100 * (i + 1) as u64);
             metrics.record_state_execution(&run_id, state_id, duration);
         }
@@ -232,10 +235,10 @@ fn test_resource_trends() {
         trends.add_throughput_point(i as f64 / 10.0);
     }
     
-    // Should be truncated to 100 points
-    assert_eq!(trends.memory_trend.len(), 100);
-    assert_eq!(trends.cpu_trend.len(), 100);
-    assert_eq!(trends.throughput_trend.len(), 100);
+    // Should be truncated to MAX_TREND_DATA_POINTS points
+    assert_eq!(trends.memory_trend.len(), MAX_TREND_DATA_POINTS);
+    assert_eq!(trends.cpu_trend.len(), MAX_TREND_DATA_POINTS);
+    assert_eq!(trends.throughput_trend.len(), MAX_TREND_DATA_POINTS);
 }
 
 #[test]
@@ -244,8 +247,8 @@ fn test_hot_states_tracking() {
     
     // Simulate state executions
     let mut state_durations = std::collections::HashMap::new();
-    state_durations.insert("state1".to_string(), Duration::from_millis(100));
-    state_durations.insert("state2".to_string(), Duration::from_millis(200));
+    state_durations.insert(StateId::new("state1"), Duration::from_millis(100));
+    state_durations.insert(StateId::new("state2"), Duration::from_millis(200));
     
     // First execution
     summary.update_hot_states(&state_durations);
@@ -256,17 +259,17 @@ fn test_hot_states_tracking() {
     
     // Second execution - state1 only
     let mut state_durations2 = std::collections::HashMap::new();
-    state_durations2.insert("state1".to_string(), Duration::from_millis(150));
+    state_durations2.insert(StateId::new("state1"), Duration::from_millis(150));
     
     summary.update_hot_states(&state_durations2);
     
     // state1 should now have 2 executions and be first (sorted by count)
     assert_eq!(summary.hot_states.len(), 2);
-    let state1_count = summary.hot_states.iter().find(|s| s.state_id == "state1").unwrap();
+    let state1_count = summary.hot_states.iter().find(|s| s.state_id == StateId::new("state1")).unwrap();
     assert_eq!(state1_count.execution_count, 2);
     assert_eq!(state1_count.total_duration, Duration::from_millis(250));
     assert_eq!(state1_count.average_duration, Duration::from_millis(125));
     
-    let state2_count = summary.hot_states.iter().find(|s| s.state_id == "state2").unwrap();
+    let state2_count = summary.hot_states.iter().find(|s| s.state_id == StateId::new("state2")).unwrap();
     assert_eq!(state2_count.execution_count, 1);
 }

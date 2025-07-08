@@ -52,7 +52,12 @@
 //!
 //! # Usage Examples
 //!
-//! ```rust
+//! ```rust,no_run
+//! # use std::collections::HashMap;
+//! # use serde_json::Value;
+//! # use swissarmyhammer::workflow::{TransitionCondition, ConditionType, WorkflowExecutor};
+//! # let mut executor = WorkflowExecutor::new();
+//! # let context = HashMap::<String, Value>::new();
 //! // Simple condition evaluation
 //! let condition = TransitionCondition {
 //!     condition_type: ConditionType::Custom,
@@ -73,6 +78,7 @@
 //!     expression: Some("default".to_string()),
 //! };
 //! let result = executor.evaluate_condition(&condition, &context)?; // Always true
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
 //! # Error Handling
@@ -267,7 +273,7 @@ impl WorkflowExecutor {
                 crate::workflow::ConditionType::Always => true,
                 crate::workflow::ConditionType::Custom => {
                     if let Some(expr) = &t.condition.expression {
-                        expr.trim() == "default"
+                        expr.trim() == DEFAULT_VARIABLE_NAME
                     } else {
                         false
                     }
@@ -417,18 +423,18 @@ impl WorkflowExecutor {
     /// - All workflow context variables are mapped to their CEL equivalents
     ///
     /// # Examples
-    /// ```
+    /// ```rust,no_run
     /// // Simple boolean expression
-    /// "default"  // Always true
+    /// let expr1 = "default";  // Always true
     /// 
     /// // Variable comparison
-    /// "status == \"active\""
+    /// let expr2 = "status == \"active\"";
     /// 
     /// // Complex conditions
-    /// "count > 10 && status == \"ready\""
+    /// let expr3 = "count > 10 && status == \"ready\"";
     /// 
     /// // Result text matching
-    /// "result.contains(\"success\")"
+    /// let expr4 = "result.contains(\"success\")";
     /// ```
     fn evaluate_cel_expression(
         &mut self,

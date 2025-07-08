@@ -16,27 +16,9 @@ use std::collections::HashMap;
         workflow.add_state(create_state("processing", "Processing state", false));
         workflow.add_state(create_state("end", "End state", true));
 
-        workflow.add_transition(Transition {
-            from_state: StateId::new("start"),
-            to_state: StateId::new("processing"),
-            condition: TransitionCondition {
-                condition_type: ConditionType::Always,
-                expression: None,
-            },
-            action: None,
-            metadata: HashMap::new(),
-        });
+        workflow.add_transition(create_transition("start", "processing", ConditionType::Always));
 
-        workflow.add_transition(Transition {
-            from_state: StateId::new("processing"),
-            to_state: StateId::new("end"),
-            condition: TransitionCondition {
-                condition_type: ConditionType::OnSuccess,
-                expression: None,
-            },
-            action: None,
-            metadata: HashMap::new(),
-        });
+        workflow.add_transition(create_transition("processing", "end", ConditionType::OnSuccess));
 
         workflow
     }

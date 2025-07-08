@@ -34,6 +34,14 @@ pub enum ValidateFormat {
     Json,
 }
 
+#[derive(ValueEnum, Clone, Debug)]
+pub enum VisualizationFormat {
+    Mermaid,
+    Html,
+    Json,
+    Dot,
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "swissarmyhammer")]
 #[command(version)]
@@ -438,6 +446,48 @@ pub enum FlowSubcommand {
         /// Filter logs by level (info, warn, error)
         #[arg(long)]
         level: Option<String>,
+    },
+    /// View metrics for workflow runs
+    Metrics {
+        /// Run ID to view metrics for (optional - shows all if not specified)
+        run_id: Option<String>,
+
+        /// Workflow name to filter by
+        #[arg(long)]
+        workflow: Option<String>,
+
+        /// Output format
+        #[arg(long, value_enum, default_value = "table")]
+        format: OutputFormat,
+
+        /// Show global metrics summary
+        #[arg(short, long)]
+        global: bool,
+    },
+    /// Generate execution visualization
+    Visualize {
+        /// Run ID to visualize
+        run_id: String,
+
+        /// Output format
+        #[arg(long, value_enum, default_value = "mermaid")]
+        format: VisualizationFormat,
+
+        /// Output file path (optional - prints to stdout if not specified)
+        #[arg(short, long)]
+        output: Option<String>,
+
+        /// Include timing information
+        #[arg(long)]
+        timing: bool,
+
+        /// Include execution counts
+        #[arg(long)]
+        counts: bool,
+
+        /// Show only executed path
+        #[arg(long)]
+        path_only: bool,
     },
 }
 

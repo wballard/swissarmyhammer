@@ -22,15 +22,17 @@ impl WorkflowRunId {
             .map_err(|e| format!("Invalid workflow run ID '{}': {}", s, e))
     }
 
-    /// Convert WorkflowRunId to string representation
-    pub fn to_string(&self) -> String {
-        self.0.to_string()
-    }
 }
 
 impl Default for WorkflowRunId {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl std::fmt::Display for WorkflowRunId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

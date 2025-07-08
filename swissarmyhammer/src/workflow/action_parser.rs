@@ -226,7 +226,7 @@ impl ActionParser {
     /// Validate that a variable name is valid
     fn is_valid_variable_name(&self, name: &str) -> bool {
         !name.is_empty() && 
-        name.chars().next().map_or(false, |c| c.is_alphabetic() || c == '_') &&
+        name.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_') &&
         name.chars().all(|c| c.is_alphanumeric() || c == '_')
     }
 

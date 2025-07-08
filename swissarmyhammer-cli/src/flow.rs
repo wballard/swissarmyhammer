@@ -1,12 +1,12 @@
 //! Flow command implementation for executing workflows
 
-use crate::cli::{FlowSubcommand, OutputFormat, PromptSource};
+use crate::cli::{FlowSubcommand, OutputFormat, PromptSource, VisualizationFormat};
 use std::collections::{HashMap, HashSet};
 use std::future;
 use std::time::Duration;
 use swissarmyhammer::workflow::{
     WorkflowExecutor, WorkflowStorage, WorkflowRunId, WorkflowRunStatus, WorkflowName,
-    Workflow, StateId, TransitionKey,
+    Workflow, StateId, TransitionKey, ExecutionVisualizer,
 };
 use swissarmyhammer::{Result, SwissArmyHammerError};
 use tokio::signal;
@@ -49,6 +49,20 @@ pub async fn run_flow_command(subcommand: FlowSubcommand) -> Result<()> {
             tail,
             level,
         } => logs_workflow_command(run_id, follow, tail, level).await,
+        FlowSubcommand::Metrics {
+            run_id,
+            workflow,
+            format,
+            global,
+        } => metrics_workflow_command(run_id, workflow, format, global).await,
+        FlowSubcommand::Visualize {
+            run_id,
+            format,
+            output,
+            timing,
+            counts,
+            path_only,
+        } => visualize_workflow_command(run_id, format, output, timing, counts, path_only).await,
     }
 }
 
@@ -662,6 +676,211 @@ fn parse_workflow_run_id(s: &str) -> Result<WorkflowRunId> {
 /// Helper to convert WorkflowRunId to string
 fn workflow_run_id_to_string(id: &WorkflowRunId) -> String {
     id.to_string()
+}
+
+/// Display metrics for workflow runs
+async fn metrics_workflow_command(
+    run_id: Option<String>,
+    workflow: Option<String>,
+    format: OutputFormat,
+    global: bool,
+) -> Result<()> {
+    let _storage = WorkflowStorage::file_system()?;
+    let executor = WorkflowExecutor::new();
+    let metrics = executor.get_metrics();
+    
+    if global {
+        // Show global metrics summary
+        let global_metrics = metrics.get_global_metrics();
+        
+        match format {
+            OutputFormat::Table => {
+                println!("📊 Global Workflow Metrics");
+                println!("========================");
+                println!("Total runs: {}", global_metrics.total_runs);
+                println!("Success rate: {:.2}%", global_metrics.success_rate * 100.0);
+                println!("Average execution time: {:.2}s", global_metrics.average_execution_time.as_secs_f64());
+                println!("Total execution time: {:.2}s", global_metrics.total_execution_time.as_secs_f64());
+                println!("Active workflows: {}", global_metrics.active_workflows);
+                println!("Unique workflows: {}", global_metrics.unique_workflows);
+            }
+            OutputFormat::Json => {
+                let json_output = serde_json::to_string_pretty(&global_metrics)?;
+                println!("{}", json_output);
+            }
+            OutputFormat::Yaml => {
+                let yaml_output = serde_yaml::to_string(&global_metrics)?;
+                println!("{}", yaml_output);
+            }
+        }
+    } else if let Some(run_id_str) = run_id {
+        // Show metrics for specific run
+        let run_id_typed = parse_workflow_run_id(&run_id_str)?;
+        
+        if let Some(run_metrics) = metrics.get_run_metrics(&run_id_typed) {
+            match format {
+                OutputFormat::Table => {
+                    println!("📊 Run Metrics: {}", run_id_str);
+                    println!("Workflow: {}", run_metrics.workflow_name);
+                    println!("Status: {:?}", run_metrics.status);
+                    println!("Started: {}", run_metrics.started_at.format("%Y-%m-%d %H:%M:%S UTC"));
+                    if let Some(completed) = run_metrics.completed_at {
+                        println!("Completed: {}", completed.format("%Y-%m-%d %H:%M:%S UTC"));
+                    }
+                    if let Some(duration) = run_metrics.total_duration {
+                        println!("Duration: {:.2}s", duration.as_secs_f64());
+                    }
+                    println!("Transitions: {}", run_metrics.transition_count);
+                    println!("State execution times:");
+                    for (state_id, duration) in &run_metrics.state_durations {
+                        println!("  {}: {:.2}s", state_id, duration.as_secs_f64());
+                    }
+                }
+                OutputFormat::Json => {
+                    let json_output = serde_json::to_string_pretty(&run_metrics)?;
+                    println!("{}", json_output);
+                }
+                OutputFormat::Yaml => {
+                    let yaml_output = serde_yaml::to_string(&run_metrics)?;
+                    println!("{}", yaml_output);
+                }
+            }
+        } else {
+            println!("No metrics found for run: {}", run_id_str);
+        }
+    } else if let Some(workflow_name) = workflow {
+        // Show metrics for specific workflow
+        let workflow_name_typed = WorkflowName::new(&workflow_name);
+        
+        if let Some(workflow_metrics) = metrics.get_workflow_summary(&workflow_name_typed) {
+            match format {
+                OutputFormat::Table => {
+                    println!("📊 Workflow Metrics: {}", workflow_name);
+                    println!("Total runs: {}", workflow_metrics.total_runs);
+                    println!("Successful runs: {}", workflow_metrics.successful_runs);
+                    println!("Failed runs: {}", workflow_metrics.failed_runs);
+                    println!("Success rate: {:.2}%", workflow_metrics.success_rate() * 100.0);
+                    if let Some(avg_duration) = workflow_metrics.average_duration {
+                        println!("Average duration: {:.2}s", avg_duration.as_secs_f64());
+                    }
+                    if let Some(min_duration) = workflow_metrics.min_duration {
+                        println!("Min duration: {:.2}s", min_duration.as_secs_f64());
+                    }
+                    if let Some(max_duration) = workflow_metrics.max_duration {
+                        println!("Max duration: {:.2}s", max_duration.as_secs_f64());
+                    }
+                    println!("Average transitions: {:.1}", workflow_metrics.average_transitions);
+                    
+                    if !workflow_metrics.hot_states.is_empty() {
+                        println!("Hot states:");
+                        for state_count in &workflow_metrics.hot_states {
+                            println!("  {}: {} executions ({:.2}s avg)", 
+                                state_count.state_id, 
+                                state_count.execution_count,
+                                state_count.average_duration.as_secs_f64()
+                            );
+                        }
+                    }
+                }
+                OutputFormat::Json => {
+                    let json_output = serde_json::to_string_pretty(&workflow_metrics)?;
+                    println!("{}", json_output);
+                }
+                OutputFormat::Yaml => {
+                    let yaml_output = serde_yaml::to_string(&workflow_metrics)?;
+                    println!("{}", yaml_output);
+                }
+            }
+        } else {
+            println!("No metrics found for workflow: {}", workflow_name);
+        }
+    } else {
+        // Show all run metrics
+        match format {
+            OutputFormat::Table => {
+                println!("📊 All Run Metrics");
+                println!("==================");
+                for (run_id, run_metrics) in &metrics.run_metrics {
+                    println!("Run: {}", workflow_run_id_to_string(run_id));
+                    println!("  Workflow: {}", run_metrics.workflow_name);
+                    println!("  Status: {:?}", run_metrics.status);
+                    if let Some(duration) = run_metrics.total_duration {
+                        println!("  Duration: {:.2}s", duration.as_secs_f64());
+                    }
+                    println!("  Transitions: {}", run_metrics.transition_count);
+                    println!();
+                }
+            }
+            OutputFormat::Json => {
+                let json_output = serde_json::to_string_pretty(&metrics.run_metrics)?;
+                println!("{}", json_output);
+            }
+            OutputFormat::Yaml => {
+                let yaml_output = serde_yaml::to_string(&metrics.run_metrics)?;
+                println!("{}", yaml_output);
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+/// Generate execution visualization
+async fn visualize_workflow_command(
+    run_id: String,
+    format: VisualizationFormat,
+    output: Option<String>,
+    timing: bool,
+    counts: bool,
+    _path_only: bool,
+) -> Result<()> {
+    let storage = WorkflowStorage::file_system()?;
+    let run_id_typed = parse_workflow_run_id(&run_id)?;
+    let run = storage.get_run(&run_id_typed)?;
+    
+    let mut visualizer = ExecutionVisualizer::new();
+    visualizer.include_timing = timing;
+    visualizer.include_counts = counts;
+    
+    let trace = visualizer.generate_trace(&run);
+    
+    let content = match format {
+        VisualizationFormat::Mermaid => {
+            visualizer.generate_mermaid_with_execution(&run.workflow, &trace)
+        }
+        VisualizationFormat::Html => {
+            visualizer.generate_html(&run.workflow, &trace)
+        }
+        VisualizationFormat::Json => {
+            visualizer.export_trace_json(&trace)?
+        }
+        VisualizationFormat::Dot => {
+            // Simple DOT format - could be enhanced
+            format!("digraph workflow {{\n{}\n}}", 
+                trace.execution_path.iter()
+                    .enumerate()
+                    .map(|(i, step)| {
+                        let next_step = trace.execution_path.get(i + 1);
+                        if let Some(next) = next_step {
+                            format!("  \"{}\" -> \"{}\"", step.state_id, next.state_id)
+                        } else {
+                            format!("  \"{}\"", step.state_id)
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        }
+    };
+    
+    if let Some(output_path) = output {
+        std::fs::write(&output_path, content)?;
+        println!("Visualization saved to: {}", output_path);
+    } else {
+        println!("{}", content);
+    }
+    
+    Ok(())
 }
 
 /// Coverage tracking for workflow test execution

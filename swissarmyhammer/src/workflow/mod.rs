@@ -9,6 +9,7 @@ mod definition;
 mod error_utils;
 mod executor;
 mod graph;
+mod metrics;
 mod parser;
 mod run;
 mod state;
@@ -17,6 +18,7 @@ mod storage;
 mod test_helpers;
 mod transition;
 mod transition_key;
+mod visualization;
 
 pub use actions::{
     parse_action_from_description, Action, ActionError, ActionResult, LogAction, LogLevel,
@@ -31,6 +33,10 @@ pub use executor::{
     ExecutionEvent, ExecutionEventType, ExecutorError, ExecutorResult, WorkflowExecutor,
 };
 pub use graph::{GraphError, GraphResult, WorkflowGraphAnalyzer};
+pub use metrics::{
+    WorkflowMetrics, RunMetrics, WorkflowSummaryMetrics, GlobalMetrics, MemoryMetrics,
+    StateExecutionCount, ResourceTrends,
+};
 pub use parser::{MermaidParser, ParseError, ParseResult};
 pub use run::{WorkflowRun, WorkflowRunId, WorkflowRunStatus};
 pub use state::{State, StateError, StateId, StateResult, StateType};
@@ -41,3 +47,7 @@ pub use storage::{
 };
 pub use transition::{ConditionType, Transition, TransitionCondition};
 pub use transition_key::TransitionKey;
+pub use visualization::{
+    ExecutionVisualizer, ExecutionTrace, ExecutionStep, VisualizationFormat,
+    VisualizationOptions, ColorScheme,
+};

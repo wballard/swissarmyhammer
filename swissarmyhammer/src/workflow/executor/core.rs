@@ -2,9 +2,11 @@
 
 use crate::workflow::{
     parse_action_from_description, ActionError, StateId, Workflow, WorkflowRun, WorkflowRunStatus,
+    metrics::{WorkflowMetrics, MemoryMetrics},
 };
 use serde_json::Value;
 use super::{ExecutorError, ExecutorResult, ExecutionEvent, ExecutionEventType, MAX_TRANSITIONS, DEFAULT_MAX_HISTORY_SIZE, LAST_ACTION_RESULT_KEY};
+use std::time::Instant;
 
 /// Workflow execution engine
 pub struct WorkflowExecutor {
@@ -12,6 +14,8 @@ pub struct WorkflowExecutor {
     execution_history: Vec<ExecutionEvent>,
     /// Maximum size of execution history to prevent unbounded growth
     max_history_size: usize,
+    /// Metrics collector for workflow execution
+    metrics: WorkflowMetrics,
 }
 
 impl WorkflowExecutor {
@@ -20,6 +24,7 @@ impl WorkflowExecutor {
         Self {
             execution_history: Vec::new(),
             max_history_size: DEFAULT_MAX_HISTORY_SIZE,
+            metrics: WorkflowMetrics::new(),
         }
     }
 
@@ -32,16 +37,28 @@ impl WorkflowExecutor {
 
         let mut run = WorkflowRun::new(workflow);
 
+        // Start metrics tracking for this run
+        self.metrics.start_run(run.id, run.workflow.name.clone());
+
         self.log_event(
             ExecutionEventType::Started,
             format!("Started workflow: {}", run.workflow.name),
         );
 
         // Execute the initial state with transition limit
-        self.execute_state_with_limit(&mut run, MAX_TRANSITIONS)
-            .await?;
+        let result = self.execute_state_with_limit(&mut run, MAX_TRANSITIONS).await;
+        
+        // Complete metrics tracking
+        match &result {
+            Ok(_) => {
+                self.metrics.complete_run(&run.id, run.status, None);
+            }
+            Err(e) => {
+                self.metrics.complete_run(&run.id, WorkflowRunStatus::Failed, Some(e.to_string()));
+            }
+        }
 
-        Ok(run)
+        result.map(|_| run)
     }
 
     /// Resume a workflow from saved state
@@ -49,6 +66,9 @@ impl WorkflowExecutor {
         if run.status == WorkflowRunStatus::Completed || run.status == WorkflowRunStatus::Failed {
             return Err(ExecutorError::WorkflowCompleted);
         }
+
+        // Start metrics tracking for resumed run
+        self.metrics.start_run(run.id, run.workflow.name.clone());
 
         self.log_event(
             ExecutionEventType::Started,
@@ -59,10 +79,19 @@ impl WorkflowExecutor {
         );
 
         // Continue execution from current state with transition limit
-        self.execute_state_with_limit(&mut run, MAX_TRANSITIONS)
-            .await?;
+        let result = self.execute_state_with_limit(&mut run, MAX_TRANSITIONS).await;
+        
+        // Complete metrics tracking
+        match &result {
+            Ok(_) => {
+                self.metrics.complete_run(&run.id, run.status, None);
+            }
+            Err(e) => {
+                self.metrics.complete_run(&run.id, WorkflowRunStatus::Failed, Some(e.to_string()));
+            }
+        }
 
-        Ok(run)
+        result.map(|_| run)
     }
 
     /// Check if workflow execution should stop
@@ -129,15 +158,15 @@ impl WorkflowExecutor {
 
     /// Execute a single state without transitioning
     pub async fn execute_single_state(&mut self, run: &mut WorkflowRun) -> ExecutorResult<()> {
-        let current_state_id = &run.current_state;
+        let current_state_id = run.current_state.clone();
 
         // Check if this is a fork state
-        if self.is_fork_state(run, current_state_id) {
+        if self.is_fork_state(run, &current_state_id) {
             return self.execute_fork_state(run).await;
         }
 
         // Check if this is a join state
-        if self.is_join_state(run, current_state_id) {
+        if self.is_join_state(run, &current_state_id) {
             return self.execute_join_state(run).await;
         }
 
@@ -145,7 +174,7 @@ impl WorkflowExecutor {
         let current_state = run
             .workflow
             .states
-            .get(current_state_id)
+            .get(&current_state_id)
             .ok_or_else(|| ExecutorError::StateNotFound(current_state_id.clone()))?;
 
         // Extract values we need before the mutable borrow
@@ -160,8 +189,15 @@ impl WorkflowExecutor {
             ),
         );
 
+        // Record state execution timing
+        let state_start_time = Instant::now();
+        
         // Execute state action if one can be parsed from the description
         self.execute_state_action(run, &state_description).await?;
+        
+        // Record state execution duration
+        let state_duration = state_start_time.elapsed();
+        self.metrics.record_state_execution(&run.id, current_state_id.clone(), state_duration);
 
         // Check if this is a terminal state
         if is_terminal {
@@ -191,6 +227,9 @@ impl WorkflowExecutor {
             ExecutionEventType::StateTransition,
             format!("Transitioning from {} to {}", run.current_state, next_state),
         );
+
+        // Record transition in metrics
+        self.metrics.record_transition(&run.id);
 
         // Update the run
         run.transition_to(next_state);
@@ -314,6 +353,25 @@ impl WorkflowExecutor {
     /// Set the maximum history size
     pub fn set_max_history_size(&mut self, max_size: usize) {
         self.max_history_size = max_size;
+    }
+
+    /// Get workflow metrics
+    pub fn get_metrics(&self) -> &WorkflowMetrics {
+        &self.metrics
+    }
+
+    /// Get mutable access to workflow metrics
+    pub fn get_metrics_mut(&mut self) -> &mut WorkflowMetrics {
+        &mut self.metrics
+    }
+
+    /// Update memory metrics for a specific run
+    pub fn update_memory_metrics(&mut self, run_id: &crate::workflow::WorkflowRunId, context_vars: usize, history_size: usize) {
+        // Simple memory estimation - in production this would use actual memory profiling
+        let estimated_memory = (context_vars * 1024) + (history_size * 256);
+        let mut memory_metrics = MemoryMetrics::new();
+        memory_metrics.update(estimated_memory as u64, context_vars, history_size);
+        self.metrics.update_memory_metrics(run_id, memory_metrics);
     }
 }
 

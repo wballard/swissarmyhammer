@@ -555,13 +555,14 @@ impl Action for SubWorkflowAction {
         let substituted_inputs = self.substitute_variables(context);
         
         // Build arguments for the sub-workflow
-        let mut args = Vec::new();
-        args.push("--dangerously-skip-permissions".to_string());
-        args.push("--output-format".to_string());
-        args.push("stream-json".to_string());
-        args.push("flow".to_string());
-        args.push("run".to_string());
-        args.push(self.workflow_name.clone());
+        let mut args = vec![
+            "--dangerously-skip-permissions".to_string(),
+            "--output-format".to_string(),
+            "stream-json".to_string(),
+            "flow".to_string(),
+            "run".to_string(),
+            self.workflow_name.clone(),
+        ];
         
         // Add workflow stack to track circular dependencies
         let mut new_stack = workflow_stack;
@@ -574,7 +575,7 @@ impl Action for SubWorkflowAction {
                     format!("Invalid input variable key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
                 ));
             }
-            args.push(format!("--var"));
+            args.push("--var".to_string());
             args.push(format!("{}={}", key, value));
         }
         
@@ -668,11 +669,9 @@ fn parse_workflow_output(output: &str) -> ActionResult<Value> {
                 match event_type.as_str() {
                     "workflow_completed" => {
                         success = true;
-                        if let Some(context) = json.get("context") {
-                            if let Value::Object(obj) = context {
-                                for (k, v) in obj {
-                                    result.insert(k.clone(), v.clone());
-                                }
+                        if let Some(Value::Object(obj)) = json.get("context") {
+                            for (k, v) in obj {
+                                result.insert(k.clone(), v.clone());
                             }
                         }
                     }

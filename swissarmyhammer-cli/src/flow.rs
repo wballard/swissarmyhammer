@@ -1,11 +1,12 @@
 //! Flow command implementation for executing workflows
 
 use crate::cli::{FlowSubcommand, OutputFormat, PromptSource};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future;
 use std::time::Duration;
 use swissarmyhammer::workflow::{
     WorkflowExecutor, WorkflowStorage, WorkflowRunId, WorkflowRunStatus, WorkflowName,
+    Workflow, StateId,
 };
 use swissarmyhammer::{Result, SwissArmyHammerError};
 use tokio::signal;
@@ -19,9 +20,10 @@ pub async fn run_flow_command(subcommand: FlowSubcommand) -> Result<()> {
             vars,
             interactive,
             dry_run,
+            test,
             timeout: timeout_str,
         } => {
-            run_workflow_command(workflow, vars, interactive, dry_run, timeout_str).await
+            run_workflow_command(workflow, vars, interactive, dry_run, test, timeout_str).await
         }
         FlowSubcommand::Resume {
             run_id,
@@ -53,6 +55,7 @@ async fn run_workflow_command(
     vars: Vec<String>,
     interactive: bool,
     dry_run: bool,
+    test_mode: bool,
     timeout_str: Option<String>,
 ) -> Result<()> {
     let mut storage = WorkflowStorage::file_system()?;
@@ -100,6 +103,57 @@ async fn run_workflow_command(
                 state.description,
                 if state.is_terminal { "(terminal)" } else { "" }
             );
+        }
+        
+        return Ok(());
+    }
+    
+    if test_mode {
+        println!("🧪 Test mode - executing workflow with mocked actions:");
+        println!("📋 Workflow: {}", workflow.name);
+        println!("🏁 Initial state: {}", workflow.initial_state);
+        println!("🔧 Variables: {:?}", variables);
+        if let Some(timeout) = timeout_duration {
+            println!("⏱️  Timeout: {:?}", timeout);
+        }
+        
+        // Execute in test mode with coverage tracking
+        let coverage = execute_workflow_test_mode(workflow, variables, timeout_duration).await?;
+        
+        // Generate coverage report
+        println!("\n📊 Coverage Report:");
+        println!("  States visited: {}/{} ({:.1}%)", 
+            coverage.visited_states.len(), 
+            coverage.total_states,
+            (coverage.visited_states.len() as f64 / coverage.total_states as f64) * 100.0
+        );
+        println!("  Transitions used: {}/{} ({:.1}%)",
+            coverage.visited_transitions.len(),
+            coverage.total_transitions,
+            (coverage.visited_transitions.len() as f64 / coverage.total_transitions as f64) * 100.0
+        );
+        
+        // Show unvisited states
+        if !coverage.unvisited_states.is_empty() {
+            println!("\n❌ Unvisited states:");
+            for state in &coverage.unvisited_states {
+                println!("  - {}", state);
+            }
+        }
+        
+        // Show unvisited transitions
+        if !coverage.unvisited_transitions.is_empty() {
+            println!("\n❌ Unvisited transitions:");
+            for transition in &coverage.unvisited_transitions {
+                println!("  - {}", transition);
+            }
+        }
+        
+        if coverage.visited_states.len() == coverage.total_states {
+            println!("\n✅ Full state coverage achieved!");
+        }
+        if coverage.visited_transitions.len() == coverage.total_transitions {
+            println!("✅ Full transition coverage achieved!");
         }
         
         return Ok(());
@@ -583,12 +637,130 @@ fn parse_duration(s: &str) -> Result<Duration> {
 /// Helper to parse WorkflowRunId from string
 fn parse_workflow_run_id(s: &str) -> Result<WorkflowRunId> {
     WorkflowRunId::parse(s)
-        .map_err(|e| SwissArmyHammerError::Other(e))
+        .map_err(SwissArmyHammerError::Other)
 }
 
 /// Helper to convert WorkflowRunId to string
 fn workflow_run_id_to_string(id: &WorkflowRunId) -> String {
     id.to_string()
+}
+
+/// Coverage tracking for workflow test execution
+struct WorkflowCoverage {
+    visited_states: HashSet<StateId>,
+    visited_transitions: HashSet<String>,
+    total_states: usize,
+    total_transitions: usize,
+    unvisited_states: Vec<StateId>,
+    unvisited_transitions: Vec<String>,
+}
+
+/// Execute workflow in test mode with mocked actions
+async fn execute_workflow_test_mode(
+    workflow: Workflow,
+    initial_variables: HashMap<String, serde_json::Value>,
+    timeout_duration: Option<Duration>,
+) -> Result<WorkflowCoverage> {
+    use swissarmyhammer::workflow::{WorkflowRun, ConditionType};
+    
+    let mut coverage = WorkflowCoverage {
+        visited_states: HashSet::new(),
+        visited_transitions: HashSet::new(),
+        total_states: workflow.states.len(),
+        total_transitions: workflow.transitions.len(),
+        unvisited_states: Vec::new(),
+        unvisited_transitions: Vec::new(),
+    };
+    
+    // Create a mock workflow run
+    let mut run = WorkflowRun::new(workflow.clone());
+    run.context.extend(initial_variables);
+    
+    // Track visited states and transitions
+    let mut current_state = workflow.initial_state.clone();
+    coverage.visited_states.insert(current_state.clone());
+    
+    println!("\n▶️  Starting test execution...");
+    
+    // Simple execution loop - try to visit all states
+    let start_time = std::time::Instant::now();
+    let timeout = timeout_duration.unwrap_or(Duration::from_secs(60));
+    
+    while !workflow.states.get(&current_state).map(|s| s.is_terminal).unwrap_or(false) {
+        if start_time.elapsed() > timeout {
+            println!("⏰ Test execution timed out");
+            break;
+        }
+        
+        // Find transitions from current state
+        let available_transitions: Vec<_> = workflow.transitions.iter()
+            .filter(|t| t.from_state == current_state)
+            .collect();
+        
+        if available_transitions.is_empty() {
+            println!("⚠️  No transitions from state: {}", current_state);
+            break;
+        }
+        
+        // Try each transition, preferring unvisited ones
+        let mut transition_taken = false;
+        for transition in &available_transitions {
+            let transition_key = format!("{} -> {}", transition.from_state, transition.to_state);
+            
+            // Check if we should take this transition based on condition
+            let should_take = match &transition.condition.condition_type {
+                ConditionType::Always => true,
+                ConditionType::Never => false,
+                ConditionType::OnSuccess => true, // Mock success
+                ConditionType::OnFailure => false,
+                ConditionType::Custom => true, // Always true in test mode
+            };
+            
+            if should_take && (!coverage.visited_transitions.contains(&transition_key) || available_transitions.len() == 1) {
+                // Mock action execution
+                if let Some(action) = &transition.action {
+                    println!("🎭 Mock executing: {}", action);
+                    // Set mock result in context
+                    run.context.insert("result".to_string(), serde_json::json!({
+                        "success": true,
+                        "output": "Mock output"
+                    }));
+                }
+                
+                // Take the transition
+                println!("➡️  {} -> {}", transition.from_state, transition.to_state);
+                coverage.visited_transitions.insert(transition_key);
+                coverage.visited_states.insert(transition.to_state.clone());
+                current_state = transition.to_state.clone();
+                transition_taken = true;
+                break;
+            }
+        }
+        
+        if !transition_taken {
+            // All transitions have been visited or conditions not met
+            println!("🔚 All transitions from {} have been explored", current_state);
+            break;
+        }
+    }
+    
+    // Calculate unvisited states and transitions
+    for state_id in workflow.states.keys() {
+        if !coverage.visited_states.contains(state_id) {
+            coverage.unvisited_states.push(state_id.clone());
+        }
+    }
+    
+    for transition in &workflow.transitions {
+        let transition_key = format!("{} -> {}", transition.from_state, transition.to_state);
+        if !coverage.visited_transitions.contains(&transition_key) {
+            coverage.unvisited_transitions.push(transition_key);
+        }
+    }
+    
+    println!("\n✅ Test execution completed");
+    
+    Ok(coverage)
 }
 
 #[cfg(test)]

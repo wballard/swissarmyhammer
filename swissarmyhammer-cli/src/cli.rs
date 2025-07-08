@@ -370,6 +370,10 @@ pub enum FlowSubcommand {
         #[arg(long)]
         dry_run: bool,
 
+        /// Test mode - execute with mocked actions and generate coverage report
+        #[arg(long)]
+        test: bool,
+
         /// Execution timeout (e.g., 30s, 5m, 1h)
         #[arg(long)]
         timeout: Option<String>,

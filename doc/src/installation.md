@@ -2,18 +2,14 @@
 
 ## Quick Install (Recommended)
 
-### Unix-like Systems (Linux/macOS)
+To update SwissArmyHammer to the latest version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/swissarmyhammer/swissarmyhammer/main/install.sh | sh
+# Update from git repository
+cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli --force
 ```
 
-This script will:
-
-- Detect your platform automatically
-- Download the latest release
-- Install to `/usr/local/bin`
-- Verify the installation
+The `--force` flag will overwrite the existing installation.
 
 ## Clone and Build
 
@@ -41,17 +37,6 @@ cargo install --path swissarmyhammer-cli
 # Or run directly without installing
 cargo run --bin swissarmyhammer -- --help
 ```
-
-## Future Installation Methods
-
-Pre-built binaries and package manager support are planned for future releases:
-
-- **macOS**: Homebrew formula
-- **Linux**: DEB and RPM packages
-- **Windows**: MSI installer and Chocolatey package
-- **crates.io**: Published crate for `cargo install swissarmyhammer-cli`
-
-Check the [releases page](https://github.com/wballard/swissarmyhammer/releases) for updates.
 
 ## Verification
 
@@ -93,17 +78,6 @@ swissarmyhammer completion powershell >> $PROFILE
 
 Remember to reload your shell or start a new terminal session for completions to take effect.
 
-## Updating
-
-To update SwissArmyHammer to the latest version:
-
-```bash
-# Update from git repository
-cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli --force
-```
-
-The `--force` flag will overwrite the existing installation.
-
 ## Next Steps
 
 Once installed, continue to the [Quick Start](./quick-start.md) guide to set up SwissArmyHammer with Claude Code and create your first prompt.
@@ -115,6 +89,7 @@ Once installed, continue to the [Quick Start](./quick-start.md) guide to set up 
 **Command not found**: Make sure `~/.cargo/bin` is in your PATH.
 
 **Build failures**: Ensure you have Rust 1.70+ installed and try updating Rust:
+
 ```bash
 rustup update
 ```

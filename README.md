@@ -60,7 +60,7 @@ Please review this code for:
 
 ### Install
 
-See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions.
+See [https://wballard.github.io/swissarmyhammer/installation.html](https://wballard.github.io/swissarmyhammer/installation.html) for detailed installation instructions.
 
 ### Configure Claude Code
 
@@ -94,7 +94,7 @@ That's it! Your prompt is now available in Claude Code.
 
 ### Use as a Rust Library
 
-See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions.
+See [https://wballard.github.io/swissarmyhammer/installation.html](https://wballard.github.io/swissarmyhammer/installation.html) for detailed installation instructions.
 
 Basic usage:
 
@@ -226,7 +226,7 @@ swissarmyhammer --help
 
 ### Development Setup
 
-See [INSTALLATION.md](INSTALLATION.md) for development setup instructions.
+See [https://wballard.github.io/swissarmyhammer/installation.html](https://wballard.github.io/swissarmyhammer/installation.html) for development setup instructions.
 
 ## 📊 Project Status
 

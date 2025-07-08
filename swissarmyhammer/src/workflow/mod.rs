@@ -18,7 +18,7 @@ mod transition;
 
 pub use actions::{
     parse_action_from_description, Action, ActionError, ActionResult, LogAction, LogLevel,
-    PromptAction, SetVariableAction, WaitAction,
+    PromptAction, SetVariableAction, SubWorkflowAction, WaitAction,
 };
 pub use definition::{Workflow, WorkflowError, WorkflowName, WorkflowResult};
 pub use error_utils::{

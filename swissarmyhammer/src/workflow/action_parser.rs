@@ -1,7 +1,7 @@
 //! Action parsing utilities for workflow state descriptions
 
 use crate::workflow::actions::{
-    ActionError, ActionResult, LogAction, LogLevel, PromptAction, SetVariableAction, WaitAction,
+    ActionError, ActionResult, LogAction, LogLevel, PromptAction, SetVariableAction, SubWorkflowAction, WaitAction,
 };
 use regex::Regex;
 use serde_json::Value;
@@ -18,10 +18,10 @@ pub struct ActionParser {
     log_regex: Regex,
     /// Regex for parsing set variable actions
     set_variable_regex: Regex,
-    /// Regex for extracting quoted text
-    quoted_text_regex: Regex,
     /// Regex for parsing arguments
     argument_regex: Regex,
+    /// Regex for parsing sub-workflow actions
+    sub_workflow_regex: Regex,
 }
 
 impl ActionParser {
@@ -36,10 +36,10 @@ impl ActionParser {
                 .map_err(|e| ActionError::ParseError(format!("Failed to compile log regex: {}", e)))?,
             set_variable_regex: Regex::new(r#"^[Ss]et\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*"?([^"]*)"?$"#)
                 .map_err(|e| ActionError::ParseError(format!("Failed to compile set variable regex: {}", e)))?,
-            quoted_text_regex: Regex::new(r#""([^"]*)""#)
-                .map_err(|e| ActionError::ParseError(format!("Failed to compile quoted text regex: {}", e)))?,
             argument_regex: Regex::new(r#"([a-zA-Z_][a-zA-Z0-9_-]*)="([^"]*)"#)
                 .map_err(|e| ActionError::ParseError(format!("Failed to compile argument regex: {}", e)))?,
+            sub_workflow_regex: Regex::new(r#"^(?:[Rr]un\s+workflow|[Dd]elegate(?:\s+to)?)\s+"([^"]+)"(?:\s+with\s+(.+))?$"#)
+                .map_err(|e| ActionError::ParseError(format!("Failed to compile sub-workflow regex: {}", e)))?,
         })
     }
 
@@ -142,6 +142,49 @@ impl ActionParser {
             }
 
             return Ok(Some(SetVariableAction::new(var_name, value)));
+        }
+
+        Ok(None)
+    }
+
+    /// Parse a sub-workflow action from description
+    /// Format: Run workflow "workflow-name" with input1="value1" input2="value2"
+    /// Format: Delegate to "workflow-name" with input="${data}"
+    pub fn parse_sub_workflow_action(&self, description: &str) -> ActionResult<Option<SubWorkflowAction>> {
+        if let Some(captures) = self.sub_workflow_regex.captures(description.trim()) {
+            let workflow_name = captures.get(1).unwrap().as_str().to_string();
+            let mut action = SubWorkflowAction::new(workflow_name);
+
+            // Parse input variables if present
+            if let Some(inputs_match) = captures.get(2) {
+                let inputs_str = inputs_match.as_str();
+                
+                // Check if it's a single input without quotes (e.g., with input="${data}")
+                if inputs_str.starts_with("input=") {
+                    let value = inputs_str.strip_prefix("input=").unwrap_or("");
+                    let value = value.trim_matches('"');
+                    action.input_variables.insert("input".to_string(), value.to_string());
+                } else {
+                    // Parse multiple arguments
+                    for arg_capture in self.argument_regex.captures_iter(inputs_str) {
+                        if let (Some(key), Some(value)) = (arg_capture.get(1), arg_capture.get(2)) {
+                            let key = key.as_str().to_string();
+                            let value = value.as_str().to_string();
+                            
+                            // Validate key format
+                            if !self.is_valid_argument_key(&key) {
+                                return Err(ActionError::ParseError(
+                                    format!("Invalid input variable key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
+                                ));
+                            }
+                            
+                            action.input_variables.insert(key, value);
+                        }
+                    }
+                }
+            }
+
+            return Ok(Some(action));
         }
 
         Ok(None)
@@ -302,5 +345,34 @@ mod tests {
         // Test with missing variable
         let result = parser.substitute_variables_safe("Process ${missing} file", &context).unwrap();
         assert_eq!(result, "Process ${missing} file");
+    }
+
+    #[test]
+    fn test_parse_sub_workflow_action() {
+        let parser = ActionParser::new().unwrap();
+        
+        // Test "Run workflow" format
+        let action = parser.parse_sub_workflow_action("Run workflow \"validation-workflow\"").unwrap().unwrap();
+        assert_eq!(action.workflow_name, "validation-workflow");
+        assert!(action.input_variables.is_empty());
+
+        // Test "Run workflow" with arguments
+        let action = parser.parse_sub_workflow_action("Run workflow \"analyze-code\" with file=\"test.rs\" mode=\"strict\"").unwrap().unwrap();
+        assert_eq!(action.workflow_name, "analyze-code");
+        assert_eq!(action.input_variables.get("file"), Some(&"test.rs".to_string()));
+        assert_eq!(action.input_variables.get("mode"), Some(&"strict".to_string()));
+
+        // Test "Delegate to" format
+        let action = parser.parse_sub_workflow_action("Delegate to \"validation-workflow\" with input=\"${data}\"").unwrap().unwrap();
+        assert_eq!(action.workflow_name, "validation-workflow");
+        assert_eq!(action.input_variables.get("input"), Some(&"${data}".to_string()));
+
+        // Test case insensitive
+        let action = parser.parse_sub_workflow_action("run workflow \"test-workflow\"").unwrap().unwrap();
+        assert_eq!(action.workflow_name, "test-workflow");
+
+        // Test invalid format
+        let result = parser.parse_sub_workflow_action("Run workflow test-workflow");
+        assert!(result.unwrap().is_none());
     }
 }

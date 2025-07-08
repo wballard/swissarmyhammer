@@ -6,7 +6,7 @@ use std::future;
 use std::time::Duration;
 use swissarmyhammer::workflow::{
     WorkflowExecutor, WorkflowStorage, WorkflowRunId, WorkflowRunStatus, WorkflowName,
-    Workflow, StateId,
+    Workflow, StateId, TransitionKey,
 };
 use swissarmyhammer::{Result, SwissArmyHammerError};
 use tokio::signal;
@@ -648,11 +648,11 @@ fn workflow_run_id_to_string(id: &WorkflowRunId) -> String {
 /// Coverage tracking for workflow test execution
 struct WorkflowCoverage {
     visited_states: HashSet<StateId>,
-    visited_transitions: HashSet<String>,
+    visited_transitions: HashSet<TransitionKey>,
     total_states: usize,
     total_transitions: usize,
     unvisited_states: Vec<StateId>,
-    unvisited_transitions: Vec<String>,
+    unvisited_transitions: Vec<TransitionKey>,
 }
 
 /// Execute workflow in test mode with mocked actions
@@ -705,7 +705,7 @@ async fn execute_workflow_test_mode(
         // Try each transition, preferring unvisited ones
         let mut transition_taken = false;
         for transition in &available_transitions {
-            let transition_key = format!("{} -> {}", transition.from_state, transition.to_state);
+            let transition_key = TransitionKey::from_refs(&transition.from_state, &transition.to_state);
             
             // Check if we should take this transition based on condition
             let should_take = match &transition.condition.condition_type {
@@ -728,7 +728,7 @@ async fn execute_workflow_test_mode(
                 }
                 
                 // Take the transition
-                println!("➡️  {} -> {}", transition.from_state, transition.to_state);
+                println!("➡️  {}", transition_key);
                 coverage.visited_transitions.insert(transition_key);
                 coverage.visited_states.insert(transition.to_state.clone());
                 current_state = transition.to_state.clone();
@@ -752,7 +752,7 @@ async fn execute_workflow_test_mode(
     }
     
     for transition in &workflow.transitions {
-        let transition_key = format!("{} -> {}", transition.from_state, transition.to_state);
+        let transition_key = TransitionKey::from_refs(&transition.from_state, &transition.to_state);
         if !coverage.visited_transitions.contains(&transition_key) {
             coverage.unvisited_transitions.push(transition_key);
         }

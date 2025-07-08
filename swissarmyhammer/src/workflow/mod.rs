@@ -16,6 +16,7 @@ mod storage;
 #[cfg(test)]
 mod test_helpers;
 mod transition;
+mod transition_key;
 
 pub use actions::{
     parse_action_from_description, Action, ActionError, ActionResult, LogAction, LogLevel,
@@ -39,3 +40,4 @@ pub use storage::{
     WorkflowStorage, WorkflowStorageBackend,
 };
 pub use transition::{ConditionType, Transition, TransitionCondition};
+pub use transition_key::TransitionKey;

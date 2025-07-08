@@ -11,9 +11,9 @@ Implementing workflow validation and testing capabilities for SwissArmyHammer.
 - [x] Should create a generic graph utility module for workflow graph operations
 
 ### 2. Missing Type Safety - Transition Keys
-- [ ] Using raw `String` for transition keys (`format!("{} -> {}", from, to)`) throughout
-- [ ] Should create a proper `TransitionKey` type to avoid string manipulation errors
-- [ ] Example locations: `flow.rs:709`, `flow.rs:755`, `validate.rs:multiple`
+- [x] Using raw `String` for transition keys (`format!("{} -> {}", from, to)`) throughout
+- [x] Should create a proper `TransitionKey` type to avoid string manipulation errors
+- [x] Example locations: `flow.rs:709`, `flow.rs:755`, `validate.rs:multiple`
 
 ### 3. Error Handling Improvements
 - [ ] `validate_workflow` method swallows file read errors with `Ok(())` instead of propagating

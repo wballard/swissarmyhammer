@@ -256,11 +256,16 @@ impl Validator {
         Ok(())
     }
 
+    /// Validates all workflow files found in the project
+    /// 
+    /// Walks through directories looking for .mermaid files in workflows/ directories
+    /// and validates each one, collecting all errors in the ValidationResult.
     fn validate_all_workflows(&self, result: &mut ValidationResult) -> Result<()> {
         // Find workflow files in .swissarmyhammer/workflows directories
         let current_dir = std::env::current_dir()?;
         
         // Walk through directories looking for workflow files
+        // TODO: Consider adding a max depth limit to prevent excessive traversal
         for entry in WalkDir::new(&current_dir)
             .follow_links(true)
             .into_iter()
@@ -288,6 +293,15 @@ impl Validator {
         Ok(())
     }
 
+    /// Validates a single workflow file
+    /// 
+    /// This method collects validation errors in the provided ValidationResult
+    /// rather than returning errors directly. This allows validation to continue
+    /// for other files even if this one has errors.
+    /// 
+    /// # Returns
+    /// 
+    /// Always returns Ok(()) - errors are recorded in the ValidationResult parameter
     pub fn validate_workflow(&self, workflow_path: &Path, result: &mut ValidationResult) -> Result<()> {
         result.files_checked += 1;
 
@@ -304,6 +318,7 @@ impl Validator {
                     message: format!("Failed to read workflow file: {}", e),
                     suggestion: None,
                 });
+                // Continue validation of other files
                 return Ok(());
             }
         };
@@ -325,6 +340,7 @@ impl Validator {
                     message: format!("Failed to parse workflow syntax: {}", e),
                     suggestion: Some("Check your Mermaid state diagram syntax".to_string()),
                 });
+                // Continue validation of other files
                 return Ok(());
             }
         };
@@ -344,6 +360,7 @@ impl Validator {
                         suggestion: None,
                     });
                 }
+                // Continue with other validations to find all issues
                 return Ok(());
             }
         }

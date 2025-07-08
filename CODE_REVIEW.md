@@ -16,8 +16,8 @@ Implementing workflow validation and testing capabilities for SwissArmyHammer.
 - [x] Example locations: `flow.rs:709`, `flow.rs:755`, `validate.rs:multiple`
 
 ### 3. Error Handling Improvements
-- [ ] `validate_workflow` method swallows file read errors with `Ok(())` instead of propagating
-- [ ] Should consider whether validation errors should stop processing or continue
+- [x] `validate_workflow` method swallows file read errors with `Ok(())` instead of propagating
+- [x] Should consider whether validation errors should stop processing or continue
 - [ ] Line/column information is always None in validation issues - could parse Mermaid to provide better location info
 
 ### 4. Test Coverage Gaps

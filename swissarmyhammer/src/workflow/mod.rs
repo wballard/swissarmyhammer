@@ -3,8 +3,10 @@
 //! This module provides the core types for representing and executing workflows
 //! based on Mermaid state diagrams.
 
+mod action_parser;
 mod actions;
 mod definition;
+mod error_utils;
 mod executor;
 mod parser;
 mod run;
@@ -19,6 +21,10 @@ pub use actions::{
     PromptAction, SetVariableAction, WaitAction,
 };
 pub use definition::{Workflow, WorkflowError, WorkflowName, WorkflowResult};
+pub use error_utils::{
+    handle_command_error, handle_command_error_with_mapper, handle_claude_command_error,
+    command_succeeded, extract_stderr, extract_stdout,
+};
 pub use executor::{
     ExecutionEvent, ExecutionEventType, ExecutorError, ExecutorResult, WorkflowExecutor,
 };

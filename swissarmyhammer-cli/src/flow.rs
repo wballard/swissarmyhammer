@@ -581,15 +581,14 @@ fn parse_duration(s: &str) -> Result<Duration> {
 }
 
 /// Helper to parse WorkflowRunId from string
-fn parse_workflow_run_id(_s: &str) -> Result<WorkflowRunId> {
-    // For now, assume we can parse from string representation
-    // In a real implementation, we'd need proper ULID parsing
-    Ok(WorkflowRunId::new()) // This is a placeholder - we'll need to implement proper parsing
+fn parse_workflow_run_id(s: &str) -> Result<WorkflowRunId> {
+    WorkflowRunId::parse(s)
+        .map_err(|e| SwissArmyHammerError::Other(e))
 }
 
 /// Helper to convert WorkflowRunId to string
 fn workflow_run_id_to_string(id: &WorkflowRunId) -> String {
-    format!("{:?}", id) // This is a placeholder - we'll need to implement proper string conversion
+    id.to_string()
 }
 
 #[cfg(test)]
@@ -612,8 +611,17 @@ mod tests {
     fn test_workflow_run_id_helpers() {
         let id = WorkflowRunId::new();
         let id_str = workflow_run_id_to_string(&id);
-        let _parsed_id = parse_workflow_run_id(&id_str).unwrap();
-        // Note: For now this just tests that the functions don't panic
-        // In a full implementation, we'd test round-trip conversion
+        let parsed_id = parse_workflow_run_id(&id_str).unwrap();
+        
+        // Test round-trip conversion works correctly
+        assert_eq!(id, parsed_id);
+        assert_eq!(id_str, workflow_run_id_to_string(&parsed_id));
+    }
+
+    #[test]
+    fn test_workflow_run_id_parse_error() {
+        let invalid_id = "invalid-ulid-string";
+        let result = parse_workflow_run_id(invalid_id);
+        assert!(result.is_err());
     }
 }

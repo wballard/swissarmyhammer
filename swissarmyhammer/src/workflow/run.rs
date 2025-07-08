@@ -14,6 +14,18 @@ impl WorkflowRunId {
     pub fn new() -> Self {
         Self(Ulid::new())
     }
+
+    /// Parse a WorkflowRunId from a string representation
+    pub fn parse(s: &str) -> Result<Self, String> {
+        Ulid::from_string(s)
+            .map(Self)
+            .map_err(|e| format!("Invalid workflow run ID '{}': {}", s, e))
+    }
+
+    /// Convert WorkflowRunId to string representation
+    pub fn to_string(&self) -> String {
+        self.0.to_string()
+    }
 }
 
 impl Default for WorkflowRunId {
@@ -108,6 +120,35 @@ mod tests {
         let id1 = WorkflowRunId::new();
         let id2 = WorkflowRunId::new();
         assert_ne!(id1, id2);
+    }
+
+    #[test]
+    fn test_workflow_run_id_parse_and_to_string() {
+        let id = WorkflowRunId::new();
+        let id_str = id.to_string();
+        
+        // Test round-trip conversion
+        let parsed_id = WorkflowRunId::parse(&id_str).unwrap();
+        assert_eq!(id, parsed_id);
+        assert_eq!(id_str, parsed_id.to_string());
+    }
+
+    #[test]
+    fn test_workflow_run_id_parse_invalid() {
+        let invalid_id = "invalid-ulid";
+        let result = WorkflowRunId::parse(invalid_id);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid workflow run ID"));
+    }
+
+    #[test]
+    fn test_workflow_run_id_parse_valid_ulid() {
+        // Generate a valid ULID string
+        let ulid = Ulid::new();
+        let ulid_str = ulid.to_string();
+        
+        let parsed_id = WorkflowRunId::parse(&ulid_str).unwrap();
+        assert_eq!(parsed_id.to_string(), ulid_str);
     }
 
     #[test]

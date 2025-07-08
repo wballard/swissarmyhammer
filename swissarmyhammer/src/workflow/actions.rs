@@ -9,6 +9,8 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::process::Command;
 use tokio::time::timeout;
+use crate::workflow::action_parser::ActionParser;
+use crate::workflow::error_utils::handle_claude_command_error;
 
 /// Errors that can occur during action execution
 #[derive(Debug, Error)]
@@ -170,16 +172,8 @@ impl Action for PromptAction {
             }
         };
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(ActionError::ClaudeError(format!(
-                "Claude command failed: {}",
-                stderr
-            )));
-        }
-
-        // Parse streaming JSON output
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Use shared error handling utility
+        let stdout = handle_claude_command_error(output)?;
         let response = parse_claude_response(&stdout)?;
 
         // Store result in context if variable name specified
@@ -424,51 +418,9 @@ fn is_valid_argument_key(key: &str) -> bool {
 /// Helper function to substitute variables in a string
 /// Variables are referenced as ${variable_name}
 fn substitute_variables_in_string(input: &str, context: &HashMap<String, Value>) -> String {
-    let mut result = String::new();
-    let mut chars = input.char_indices().peekable();
-    
-    while let Some((i, ch)) = chars.next() {
-        if ch == '$' && chars.peek().map(|(_, c)| *c) == Some('{') {
-            // Found potential variable start
-            chars.next(); // Skip '{'
-            let var_start = i + 2;
-            let mut var_end = var_start;
-            let mut var_name = String::new();
-            let mut found_closing = false;
-            
-            // Collect variable name until we find '}'
-            for (j, ch) in chars.by_ref() {
-                if ch == '}' {
-                    var_end = j;
-                    found_closing = true;
-                    break;
-                }
-                var_name.push(ch);
-            }
-            
-            if found_closing && !var_name.is_empty() {
-                // Validate variable name contains only safe characters
-                if var_name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.') {
-                    // Valid variable found, substitute it
-                    let replacement = context
-                        .get(&var_name)
-                        .map(value_to_string)
-                        .unwrap_or_else(|| format!("${{{}}}", var_name));
-                    result.push_str(&replacement);
-                } else {
-                    // Invalid variable name, keep original
-                    result.push_str(&input[i..=var_end]);
-                }
-            } else {
-                // Invalid variable syntax, keep original
-                result.push_str(&input[i..=var_end]);
-            }
-        } else {
-            result.push(ch);
-        }
-    }
-    
-    result
+    let parser = ActionParser::new().expect("Failed to create ActionParser");
+    parser.substitute_variables_safe(input, context)
+        .unwrap_or_else(|_| input.to_string())
 }
 
 /// Convert a JSON Value to a string representation
@@ -532,165 +484,38 @@ fn parse_claude_response(output: &str) -> ActionResult<Value> {
 
 /// Parse action from state description text
 pub fn parse_action_from_description(description: &str) -> ActionResult<Option<Box<dyn Action>>> {
+    let parser = ActionParser::new()?;
     let description = description.trim();
 
-    // Parse different action patterns
-    if let Some(prompt_action) = parse_prompt_action(description)? {
+    // Parse different action patterns using the robust parser
+    if let Some(prompt_action) = parser.parse_prompt_action(description)? {
         return Ok(Some(Box::new(prompt_action)));
     }
 
-    if let Some(wait_action) = parse_wait_action(description)? {
+    if let Some(wait_action) = parser.parse_wait_action(description)? {
         return Ok(Some(Box::new(wait_action)));
     }
 
-    if let Some(log_action) = parse_log_action(description)? {
+    if let Some(log_action) = parser.parse_log_action(description)? {
         return Ok(Some(Box::new(log_action)));
     }
 
-    if let Some(set_action) = parse_set_variable_action(description)? {
+    if let Some(set_action) = parser.parse_set_variable_action(description)? {
         return Ok(Some(Box::new(set_action)));
     }
 
     Ok(None)
 }
 
-/// Parse prompt action from description
-/// Format: Execute prompt "prompt-name" with arg1="value1" arg2="value2"
-fn parse_prompt_action(description: &str) -> ActionResult<Option<PromptAction>> {
-    if !description.to_lowercase().starts_with("execute prompt") {
-        return Ok(None);
-    }
 
-    // Extract prompt name
-    let start_quote = description
-        .find('"')
-        .ok_or_else(|| ActionError::ParseError("Expected quoted prompt name".to_string()))?;
-    
-    let remaining = description.get(start_quote + 1..)
-        .ok_or_else(|| ActionError::ParseError("Invalid prompt name position".to_string()))?;
-    
-    let relative_end = remaining.find('"')
-        .ok_or_else(|| ActionError::ParseError("Expected closing quote for prompt name".to_string()))?;
-    
-    let prompt_name = remaining.get(..relative_end)
-        .ok_or_else(|| ActionError::ParseError("Invalid prompt name range".to_string()))?
-        .to_string();
-    let mut action = PromptAction::new(prompt_name);
 
-    // Parse arguments if present
-    if let Some(with_pos) = description.find(" with ") {
-        if let Some(args_part) = description.get(with_pos + 6..) {
-            for arg_pair in args_part.split_whitespace() {
-                if let Some(eq_pos) = arg_pair.find('=') {
-                    if let (Some(key), Some(value_part)) = (arg_pair.get(..eq_pos), arg_pair.get(eq_pos + 1..)) {
-                        let key = key.to_string();
-                        let value = value_part.trim_matches('"').to_string();
-                        action.arguments.insert(key, value);
-                    }
-                }
-            }
-        }
-    }
 
-    Ok(Some(action))
-}
 
-/// Parse wait action from description
-/// Format: Wait for user confirmation OR Wait 30 seconds
-fn parse_wait_action(description: &str) -> ActionResult<Option<WaitAction>> {
-    let lower_desc = description.to_lowercase();
-
-    if lower_desc.starts_with("wait for user") {
-        return Ok(Some(
-            WaitAction::new_user_input().with_message(description.to_string()),
-        ));
-    }
-
-    if lower_desc.starts_with("wait ") {
-        // Try to parse duration
-        if let Some(seconds) = extract_duration_seconds(&lower_desc) {
-            return Ok(Some(WaitAction::new_duration(Duration::from_secs(seconds))));
-        }
-    }
-
-    Ok(None)
-}
-
-/// Parse log action from description
-/// Format: Log "message" OR Log error "message"
-fn parse_log_action(description: &str) -> ActionResult<Option<LogAction>> {
-    let lower_desc = description.to_lowercase();
-
-    if lower_desc.starts_with("log error") {
-        if let Some(message) = extract_quoted_text(description) {
-            return Ok(Some(LogAction::error(message)));
-        }
-    } else if lower_desc.starts_with("log warning") {
-        if let Some(message) = extract_quoted_text(description) {
-            return Ok(Some(LogAction::warning(message)));
-        }
-    } else if lower_desc.starts_with("log") {
-        if let Some(message) = extract_quoted_text(description) {
-            return Ok(Some(LogAction::info(message)));
-        }
-    }
-
-    Ok(None)
-}
-
-/// Parse set variable action from description
-/// Format: Set variable_name="${value}"
-fn parse_set_variable_action(description: &str) -> ActionResult<Option<SetVariableAction>> {
-    if !description.to_lowercase().starts_with("set ") {
-        return Ok(None);
-    }
-
-    // Find the equals sign
-    if let Some(eq_pos) = description.find('=') {
-        let var_name = description.get(4..eq_pos)
-            .ok_or_else(|| ActionError::ParseError("Invalid variable name range".to_string()))?
-            .trim()
-            .to_string();
-        let value = description.get(eq_pos + 1..)
-            .ok_or_else(|| ActionError::ParseError("Invalid value range".to_string()))?
-            .trim_matches('"')
-            .to_string();
-
-        return Ok(Some(SetVariableAction::new(var_name, value)));
-    }
-
-    Ok(None)
-}
-
-/// Helper to extract quoted text from a string
-fn extract_quoted_text(text: &str) -> Option<String> {
-    let start_quote = text.find('"')?;
-    let remaining = text.get(start_quote + 1..)?;
-    let relative_end = remaining.find('"')?;
-    remaining.get(..relative_end).map(|s| s.to_string())
-}
-
-/// Helper to extract duration in seconds from text
-fn extract_duration_seconds(text: &str) -> Option<u64> {
-    // Simple parser for "wait 30 seconds", "wait 5 minutes", etc.
-    let parts: Vec<&str> = text.split_whitespace().collect();
-    if parts.len() >= 3 {
-        if let Ok(number) = parts[1].parse::<u64>() {
-            let unit = parts[2].to_lowercase();
-            return match unit.as_str() {
-                "second" | "seconds" | "sec" | "s" => Some(number),
-                "minute" | "minutes" | "min" | "m" => Some(number * 60),
-                "hour" | "hours" | "h" => Some(number * 3600),
-                _ => None,
-            };
-        }
-    }
-    None
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::workflow::action_parser::ActionParser;
 
     #[test]
     fn test_variable_substitution() {
@@ -705,8 +530,9 @@ mod tests {
 
     #[test]
     fn test_parse_prompt_action() {
+        let parser = ActionParser::new().unwrap();
         let desc = r#"Execute prompt "analyze-code" with file="test.rs" verbose="true""#;
-        let action = parse_prompt_action(desc).unwrap().unwrap();
+        let action = parser.parse_prompt_action(desc).unwrap().unwrap();
 
         assert_eq!(action.prompt_name, "analyze-code");
         assert_eq!(action.arguments.get("file"), Some(&"test.rs".to_string()));
@@ -715,21 +541,23 @@ mod tests {
 
     #[test]
     fn test_parse_wait_action() {
-        let action = parse_wait_action("Wait for user confirmation")
+        let parser = ActionParser::new().unwrap();
+        let action = parser.parse_wait_action("Wait for user confirmation")
             .unwrap()
             .unwrap();
         assert!(action.duration.is_none());
 
-        let action = parse_wait_action("Wait 30 seconds").unwrap().unwrap();
+        let action = parser.parse_wait_action("Wait 30 seconds").unwrap().unwrap();
         assert_eq!(action.duration, Some(Duration::from_secs(30)));
     }
 
     #[test]
     fn test_parse_log_action() {
-        let action = parse_log_action(r#"Log "Hello world""#).unwrap().unwrap();
+        let parser = ActionParser::new().unwrap();
+        let action = parser.parse_log_action(r#"Log "Hello world""#).unwrap().unwrap();
         assert_eq!(action.message, "Hello world");
 
-        let action = parse_log_action(r#"Log error "Something failed""#)
+        let action = parser.parse_log_action(r#"Log error "Something failed""#)
             .unwrap()
             .unwrap();
         assert_eq!(action.message, "Something failed");
@@ -737,7 +565,8 @@ mod tests {
 
     #[test]
     fn test_parse_set_variable_action() {
-        let action = parse_set_variable_action(r#"Set result="${claude_response}""#)
+        let parser = ActionParser::new().unwrap();
+        let action = parser.parse_set_variable_action(r#"Set result="${claude_response}""#)
             .unwrap()
             .unwrap();
         assert_eq!(action.variable_name, "result");

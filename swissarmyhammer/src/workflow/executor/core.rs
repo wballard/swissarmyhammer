@@ -7,6 +7,8 @@ use crate::workflow::{
 use serde_json::Value;
 use super::{ExecutorError, ExecutorResult, ExecutionEvent, ExecutionEventType, MAX_TRANSITIONS, DEFAULT_MAX_HISTORY_SIZE, LAST_ACTION_RESULT_KEY};
 use std::time::Instant;
+use std::collections::HashMap;
+use cel_interpreter::Program;
 
 /// Workflow execution engine
 pub struct WorkflowExecutor {
@@ -16,6 +18,8 @@ pub struct WorkflowExecutor {
     max_history_size: usize,
     /// Metrics collector for workflow execution
     metrics: WorkflowMetrics,
+    /// Cache for compiled CEL programs
+    cel_program_cache: HashMap<String, Program>,
 }
 
 impl WorkflowExecutor {
@@ -25,6 +29,7 @@ impl WorkflowExecutor {
             execution_history: Vec::new(),
             max_history_size: DEFAULT_MAX_HISTORY_SIZE,
             metrics: WorkflowMetrics::new(),
+            cel_program_cache: HashMap::new(),
         }
     }
 
@@ -377,6 +382,25 @@ impl WorkflowExecutor {
         let mut memory_metrics = MemoryMetrics::new();
         memory_metrics.update(estimated_memory as u64, context_vars, history_size);
         self.metrics.update_memory_metrics(run_id, memory_metrics);
+    }
+
+    /// Get or compile a CEL program from cache
+    pub fn get_compiled_cel_program(&mut self, expression: &str) -> Result<&Program, Box<dyn std::error::Error>> {
+        if !self.cel_program_cache.contains_key(expression) {
+            let program = Program::compile(expression)?;
+            self.cel_program_cache.insert(expression.to_string(), program);
+        }
+        Ok(self.cel_program_cache.get(expression).unwrap())
+    }
+    
+    /// Check if a CEL program is cached
+    pub fn is_cel_program_cached(&self, expression: &str) -> bool {
+        self.cel_program_cache.contains_key(expression)
+    }
+    
+    /// Get CEL program cache statistics
+    pub fn get_cel_cache_stats(&self) -> (usize, usize) {
+        (self.cel_program_cache.len(), self.cel_program_cache.capacity())
     }
 }
 

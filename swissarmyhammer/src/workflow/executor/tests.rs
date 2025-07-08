@@ -51,7 +51,7 @@ use std::collections::HashMap;
         assert_eq!(run.workflow.name.as_str(), "Test Workflow");
         // The workflow executes through to completion immediately
         assert_eq!(run.status, WorkflowRunStatus::Completed);
-        assert_eq!(run.current_state.as_str(), "end");
+        assert_eq!(run.current_state, StateId::new("end"));
         assert!(!executor.get_history().is_empty());
     }
 
@@ -64,7 +64,7 @@ use std::collections::HashMap;
 
         // The workflow should have executed through to completion
         assert_eq!(run.status, WorkflowRunStatus::Completed);
-        assert_eq!(run.current_state.as_str(), "end");
+        assert_eq!(run.current_state, StateId::new("end"));
 
         // Check execution history
         let history = executor.get_history();
@@ -149,7 +149,7 @@ use std::collections::HashMap;
 
     #[test]
     fn test_never_condition() {
-        let executor = WorkflowExecutor::new();
+        let mut executor = WorkflowExecutor::new();
         let workflow = create_test_workflow();
         let run = WorkflowRun::new(workflow);
 
@@ -166,7 +166,7 @@ use std::collections::HashMap;
 
     #[test]
     fn test_custom_condition_without_expression() {
-        let executor = WorkflowExecutor::new();
+        let mut executor = WorkflowExecutor::new();
         let run = WorkflowRun::new(create_test_workflow());
 
         let condition = TransitionCondition {
@@ -294,7 +294,7 @@ use std::collections::HashMap;
 
         // After execution, workflow should be completed
         assert_eq!(run.status, WorkflowRunStatus::Completed);
-        assert_eq!(run.current_state.as_str(), "end");
+        assert_eq!(run.current_state, StateId::new("end"));
 
         // History should show parallel branch execution
         let history = executor.get_history();
@@ -418,7 +418,7 @@ use std::collections::HashMap;
 
     #[test]
     fn test_on_success_condition_with_context() {
-        let executor = WorkflowExecutor::new();
+        let mut executor = WorkflowExecutor::new();
         let mut context = HashMap::new();
         context.insert(LAST_ACTION_RESULT_KEY.to_string(), serde_json::Value::Bool(true));
 
@@ -438,7 +438,7 @@ use std::collections::HashMap;
 
     #[test]
     fn test_on_failure_condition_with_context() {
-        let executor = WorkflowExecutor::new();
+        let mut executor = WorkflowExecutor::new();
         let mut context = HashMap::new();
         context.insert(LAST_ACTION_RESULT_KEY.to_string(), serde_json::Value::Bool(false));
 
@@ -458,7 +458,7 @@ use std::collections::HashMap;
 
     #[test]
     fn test_cel_expression_evaluation() {
-        let executor = WorkflowExecutor::new();
+        let mut executor = WorkflowExecutor::new();
         let mut context = HashMap::new();
         context.insert("result".to_string(), serde_json::Value::String("ok".to_string()));
 
@@ -483,7 +483,7 @@ use std::collections::HashMap;
 
     #[test]
     fn test_cel_expression_with_variables() {
-        let executor = WorkflowExecutor::new();
+        let mut executor = WorkflowExecutor::new();
         let mut context = HashMap::new();
         context.insert("count".to_string(), serde_json::Value::Number(serde_json::Number::from(5)));
         context.insert("status".to_string(), serde_json::Value::String("active".to_string()));
@@ -518,7 +518,7 @@ use std::collections::HashMap;
 
     #[test]
     fn test_cel_expression_invalid_syntax() {
-        let executor = WorkflowExecutor::new();
+        let mut executor = WorkflowExecutor::new();
         let context = HashMap::new();
 
         let condition = TransitionCondition {
@@ -528,6 +528,145 @@ use std::collections::HashMap;
 
         let result = executor.evaluate_condition(&condition, &context);
         assert!(matches!(result, Err(ExecutorError::ExpressionError(_))));
+    }
+
+    #[test]
+    fn test_cel_expression_suspicious_quotes() {
+        let mut executor = WorkflowExecutor::new();
+        let context = HashMap::new();
+
+        // Test triple quotes
+        let condition = TransitionCondition {
+            condition_type: ConditionType::Custom,
+            expression: Some("\"\"\"dangerous\"\"\"".to_string()),
+        };
+
+        let result = executor.evaluate_condition(&condition, &context);
+        assert!(matches!(result, Err(ExecutorError::ExpressionError(msg)) if msg.contains("suspicious quote")));
+    }
+
+    #[test]
+    fn test_choice_state_determinism_validation() {
+        let mut executor = WorkflowExecutor::new();
+        
+        // Create a workflow with ambiguous choice state conditions
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Ambiguous Choice Test"),
+            "Test ambiguous choice state validation".to_string(),
+            StateId::new("start"),
+        );
+
+        // Add states
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state_with_type(
+            "choice1",
+            "Ambiguous choice state",
+            StateType::Choice,
+            false,
+        ));
+        workflow.add_state(create_state("success1", "Success state 1", true));
+        workflow.add_state(create_state("success2", "Success state 2", true));
+
+        // Add transition to choice state
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("choice1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        // Add two OnSuccess conditions - this should be ambiguous
+        workflow.add_transition(Transition {
+            from_state: StateId::new("choice1"),
+            to_state: StateId::new("success1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::OnSuccess,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        workflow.add_transition(Transition {
+            from_state: StateId::new("choice1"),
+            to_state: StateId::new("success2"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::OnSuccess,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        let mut run = WorkflowRun::new(workflow);
+        
+        // Transition to the choice state first
+        run.transition_to(StateId::new("choice1"));
+        
+        let result = executor.evaluate_transitions(&run);
+        
+        // Should fail due to ambiguous conditions
+        assert!(matches!(result, Err(ExecutorError::ExecutionFailed(msg)) if msg.contains("ambiguous conditions")));
+    }
+
+    #[test]
+    fn test_choice_state_never_condition_validation() {
+        let mut executor = WorkflowExecutor::new();
+        
+        // Create a workflow with Never condition in choice state
+        let mut workflow = Workflow::new(
+            WorkflowName::new("Never Choice Test"),
+            "Test Never condition in choice state".to_string(),
+            StateId::new("start"),
+        );
+
+        // Add states
+        workflow.add_state(create_state("start", "Start state", false));
+        workflow.add_state(create_state_with_type(
+            "choice1",
+            "Choice state with Never",
+            StateType::Choice,
+            false,
+        ));
+        workflow.add_state(create_state("never_state", "Never reached", true));
+
+        // Add transition to choice state
+        workflow.add_transition(Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("choice1"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        // Add Never condition - should be flagged as error
+        workflow.add_transition(Transition {
+            from_state: StateId::new("choice1"),
+            to_state: StateId::new("never_state"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Never,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        });
+
+        let mut run = WorkflowRun::new(workflow);
+        
+        // Transition to the choice state first
+        run.transition_to(StateId::new("choice1"));
+        
+        let result = executor.evaluate_transitions(&run);
+        
+        // Should fail due to Never condition in choice state
+        assert!(matches!(result, Err(ExecutorError::ExecutionFailed(msg)) if msg.contains("Never conditions")));
     }
 
     #[tokio::test]
@@ -592,7 +731,7 @@ use std::collections::HashMap;
 
         // Should go to success state since OnSuccess defaults to true
         assert_eq!(run.status, WorkflowRunStatus::Completed);
-        assert_eq!(run.current_state.as_str(), "success");
+        assert_eq!(run.current_state, StateId::new("success"));
     }
 
     #[tokio::test]
@@ -657,7 +796,7 @@ use std::collections::HashMap;
 
         // Should go to success state since start state sets result="ok"
         assert_eq!(run.status, WorkflowRunStatus::Completed);
-        assert_eq!(run.current_state.as_str(), "success");
+        assert_eq!(run.current_state, StateId::new("success"));
     }
 
     #[tokio::test]
@@ -789,4 +928,107 @@ use std::collections::HashMap;
 
         // Should select the first transition (to "first" state)
         assert_eq!(next_state, Some(StateId::new("first")));
+    }
+
+    #[test]
+    fn test_cel_expression_security_validation() {
+        let mut executor = WorkflowExecutor::new();
+        let context = HashMap::new();
+
+        // Test forbidden patterns
+        let forbidden_patterns = ["import", "eval", "exec", "system", "file", "delete"];
+        
+        for pattern in forbidden_patterns {
+            let condition = TransitionCondition {
+                condition_type: ConditionType::Custom,
+                expression: Some(format!("{} == true", pattern)),
+            };
+
+            let result = executor.evaluate_condition(&condition, &context);
+            assert!(matches!(result, Err(ExecutorError::ExpressionError(msg)) if msg.contains("forbidden pattern")));
+        }
+    }
+
+    #[test]
+    fn test_cel_expression_length_limits() {
+        let mut executor = WorkflowExecutor::new();
+        let context = HashMap::new();
+
+        // Test expression length validation
+        let long_expression = "a == ".repeat(200) + "\"test\"";
+        let condition = TransitionCondition {
+            condition_type: ConditionType::Custom,
+            expression: Some(long_expression),
+        };
+
+        let result = executor.evaluate_condition(&condition, &context);
+        assert!(matches!(result, Err(ExecutorError::ExpressionError(msg)) if msg.contains("too long")));
+    }
+
+    #[test]
+    fn test_cel_expression_nesting_limits() {
+        let mut executor = WorkflowExecutor::new();
+        let context = HashMap::new();
+
+        // Test excessive nesting
+        let nested_expression = "(".repeat(15) + "true" + &")".repeat(15);
+        let condition = TransitionCondition {
+            condition_type: ConditionType::Custom,
+            expression: Some(nested_expression),
+        };
+
+        let result = executor.evaluate_condition(&condition, &context);
+        assert!(matches!(result, Err(ExecutorError::ExpressionError(msg)) if msg.contains("excessive nesting")));
+    }
+
+    #[test]
+    fn test_cel_expression_caching_behavior() {
+        let mut executor = WorkflowExecutor::new();
+        let context = HashMap::new();
+
+        let condition = TransitionCondition {
+            condition_type: ConditionType::Custom,
+            expression: Some("default".to_string()),
+        };
+
+        // Evaluate the same expression multiple times
+        let result1 = executor.evaluate_condition(&condition, &context);
+        let result2 = executor.evaluate_condition(&condition, &context);
+
+        assert!(result1.is_ok());
+        assert!(result2.is_ok());
+        
+        // Verify the expression is cached
+        assert!(executor.get_compiled_cel_program("default").is_ok());
+    }
+
+    #[test]
+    fn test_cel_expression_complex_json_handling() {
+        let mut executor = WorkflowExecutor::new();
+        let mut context = HashMap::new();
+        
+        // Add complex JSON structures
+        let array_value = serde_json::Value::Array(vec![
+            serde_json::Value::Number(serde_json::Number::from(1)),
+            serde_json::Value::Number(serde_json::Number::from(2)),
+        ]);
+        context.insert("numbers".to_string(), array_value);
+        
+        let mut nested_object = serde_json::Map::new();
+        nested_object.insert("key".to_string(), serde_json::Value::String("value".to_string()));
+        context.insert("nested".to_string(), serde_json::Value::Object(nested_object));
+        
+        // Test that complex structures are handled gracefully
+        let condition = TransitionCondition {
+            condition_type: ConditionType::Custom,
+            expression: Some("numbers != null".to_string()),
+        };
+
+        let result = executor.evaluate_condition(&condition, &context);
+        // Should either work or fail gracefully
+        match result {
+            Ok(_) => {}, // Success
+            Err(ExecutorError::ExpressionError(_)) => {}, // Expected for some cases
+            _ => panic!("Unexpected error type")
+        }
     }

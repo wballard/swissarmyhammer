@@ -294,6 +294,35 @@ Examples:
         #[arg(short, long)]
         limit: Option<usize>,
     },
+    /// Execute and manage workflows
+    #[command(long_about = "
+Execute and manage workflows with support for starting new runs and resuming existing ones.
+Workflows are defined as state machines that can execute actions and tools including Claude commands.
+
+Basic usage:
+  swissarmyhammer flow run my-workflow           # Start new workflow
+  swissarmyhammer flow resume <run_id>           # Resume paused workflow
+  swissarmyhammer flow list                      # List available workflows
+  swissarmyhammer flow status <run_id>           # Check run status
+  swissarmyhammer flow logs <run_id>             # View execution logs
+
+Workflow execution:
+  --vars key=value                               # Pass initial variables
+  --interactive                                  # Step-by-step execution
+  --dry-run                                      # Show execution plan
+  --timeout 60s                                  # Set execution timeout
+
+Examples:
+  swissarmyhammer flow run code-review --vars file=main.rs
+  swissarmyhammer flow run deploy --dry-run
+  swissarmyhammer flow resume a1b2c3d4 --interactive
+  swissarmyhammer flow list --format json
+  swissarmyhammer flow status a1b2c3d4 --watch
+")]
+    Flow {
+        #[command(subcommand)]
+        subcommand: FlowSubcommand,
+    },
     /// Generate shell completion scripts
     #[command(long_about = "
 Generates shell completion scripts for various shells. Supports:
@@ -319,6 +348,88 @@ Examples:
         /// Shell to generate completion for
         #[arg(value_enum)]
         shell: clap_complete::Shell,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum FlowSubcommand {
+    /// Run a workflow
+    Run {
+        /// Workflow name to run
+        workflow: String,
+
+        /// Initial variables as key=value pairs
+        #[arg(long = "var", value_name = "KEY=VALUE")]
+        vars: Vec<String>,
+
+        /// Interactive mode - prompt at each state
+        #[arg(short, long)]
+        interactive: bool,
+
+        /// Dry run - show execution plan without running
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Execution timeout (e.g., 30s, 5m, 1h)
+        #[arg(long)]
+        timeout: Option<String>,
+    },
+    /// Resume a paused workflow run
+    Resume {
+        /// Run ID to resume
+        run_id: String,
+
+        /// Interactive mode - prompt at each state
+        #[arg(short, long)]
+        interactive: bool,
+
+        /// Execution timeout (e.g., 30s, 5m, 1h)
+        #[arg(long)]
+        timeout: Option<String>,
+    },
+    /// List available workflows
+    List {
+        /// Output format
+        #[arg(long, value_enum, default_value = "table")]
+        format: OutputFormat,
+
+        /// Show verbose output including workflow details
+        #[arg(short, long)]
+        verbose: bool,
+
+        /// Filter by source
+        #[arg(long, value_enum)]
+        source: Option<PromptSource>,
+    },
+    /// Check status of a workflow run
+    Status {
+        /// Run ID to check
+        run_id: String,
+
+        /// Output format
+        #[arg(long, value_enum, default_value = "table")]
+        format: OutputFormat,
+
+        /// Watch for status changes
+        #[arg(short, long)]
+        watch: bool,
+    },
+    /// View logs for a workflow run
+    Logs {
+        /// Run ID to view logs for
+        run_id: String,
+
+        /// Follow log output (like tail -f)
+        #[arg(short, long)]
+        follow: bool,
+
+        /// Number of log lines to show (from end)
+        #[arg(short = 'n', long)]
+        tail: Option<usize>,
+
+        /// Filter logs by level (info, warn, error)
+        #[arg(long)]
+        level: Option<String>,
     },
 }
 

@@ -2,6 +2,7 @@ use std::process;
 mod cli;
 mod completions;
 mod doctor;
+mod flow;
 mod list;
 // prompt_loader module removed - using SDK's PromptResolver directly
 mod search;
@@ -10,7 +11,7 @@ mod test;
 mod validate;
 
 use clap::CommandFactory;
-use cli::{Cli, Commands, OutputFormat, PromptSource, ValidateFormat};
+use cli::{Cli, Commands, FlowSubcommand, OutputFormat, PromptSource, ValidateFormat};
 
 #[tokio::main]
 async fn main() {
@@ -164,6 +165,10 @@ async fn main() {
         Some(Commands::Completion { shell }) => {
             tracing::info!("Generating completion for {:?}", shell);
             run_completions(shell)
+        }
+        Some(Commands::Flow { subcommand }) => {
+            tracing::info!("Running flow command");
+            run_flow(subcommand).await
         }
         None => {
             // This case is handled early above for performance
@@ -328,6 +333,18 @@ fn run_completions(shell: clap_complete::Shell) -> i32 {
         Ok(_) => 0,
         Err(e) => {
             eprintln!("Completion error: {}", e);
+            1
+        }
+    }
+}
+
+async fn run_flow(subcommand: FlowSubcommand) -> i32 {
+    use flow;
+
+    match flow::run_flow_command(subcommand).await {
+        Ok(_) => 0,
+        Err(e) => {
+            eprintln!("Flow error: {}", e);
             1
         }
     }

@@ -3,10 +3,10 @@
 use crate::security::MAX_DIRECTORY_DEPTH;
 use crate::workflow::{MermaidParser, Workflow, WorkflowName, WorkflowRun, WorkflowRunId};
 use crate::{Result, SwissArmyHammerError};
+use base64::{engine::general_purpose, Engine as _};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::io::{Read, Write};
 
 /// Source of a workflow (builtin, user, local, or dynamic)
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -950,7 +950,7 @@ impl WorkflowStorageBackend for CompressedWorkflowStorage {
         let mut compressed_workflow = workflow.clone();
         compressed_workflow.description = format!(
             "COMPRESSED_DATA:{}",
-            base64::encode(&compressed_data)
+            general_purpose::STANDARD.encode(&compressed_data)
         );
 
         self.inner.store_workflow(compressed_workflow)
@@ -962,12 +962,16 @@ impl WorkflowStorageBackend for CompressedWorkflowStorage {
         // Check if this is compressed data
         if stored_workflow.description.starts_with("COMPRESSED_DATA:") {
             let encoded_data = &stored_workflow.description[16..]; // Skip "COMPRESSED_DATA:"
-            let compressed_data = base64::decode(encoded_data)
-                .map_err(|e| SwissArmyHammerError::Storage(format!("Base64 decode failed: {}", e)))?;
+            let compressed_data = general_purpose::STANDARD
+                .decode(encoded_data)
+                .map_err(|e| {
+                    SwissArmyHammerError::Storage(format!("Base64 decode failed: {}", e))
+                })?;
 
             let json_data = self.decompress_data(&compressed_data)?;
-            let workflow: Workflow = serde_json::from_slice(&json_data)
-                .map_err(|e| SwissArmyHammerError::Storage(format!("Deserialization failed: {}", e)))?;
+            let workflow: Workflow = serde_json::from_slice(&json_data).map_err(|e| {
+                SwissArmyHammerError::Storage(format!("Deserialization failed: {}", e))
+            })?;
 
             Ok(workflow)
         } else {
@@ -983,12 +987,17 @@ impl WorkflowStorageBackend for CompressedWorkflowStorage {
         for stored_workflow in stored_workflows {
             if stored_workflow.description.starts_with("COMPRESSED_DATA:") {
                 let encoded_data = &stored_workflow.description[16..];
-                let compressed_data = base64::decode(encoded_data)
-                    .map_err(|e| SwissArmyHammerError::Storage(format!("Base64 decode failed: {}", e)))?;
+                let compressed_data =
+                    general_purpose::STANDARD
+                        .decode(encoded_data)
+                        .map_err(|e| {
+                            SwissArmyHammerError::Storage(format!("Base64 decode failed: {}", e))
+                        })?;
 
                 let json_data = self.decompress_data(&compressed_data)?;
-                let workflow: Workflow = serde_json::from_slice(&json_data)
-                    .map_err(|e| SwissArmyHammerError::Storage(format!("Deserialization failed: {}", e)))?;
+                let workflow: Workflow = serde_json::from_slice(&json_data).map_err(|e| {
+                    SwissArmyHammerError::Storage(format!("Deserialization failed: {}", e))
+                })?;
 
                 workflows.push(workflow);
             } else {
@@ -1023,9 +1032,9 @@ impl WorkflowStorage {
             })?
             .join(".swissarmyhammer");
 
-        let workflow_backend = CompressedWorkflowStorage::with_default_compression(
-            Box::new(FileSystemWorkflowStorage::new()?)
-        );
+        let workflow_backend = CompressedWorkflowStorage::with_default_compression(Box::new(
+            FileSystemWorkflowStorage::new()?,
+        ));
 
         Ok(Self::new(
             Arc::new(workflow_backend),
@@ -1035,9 +1044,9 @@ impl WorkflowStorage {
 
     /// Create with compressed memory backends (for testing)
     pub fn compressed_memory() -> Self {
-        let workflow_backend = CompressedWorkflowStorage::with_default_compression(
-            Box::new(MemoryWorkflowStorage::new())
-        );
+        let workflow_backend = CompressedWorkflowStorage::with_default_compression(Box::new(
+            MemoryWorkflowStorage::new(),
+        ));
 
         Self::new(
             Arc::new(workflow_backend),
@@ -1163,9 +1172,9 @@ mod tests {
 
     #[test]
     fn test_compressed_workflow_storage() {
-        let mut storage = CompressedWorkflowStorage::with_default_compression(
-            Box::new(MemoryWorkflowStorage::new())
-        );
+        let mut storage = CompressedWorkflowStorage::with_default_compression(Box::new(
+            MemoryWorkflowStorage::new(),
+        ));
         let workflow = create_test_workflow();
 
         // Store compressed workflow

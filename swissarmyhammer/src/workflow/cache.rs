@@ -1,6 +1,6 @@
 //! Performance caching utilities for workflow operations
 
-use crate::workflow::{Workflow, WorkflowName, StateId, TransitionKey};
+use crate::workflow::{StateId, TransitionKey, Workflow, WorkflowName};
 use cel_interpreter::Program;
 use lru::LruCache;
 use std::collections::HashMap;
@@ -51,7 +51,8 @@ pub struct WorkflowCache {
 
 impl WorkflowCache {
     pub fn new(capacity: usize) -> Self {
-        let capacity = NonZeroUsize::new(capacity).unwrap_or(NonZeroUsize::new(DEFAULT_WORKFLOW_CACHE_SIZE).unwrap());
+        let capacity = NonZeroUsize::new(capacity)
+            .unwrap_or(NonZeroUsize::new(DEFAULT_WORKFLOW_CACHE_SIZE).unwrap());
         Self {
             cache: Arc::new(Mutex::new(LruCache::new(capacity))),
             stats: Arc::new(Mutex::new(CacheStats::new())),
@@ -61,7 +62,7 @@ impl WorkflowCache {
     pub fn get(&self, name: &WorkflowName) -> Option<Arc<Workflow>> {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
-        
+
         match cache.get(name) {
             Some(workflow) => {
                 stats.hits += 1;
@@ -77,11 +78,11 @@ impl WorkflowCache {
     pub fn put(&self, name: WorkflowName, workflow: Arc<Workflow>) {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
-        
+
         if cache.put(name, workflow).is_some() {
             stats.evictions += 1;
         }
-        
+
         stats.size = cache.len();
         stats.capacity = cache.cap().get();
     }
@@ -93,7 +94,7 @@ impl WorkflowCache {
     pub fn clear(&self) {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
-        
+
         cache.clear();
         stats.size = 0;
         stats.evictions += stats.size as u64;
@@ -137,7 +138,8 @@ pub struct TransitionCache {
 
 impl TransitionCache {
     pub fn new(capacity: usize, ttl: Duration) -> Self {
-        let capacity = NonZeroUsize::new(capacity).unwrap_or(NonZeroUsize::new(DEFAULT_TRANSITION_CACHE_SIZE).unwrap());
+        let capacity = NonZeroUsize::new(capacity)
+            .unwrap_or(NonZeroUsize::new(DEFAULT_TRANSITION_CACHE_SIZE).unwrap());
         Self {
             cache: Arc::new(Mutex::new(LruCache::new(capacity))),
             stats: Arc::new(Mutex::new(CacheStats::new())),
@@ -148,7 +150,7 @@ impl TransitionCache {
     pub fn get(&self, key: &TransitionKey) -> Option<TransitionPath> {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
-        
+
         match cache.get(key) {
             Some(path) => {
                 if path.is_expired(self.ttl) {
@@ -171,11 +173,11 @@ impl TransitionCache {
     pub fn put(&self, key: TransitionKey, path: TransitionPath) {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
-        
+
         if cache.put(key, path).is_some() {
             stats.evictions += 1;
         }
-        
+
         stats.size = cache.len();
         stats.capacity = cache.cap().get();
     }
@@ -183,7 +185,7 @@ impl TransitionCache {
     pub fn invalidate(&self, key: &TransitionKey) {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
-        
+
         if cache.pop(key).is_some() {
             stats.evictions += 1;
             stats.size = cache.len();
@@ -193,7 +195,7 @@ impl TransitionCache {
     pub fn clear(&self) {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
-        
+
         let size = cache.len();
         cache.clear();
         stats.size = 0;
@@ -214,7 +216,8 @@ pub struct CelProgramCache {
 
 impl CelProgramCache {
     pub fn new(capacity: usize) -> Self {
-        let capacity = NonZeroUsize::new(capacity).unwrap_or(NonZeroUsize::new(DEFAULT_CEL_CACHE_SIZE).unwrap());
+        let capacity = NonZeroUsize::new(capacity)
+            .unwrap_or(NonZeroUsize::new(DEFAULT_CEL_CACHE_SIZE).unwrap());
         Self {
             cache: Arc::new(Mutex::new(LruCache::new(capacity))),
             stats: Arc::new(Mutex::new(CacheStats::new())),
@@ -225,7 +228,7 @@ impl CelProgramCache {
     pub fn get(&self, expression: &str) -> Option<Arc<Program>> {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
-        
+
         match cache.get(expression) {
             Some(program) => {
                 stats.hits += 1;
@@ -242,17 +245,20 @@ impl CelProgramCache {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
         let mut times = self.compilation_times.lock().unwrap();
-        
+
         if cache.put(expression.clone(), Arc::new(program)).is_some() {
             stats.evictions += 1;
         }
-        
+
         times.insert(expression, compilation_time);
         stats.size = cache.len();
         stats.capacity = cache.cap().get();
     }
 
-    pub fn get_or_compile(&self, expression: &str) -> Result<Arc<Program>, Box<dyn std::error::Error>> {
+    pub fn get_or_compile(
+        &self,
+        expression: &str,
+    ) -> Result<Arc<Program>, Box<dyn std::error::Error>> {
         if let Some(program) = self.get(expression) {
             return Ok(program);
         }
@@ -262,7 +268,7 @@ impl CelProgramCache {
         let compilation_time = start.elapsed();
 
         self.put(expression.to_string(), program, compilation_time);
-        
+
         // Get the program back from cache to return as Arc
         Ok(self.get(expression).unwrap())
     }
@@ -271,7 +277,7 @@ impl CelProgramCache {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
         let mut times = self.compilation_times.lock().unwrap();
-        
+
         let size = cache.len();
         cache.clear();
         times.clear();
@@ -288,7 +294,7 @@ impl CelProgramCache {
         if times.is_empty() {
             return None;
         }
-        
+
         let total: Duration = times.values().sum();
         Some(total / times.len() as u32)
     }
@@ -305,7 +311,10 @@ impl WorkflowCacheManager {
     pub fn new() -> Self {
         Self {
             workflow_cache: WorkflowCache::new(DEFAULT_WORKFLOW_CACHE_SIZE),
-            transition_cache: TransitionCache::new(DEFAULT_TRANSITION_CACHE_SIZE, Duration::from_secs(300)), // 5 minutes TTL
+            transition_cache: TransitionCache::new(
+                DEFAULT_TRANSITION_CACHE_SIZE,
+                Duration::from_secs(300),
+            ), // 5 minutes TTL
             cel_cache: CelProgramCache::new(DEFAULT_CEL_CACHE_SIZE),
         }
     }
@@ -333,16 +342,16 @@ impl WorkflowCacheManager {
     }
 
     pub fn total_cache_size(&self) -> usize {
-        self.workflow_cache.stats().size + 
-        self.transition_cache.stats().size + 
-        self.cel_cache.stats().size
+        self.workflow_cache.stats().size
+            + self.transition_cache.stats().size
+            + self.cel_cache.stats().size
     }
 
     pub fn overall_hit_rate(&self) -> f64 {
         let stats = self.get_combined_stats();
         let total_hits: u64 = stats.values().map(|s| s.hits).sum();
         let total_requests: u64 = stats.values().map(|s| s.hits + s.misses).sum();
-        
+
         if total_requests == 0 {
             0.0
         } else {
@@ -360,7 +369,7 @@ impl Default for WorkflowCacheManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workflow::{State, StateType, Transition, TransitionCondition, ConditionType};
+    use crate::workflow::{ConditionType, State, StateType, Transition, TransitionCondition};
     use std::collections::HashMap;
     use std::thread;
     use std::time::Duration;
@@ -426,12 +435,12 @@ mod tests {
     #[test]
     fn test_workflow_cache_eviction() {
         let cache = WorkflowCache::new(2);
-        
+
         // Fill cache to capacity first
         let workflow1 = Arc::new(create_test_workflow());
         let name1 = WorkflowName::new("workflow_0");
         cache.put(name1, workflow1);
-        
+
         let workflow2 = Arc::new(create_test_workflow());
         let name2 = WorkflowName::new("workflow_1");
         cache.put(name2, workflow2);
@@ -447,8 +456,11 @@ mod tests {
 
         // Should have evicted one item
         let stats = cache.stats();
-        println!("Cache stats: evictions={}, size={}", stats.evictions, stats.size);
-        
+        println!(
+            "Cache stats: evictions={}, size={}",
+            stats.evictions, stats.size
+        );
+
         // LRU cache should have evicted the least recently used item
         assert_eq!(stats.size, 2);
         // For now, let's just test that it doesn't grow beyond capacity
@@ -473,7 +485,7 @@ mod tests {
 
         // Wait for TTL to expire
         thread::sleep(Duration::from_millis(150));
-        
+
         // Should be expired now
         assert!(cache.get(&key).is_none());
         assert_eq!(cache.stats().misses, 1);
@@ -542,7 +554,7 @@ mod tests {
         // Add to cache and hit once
         cache.put(name.clone(), workflow);
         cache.get(&name);
-        
+
         // Hit rate should be 0.5 (1 hit, 1 miss)
         assert_eq!(cache.stats().hit_rate(), 0.5);
     }
@@ -554,7 +566,7 @@ mod tests {
 
         // Compile once to measure timing
         cache.get_or_compile(expression).unwrap();
-        
+
         // Should have recorded compilation time
         assert!(cache.average_compilation_time().is_some());
         assert!(cache.average_compilation_time().unwrap() > Duration::from_nanos(0));

@@ -698,10 +698,7 @@ impl Doctor {
         } else {
             for (path, error) in yaml_errors {
                 self.checks.push(Check {
-                    name: format!(
-                        format_strings::YAML_PARSING_ERROR,
-                        path.file_name().unwrap_or_default()
-                    ),
+                    name: format!("YAML parsing: {:?}", path.file_name().unwrap_or_default()),
                     status: CheckStatus::Error,
                     message: error,
                     fix: Some(format!("Fix the YAML syntax in {:?}", path)),
@@ -988,7 +985,7 @@ impl Doctor {
                     if (mode & 0o700) == 0o700 {
                         self.checks.push(Check {
                             name: format!(
-                                format_strings::WORKFLOW_DIR_PERMISSIONS,
+                                "Workflow directory permissions: {:?}",
                                 dir.file_name().unwrap_or_default()
                             ),
                             status: CheckStatus::Ok,
@@ -1001,7 +998,7 @@ impl Doctor {
                     } else {
                         self.checks.push(Check {
                             name: format!(
-                                format_strings::WORKFLOW_DIR_PERMISSIONS,
+                                "Workflow directory permissions: {:?}",
                                 dir.file_name().unwrap_or_default()
                             ),
                             status: CheckStatus::Warning,
@@ -1113,7 +1110,7 @@ impl Doctor {
             for (path, error) in workflow_errors {
                 self.checks.push(Check {
                     name: format!(
-                        format_strings::WORKFLOW_PARSING_ERROR,
+                        "Workflow parsing: {:?}",
                         path.file_name().unwrap_or_default()
                     ),
                     status: CheckStatus::Error,

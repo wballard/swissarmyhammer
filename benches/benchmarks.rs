@@ -1,12 +1,11 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use swissarmyhammer::workflow::{
-    MermaidParser, Workflow, WorkflowExecutor, WorkflowName, WorkflowStorage,
-    StateId, State, StateType, Transition, TransitionCondition, ConditionType,
-    WorkflowCacheManager, WorkflowRun,
-};
 use std::collections::HashMap;
 use std::process::Command;
 use std::time::Instant;
+use swissarmyhammer::workflow::{
+    ConditionType, MermaidParser, State, StateId, StateType, Transition, TransitionCondition,
+    Workflow, WorkflowCacheManager, WorkflowExecutor, WorkflowName, WorkflowRun, WorkflowStorage,
+};
 
 // Workflow performance benchmarks
 fn create_simple_workflow() -> Workflow {
@@ -152,15 +151,11 @@ fn benchmark_workflow_parsing(c: &mut Criterion) {
     "#;
 
     c.bench_function("parse simple workflow", |b| {
-        b.iter(|| {
-            MermaidParser::parse(black_box(simple_mermaid), black_box("simple_workflow"))
-        });
+        b.iter(|| MermaidParser::parse(black_box(simple_mermaid), black_box("simple_workflow")));
     });
 
     c.bench_function("parse complex workflow", |b| {
-        b.iter(|| {
-            MermaidParser::parse(black_box(complex_mermaid), black_box("complex_workflow"))
-        });
+        b.iter(|| MermaidParser::parse(black_box(complex_mermaid), black_box("complex_workflow")));
     });
 }
 
@@ -173,7 +168,9 @@ fn benchmark_workflow_execution(c: &mut Criterion) {
             let mut executor = WorkflowExecutor::new();
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {
-                executor.start_workflow(black_box(simple_workflow.clone())).await
+                executor
+                    .start_workflow(black_box(simple_workflow.clone()))
+                    .await
             })
         });
     });
@@ -183,7 +180,9 @@ fn benchmark_workflow_execution(c: &mut Criterion) {
             let mut executor = WorkflowExecutor::new();
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async {
-                executor.start_workflow(black_box(complex_workflow.clone())).await
+                executor
+                    .start_workflow(black_box(complex_workflow.clone()))
+                    .await
             })
         });
     });
@@ -203,20 +202,23 @@ fn benchmark_workflow_cache(c: &mut Criterion) {
     });
 
     // Pre-populate cache for get benchmark
-    cache_manager.workflow_cache.put(
-        WorkflowName::new("cached_workflow"),
-        workflow.clone(),
-    );
+    cache_manager
+        .workflow_cache
+        .put(WorkflowName::new("cached_workflow"), workflow.clone());
 
     c.bench_function("workflow cache get (hit)", |b| {
         b.iter(|| {
-            cache_manager.workflow_cache.get(black_box(&WorkflowName::new("cached_workflow")))
+            cache_manager
+                .workflow_cache
+                .get(black_box(&WorkflowName::new("cached_workflow")))
         });
     });
 
     c.bench_function("workflow cache get (miss)", |b| {
         b.iter(|| {
-            cache_manager.workflow_cache.get(black_box(&WorkflowName::new("missing_workflow")))
+            cache_manager
+                .workflow_cache
+                .get(black_box(&WorkflowName::new("missing_workflow")))
         });
     });
 }
@@ -226,24 +228,18 @@ fn benchmark_workflow_storage(c: &mut Criterion) {
     let workflow = create_simple_workflow();
 
     c.bench_function("workflow storage store", |b| {
-        b.iter(|| {
-            storage.store_workflow(black_box(workflow.clone()))
-        });
+        b.iter(|| storage.store_workflow(black_box(workflow.clone())));
     });
 
     // Pre-populate storage for get benchmark
     storage.store_workflow(workflow.clone()).unwrap();
 
     c.bench_function("workflow storage get", |b| {
-        b.iter(|| {
-            storage.get_workflow(black_box(&workflow.name))
-        });
+        b.iter(|| storage.get_workflow(black_box(&workflow.name)));
     });
 
     c.bench_function("workflow storage list", |b| {
-        b.iter(|| {
-            storage.list_workflows()
-        });
+        b.iter(|| storage.list_workflows());
     });
 }
 
@@ -255,9 +251,7 @@ fn benchmark_workflow_state_transitions(c: &mut Criterion) {
         b.iter(|| {
             let mut run = WorkflowRun::new(black_box(workflow.clone()));
             let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                executor.execute_single_state(&mut run).await
-            })
+            rt.block_on(async { executor.execute_single_state(&mut run).await })
         });
     });
 
@@ -277,7 +271,9 @@ fn benchmark_cel_program_cache(c: &mut Criterion) {
 
     c.bench_function("CEL program compile and cache", |b| {
         b.iter(|| {
-            cache_manager.cel_cache.get_or_compile(black_box(expression))
+            cache_manager
+                .cel_cache
+                .get_or_compile(black_box(expression))
         });
     });
 
@@ -285,16 +281,14 @@ fn benchmark_cel_program_cache(c: &mut Criterion) {
     cache_manager.cel_cache.get_or_compile(expression).unwrap();
 
     c.bench_function("CEL program cache hit", |b| {
-        b.iter(|| {
-            cache_manager.cel_cache.get(black_box(expression))
-        });
+        b.iter(|| cache_manager.cel_cache.get(black_box(expression)));
     });
 }
 
 fn benchmark_workflow_scalability(c: &mut Criterion) {
     let workflow_sizes = vec![10, 50, 100, 500];
     let mut group = c.benchmark_group("workflow_scalability");
-    
+
     for size in workflow_sizes {
         group.bench_function(format!("workflow_size_{}", size), |b| {
             b.iter(|| {
@@ -358,12 +352,12 @@ fn benchmark_workflow_scalability(c: &mut Criterion) {
             });
         });
     }
-    
+
     group.finish();
 }
 
 criterion_group!(
-    benches, 
+    benches,
     benchmark_workflow_parsing,
     benchmark_workflow_execution,
     benchmark_workflow_cache,

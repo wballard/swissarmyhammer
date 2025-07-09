@@ -6,12 +6,11 @@ use super::{
 };
 use crate::workflow::{
     metrics::{MemoryMetrics, WorkflowMetrics},
-    parse_action_from_description, ActionError, CompensationKey, ErrorContext, StateId, Workflow,
-    WorkflowRun, WorkflowRunStatus, WorkflowCacheManager, TransitionPath, TransitionKey,
+    parse_action_from_description, ActionError, CompensationKey, ErrorContext, StateId,
+    TransitionKey, TransitionPath, Workflow, WorkflowCacheManager, WorkflowRun, WorkflowRunStatus,
 };
 use cel_interpreter::Program;
 use serde_json::Value;
-use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 /// Configuration for retry behavior
@@ -772,7 +771,11 @@ impl WorkflowExecutor {
     }
 
     /// Get cached transition path if available
-    pub fn get_cached_transition_path(&self, from_state: &StateId, to_state: &StateId) -> Option<TransitionPath> {
+    pub fn get_cached_transition_path(
+        &self,
+        from_state: &StateId,
+        to_state: &StateId,
+    ) -> Option<TransitionPath> {
         let key = TransitionKey::new(from_state.clone(), to_state.clone());
         self.cache_manager.transition_cache.get(&key)
     }

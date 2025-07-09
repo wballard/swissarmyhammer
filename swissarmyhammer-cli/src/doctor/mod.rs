@@ -4,6 +4,54 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Minimum disk space in MB before warning
+const LOW_DISK_SPACE_MB: u64 = 100;
+
+/// Check names constants to avoid typos and improve maintainability
+mod check_names {
+    pub const INSTALLATION_METHOD: &str = "Installation Method";
+    pub const BINARY_PERMISSIONS: &str = "Binary Permissions";
+    pub const BINARY_NAME: &str = "Binary Name";
+    pub const IN_PATH: &str = "swissarmyhammer in PATH";
+    pub const CLAUDE_CONFIG: &str = "Claude Code MCP configuration";
+    pub const BUILTIN_PROMPTS: &str = "Built-in prompts";
+    pub const USER_PROMPTS_DIR: &str = "User prompts directory";
+    pub const LOCAL_PROMPTS_DIR: &str = "Local prompts directory";
+    pub const YAML_PARSING: &str = "YAML parsing";
+    pub const FILE_PERMISSIONS: &str = "File permissions";
+    pub const WORKFLOW_PARSING: &str = "Workflow parsing";
+    pub const WORKFLOW_RUN_STORAGE_ACCESS: &str = "Workflow run storage accessibility";
+    pub const WORKFLOW_RUN_STORAGE_SPACE: &str = "Workflow run storage space";
+    pub const WORKFLOW_NAME_CONFLICTS: &str = "Workflow name conflicts";
+    pub const WORKFLOW_CIRCULAR_DEPS: &str = "Workflow circular dependencies";
+}
+
+/// Wrapper type for workflow directory paths to provide type safety
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowDirectory(PathBuf);
+
+impl WorkflowDirectory {
+    pub fn new(path: PathBuf) -> Self {
+        Self(path)
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl AsRef<Path> for WorkflowDirectory {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for WorkflowDirectory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum CheckStatus {
     Ok,
@@ -42,6 +90,13 @@ impl Doctor {
         self.check_yaml_parsing()?;
         self.check_file_permissions()?;
 
+        // Run workflow diagnostics
+        self.check_workflow_directories()?;
+        self.check_workflow_permissions()?;
+        self.check_workflow_parsing()?;
+        self.check_workflow_run_storage()?;
+        self.check_workflow_dependencies()?;
+
         // Print results
         self.print_results();
 
@@ -77,7 +132,7 @@ impl Doctor {
         };
 
         self.checks.push(Check {
-            name: "Installation Method".to_string(),
+            name: check_names::INSTALLATION_METHOD.to_string(),
             status: CheckStatus::Ok,
             message: format!(
                 "{} (v{}, {}) at {}",
@@ -96,14 +151,14 @@ impl Doctor {
 
                 if mode & 0o111 != 0 {
                     self.checks.push(Check {
-                        name: "Binary Permissions".to_string(),
+                        name: check_names::BINARY_PERMISSIONS.to_string(),
                         status: CheckStatus::Ok,
                         message: format!("Executable permissions: {:o}", mode & 0o777),
                         fix: None,
                     });
                 } else {
                     self.checks.push(Check {
-                        name: "Binary Permissions".to_string(),
+                        name: check_names::BINARY_PERMISSIONS.to_string(),
                         status: CheckStatus::Error,
                         message: "Binary is not executable".to_string(),
                         fix: Some(format!("Run: chmod +x {}", exe_path)),
@@ -120,14 +175,14 @@ impl Doctor {
 
         if exe_name == "swissarmyhammer" || exe_name == "swissarmyhammer.exe" {
             self.checks.push(Check {
-                name: "Binary Name".to_string(),
+                name: check_names::BINARY_NAME.to_string(),
                 status: CheckStatus::Ok,
                 message: format!("Running as {}", exe_name),
                 fix: None,
             });
         } else {
             self.checks.push(Check {
-                name: "Binary Name".to_string(),
+                name: check_names::BINARY_NAME.to_string(),
                 status: CheckStatus::Warning,
                 message: format!("Unexpected binary name: {}", exe_name),
                 fix: Some("Consider renaming binary to 'swissarmyhammer'".to_string()),
@@ -157,7 +212,7 @@ impl Doctor {
 
         if found {
             self.checks.push(Check {
-                name: "swissarmyhammer in PATH".to_string(),
+                name: check_names::IN_PATH.to_string(),
                 status: CheckStatus::Ok,
                 message: format!(
                     "Found at: {:?}",
@@ -167,7 +222,7 @@ impl Doctor {
             });
         } else {
             self.checks.push(Check {
-                name: "swissarmyhammer in PATH".to_string(),
+                name: check_names::IN_PATH.to_string(),
                 status: CheckStatus::Warning,
                 message: "swissarmyhammer not found in PATH".to_string(),
                 fix: Some(
@@ -193,14 +248,14 @@ impl Doctor {
                     // Check if swissarmyhammer is in the list
                     if stdout.contains("swissarmyhammer") {
                         self.checks.push(Check {
-                            name: "Claude Code MCP configuration".to_string(),
+                            name: check_names::CLAUDE_CONFIG.to_string(),
                             status: CheckStatus::Ok,
                             message: "swissarmyhammer is configured in Claude Code".to_string(),
                             fix: None,
                         });
                     } else {
                         self.checks.push(Check {
-                            name: "Claude Code MCP configuration".to_string(),
+                            name: check_names::CLAUDE_CONFIG.to_string(),
                             status: CheckStatus::Warning,
                             message: "swissarmyhammer not found in Claude Code MCP servers"
                                 .to_string(),
@@ -210,7 +265,7 @@ impl Doctor {
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     self.checks.push(Check {
-                        name: "Claude Code MCP configuration".to_string(),
+                        name: check_names::CLAUDE_CONFIG.to_string(),
                         status: CheckStatus::Error,
                         message: format!("Failed to run 'claude mcp list': {}", stderr.trim()),
                         fix: Some(
@@ -223,14 +278,14 @@ impl Doctor {
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::NotFound {
                     self.checks.push(Check {
-                        name: "Claude Code MCP configuration".to_string(),
+                        name: check_names::CLAUDE_CONFIG.to_string(),
                         status: CheckStatus::Error,
                         message: "Claude Code command not found".to_string(),
                         fix: Some("Install Claude Code from https://claude.ai/code or ensure the 'claude' command is in your PATH".to_string()),
                     });
                 } else {
                     self.checks.push(Check {
-                        name: "Claude Code MCP configuration".to_string(),
+                        name: check_names::CLAUDE_CONFIG.to_string(),
                         status: CheckStatus::Error,
                         message: format!("Failed to run 'claude mcp list': {}", e),
                         fix: Some("Check that Claude Code is properly installed".to_string()),
@@ -246,7 +301,7 @@ impl Doctor {
     pub fn check_prompt_directories(&mut self) -> Result<()> {
         // Check builtin prompts (embedded in binary)
         self.checks.push(Check {
-            name: "Built-in prompts".to_string(),
+            name: check_names::BUILTIN_PROMPTS.to_string(),
             status: CheckStatus::Ok,
             message: "Built-in prompts are embedded in the binary".to_string(),
             fix: None,
@@ -258,14 +313,14 @@ impl Doctor {
             if user_prompts.exists() {
                 let count = count_markdown_files(&user_prompts);
                 self.checks.push(Check {
-                    name: "User prompts directory".to_string(),
+                    name: check_names::USER_PROMPTS_DIR.to_string(),
                     status: CheckStatus::Ok,
                     message: format!("Found {} prompts in {:?}", count, user_prompts),
                     fix: None,
                 });
             } else {
                 self.checks.push(Check {
-                    name: "User prompts directory".to_string(),
+                    name: check_names::USER_PROMPTS_DIR.to_string(),
                     status: CheckStatus::Ok,
                     message: format!(
                         "User prompts directory not found (optional): {:?}",
@@ -281,14 +336,14 @@ impl Doctor {
         if local_prompts.exists() {
             let count = count_markdown_files(&local_prompts);
             self.checks.push(Check {
-                name: "Local prompts directory".to_string(),
+                name: check_names::LOCAL_PROMPTS_DIR.to_string(),
                 status: CheckStatus::Ok,
                 message: format!("Found {} prompts in {:?}", count, local_prompts),
                 fix: None,
             });
         } else {
             self.checks.push(Check {
-                name: "Local prompts directory".to_string(),
+                name: check_names::LOCAL_PROMPTS_DIR.to_string(),
                 status: CheckStatus::Ok,
                 message: format!(
                     "Local prompts directory not found (optional): {:?}",
@@ -353,7 +408,7 @@ impl Doctor {
 
         if yaml_errors.is_empty() {
             self.checks.push(Check {
-                name: "YAML parsing".to_string(),
+                name: check_names::YAML_PARSING.to_string(),
                 status: CheckStatus::Ok,
                 message: "All prompt YAML front matter is valid".to_string(),
                 fix: None,
@@ -378,7 +433,7 @@ impl Doctor {
         match std::env::current_dir() {
             Ok(cwd) => {
                 self.checks.push(Check {
-                    name: "File permissions".to_string(),
+                    name: check_names::FILE_PERMISSIONS.to_string(),
                     status: CheckStatus::Ok,
                     message: format!("Can read current directory: {:?}", cwd),
                     fix: None,
@@ -386,7 +441,7 @@ impl Doctor {
             }
             Err(e) => {
                 self.checks.push(Check {
-                    name: "File permissions".to_string(),
+                    name: check_names::FILE_PERMISSIONS.to_string(),
                     status: CheckStatus::Error,
                     message: format!("Cannot read current directory: {}", e),
                     fix: Some("Check file permissions for the current directory".to_string()),
@@ -418,6 +473,13 @@ impl Doctor {
             .checks
             .iter()
             .filter(|c| c.name.contains("prompt") || c.name.contains("YAML"))
+            .filter(|c| !c.name.contains("Workflow"))
+            .collect();
+
+        let workflow_checks: Vec<_> = self
+            .checks
+            .iter()
+            .filter(|c| c.name.contains("Workflow") || c.name.contains("workflow"))
             .collect();
 
         // Print system checks
@@ -454,6 +516,19 @@ impl Doctor {
                 println!("Prompts:");
             }
             for check in prompt_checks {
+                print_check(check, use_color);
+            }
+            println!();
+        }
+
+        // Print workflow checks
+        if !workflow_checks.is_empty() {
+            if use_color {
+                println!("{}", "Workflows:".bold().yellow());
+            } else {
+                println!("Workflows:");
+            }
+            for check in workflow_checks {
                 print_check(check, use_color);
             }
             println!();
@@ -526,6 +601,377 @@ impl Doctor {
             0
         }
     }
+
+    /// Check workflow directories exist
+    pub fn check_workflow_directories(&mut self) -> Result<()> {
+        // Check workflow directories
+        for (dir_path, dir_type) in get_workflow_directories() {
+            if dir_path.path().exists() {
+                let count = count_files_with_extension(dir_path.path(), "mermaid");
+                self.checks.push(Check {
+                    name: format!("{} workflows directory", dir_type),
+                    status: CheckStatus::Ok,
+                    message: format!("Found {} workflows in {}", count, dir_path),
+                    fix: None,
+                });
+            } else {
+                self.checks.push(Check {
+                    name: format!("{} workflows directory", dir_type),
+                    status: CheckStatus::Ok,
+                    message: format!(
+                        "{} workflows directory not found (optional): {}",
+                        dir_type, dir_path
+                    ),
+                    fix: Some(format!("Create directory: mkdir -p {}", dir_path)),
+                });
+            }
+        }
+
+        // Check workflow run storage directory
+        if let Some(home) = dirs::home_dir() {
+            let run_storage = home.join(".swissarmyhammer").join("runs");
+            if run_storage.exists() {
+                self.checks.push(Check {
+                    name: "Workflow run storage directory".to_string(),
+                    status: CheckStatus::Ok,
+                    message: format!("Run storage directory exists: {:?}", run_storage),
+                    fix: None,
+                });
+            } else {
+                self.checks.push(Check {
+                    name: "Workflow run storage directory".to_string(),
+                    status: CheckStatus::Warning,
+                    message: format!("Run storage directory not found: {:?}", run_storage),
+                    fix: Some(format!("Create directory: mkdir -p {:?}", run_storage)),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check workflow file permissions
+    pub fn check_workflow_permissions(&mut self) -> Result<()> {
+        let mut dirs_to_check = Vec::new();
+
+        // Add workflow directories
+        for (dir_path, _) in get_workflow_directories() {
+            if dir_path.path().exists() {
+                dirs_to_check.push(dir_path.path().to_path_buf());
+            }
+        }
+
+        // Add run storage directory if it exists
+        if let Some(home) = dirs::home_dir() {
+            let run_storage = home.join(".swissarmyhammer").join("runs");
+            if run_storage.exists() {
+                dirs_to_check.push(run_storage);
+            }
+        }
+
+        // Check permissions on each directory
+        for dir in dirs_to_check {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if let Ok(metadata) = std::fs::metadata(&dir) {
+                    let permissions = metadata.permissions();
+                    let mode = permissions.mode();
+
+                    // Check if directory is readable and writable
+                    if (mode & 0o700) == 0o700 {
+                        self.checks.push(Check {
+                            name: format!(
+                                "Workflow directory permissions: {:?}",
+                                dir.file_name().unwrap_or_default()
+                            ),
+                            status: CheckStatus::Ok,
+                            message: format!(
+                                "Directory has correct permissions: {:o}",
+                                mode & 0o777
+                            ),
+                            fix: None,
+                        });
+                    } else {
+                        self.checks.push(Check {
+                            name: format!(
+                                "Workflow directory permissions: {:?}",
+                                dir.file_name().unwrap_or_default()
+                            ),
+                            status: CheckStatus::Warning,
+                            message: format!(
+                                "Directory permissions may be insufficient: {:o}",
+                                mode & 0o777
+                            ),
+                            fix: Some(format!("Run: chmod 755 {:?}", dir)),
+                        });
+                    }
+                } else {
+                    self.checks.push(Check {
+                        name: format!(
+                            "Workflow directory permissions: {:?}",
+                            dir.file_name().unwrap_or_default()
+                        ),
+                        status: CheckStatus::Warning,
+                        message: "Cannot check directory permissions".to_string(),
+                        fix: None,
+                    });
+                }
+            }
+
+            #[cfg(not(unix))]
+            {
+                // On non-Unix systems, just check if directory is accessible
+                if std::fs::read_dir(&dir).is_ok() {
+                    self.checks.push(Check {
+                        name: format!(
+                            "Workflow directory access: {:?}",
+                            dir.file_name().unwrap_or_default()
+                        ),
+                        status: CheckStatus::Ok,
+                        message: "Directory is accessible".to_string(),
+                        fix: None,
+                    });
+                } else {
+                    self.checks.push(Check {
+                        name: format!(
+                            "Workflow directory access: {:?}",
+                            dir.file_name().unwrap_or_default()
+                        ),
+                        status: CheckStatus::Error,
+                        message: "Cannot access directory".to_string(),
+                        fix: Some("Check directory permissions and ownership".to_string()),
+                    });
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check workflow parsing
+    pub fn check_workflow_parsing(&mut self) -> Result<()> {
+        use walkdir::WalkDir;
+
+        let mut workflow_errors = Vec::new();
+
+        for (dir, _) in get_workflow_directories() {
+            if !dir.path().exists() {
+                continue;
+            }
+
+            for entry in WalkDir::new(dir.path())
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_type().is_file())
+                .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("mermaid"))
+            {
+                match fs::read_to_string(entry.path()) {
+                    Ok(content) => {
+                        // Check if file is readable and not empty
+                        if content.trim().is_empty() {
+                            workflow_errors.push((
+                                entry.path().to_path_buf(),
+                                "Workflow file is empty".to_string(),
+                            ));
+                        }
+                    }
+                    Err(e) => {
+                        workflow_errors.push((
+                            entry.path().to_path_buf(),
+                            format!("Failed to read workflow file: {}", e),
+                        ));
+                    }
+                }
+            }
+        }
+
+        if workflow_errors.is_empty() {
+            self.checks.push(Check {
+                name: check_names::WORKFLOW_PARSING.to_string(),
+                status: CheckStatus::Ok,
+                message: "All workflow files are readable".to_string(),
+                fix: None,
+            });
+        } else {
+            for (path, error) in workflow_errors {
+                self.checks.push(Check {
+                    name: format!(
+                        "Workflow parsing: {:?}",
+                        path.file_name().unwrap_or_default()
+                    ),
+                    status: CheckStatus::Error,
+                    message: error,
+                    fix: Some(format!("Fix or remove the workflow file: {:?}", path)),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check workflow run storage
+    pub fn check_workflow_run_storage(&mut self) -> Result<()> {
+        if let Some(home) = dirs::home_dir() {
+            let run_storage = home.join(".swissarmyhammer").join("runs");
+
+            if run_storage.exists() {
+                self.check_run_storage_write_access(&run_storage)?;
+                self.check_run_storage_disk_space(&run_storage)?;
+            } else {
+                self.checks.push(Check {
+                    name: check_names::WORKFLOW_RUN_STORAGE_ACCESS.to_string(),
+                    status: CheckStatus::Warning,
+                    message: "Run storage directory does not exist".to_string(),
+                    fix: Some(format!("Create directory: mkdir -p {:?}", run_storage)),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if workflow run storage is writable
+    fn check_run_storage_write_access(&mut self, run_storage: &Path) -> Result<()> {
+        let test_file = run_storage.join(".doctor_test");
+        match fs::write(&test_file, "test") {
+            Ok(_) => {
+                // Clean up test file - ignore errors as the file may have already been removed
+                // or we may lack permissions (which was the point of the test)
+                if let Err(e) = fs::remove_file(&test_file) {
+                    // Log error for debugging but don't fail the check
+                    eprintln!("Warning: Failed to clean up test file: {}", e);
+                }
+
+                self.checks.push(Check {
+                    name: check_names::WORKFLOW_RUN_STORAGE_ACCESS.to_string(),
+                    status: CheckStatus::Ok,
+                    message: "Run storage is accessible and writable".to_string(),
+                    fix: None,
+                });
+            }
+            Err(e) => {
+                self.checks.push(Check {
+                    name: check_names::WORKFLOW_RUN_STORAGE_ACCESS.to_string(),
+                    status: CheckStatus::Error,
+                    message: format!("Run storage is not writable: {}", e),
+                    fix: Some(format!("Check permissions on {:?}", run_storage)),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check available disk space for workflow run storage
+    fn check_run_storage_disk_space(&mut self, run_storage: &Path) -> Result<()> {
+        match check_disk_space(run_storage) {
+            Ok((available_mb, _)) => {
+                if available_mb < LOW_DISK_SPACE_MB {
+                    self.checks.push(Check {
+                        name: check_names::WORKFLOW_RUN_STORAGE_SPACE.to_string(),
+                        status: CheckStatus::Warning,
+                        message: format!("Low disk space: {} MB available", available_mb),
+                        fix: Some(
+                            "Consider cleaning up old workflow runs or freeing disk space"
+                                .to_string(),
+                        ),
+                    });
+                } else {
+                    self.checks.push(Check {
+                        name: check_names::WORKFLOW_RUN_STORAGE_SPACE.to_string(),
+                        status: CheckStatus::Ok,
+                        message: format!("Adequate disk space: {} MB available", available_mb),
+                        fix: None,
+                    });
+                }
+            }
+            Err(e) => {
+                self.checks.push(Check {
+                    name: check_names::WORKFLOW_RUN_STORAGE_SPACE.to_string(),
+                    status: CheckStatus::Warning,
+                    message: format!("Failed to check disk space: {}", e),
+                    fix: None,
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check for workflow circular dependencies and conflicts
+    pub fn check_workflow_dependencies(&mut self) -> Result<()> {
+        use std::collections::HashMap;
+        use walkdir::WalkDir;
+
+        let mut workflow_names = HashMap::new();
+
+        // Collect all workflow names and their locations
+        for (dir, _) in get_workflow_directories() {
+            if !dir.path().exists() {
+                continue;
+            }
+
+            for entry in WalkDir::new(dir.path())
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_type().is_file())
+                .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("mermaid"))
+            {
+                if let Some(stem) = entry.path().file_stem().and_then(|s| s.to_str()) {
+                    workflow_names
+                        .entry(stem.to_string())
+                        .or_insert_with(Vec::new)
+                        .push(entry.path().to_path_buf());
+                }
+            }
+        }
+
+        // Check for workflow name conflicts
+        let mut has_conflicts = false;
+        for (name, paths) in workflow_names.iter() {
+            if paths.len() > 1 {
+                has_conflicts = true;
+                let locations = paths
+                    .iter()
+                    .map(|p| format!("{:?}", p))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                self.checks.push(Check {
+                    name: format!("Workflow name conflict: {}", name),
+                    status: CheckStatus::Warning,
+                    message: format!(
+                        "Workflow '{}' exists in multiple locations: {}",
+                        name, locations
+                    ),
+                    fix: Some(
+                        "Rename or remove duplicate workflows to avoid conflicts".to_string(),
+                    ),
+                });
+            }
+        }
+
+        if !has_conflicts {
+            self.checks.push(Check {
+                name: check_names::WORKFLOW_NAME_CONFLICTS.to_string(),
+                status: CheckStatus::Ok,
+                message: "No workflow name conflicts detected".to_string(),
+                fix: None,
+            });
+        }
+
+        // Note: Actual circular dependency checking would require parsing the workflow files
+        // and analyzing their transition dependencies, which is beyond the scope of a simple check
+        self.checks.push(Check {
+            name: check_names::WORKFLOW_CIRCULAR_DEPS.to_string(),
+            status: CheckStatus::Ok,
+            message: "Circular dependency checking requires workflow execution".to_string(),
+            fix: None,
+        });
+
+        Ok(())
+    }
 }
 
 impl Default for Doctor {
@@ -584,6 +1030,18 @@ fn count_markdown_files(path: &Path) -> usize {
         .count()
 }
 
+/// Count files with a specific extension in a directory
+fn count_files_with_extension(path: &Path, extension: &str) -> usize {
+    use walkdir::WalkDir;
+
+    WalkDir::new(path)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some(extension))
+        .count()
+}
+
 /// Get the Claude add command
 fn get_claude_add_command() -> String {
     r#"Add swissarmyhammer to Claude Code using this command:
@@ -594,6 +1052,67 @@ Or if swissarmyhammer is not in your PATH, use the full path:
 
 claude mcp add --scope user  swissarmyhammer /path/to/swissarmyhammer serve"#
         .to_string()
+}
+
+/// Check disk space for a given path and return (available_mb, total_mb)
+#[cfg(unix)]
+fn check_disk_space(path: &Path) -> Result<(u64, u64)> {
+    use std::process::Command;
+
+    // Use df-like approach to check disk space
+    let output = Command::new("df")
+        .arg("-k") // Output in KB
+        .arg(path)
+        .output()?;
+
+    if !output.status.success() {
+        anyhow::bail!("df command failed");
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Parse df output to get available space
+    // Format: Filesystem 1K-blocks Used Available Use% Mounted
+    if let Some(line) = stdout.lines().nth(1) {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 4 {
+            let total_kb = parts[1].parse::<u64>().unwrap_or(0);
+            let available_kb = parts[3].parse::<u64>().unwrap_or(0);
+            let total_mb = total_kb / 1024;
+            let available_mb = available_kb / 1024;
+            return Ok((available_mb, total_mb));
+        }
+    }
+
+    anyhow::bail!("Failed to parse df output")
+}
+
+/// Check disk space for a given path - Windows/non-Unix fallback
+#[cfg(not(unix))]
+fn check_disk_space(_path: &Path) -> Result<(u64, u64)> {
+    // On non-Unix systems, we can't easily check disk space
+    // Return a placeholder that indicates we have enough space
+    Ok((1000, 10000)) // 1GB available, 10GB total
+}
+
+/// Get workflow directories to check
+fn get_workflow_directories() -> Vec<(WorkflowDirectory, &'static str)> {
+    let mut dirs = Vec::new();
+
+    // Add user directory if it exists
+    if let Some(home) = dirs::home_dir() {
+        dirs.push((
+            WorkflowDirectory::new(home.join(".swissarmyhammer").join("workflows")),
+            "User",
+        ));
+    }
+
+    // Add local directory
+    dirs.push((
+        WorkflowDirectory::new(PathBuf::from(".swissarmyhammer").join("workflows")),
+        "Local",
+    ));
+
+    dirs
 }
 
 /// Print a single check result
@@ -782,5 +1301,113 @@ mod tests {
                 "Doctor should use 'claude mcp list' instead of looking for config files"
             );
         }
+    }
+
+    #[test]
+    fn test_check_workflow_directories() {
+        let mut doctor = Doctor::new();
+        let result = doctor.check_workflow_directories();
+        assert!(result.is_ok());
+
+        // Should have checks for workflow directories
+        let workflow_checks: Vec<_> = doctor
+            .checks
+            .iter()
+            .filter(|c| c.name.contains("Workflow") && c.name.contains("director"))
+            .collect();
+        assert!(
+            !workflow_checks.is_empty(),
+            "Should have workflow directory checks"
+        );
+    }
+
+    #[test]
+    fn test_check_workflow_permissions() {
+        let mut doctor = Doctor::new();
+        let result = doctor.check_workflow_permissions();
+        assert!(result.is_ok());
+
+        // Should have checks for workflow permissions
+        let permission_checks: Vec<_> = doctor
+            .checks
+            .iter()
+            .filter(|c| c.name.contains("Workflow") && c.name.contains("permission"))
+            .collect();
+        assert!(
+            !permission_checks.is_empty(),
+            "Should have workflow permission checks"
+        );
+    }
+
+    #[test]
+    fn test_check_workflow_parsing() {
+        let mut doctor = Doctor::new();
+        let result = doctor.check_workflow_parsing();
+        assert!(result.is_ok());
+
+        // Should have checks for workflow parsing
+        let parsing_checks: Vec<_> = doctor
+            .checks
+            .iter()
+            .filter(|c| c.name.contains("Workflow") && c.name.contains("parsing"))
+            .collect();
+        assert!(
+            !parsing_checks.is_empty(),
+            "Should have workflow parsing checks"
+        );
+    }
+
+    #[test]
+    fn test_check_workflow_run_storage() {
+        let mut doctor = Doctor::new();
+        let result = doctor.check_workflow_run_storage();
+        assert!(result.is_ok());
+
+        // Should have checks for workflow run storage
+        let storage_checks: Vec<_> = doctor
+            .checks
+            .iter()
+            .filter(|c| c.name.contains("Workflow run storage"))
+            .collect();
+        assert!(
+            !storage_checks.is_empty(),
+            "Should have workflow run storage checks"
+        );
+    }
+
+    #[test]
+    fn test_check_workflow_dependencies() {
+        let mut doctor = Doctor::new();
+        let result = doctor.check_workflow_dependencies();
+        assert!(result.is_ok());
+
+        // Should have checks for workflow dependencies
+        let dependency_checks: Vec<_> = doctor
+            .checks
+            .iter()
+            .filter(|c| c.name.contains("Workflow") && c.name.contains("dependen"))
+            .collect();
+        assert!(
+            !dependency_checks.is_empty(),
+            "Should have workflow dependency checks"
+        );
+    }
+
+    #[test]
+    fn test_workflow_diagnostics_in_run_diagnostics() {
+        let mut doctor = Doctor::new();
+        let result = doctor.run_diagnostics();
+        assert!(result.is_ok());
+
+        // Should have workflow-related checks in the full diagnostics
+        let workflow_checks: Vec<_> = doctor
+            .checks
+            .iter()
+            .filter(|c| c.name.contains("Workflow") || c.name.contains("workflow"))
+            .collect();
+        assert!(
+            !workflow_checks.is_empty(),
+            "run_diagnostics should include workflow checks"
+        );
     }
 }

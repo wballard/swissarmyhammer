@@ -47,31 +47,28 @@ pub struct McpServer {
 
 impl McpServer {
     /// Create a new MCP server
-    pub fn new(library: PromptLibrary) -> Self {
+    pub fn new(library: PromptLibrary) -> anyhow::Result<Self> {
         // Initialize workflow storage with filesystem backend
-        let workflow_backend = Arc::new(FileSystemWorkflowStorage::new().unwrap_or_else(|e| {
+        let workflow_backend = Arc::new(FileSystemWorkflowStorage::new().map_err(|e| {
             tracing::error!("Failed to create workflow storage: {}", e);
-            panic!("Failed to create workflow storage: {}", e);
-        })) as Arc<dyn WorkflowStorageBackend>;
+            anyhow::anyhow!("Failed to create workflow storage: {}", e)
+        })?) as Arc<dyn WorkflowStorageBackend>;
         
         // Create runs directory in user's home directory
-        let runs_path = dirs::home_dir()
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")))
-            .join(".swissarmyhammer")
-            .join("workflow-runs");
+        let runs_path = Self::get_workflow_runs_path();
         
-        let run_backend = Arc::new(FileSystemWorkflowRunStorage::new(runs_path).unwrap_or_else(|e| {
+        let run_backend = Arc::new(FileSystemWorkflowRunStorage::new(runs_path).map_err(|e| {
             tracing::error!("Failed to create workflow run storage: {}", e);
-            panic!("Failed to create workflow run storage: {}", e);
-        })) as Arc<dyn WorkflowRunStorageBackend>;
+            anyhow::anyhow!("Failed to create workflow run storage: {}", e)
+        })?) as Arc<dyn WorkflowRunStorageBackend>;
         
         let workflow_storage = WorkflowStorage::new(workflow_backend, run_backend);
         
-        Self {
+        Ok(Self {
             library: Arc::new(RwLock::new(library)),
             workflow_storage: Arc::new(RwLock::new(workflow_storage)),
             watcher_handle: Arc::new(Mutex::new(None)),
-        }
+        })
     }
 
     /// Get the underlying library
@@ -186,7 +183,9 @@ impl McpServer {
         let mut watcher = RecommendedWatcher::new(
             move |result: Result<Event, notify::Error>| {
                 if let Ok(event) = result {
-                    let _ = tx.blocking_send(event);
+                    if let Err(e) = tx.blocking_send(event) {
+                        tracing::error!("Failed to send file watch event: {}", e);
+                    }
                 }
             },
             notify::Config::default(),
@@ -201,7 +200,8 @@ impl McpServer {
         // Spawn the event handler task
         let server = self.clone();
         let handle = tokio::spawn(async move {
-            // Keep the watcher alive
+            // Keep the watcher alive for the duration of this task
+            // The watcher must be moved into the task to prevent it from being dropped
             let _watcher = watcher;
 
             while let Some(event) = rx.recv().await {
@@ -267,12 +267,50 @@ impl McpServer {
         }
     }
 
+    /// Get the workflow runs directory path
+    fn get_workflow_runs_path() -> std::path::PathBuf {
+        dirs::home_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")))
+            .join(".swissarmyhammer")
+            .join("workflow-runs")
+    }
+
+    /// Convert internal prompt arguments to MCP PromptArgument structures
+    fn convert_prompt_arguments(args: &[crate::ArgumentSpec]) -> Option<Vec<PromptArgument>> {
+        if args.is_empty() {
+            None
+        } else {
+            Some(
+                args.iter()
+                    .map(|arg| PromptArgument {
+                        name: arg.name.clone(),
+                        description: arg.description.clone(),
+                        required: Some(arg.required),
+                    })
+                    .collect(),
+            )
+        }
+    }
+
+    /// Convert serde_json::Map to HashMap<String, String>
+    fn json_map_to_string_map(args: &serde_json::Map<String, Value>) -> HashMap<String, String> {
+        let mut template_args = HashMap::new();
+        for (key, value) in args {
+            let value_str = match value {
+                Value::String(s) => s.clone(),
+                v => v.to_string(),
+            };
+            template_args.insert(key.clone(), value_str);
+        }
+        template_args
+    }
+
     /// Reload prompts from disk
     async fn reload_prompts(&self) -> anyhow::Result<()> {
         let mut library = self.library.write().await;
         let mut resolver = PromptResolver::new();
 
-        // Get count before reload
+        // Get count before reload (default to 0 if library.list() fails)
         let before_count = library.list().map(|p| p.len()).unwrap_or(0);
 
         // Clear existing prompts and reload
@@ -347,20 +385,7 @@ impl ServerHandler for McpServer {
                     .iter()
                     .filter(|p| !Self::is_partial_template(p))  // Filter out partial templates
                     .map(|p| {
-                        let arguments = if p.arguments.is_empty() {
-                            None
-                        } else {
-                            Some(
-                                p.arguments
-                                    .iter()
-                                    .map(|arg| PromptArgument {
-                                        name: arg.name.clone(),
-                                        description: arg.description.clone(),
-                                        required: Some(arg.required),
-                                    })
-                                    .collect(),
-                            )
-                        };
+                        let arguments = Self::convert_prompt_arguments(&p.arguments);
 
                         Prompt {
                             name: p.name.clone(),
@@ -400,15 +425,7 @@ impl ServerHandler for McpServer {
 
                 // Handle arguments if provided
                 let content = if let Some(args) = &request.arguments {
-                    // Convert serde_json::Map to HashMap<String, String>
-                    let mut template_args = HashMap::new();
-                    for (key, value) in args {
-                        let value_str = match value {
-                            Value::String(s) => s.clone(),
-                            v => v.to_string(),
-                        };
-                        template_args.insert(key.clone(), value_str);
-                    }
+                    let template_args = Self::json_map_to_string_map(args);
 
                     match library.render_prompt(&request.name, &template_args) {
                         Ok(rendered) => rendered,
@@ -476,7 +493,7 @@ mod tests {
     #[tokio::test]
     async fn test_mcp_server_creation() {
         let library = PromptLibrary::new();
-        let server = McpServer::new(library);
+        let server = McpServer::new(library).unwrap();
 
         let info = server.get_info();
         // Just verify we can get server info - details depend on default implementation
@@ -494,7 +511,7 @@ mod tests {
             .with_description("Test description".to_string());
         library.add(prompt).unwrap();
 
-        let server = McpServer::new(library);
+        let server = McpServer::new(library).unwrap();
         let prompts = server.list_prompts().await.unwrap();
 
         assert_eq!(prompts.len(), 1);
@@ -508,7 +525,7 @@ mod tests {
             .with_description("Greeting prompt".to_string());
         library.add(prompt).unwrap();
 
-        let server = McpServer::new(library);
+        let server = McpServer::new(library).unwrap();
         let mut arguments = HashMap::new();
         arguments.insert("name".to_string(), "World".to_string());
 
@@ -523,7 +540,7 @@ mod tests {
     #[tokio::test]
     async fn test_mcp_server_exposes_prompt_capabilities() {
         let library = PromptLibrary::new();
-        let server = McpServer::new(library);
+        let server = McpServer::new(library).unwrap();
 
         let info = server.get_info();
 
@@ -574,7 +591,7 @@ mod tests {
     async fn test_mcp_server_file_watching_integration() {
         // Create a test library and server
         let library = PromptLibrary::new();
-        let server = McpServer::new(library);
+        let server = McpServer::new(library).unwrap();
 
         // Test that file watching requires a peer connection
         // In tests, we can't easily create a real peer, so we skip the file watching test
@@ -601,7 +618,7 @@ mod tests {
         // The server should use the same directories for file watching
         // This test ensures the fix for hardcoded paths is working
         let library = PromptLibrary::new();
-        let _server = McpServer::new(library);
+        let _server = McpServer::new(library).unwrap();
 
         // File watching now requires a peer connection from the MCP client
         // The important thing is that both use get_prompt_directories() method
@@ -625,7 +642,7 @@ mod tests {
         library
             .add(Prompt::new("test", "Hello {{ name }}!").with_description("Test prompt"))
             .unwrap();
-        let server = McpServer::new(library);
+        let server = McpServer::new(library).unwrap();
 
         // Test getting an existing prompt works
         let mut args = HashMap::new();
@@ -652,7 +669,7 @@ mod tests {
     async fn test_mcp_server_exposes_workflow_tools_capability() {
         // Create a test library and server
         let library = PromptLibrary::new();
-        let server = McpServer::new(library);
+        let server = McpServer::new(library).unwrap();
 
         let info = server.get_info();
 
@@ -697,7 +714,7 @@ mod tests {
             .with_description("Another partial template".to_string());
         library.add(partial_with_marker).unwrap();
 
-        let server = McpServer::new(library);
+        let server = McpServer::new(library).unwrap();
 
         // Test list_prompts - should only return regular prompts
         let prompts = server.list_prompts().await.unwrap();

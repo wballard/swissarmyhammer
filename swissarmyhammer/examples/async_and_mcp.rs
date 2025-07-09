@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
 
         // Create an MCP server
-        let server = McpServer::new(library);
+        let server = McpServer::new(library)?;
 
         println!("MCP Server Information:");
         let info = server.get_info();

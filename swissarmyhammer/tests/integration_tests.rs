@@ -271,7 +271,7 @@ async fn test_mcp_server() {
         .add(Prompt::new("test", "Hello {{ name }}!").with_description("Test prompt"))
         .unwrap();
 
-    let server = McpServer::new(library);
+    let server = McpServer::new(library).unwrap();
 
     // Test server info
     let info = server.get_info();

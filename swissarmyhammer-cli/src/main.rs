@@ -191,7 +191,13 @@ async fn run_server() -> i32 {
 
     // Create library and server
     let library = PromptLibrary::new();
-    let server = McpServer::new(library);
+    let server = match McpServer::new(library) {
+        Ok(server) => server,
+        Err(e) => {
+            tracing::error!("Failed to create MCP server: {}", e);
+            return 1;
+        }
+    };
 
     // Initialize prompts (this will load user and local prompts)
     if let Err(e) = server.initialize().await {

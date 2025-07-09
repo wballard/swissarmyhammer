@@ -1,11 +1,12 @@
 //! Storage abstractions and implementations for workflows and workflow runs
 
+use crate::security::MAX_DIRECTORY_DEPTH;
 use crate::workflow::{MermaidParser, Workflow, WorkflowName, WorkflowRun, WorkflowRunId};
 use crate::{Result, SwissArmyHammerError};
-use crate::security::MAX_DIRECTORY_DEPTH;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::io::{Read, Write};
 
 /// Source of a workflow (builtin, user, local, or dynamic)
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -69,7 +70,7 @@ impl WorkflowResolver {
             if depth >= MAX_DIRECTORY_DEPTH {
                 break;
             }
-            
+
             let swissarmyhammer_dir = path.join(".swissarmyhammer");
             if swissarmyhammer_dir.exists() && swissarmyhammer_dir.is_dir() {
                 // Skip the user's home .swissarmyhammer directory to avoid duplicate
@@ -155,11 +156,7 @@ impl WorkflowResolver {
     pub fn load_user_workflows(&mut self, storage: &mut dyn WorkflowStorageBackend) -> Result<()> {
         if let Some(home) = dirs::home_dir() {
             for workflows_dir in self.find_workflow_directories(&home) {
-                self.load_workflows_from_directory(
-                    &workflows_dir,
-                    WorkflowSource::User,
-                    storage,
-                )?;
+                self.load_workflows_from_directory(&workflows_dir, WorkflowSource::User, storage)?;
             }
         }
         Ok(())
@@ -177,11 +174,13 @@ impl WorkflowResolver {
         loop {
             // Find workflow directories at this level
             let found_dirs = self.find_workflow_directories(path);
-            
+
             // Only add if not the user's home .swissarmyhammer directory
             for dir in found_dirs {
                 let parent_swissarmyhammer = dir.parent();
-                if let (Some(parent), Some(ref user_dir)) = (parent_swissarmyhammer, &user_home_swissarmyhammer) {
+                if let (Some(parent), Some(ref user_dir)) =
+                    (parent_swissarmyhammer, &user_home_swissarmyhammer)
+                {
                     if parent == user_dir {
                         continue; // Skip user's home .swissarmyhammer/workflows
                     }
@@ -904,6 +903,149 @@ impl WorkflowStorage {
     }
 }
 
+/// Compressed workflow storage that wraps another storage backend
+pub struct CompressedWorkflowStorage {
+    inner: Box<dyn WorkflowStorageBackend>,
+    compression_level: i32,
+}
+
+impl CompressedWorkflowStorage {
+    /// Create a new compressed storage wrapper
+    pub fn new(inner: Box<dyn WorkflowStorageBackend>, compression_level: i32) -> Self {
+        Self {
+            inner,
+            compression_level: compression_level.clamp(1, 22), // zstd compression levels 1-22
+        }
+    }
+
+    /// Create with default compression level (3)
+    pub fn with_default_compression(inner: Box<dyn WorkflowStorageBackend>) -> Self {
+        Self::new(inner, 3)
+    }
+
+    /// Compress data using zstd
+    fn compress_data(&self, data: &[u8]) -> Result<Vec<u8>> {
+        zstd::encode_all(data, self.compression_level)
+            .map_err(|e| SwissArmyHammerError::Storage(format!("Compression failed: {}", e)))
+    }
+
+    /// Decompress data using zstd
+    fn decompress_data(&self, data: &[u8]) -> Result<Vec<u8>> {
+        zstd::decode_all(data)
+            .map_err(|e| SwissArmyHammerError::Storage(format!("Decompression failed: {}", e)))
+    }
+}
+
+impl WorkflowStorageBackend for CompressedWorkflowStorage {
+    fn store_workflow(&mut self, workflow: Workflow) -> Result<()> {
+        // Serialize workflow to JSON
+        let json_data = serde_json::to_vec(&workflow)
+            .map_err(|e| SwissArmyHammerError::Storage(format!("Serialization failed: {}", e)))?;
+
+        // Compress the JSON data
+        let compressed_data = self.compress_data(&json_data)?;
+
+        // Create a temporary workflow with compressed data stored as description
+        // This is a workaround since we can't modify the storage interface
+        let mut compressed_workflow = workflow.clone();
+        compressed_workflow.description = format!(
+            "COMPRESSED_DATA:{}",
+            base64::encode(&compressed_data)
+        );
+
+        self.inner.store_workflow(compressed_workflow)
+    }
+
+    fn get_workflow(&self, name: &WorkflowName) -> Result<Workflow> {
+        let stored_workflow = self.inner.get_workflow(name)?;
+
+        // Check if this is compressed data
+        if stored_workflow.description.starts_with("COMPRESSED_DATA:") {
+            let encoded_data = &stored_workflow.description[16..]; // Skip "COMPRESSED_DATA:"
+            let compressed_data = base64::decode(encoded_data)
+                .map_err(|e| SwissArmyHammerError::Storage(format!("Base64 decode failed: {}", e)))?;
+
+            let json_data = self.decompress_data(&compressed_data)?;
+            let workflow: Workflow = serde_json::from_slice(&json_data)
+                .map_err(|e| SwissArmyHammerError::Storage(format!("Deserialization failed: {}", e)))?;
+
+            Ok(workflow)
+        } else {
+            // Not compressed, return as-is
+            Ok(stored_workflow)
+        }
+    }
+
+    fn list_workflows(&self) -> Result<Vec<Workflow>> {
+        let stored_workflows = self.inner.list_workflows()?;
+        let mut workflows = Vec::new();
+
+        for stored_workflow in stored_workflows {
+            if stored_workflow.description.starts_with("COMPRESSED_DATA:") {
+                let encoded_data = &stored_workflow.description[16..];
+                let compressed_data = base64::decode(encoded_data)
+                    .map_err(|e| SwissArmyHammerError::Storage(format!("Base64 decode failed: {}", e)))?;
+
+                let json_data = self.decompress_data(&compressed_data)?;
+                let workflow: Workflow = serde_json::from_slice(&json_data)
+                    .map_err(|e| SwissArmyHammerError::Storage(format!("Deserialization failed: {}", e)))?;
+
+                workflows.push(workflow);
+            } else {
+                workflows.push(stored_workflow);
+            }
+        }
+
+        Ok(workflows)
+    }
+
+    fn remove_workflow(&mut self, name: &WorkflowName) -> Result<()> {
+        self.inner.remove_workflow(name)
+    }
+
+    fn clone_box(&self) -> Box<dyn WorkflowStorageBackend> {
+        Box::new(CompressedWorkflowStorage {
+            inner: self.inner.clone_box(),
+            compression_level: self.compression_level,
+        })
+    }
+}
+
+impl WorkflowStorage {
+    /// Create with compressed file system backends
+    pub fn compressed_file_system() -> Result<Self> {
+        let base_path = dirs::home_dir()
+            .ok_or_else(|| {
+                SwissArmyHammerError::Storage(
+                    "Cannot find home directory. Please ensure HOME environment variable is set"
+                        .to_string(),
+                )
+            })?
+            .join(".swissarmyhammer");
+
+        let workflow_backend = CompressedWorkflowStorage::with_default_compression(
+            Box::new(FileSystemWorkflowStorage::new()?)
+        );
+
+        Ok(Self::new(
+            Arc::new(workflow_backend),
+            Arc::new(FileSystemWorkflowRunStorage::new(&base_path)?),
+        ))
+    }
+
+    /// Create with compressed memory backends (for testing)
+    pub fn compressed_memory() -> Self {
+        let workflow_backend = CompressedWorkflowStorage::with_default_compression(
+            Box::new(MemoryWorkflowStorage::new())
+        );
+
+        Self::new(
+            Arc::new(workflow_backend),
+            Arc::new(MemoryWorkflowRunStorage::new()),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1015,6 +1157,52 @@ mod tests {
         assert_eq!(retrieved_run.id, run.id);
 
         // Test listing runs for workflow
+        let workflow_runs = storage.list_runs_for_workflow(&workflow.name).unwrap();
+        assert_eq!(workflow_runs.len(), 1);
+    }
+
+    #[test]
+    fn test_compressed_workflow_storage() {
+        let mut storage = CompressedWorkflowStorage::with_default_compression(
+            Box::new(MemoryWorkflowStorage::new())
+        );
+        let workflow = create_test_workflow();
+
+        // Store compressed workflow
+        storage.store_workflow(workflow.clone()).unwrap();
+
+        // Retrieve and verify
+        let retrieved = storage.get_workflow(&workflow.name).unwrap();
+        assert_eq!(retrieved.name, workflow.name);
+        assert_eq!(retrieved.description, workflow.description);
+        assert_eq!(retrieved.states.len(), workflow.states.len());
+
+        // Test listing
+        let list = storage.list_workflows().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, workflow.name);
+
+        // Test removal
+        storage.remove_workflow(&workflow.name).unwrap();
+        assert!(storage.get_workflow(&workflow.name).is_err());
+    }
+
+    #[test]
+    fn test_compressed_storage_integration() {
+        let mut storage = WorkflowStorage::compressed_memory();
+        let workflow = create_test_workflow();
+        let run = WorkflowRun::new(workflow.clone());
+
+        // Test workflow operations with compression
+        storage.store_workflow(workflow.clone()).unwrap();
+        let retrieved_workflow = storage.get_workflow(&workflow.name).unwrap();
+        assert_eq!(retrieved_workflow.name, workflow.name);
+
+        // Test that compression doesn't affect run operations
+        storage.store_run(&run).unwrap();
+        let retrieved_run = storage.get_run(&run.id).unwrap();
+        assert_eq!(retrieved_run.id, run.id);
+
         let workflow_runs = storage.list_runs_for_workflow(&workflow.name).unwrap();
         assert_eq!(workflow_runs.len(), 1);
     }

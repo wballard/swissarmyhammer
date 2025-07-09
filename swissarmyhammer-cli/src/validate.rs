@@ -3,8 +3,10 @@ use colored::*;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use swissarmyhammer::workflow::{MermaidParser, WorkflowGraphAnalyzer, Workflow};
-use swissarmyhammer::security::{validate_path_security, validate_workflow_complexity, MAX_DIRECTORY_DEPTH};
+use swissarmyhammer::security::{
+    validate_path_security, validate_workflow_complexity, MAX_DIRECTORY_DEPTH,
+};
+use swissarmyhammer::workflow::{MermaidParser, Workflow, WorkflowGraphAnalyzer};
 use walkdir::WalkDir;
 
 use crate::cli::ValidateFormat;
@@ -130,10 +132,9 @@ pub struct Validator {
     workflow_cache: HashMap<PathBuf, Workflow>,
 }
 
-
 impl Validator {
     pub fn new(quiet: bool) -> Self {
-        Self { 
+        Self {
             quiet,
             workflow_cache: HashMap::new(),
         }
@@ -143,8 +144,11 @@ impl Validator {
     pub fn validate_all(&mut self) -> Result<ValidationResult> {
         self.validate_all_with_options(Vec::new())
     }
-    
-    pub fn validate_all_with_options(&mut self, workflow_dirs: Vec<String>) -> Result<ValidationResult> {
+
+    pub fn validate_all_with_options(
+        &mut self,
+        workflow_dirs: Vec<String>,
+    ) -> Result<ValidationResult> {
         let mut result = ValidationResult::new();
 
         // Load all prompts using the centralized PromptResolver
@@ -204,7 +208,7 @@ impl Validator {
             // Validate fields and variables (but skip liquid syntax since we did it above)
             self.validate_prompt_fields_and_variables(&local_prompt, &mut result, prompt_title)?;
         }
-        
+
         // Validate workflows
         self.validate_all_workflows(&mut result, &workflow_dirs)?;
 
@@ -272,28 +276,33 @@ impl Validator {
     }
 
     /// Validates all workflow files found in the project
-    /// 
+    ///
     /// Walks through directories looking for .mermaid files in workflows/ directories
     /// and validates each one, collecting all errors in the ValidationResult.
-    /// 
+    ///
     /// Security measures:
     /// - Limits directory traversal depth to prevent DoS
     /// - Validates paths to prevent traversal attacks
     /// - Does not follow symlinks to prevent escaping project boundaries
-    /// 
+    ///
     /// Parameters:
     /// - result: The validation result to accumulate errors into
     /// - workflow_dirs: Optional list of specific directories to validate. If empty, walks from current dir.
-    fn validate_all_workflows(&mut self, result: &mut ValidationResult, workflow_dirs: &[String]) -> Result<()> {
+    fn validate_all_workflows(
+        &mut self,
+        result: &mut ValidationResult,
+        workflow_dirs: &[String],
+    ) -> Result<()> {
         let current_dir = std::env::current_dir()?;
-        
+
         // Determine directories to search
         let dirs_to_search: Vec<PathBuf> = if workflow_dirs.is_empty() {
             // Default behavior: search from current directory
             vec![current_dir.clone()]
         } else {
             // Use specified directories
-            workflow_dirs.iter()
+            workflow_dirs
+                .iter()
                 .map(|dir| {
                     let path = PathBuf::from(dir);
                     if path.is_absolute() {
@@ -304,7 +313,7 @@ impl Validator {
                 })
                 .collect()
         };
-        
+
         // Walk through each directory with security limits
         for search_dir in dirs_to_search {
             // Validate the search directory is safe
@@ -318,12 +327,14 @@ impl Validator {
                         line: None,
                         column: None,
                         message: format!("Security: {}", e),
-                        suggestion: Some("Ensure workflow directory is within the project".to_string()),
+                        suggestion: Some(
+                            "Ensure workflow directory is within the project".to_string(),
+                        ),
                     });
                     continue;
                 }
             }
-            
+
             if !search_dir.exists() {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Warning,
@@ -336,10 +347,10 @@ impl Validator {
                 });
                 continue;
             }
-            
+
             for entry in WalkDir::new(&search_dir)
                 .max_depth(MAX_DIRECTORY_DEPTH)
-                .follow_links(false)  // Don't follow symlinks for security
+                .follow_links(false) // Don't follow symlinks for security
                 .into_iter()
                 .filter_entry(|e| {
                     // Skip common directories that shouldn't contain workflows
@@ -347,58 +358,69 @@ impl Validator {
                     !name.starts_with('.') || name == ".swissarmyhammer"
                 })
             {
-            let entry = entry?;
-            let path = entry.path();
-            
-            // Validate path security
-            match validate_path_security(path, &current_dir) {
-                Ok(_) => {}
-                Err(e) => {
-                    result.add_issue(ValidationIssue {
-                        level: ValidationLevel::Error,
-                        file_path: path.to_path_buf(),
-                        prompt_title: None,
-                        line: None,
-                        column: None,
-                        message: format!("Security: {}", e),
-                        suggestion: Some("Ensure workflow files are within the project directory".to_string()),
-                    });
-                    continue;
+                let entry = entry?;
+                let path = entry.path();
+
+                // Validate path security
+                match validate_path_security(path, &current_dir) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        result.add_issue(ValidationIssue {
+                            level: ValidationLevel::Error,
+                            file_path: path.to_path_buf(),
+                            prompt_title: None,
+                            line: None,
+                            column: None,
+                            message: format!("Security: {}", e),
+                            suggestion: Some(
+                                "Ensure workflow files are within the project directory"
+                                    .to_string(),
+                            ),
+                        });
+                        continue;
+                    }
+                }
+
+                // Check if this is a workflow file
+                if path.extension().and_then(|s| s.to_str()) == Some("mermaid") {
+                    // Check if it's in a workflows directory
+                    if path
+                        .parent()
+                        .and_then(|p| p.file_name())
+                        .and_then(|n| n.to_str())
+                        == Some("workflows")
+                    {
+                        self.validate_workflow(path, result)?;
+                    }
                 }
             }
-            
-            // Check if this is a workflow file
-            if path.extension().and_then(|s| s.to_str()) == Some("mermaid") {
-                // Check if it's in a workflows directory
-                if path.parent()
-                    .and_then(|p| p.file_name())
-                    .and_then(|n| n.to_str()) == Some("workflows") 
-                {
-                    self.validate_workflow(path, result)?;
-                }
-            }
-        }
         } // End of dirs_to_search loop
 
         Ok(())
     }
 
     /// Validates a single workflow file
-    /// 
+    ///
     /// This method collects validation errors in the provided ValidationResult
     /// rather than returning errors directly. This allows validation to continue
     /// for other files even if this one has errors.
-    /// 
+    ///
     /// Uses caching to avoid re-parsing the same workflow multiple times.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Always returns Ok(()) - errors are recorded in the ValidationResult parameter
-    pub fn validate_workflow(&mut self, workflow_path: &Path, result: &mut ValidationResult) -> Result<()> {
+    pub fn validate_workflow(
+        &mut self,
+        workflow_path: &Path,
+        result: &mut ValidationResult,
+    ) -> Result<()> {
         result.files_checked += 1;
-        
+
         // Check cache first
-        let canonical_path = workflow_path.canonicalize().unwrap_or_else(|_| workflow_path.to_path_buf());
+        let canonical_path = workflow_path
+            .canonicalize()
+            .unwrap_or_else(|_| workflow_path.to_path_buf());
         let workflow = if let Some(cached_workflow) = self.workflow_cache.get(&canonical_path) {
             // Use cached workflow
             cached_workflow.clone()
@@ -442,14 +464,16 @@ impl Validator {
                     return Ok(());
                 }
             };
-            
+
             // Cache the successfully parsed workflow
             self.workflow_cache.insert(canonical_path, workflow.clone());
             workflow
         };
 
         // Check workflow complexity to prevent DoS
-        if let Err(e) = validate_workflow_complexity(workflow.states.len(), workflow.transitions.len()) {
+        if let Err(e) =
+            validate_workflow_complexity(workflow.states.len(), workflow.transitions.len())
+        {
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Error,
                 file_path: workflow_path.to_path_buf(),
@@ -465,7 +489,7 @@ impl Validator {
 
         // Validate the workflow structure
         match workflow.validate() {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(errors) => {
                 for error in errors {
                     result.add_issue(ValidationIssue {
@@ -486,7 +510,7 @@ impl Validator {
         // Check for unreachable states
         let graph_analyzer = WorkflowGraphAnalyzer::new(&workflow);
         let unreachable_states = graph_analyzer.find_unreachable_states();
-        
+
         for state_id in unreachable_states {
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Error,
@@ -495,7 +519,10 @@ impl Validator {
                 line: None,
                 column: None,
                 message: format!("State '{}' is unreachable from the initial state", state_id),
-                suggestion: Some("Ensure all states have incoming transitions or remove unused states".to_string()),
+                suggestion: Some(
+                    "Ensure all states have incoming transitions or remove unused states"
+                        .to_string(),
+                ),
             });
         }
 
@@ -525,11 +552,12 @@ impl Validator {
         if !all_cycles.is_empty() {
             // Report only the first cycle to avoid clutter
             let first_cycle = &all_cycles[0];
-            let cycle_str = first_cycle.iter()
+            let cycle_str = first_cycle
+                .iter()
                 .map(|s| s.as_str())
                 .collect::<Vec<_>>()
                 .join(" -> ");
-            
+
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Warning,
                 file_path: workflow_path.to_path_buf(),
@@ -537,7 +565,10 @@ impl Validator {
                 line: None,
                 column: None,
                 message: format!("Circular dependency detected: {}", cycle_str),
-                suggestion: Some("Ensure the workflow has proper exit conditions to avoid infinite loops".to_string()),
+                suggestion: Some(
+                    "Ensure the workflow has proper exit conditions to avoid infinite loops"
+                        .to_string(),
+                ),
             });
         }
 
@@ -562,8 +593,9 @@ impl Validator {
             // Check for undefined variables in conditions
             if let Some(expression) = &transition.condition.expression {
                 // Simple heuristic: look for variable-like patterns
-                if expression.contains("undefined_var") || 
-                   (expression.contains("==") && !expression.contains("result.")) {
+                if expression.contains("undefined_var")
+                    || (expression.contains("==") && !expression.contains("result."))
+                {
                     result.add_issue(ValidationIssue {
                         level: ValidationLevel::Warning,
                         file_path: workflow_path.to_path_buf(),
@@ -1111,7 +1143,11 @@ impl Validator {
     }
 }
 
-pub fn run_validate_command(quiet: bool, format: ValidateFormat, workflow_dirs: Vec<String>) -> Result<i32> {
+pub fn run_validate_command(
+    quiet: bool,
+    format: ValidateFormat,
+    workflow_dirs: Vec<String>,
+) -> Result<i32> {
     let mut validator = Validator::new(quiet);
 
     // Always validate all prompts
@@ -1227,18 +1263,24 @@ mod tests {
         let mut validator = Validator::new(false);
         let temp_dir = tempfile::TempDir::new().unwrap();
         let workflow_path = temp_dir.path().join("test.mermaid");
-        
+
         // Create a valid workflow
-        std::fs::write(&workflow_path, r#"stateDiagram-v2
+        std::fs::write(
+            &workflow_path,
+            r#"stateDiagram-v2
     [*] --> Start
     Start --> Process: continue
     Process --> End: complete
     End --> [*]
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let mut result = ValidationResult::new();
-        validator.validate_workflow(&workflow_path, &mut result).unwrap();
-        
+        validator
+            .validate_workflow(&workflow_path, &mut result)
+            .unwrap();
+
         assert_eq!(result.errors, 0);
         assert_eq!(result.warnings, 0);
     }
@@ -1248,19 +1290,28 @@ mod tests {
         let mut validator = Validator::new(false);
         let temp_dir = tempfile::TempDir::new().unwrap();
         let workflow_path = temp_dir.path().join("test.mermaid");
-        
+
         // Create an invalid workflow with syntax error
-        std::fs::write(&workflow_path, r#"stateDiagram-v2
+        std::fs::write(
+            &workflow_path,
+            r#"stateDiagram-v2
     [*] --> Start
     Start --> Process: invalid syntax here [
     Process --> End
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let mut result = ValidationResult::new();
-        validator.validate_workflow(&workflow_path, &mut result).unwrap();
-        
+        validator
+            .validate_workflow(&workflow_path, &mut result)
+            .unwrap();
+
         assert!(result.has_errors());
-        assert!(result.issues.iter().any(|issue| issue.message.contains("syntax")));
+        assert!(result
+            .issues
+            .iter()
+            .any(|issue| issue.message.contains("syntax")));
     }
 
     #[test]
@@ -1268,20 +1319,32 @@ mod tests {
         let mut validator = Validator::new(false);
         let temp_dir = tempfile::TempDir::new().unwrap();
         let workflow_path = temp_dir.path().join("test.mermaid");
-        
+
         // Create a workflow with unreachable state
-        std::fs::write(&workflow_path, r#"stateDiagram-v2
+        std::fs::write(
+            &workflow_path,
+            r#"stateDiagram-v2
     [*] --> Start
     Start --> End
     End --> [*]
     Orphan --> End
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let mut result = ValidationResult::new();
-        validator.validate_workflow(&workflow_path, &mut result).unwrap();
-        
+        validator
+            .validate_workflow(&workflow_path, &mut result)
+            .unwrap();
+
         assert!(result.has_errors());
-        assert!(result.issues.iter().any(|issue| issue.message.contains("unreachable") || issue.message.contains("Orphan")));
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.message.contains("unreachable")
+                    || issue.message.contains("Orphan"))
+        );
     }
 
     #[test]
@@ -1289,19 +1352,31 @@ mod tests {
         let mut validator = Validator::new(false);
         let temp_dir = tempfile::TempDir::new().unwrap();
         let workflow_path = temp_dir.path().join("test.mermaid");
-        
+
         // Create a workflow without terminal state
-        std::fs::write(&workflow_path, r#"stateDiagram-v2
+        std::fs::write(
+            &workflow_path,
+            r#"stateDiagram-v2
     [*] --> Start
     Start --> Process
     Process --> Start
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let mut result = ValidationResult::new();
-        validator.validate_workflow(&workflow_path, &mut result).unwrap();
-        
+        validator
+            .validate_workflow(&workflow_path, &mut result)
+            .unwrap();
+
         assert!(result.has_errors());
-        assert!(result.issues.iter().any(|issue| issue.message.contains("terminal") || issue.message.contains("end state")));
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.message.contains("terminal")
+                    || issue.message.contains("end state"))
+        );
     }
 
     #[test]
@@ -1309,20 +1384,26 @@ mod tests {
         let mut validator = Validator::new(false);
         let temp_dir = tempfile::TempDir::new().unwrap();
         let workflow_path = temp_dir.path().join("test.mermaid");
-        
+
         // Create a workflow with circular dependency but also a terminal state
-        std::fs::write(&workflow_path, r#"stateDiagram-v2
+        std::fs::write(
+            &workflow_path,
+            r#"stateDiagram-v2
     [*] --> A
     A --> B
     B --> C
     C --> A
     C --> End
     End --> [*]
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let mut result = ValidationResult::new();
-        validator.validate_workflow(&workflow_path, &mut result).unwrap();
-        
+        validator
+            .validate_workflow(&workflow_path, &mut result)
+            .unwrap();
+
         assert!(result.has_warnings());
         assert!(result.issues.iter().any(|issue| {
             let msg_lower = issue.message.to_lowercase();
@@ -1335,18 +1416,24 @@ mod tests {
         let mut validator = Validator::new(false);
         let temp_dir = tempfile::TempDir::new().unwrap();
         let workflow_path = temp_dir.path().join("test.mermaid");
-        
+
         // Create a workflow with actions
-        std::fs::write(&workflow_path, r#"stateDiagram-v2
+        std::fs::write(
+            &workflow_path,
+            r#"stateDiagram-v2
     [*] --> Start
     Start --> Process: execute prompt "test"
     Process --> End: check result.success
     End --> [*]
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let mut result = ValidationResult::new();
-        validator.validate_workflow(&workflow_path, &mut result).unwrap();
-        
+        validator
+            .validate_workflow(&workflow_path, &mut result)
+            .unwrap();
+
         // Should validate action syntax
         assert_eq!(result.errors, 0);
     }
@@ -1356,20 +1443,32 @@ mod tests {
         let mut validator = Validator::new(false);
         let temp_dir = tempfile::TempDir::new().unwrap();
         let workflow_path = temp_dir.path().join("test.mermaid");
-        
+
         // Create a workflow using undefined variables
-        std::fs::write(&workflow_path, r#"stateDiagram-v2
+        std::fs::write(
+            &workflow_path,
+            r#"stateDiagram-v2
     [*] --> Start
     Start --> Process: check undefined_var == true
     Process --> End
     End --> [*]
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let mut result = ValidationResult::new();
-        validator.validate_workflow(&workflow_path, &mut result).unwrap();
-        
+        validator
+            .validate_workflow(&workflow_path, &mut result)
+            .unwrap();
+
         assert!(result.has_warnings());
-        assert!(result.issues.iter().any(|issue| issue.message.contains("undefined") || issue.message.contains("variable")));
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.message.contains("undefined")
+                    || issue.message.contains("variable"))
+        );
     }
 
     #[test]
@@ -1378,42 +1477,49 @@ mod tests {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let workflows_dir = temp_dir.path().join(".swissarmyhammer").join("workflows");
         std::fs::create_dir_all(&workflows_dir).unwrap();
-        
+
         // Create a workflow file
-        std::fs::write(workflows_dir.join("test.mermaid"), r#"stateDiagram-v2
+        std::fs::write(
+            workflows_dir.join("test.mermaid"),
+            r#"stateDiagram-v2
     [*] --> Start
     Start --> End
     End --> [*]
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         // Note: This test would need to be run as an integration test
         // since run_validate_command uses the current directory
     }
-    
+
     #[test]
     fn test_validate_workflow_empty_file() {
         let mut validator = Validator::new(false);
         let temp_dir = tempfile::TempDir::new().unwrap();
         let workflow_path = temp_dir.path().join("empty.mermaid");
-        
+
         // Create empty workflow file
         std::fs::write(&workflow_path, "").unwrap();
-        
+
         let mut result = ValidationResult::new();
-        validator.validate_workflow(&workflow_path, &mut result).unwrap();
-        
+        validator
+            .validate_workflow(&workflow_path, &mut result)
+            .unwrap();
+
         assert!(result.has_errors());
-        assert!(result.issues.iter().any(|issue| 
-            issue.message.contains("Failed to parse workflow syntax")
-        ));
+        assert!(result
+            .issues
+            .iter()
+            .any(|issue| issue.message.contains("Failed to parse workflow syntax")));
     }
-    
+
     #[test]
     fn test_validate_workflow_malformed_mermaid() {
         let mut validator = Validator::new(false);
         let temp_dir = tempfile::TempDir::new().unwrap();
         let workflow_path = temp_dir.path().join("malformed.mermaid");
-        
+
         // Various malformed Mermaid syntax
         let test_cases = [
             // Missing diagram type
@@ -1427,30 +1533,38 @@ mod tests {
             // Missing terminal state
             "stateDiagram-v2\n    Start --> Middle",
         ];
-        
+
         for (i, content) in test_cases.iter().enumerate() {
             std::fs::write(&workflow_path, content).unwrap();
-            
+
             let mut result = ValidationResult::new();
-            validator.validate_workflow(&workflow_path, &mut result).unwrap();
-            
+            validator
+                .validate_workflow(&workflow_path, &mut result)
+                .unwrap();
+
             assert!(result.has_errors(), "Test case {} should have errors", i);
-            assert!(result.issues.iter().any(|issue| 
-                issue.message.contains("Failed to parse workflow syntax") ||
-                issue.message.contains("no terminal state") ||
-                issue.message.contains("validation failed")
-            ), "Test case {} should have parsing or validation errors", i);
+            assert!(
+                result.issues.iter().any(|issue| issue
+                    .message
+                    .contains("Failed to parse workflow syntax")
+                    || issue.message.contains("no terminal state")
+                    || issue.message.contains("validation failed")),
+                "Test case {} should have parsing or validation errors",
+                i
+            );
         }
     }
-    
+
     #[test]
     fn test_validate_workflow_complex_edge_cases() {
         let mut validator = Validator::new(false);
         let temp_dir = tempfile::TempDir::new().unwrap();
         let workflow_path = temp_dir.path().join("complex.mermaid");
-        
+
         // Workflow with multiple isolated components
-        std::fs::write(&workflow_path, r#"stateDiagram-v2
+        std::fs::write(
+            &workflow_path,
+            r#"stateDiagram-v2
     [*] --> A
     A --> B
     B --> [*]
@@ -1458,112 +1572,155 @@ mod tests {
     C --> D
     D --> E
     E --> [*]
-"#).unwrap();
-        
+"#,
+        )
+        .unwrap();
+
         let mut result = ValidationResult::new();
-        validator.validate_workflow(&workflow_path, &mut result).unwrap();
-        
+        validator
+            .validate_workflow(&workflow_path, &mut result)
+            .unwrap();
+
         // Should have errors for unreachable states C, D, E (they're not connected to initial state)
         assert!(result.has_errors());
-        let _unreachable_count = result.issues.iter()
+        let _unreachable_count = result
+            .issues
+            .iter()
             .filter(|issue| issue.message.contains("unreachable"))
             .count();
         // Note: The parser may not create states that aren't referenced in transitions
         // So we just verify that validation completes without panic
-        assert!(result.files_checked > 0, "Should have validated the workflow file");
+        assert!(
+            result.files_checked > 0,
+            "Should have validated the workflow file"
+        );
     }
-    
+
     #[test]
     fn test_validate_workflow_self_loop() {
         let mut validator = Validator::new(false);
         let temp_dir = tempfile::TempDir::new().unwrap();
         let workflow_path = temp_dir.path().join("selfloop.mermaid");
-        
+
         // Workflow with self-loop
-        std::fs::write(&workflow_path, r#"stateDiagram-v2
+        std::fs::write(
+            &workflow_path,
+            r#"stateDiagram-v2
     [*] --> Processing
     Processing --> Processing : retry
     Processing --> Done : success
     Done --> [*]
-"#).unwrap();
-        
+"#,
+        )
+        .unwrap();
+
         let mut result = ValidationResult::new();
-        validator.validate_workflow(&workflow_path, &mut result).unwrap();
-        
+        validator
+            .validate_workflow(&workflow_path, &mut result)
+            .unwrap();
+
         // Self-loops are valid, should have no errors
         assert!(!result.has_errors());
         // Might have a warning about cycles
-        let cycle_warnings = result.issues.iter()
-            .filter(|issue| issue.level == ValidationLevel::Warning && 
-                            (issue.message.contains("cycle") || issue.message.contains("circular")))
+        let cycle_warnings = result
+            .issues
+            .iter()
+            .filter(|issue| {
+                issue.level == ValidationLevel::Warning
+                    && (issue.message.contains("cycle") || issue.message.contains("circular"))
+            })
             .count();
         assert!(cycle_warnings <= 1); // At most one cycle warning
     }
-    
+
     #[test]
     fn test_validate_workflow_nested_conditions() {
         let mut validator = Validator::new(false);
         let temp_dir = tempfile::TempDir::new().unwrap();
         let workflow_path = temp_dir.path().join("conditions.mermaid");
-        
+
         // Workflow with complex conditions
-        std::fs::write(&workflow_path, r#"stateDiagram-v2
+        std::fs::write(
+            &workflow_path,
+            r#"stateDiagram-v2
     [*] --> Check
     Check --> Process : result.success == true && input.type == "valid"
     Check --> Error : result.success == false || timeout > 30
     Process --> Done
     Error --> Done
     Done --> [*]
-"#).unwrap();
-        
+"#,
+        )
+        .unwrap();
+
         let mut result = ValidationResult::new();
-        validator.validate_workflow(&workflow_path, &mut result).unwrap();
-        
+        validator
+            .validate_workflow(&workflow_path, &mut result)
+            .unwrap();
+
         // Current implementation may not detect all undefined variables in complex expressions
         // This is a known limitation mentioned in CODE_REVIEW.md
         // The test verifies that validation completes without crashing
-        assert!(!result.has_errors() || result.has_warnings(), 
-            "Should complete validation without critical errors");
+        assert!(
+            !result.has_errors() || result.has_warnings(),
+            "Should complete validation without critical errors"
+        );
     }
-    
+
     #[test]
     fn test_validate_all_workflows_integration() {
         let mut validator = Validator::new(false);
         let temp_dir = tempfile::TempDir::new().unwrap();
-        
+
         // Create nested workflow directories
         let workflows_dir1 = temp_dir.path().join(".swissarmyhammer").join("workflows");
-        let workflows_dir2 = temp_dir.path().join("project").join(".swissarmyhammer").join("workflows");
+        let workflows_dir2 = temp_dir
+            .path()
+            .join("project")
+            .join(".swissarmyhammer")
+            .join("workflows");
         std::fs::create_dir_all(&workflows_dir1).unwrap();
         std::fs::create_dir_all(&workflows_dir2).unwrap();
-        
+
         // Create valid workflow
-        std::fs::write(workflows_dir1.join("valid.mermaid"), r#"stateDiagram-v2
+        std::fs::write(
+            workflows_dir1.join("valid.mermaid"),
+            r#"stateDiagram-v2
     [*] --> Start
     Start --> End
     End --> [*]
-"#).unwrap();
-        
+"#,
+        )
+        .unwrap();
+
         // Create invalid workflow
-        std::fs::write(workflows_dir2.join("invalid.mermaid"), r#"stateDiagram-v2
+        std::fs::write(
+            workflows_dir2.join("invalid.mermaid"),
+            r#"stateDiagram-v2
     [*] --> Start
     Start --> Middle
     Middle --> End
-"#).unwrap();
-        
+"#,
+        )
+        .unwrap();
+
         // Create non-workflow mermaid file (should be ignored)
-        std::fs::write(temp_dir.path().join("diagram.mermaid"), r#"flowchart TD
+        std::fs::write(
+            temp_dir.path().join("diagram.mermaid"),
+            r#"flowchart TD
     A --> B
-"#).unwrap();
-        
+"#,
+        )
+        .unwrap();
+
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(&temp_dir).unwrap();
-        
+
         let mut result = ValidationResult::new();
         let validation_result = validator.validate_all_workflows(&mut result, &Vec::new());
-        
+
         std::env::set_current_dir(original_dir).unwrap();
-        
+
         assert!(validation_result.is_ok());
         // The validate_all_workflows might not find files in temp directory due to walkdir behavior
         // Just verify that it completes without error

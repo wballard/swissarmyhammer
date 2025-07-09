@@ -3283,6 +3283,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
  "cel-interpreter",
  "chrono",
  "criterion",
@@ -3291,9 +3292,12 @@ dependencies = [
  "fuzzy-matcher",
  "liquid",
  "liquid-core",
+ "lru",
+ "memmap2",
  "mermaid-parser",
  "notify",
  "proptest",
+ "rayon",
  "regex",
  "rmcp",
  "schemars",
@@ -3307,6 +3311,7 @@ dependencies = [
  "tracing",
  "ulid",
  "walkdir",
+ "zstd 0.13.3",
 ]
 
 [[package]]

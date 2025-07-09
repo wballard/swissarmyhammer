@@ -57,6 +57,13 @@ mermaid-parser = { git = "https://github.com/wballard/mermaid_parser" }
 # CEL expression evaluation
 cel-interpreter = "0.8"
 
+# Performance optimizations
+lru = "0.12"
+zstd = "0.13"
+memmap2 = "0.9"
+rayon = "1.8"
+base64 = "0.22"
+
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -66,3 +73,9 @@ criterion = { workspace = true }
 [lib]
 name = "swissarmyhammer"
 path = "src/lib.rs"
+
+# Benchmark configuration
+[[bench]]
+name = "benchmarks"
+harness = false
+path = "../benches/benchmarks.rs"

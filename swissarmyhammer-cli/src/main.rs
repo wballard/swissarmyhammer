@@ -107,7 +107,11 @@ async fn main() {
             tracing::info!("Listing prompts");
             run_list(format, verbose, source, category, search)
         }
-        Some(Commands::Validate { quiet, format, workflow_dirs }) => {
+        Some(Commands::Validate {
+            quiet,
+            format,
+            workflow_dirs,
+        }) => {
             tracing::info!("Validating prompts");
             run_validate(quiet, format, workflow_dirs)
         }

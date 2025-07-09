@@ -110,7 +110,8 @@ impl CompensationKey {
 
     /// Extract the state ID from a compensation key
     pub fn extract_state_id(&self) -> Option<StateId> {
-        self.0.strip_prefix("compensation_for_")
+        self.0
+            .strip_prefix("compensation_for_")
             .filter(|s| !s.is_empty())
             .map(StateId::new)
     }
@@ -153,7 +154,11 @@ impl ErrorContext {
     }
 
     /// Create error context with retry information
-    pub fn with_retries(error_message: String, error_state: StateId, retry_attempts: usize) -> Self {
+    pub fn with_retries(
+        error_message: String,
+        error_state: StateId,
+        retry_attempts: usize,
+    ) -> Self {
         Self {
             error_message,
             error_state,

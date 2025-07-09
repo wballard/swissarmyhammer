@@ -1,14 +1,18 @@
 //! Core workflow execution logic
 
-use crate::workflow::{
-    parse_action_from_description, ActionError, StateId, CompensationKey, ErrorContext, Workflow, WorkflowRun, WorkflowRunStatus,
-    metrics::{WorkflowMetrics, MemoryMetrics},
+use super::{
+    ExecutionEvent, ExecutionEventType, ExecutorError, ExecutorResult, DEFAULT_MAX_HISTORY_SIZE,
+    LAST_ACTION_RESULT_KEY, MAX_TRANSITIONS,
 };
-use serde_json::Value;
-use super::{ExecutorError, ExecutorResult, ExecutionEvent, ExecutionEventType, MAX_TRANSITIONS, DEFAULT_MAX_HISTORY_SIZE, LAST_ACTION_RESULT_KEY};
-use std::time::{Instant, Duration};
-use std::collections::HashMap;
+use crate::workflow::{
+    metrics::{MemoryMetrics, WorkflowMetrics},
+    parse_action_from_description, ActionError, CompensationKey, ErrorContext, StateId, Workflow,
+    WorkflowRun, WorkflowRunStatus, WorkflowCacheManager, TransitionPath, TransitionKey,
+};
 use cel_interpreter::Program;
+use serde_json::Value;
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 /// Configuration for retry behavior
 #[derive(Debug, Clone)]
@@ -42,8 +46,8 @@ pub struct WorkflowExecutor {
     max_history_size: usize,
     /// Metrics collector for workflow execution
     metrics: WorkflowMetrics,
-    /// Cache for compiled CEL programs
-    cel_program_cache: HashMap<String, Program>,
+    /// Cache manager for performance optimizations
+    cache_manager: WorkflowCacheManager,
 }
 
 impl WorkflowExecutor {
@@ -53,7 +57,7 @@ impl WorkflowExecutor {
             execution_history: Vec::new(),
             max_history_size: DEFAULT_MAX_HISTORY_SIZE,
             metrics: WorkflowMetrics::new(),
-            cel_program_cache: HashMap::new(),
+            cache_manager: WorkflowCacheManager::new(),
         }
     }
 
@@ -75,15 +79,18 @@ impl WorkflowExecutor {
         );
 
         // Execute the initial state with transition limit
-        let result = self.execute_state_with_limit(&mut run, MAX_TRANSITIONS).await;
-        
+        let result = self
+            .execute_state_with_limit(&mut run, MAX_TRANSITIONS)
+            .await;
+
         // Complete metrics tracking
         match &result {
             Ok(_) => {
                 self.metrics.complete_run(&run.id, run.status, None);
             }
             Err(e) => {
-                self.metrics.complete_run(&run.id, WorkflowRunStatus::Failed, Some(e.to_string()));
+                self.metrics
+                    .complete_run(&run.id, WorkflowRunStatus::Failed, Some(e.to_string()));
             }
         }
 
@@ -108,15 +115,18 @@ impl WorkflowExecutor {
         );
 
         // Continue execution from current state with transition limit
-        let result = self.execute_state_with_limit(&mut run, MAX_TRANSITIONS).await;
-        
+        let result = self
+            .execute_state_with_limit(&mut run, MAX_TRANSITIONS)
+            .await;
+
         // Complete metrics tracking
         match &result {
             Ok(_) => {
                 self.metrics.complete_run(&run.id, run.status, None);
             }
             Err(e) => {
-                self.metrics.complete_run(&run.id, WorkflowRunStatus::Failed, Some(e.to_string()));
+                self.metrics
+                    .complete_run(&run.id, WorkflowRunStatus::Failed, Some(e.to_string()));
             }
         }
 
@@ -133,7 +143,7 @@ impl WorkflowExecutor {
         // Execute the state, but don't propagate action errors immediately
         // We need to check for OnFailure transitions first
         let state_result = self.execute_single_state(run).await;
-        
+
         // If it's an action error, we'll handle it after checking transitions
         let state_error = match state_result {
             Err(ExecutorError::ActionError(e)) => Some(ExecutorError::ActionError(e)),
@@ -241,13 +251,14 @@ impl WorkflowExecutor {
 
         // Record state execution timing
         let state_start_time = Instant::now();
-        
+
         // Execute state action if one can be parsed from the description
         self.execute_state_action(run, &state_description).await?;
-        
+
         // Record state execution duration
         let state_duration = state_start_time.elapsed();
-        self.metrics.record_state_execution(&run.id, current_state_id.clone(), state_duration);
+        self.metrics
+            .record_state_execution(&run.id, current_state_id.clone(), state_duration);
 
         // Check if this state requires manual intervention
         if self.requires_manual_intervention(run) {
@@ -255,16 +266,20 @@ impl WorkflowExecutor {
                 ExecutionEventType::StateExecution,
                 format!("State {} requires manual intervention", current_state_id),
             );
-            
+
             // Check if manual approval has been provided
-            if !run.context.get("manual_approval")
+            if !run
+                .context
+                .get("manual_approval")
                 .and_then(|v| v.as_bool())
-                .unwrap_or(false) {
+                .unwrap_or(false)
+            {
                 // Pause execution here - workflow will need to be resumed
                 // Mark workflow as paused by returning the proper error type
-                return Err(ExecutorError::ManualInterventionRequired(
-                    format!("State {} requires manual approval", current_state_id)
-                ));
+                return Err(ExecutorError::ManualInterventionRequired(format!(
+                    "State {} requires manual approval",
+                    current_state_id
+                )));
             }
         }
 
@@ -293,14 +308,17 @@ impl WorkflowExecutor {
         }
 
         // Track compensation states from transition metadata
-        if let Some(transition) = run.workflow.transitions
+        if let Some(transition) = run
+            .workflow
+            .transitions
             .iter()
-            .find(|t| t.from_state == run.current_state && t.to_state == next_state) {
-            
+            .find(|t| t.from_state == run.current_state && t.to_state == next_state)
+        {
             if let Some(comp_state) = transition.metadata.get("compensation_state") {
                 // Store compensation state in context for this transition
                 let comp_key = CompensationKey::for_state(&run.current_state);
-                run.context.insert(comp_key.into(), Value::String(comp_state.clone()));
+                run.context
+                    .insert(comp_key.into(), Value::String(comp_state.clone()));
             }
         }
 
@@ -329,7 +347,11 @@ impl WorkflowExecutor {
     }
 
     /// Find transitions TO the given state
-    fn find_transitions_to_state<'a>(&self, run: &'a WorkflowRun, state_id: &StateId) -> Vec<&'a crate::workflow::Transition> {
+    fn find_transitions_to_state<'a>(
+        &self,
+        run: &'a WorkflowRun,
+        state_id: &StateId,
+    ) -> Vec<&'a crate::workflow::Transition> {
         run.workflow
             .transitions
             .iter()
@@ -362,7 +384,11 @@ impl WorkflowExecutor {
                     Ok(n) => {
                         self.log_event(
                             ExecutionEventType::Failed,
-                            format!("Retry attempts {} exceeds maximum allowed {}", n, RetryConfig::MAX_RETRY_ATTEMPTS),
+                            format!(
+                                "Retry attempts {} exceeds maximum allowed {}",
+                                n,
+                                RetryConfig::MAX_RETRY_ATTEMPTS
+                            ),
                         );
                         RetryConfig::MAX_RETRY_ATTEMPTS
                     }
@@ -374,29 +400,33 @@ impl WorkflowExecutor {
                         continue;
                     }
                 };
-                
-                let backoff_ms = transition.metadata.get("retry_backoff_ms")
+
+                let backoff_ms = transition
+                    .metadata
+                    .get("retry_backoff_ms")
                     .and_then(|s| s.parse::<u64>().ok())
                     .map(|ms| ms.min(RetryConfig::MAX_BACKOFF_MS))
                     .unwrap_or(RetryConfig::DEFAULT_BACKOFF_MS);
-                    
-                let backoff_multiplier = transition.metadata.get("retry_backoff_multiplier")
+
+                let backoff_multiplier = transition
+                    .metadata
+                    .get("retry_backoff_multiplier")
                     .and_then(|s| s.parse::<f64>().ok())
                     .map(|m| m.clamp(1.0, RetryConfig::MAX_BACKOFF_MULTIPLIER))
                     .unwrap_or(RetryConfig::DEFAULT_BACKOFF_MULTIPLIER);
-                
+
                 let config = RetryConfig {
                     max_attempts,
                     backoff_ms,
                     backoff_multiplier,
                 };
-                
+
                 if config.max_attempts > 0 {
                     return Some(config);
                 }
             }
         }
-        
+
         None
     }
 
@@ -425,20 +455,23 @@ impl WorkflowExecutor {
                         );
                     }
                     // Update error context with retry attempts if it exists
-                    if let Some(Value::Object(error_obj)) = run.context.get_mut(ErrorContext::CONTEXT_KEY) {
-                        error_obj.insert("retry_attempts".to_string(), Value::Number(attempt.into()));
+                    if let Some(Value::Object(error_obj)) =
+                        run.context.get_mut(ErrorContext::CONTEXT_KEY)
+                    {
+                        error_obj
+                            .insert("retry_attempts".to_string(), Value::Number(attempt.into()));
                     }
                     return Ok(result);
                 }
                 Err(error) => {
                     last_error = Some(error);
-                    
+
                     if attempt < retry_config.max_attempts {
                         self.log_event(
                             ExecutionEventType::Failed,
                             format!("Action failed, waiting {}ms before retry", backoff_ms),
                         );
-                        
+
                         // Wait with exponential backoff
                         tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
                         backoff_ms = (backoff_ms as f64 * retry_config.backoff_multiplier) as u64;
@@ -448,7 +481,10 @@ impl WorkflowExecutor {
         }
 
         // All retries exhausted
-        run.context.insert("retry_attempts".to_string(), Value::Number(retry_config.max_attempts.into()));
+        run.context.insert(
+            "retry_attempts".to_string(),
+            Value::Number(retry_config.max_attempts.into()),
+        );
         Err(last_error.unwrap())
     }
 
@@ -467,7 +503,7 @@ impl WorkflowExecutor {
 
             // Check for retry configuration
             let retry_config = self.get_retry_config(run);
-            
+
             // Execute the action (with retry if configured)
             let result = if let Some(config) = retry_config {
                 self.execute_action_with_retry(run, action, &config).await
@@ -479,7 +515,10 @@ impl WorkflowExecutor {
                 Ok(result_value) => {
                     self.log_event(
                         ExecutionEventType::StateExecution,
-                        format!("Action completed successfully with result: {}", result_value),
+                        format!(
+                            "Action completed successfully with result: {}",
+                            result_value
+                        ),
                     );
                 }
                 Err(action_error) => {
@@ -488,46 +527,56 @@ impl WorkflowExecutor {
                         .insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(false));
 
                     // Capture error context
-                    let retry_attempts = run.context.get("retry_attempts")
+                    let retry_attempts = run
+                        .context
+                        .get("retry_attempts")
                         .and_then(|v| v.as_u64())
                         .map(|v| v as usize);
-                    
+
                     let error_context = if let Some(attempts) = retry_attempts {
                         ErrorContext::with_retries(
                             action_error.to_string(),
                             run.current_state.clone(),
-                            attempts
+                            attempts,
                         )
                     } else {
-                        ErrorContext::new(
-                            action_error.to_string(),
-                            run.current_state.clone()
-                        )
+                        ErrorContext::new(action_error.to_string(), run.current_state.clone())
                     };
-                    
-                    let error_context_json = serde_json::to_value(&error_context)
-                        .unwrap_or_else(|_| Value::Null);
-                    run.context.insert(ErrorContext::CONTEXT_KEY.to_string(), error_context_json);
+
+                    let error_context_json =
+                        serde_json::to_value(&error_context).unwrap_or_else(|_| Value::Null);
+                    run.context
+                        .insert(ErrorContext::CONTEXT_KEY.to_string(), error_context_json);
 
                     // Log the error with appropriate details
                     let error_details = match &action_error {
-                        ActionError::Timeout { timeout } => format!("Action timed out after {:?}", timeout),
+                        ActionError::Timeout { timeout } => {
+                            format!("Action timed out after {:?}", timeout)
+                        }
                         ActionError::ClaudeError(msg) => format!("Claude command failed: {}", msg),
-                        ActionError::VariableError(msg) => format!("Variable operation failed: {}", msg),
+                        ActionError::VariableError(msg) => {
+                            format!("Variable operation failed: {}", msg)
+                        }
                         ActionError::IoError(io_err) => format!("IO operation failed: {}", io_err),
-                        ActionError::JsonError(json_err) => format!("JSON parsing failed: {}", json_err),
+                        ActionError::JsonError(json_err) => {
+                            format!("JSON parsing failed: {}", json_err)
+                        }
                         ActionError::ParseError(msg) => format!("Action parsing failed: {}", msg),
-                        ActionError::ExecutionError(msg) => format!("Action execution failed: {}", msg),
+                        ActionError::ExecutionError(msg) => {
+                            format!("Action execution failed: {}", msg)
+                        }
                     };
-                    
+
                     self.log_event(ExecutionEventType::Failed, error_details);
 
                     // Check for dead letter state configuration
                     if let Some(dead_letter_state) = self.get_dead_letter_state(run) {
                         // Add dead letter reason to context
-                        run.context.insert("dead_letter_reason".to_string(), 
-                            Value::String(format!("Max retries exhausted: {}", action_error)));
-                        
+                        run.context.insert(
+                            "dead_letter_reason".to_string(),
+                            Value::String(format!("Max retries exhausted: {}", action_error)),
+                        );
+
                         // Transition to dead letter state
                         self.log_event(
                             ExecutionEventType::StateTransition,
@@ -577,7 +626,6 @@ impl WorkflowExecutor {
             .map(|state| StateId::new(&state))
     }
 
-
     /// Check if state should be skipped on failure
     fn should_skip_on_failure(&self, run: &WorkflowRun) -> bool {
         self.get_transition_metadata(run, "skip_on_failure")
@@ -604,7 +652,7 @@ impl WorkflowExecutor {
 
         // Find all compensation states stored in context
         let mut compensation_states: Vec<(String, StateId)> = Vec::new();
-        
+
         for (key, value) in &run.context {
             if CompensationKey::is_compensation_key(key) {
                 if let Value::String(comp_state) = value {
@@ -623,7 +671,7 @@ impl WorkflowExecutor {
             // Just transition to the compensation state, don't execute it
             // The normal workflow execution will handle it
             self.perform_transition(run, comp_state)?;
-            
+
             // Remove from context after execution
             run.context.remove(&key);
         }
@@ -669,7 +717,12 @@ impl WorkflowExecutor {
     }
 
     /// Update memory metrics for a specific run
-    pub fn update_memory_metrics(&mut self, run_id: &crate::workflow::WorkflowRunId, context_vars: usize, history_size: usize) {
+    pub fn update_memory_metrics(
+        &mut self,
+        run_id: &crate::workflow::WorkflowRunId,
+        context_vars: usize,
+        history_size: usize,
+    ) {
         // Simple memory estimation - in production this would use actual memory profiling
         let estimated_memory = (context_vars * 1024) + (history_size * 256);
         let mut memory_metrics = MemoryMetrics::new();
@@ -678,22 +731,55 @@ impl WorkflowExecutor {
     }
 
     /// Get or compile a CEL program from cache
-    pub fn get_compiled_cel_program(&mut self, expression: &str) -> Result<&Program, Box<dyn std::error::Error>> {
-        if !self.cel_program_cache.contains_key(expression) {
-            let program = Program::compile(expression)?;
-            self.cel_program_cache.insert(expression.to_string(), program);
-        }
-        Ok(self.cel_program_cache.get(expression).unwrap())
+    pub fn get_compiled_cel_program(
+        &mut self,
+        expression: &str,
+    ) -> Result<std::sync::Arc<Program>, Box<dyn std::error::Error>> {
+        self.cache_manager.cel_cache.get_or_compile(expression)
     }
-    
+
     /// Check if a CEL program is cached
     pub fn is_cel_program_cached(&self, expression: &str) -> bool {
-        self.cel_program_cache.contains_key(expression)
+        self.cache_manager.cel_cache.get(expression).is_some()
     }
-    
+
     /// Get CEL program cache statistics
     pub fn get_cel_cache_stats(&self) -> (usize, usize) {
-        (self.cel_program_cache.len(), self.cel_program_cache.capacity())
+        let stats = self.cache_manager.cel_cache.stats();
+        (stats.size, stats.capacity)
+    }
+
+    /// Get cache manager for advanced cache operations
+    pub fn get_cache_manager(&self) -> &WorkflowCacheManager {
+        &self.cache_manager
+    }
+
+    /// Get mutable cache manager for advanced cache operations
+    pub fn get_cache_manager_mut(&mut self) -> &mut WorkflowCacheManager {
+        &mut self.cache_manager
+    }
+
+    /// Cache a transition path for optimization
+    pub fn cache_transition_path(
+        &mut self,
+        from_state: StateId,
+        to_state: StateId,
+        conditions: Vec<String>,
+    ) {
+        let key = TransitionKey::new(from_state.clone(), to_state.clone());
+        let path = TransitionPath::new(from_state, to_state, conditions);
+        self.cache_manager.transition_cache.put(key, path);
+    }
+
+    /// Get cached transition path if available
+    pub fn get_cached_transition_path(&self, from_state: &StateId, to_state: &StateId) -> Option<TransitionPath> {
+        let key = TransitionKey::new(from_state.clone(), to_state.clone());
+        self.cache_manager.transition_cache.get(&key)
+    }
+
+    /// Clear all caches
+    pub fn clear_all_caches(&mut self) {
+        self.cache_manager.clear_all();
     }
 }
 

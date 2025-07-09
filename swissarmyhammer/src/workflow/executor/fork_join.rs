@@ -1,12 +1,10 @@
 //! Fork/join parallel execution functionality
 
-use crate::workflow::{
-    parse_action_from_description, StateId, StateType, Workflow, WorkflowRun,
-};
+use super::core::WorkflowExecutor;
+use super::{ExecutionEventType, ExecutorError, ExecutorResult, LAST_ACTION_RESULT_KEY};
+use crate::workflow::{parse_action_from_description, StateId, StateType, Workflow, WorkflowRun};
 use serde_json::Value;
 use std::collections::HashMap;
-use super::{ExecutorError, ExecutorResult, ExecutionEventType, LAST_ACTION_RESULT_KEY};
-use super::core::WorkflowExecutor;
 
 /// Represents a parallel execution branch
 #[derive(Debug)]
@@ -21,7 +19,12 @@ pub struct ParallelBranch {
 
 impl WorkflowExecutor {
     /// Check if a state matches a specific state type
-    pub fn is_state_type(&self, run: &WorkflowRun, state_id: &StateId, state_type: StateType) -> bool {
+    pub fn is_state_type(
+        &self,
+        run: &WorkflowRun,
+        state_id: &StateId,
+        state_type: StateType,
+    ) -> bool {
         run.workflow
             .states
             .get(state_id)
@@ -129,7 +132,9 @@ impl WorkflowExecutor {
         );
 
         // Execute all branches in parallel
-        let completed_branches = self.execute_parallel_branches(run, &branch_states, &join_state).await?;
+        let completed_branches = self
+            .execute_parallel_branches(run, &branch_states, &join_state)
+            .await?;
 
         // Merge contexts from all branches
         self.merge_branch_contexts(run, completed_branches)?;
@@ -151,7 +156,11 @@ impl WorkflowExecutor {
     /// # Returns
     /// - `Ok(Vec<StateId>)`: List of branch states if validation passes
     /// - `Err(ExecutorError)`: If validation fails
-    fn validate_fork_transitions(&self, run: &WorkflowRun, fork_state: &StateId) -> ExecutorResult<Vec<StateId>> {
+    fn validate_fork_transitions(
+        &self,
+        run: &WorkflowRun,
+        fork_state: &StateId,
+    ) -> ExecutorResult<Vec<StateId>> {
         let branch_states = self.find_fork_transitions(run, fork_state);
 
         if branch_states.is_empty() {
@@ -189,10 +198,10 @@ impl WorkflowExecutor {
     /// - `Ok(StateId)`: The join state if found
     /// - `Err(ExecutorError)`: If no valid join state exists
     fn find_join_state_for_branches(
-        &self, 
-        run: &WorkflowRun, 
-        fork_state: &StateId, 
-        branch_states: &[StateId]
+        &self,
+        run: &WorkflowRun,
+        fork_state: &StateId,
+        branch_states: &[StateId],
     ) -> ExecutorResult<StateId> {
         self.find_join_state(run, branch_states).ok_or_else(|| {
             ExecutorError::ExecutionFailed(
@@ -287,7 +296,10 @@ impl WorkflowExecutor {
         // The conditional transitions are handled by the normal transition evaluation
         self.log_event(
             ExecutionEventType::StateExecution,
-            format!("Choice state '{}' ready for conditional transition evaluation", choice_state),
+            format!(
+                "Choice state '{}' ready for conditional transition evaluation",
+                choice_state
+            ),
         );
 
         Ok(())

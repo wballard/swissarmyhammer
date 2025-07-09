@@ -3,14 +3,14 @@
 //! This module provides the action execution infrastructure for workflows,
 //! including Claude integration, variable operations, and control flow actions.
 
+use crate::workflow::action_parser::ActionParser;
+use crate::workflow::error_utils::handle_claude_command_error;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::process::Command;
 use tokio::time::timeout;
-use crate::workflow::action_parser::ActionParser;
-use crate::workflow::error_utils::handle_claude_command_error;
 
 /// Errors that can occur during action execution
 #[derive(Debug, Error)]
@@ -151,7 +151,7 @@ impl Action for PromptAction {
         cmd.stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .stdin(std::process::Stdio::null());
-        
+
         let child = cmd.spawn().map_err(|e| {
             ActionError::ClaudeError(format!("Failed to spawn claude command: {}", e))
         })?;
@@ -257,7 +257,7 @@ impl Action for WaitAction {
                 use tokio::io::{stdin, AsyncBufReadExt, BufReader};
                 let mut reader = BufReader::new(stdin());
                 let mut line = String::new();
-                
+
                 // Use a 5-minute timeout for user input
                 const USER_INPUT_TIMEOUT: Duration = Duration::from_secs(300);
                 match timeout(USER_INPUT_TIMEOUT, reader.read_line(&mut line)).await {
@@ -427,18 +427,20 @@ impl Action for SetVariableAction {
 
 /// Validate that an argument key is safe for command-line use
 fn is_valid_argument_key(key: &str) -> bool {
-    !key.is_empty() && 
-    key.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    !key.is_empty()
+        && key
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
 }
 
 /// Helper function to substitute variables in a string
 /// Variables are referenced as ${variable_name}
 fn substitute_variables_in_string(input: &str, context: &HashMap<String, Value>) -> String {
     let parser = ActionParser::new().expect("Failed to create ActionParser");
-    parser.substitute_variables_safe(input, context)
+    parser
+        .substitute_variables_safe(input, context)
         .unwrap_or_else(|_| input.to_string())
 }
-
 
 /// Parse Claude's streaming JSON response
 fn parse_claude_response(output: &str) -> ActionResult<Value> {
@@ -451,7 +453,7 @@ fn parse_claude_response(output: &str) -> ActionResult<Value> {
         if line.trim().is_empty() {
             continue;
         }
-        
+
         match serde_json::from_str::<Value>(line) {
             Ok(json) => {
                 valid_json_found = true;
@@ -534,11 +536,12 @@ impl SubWorkflowAction {
 impl Action for SubWorkflowAction {
     async fn execute(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
         // Check for circular dependencies
-        let workflow_stack = context.get(WORKFLOW_STACK_KEY)
+        let workflow_stack = context
+            .get(WORKFLOW_STACK_KEY)
             .and_then(|v| v.as_array())
             .cloned()
             .unwrap_or_default();
-        
+
         // Check if this workflow is already in the execution stack
         for stack_item in &workflow_stack {
             if let Some(workflow_name) = stack_item.as_str() {
@@ -550,10 +553,10 @@ impl Action for SubWorkflowAction {
                 }
             }
         }
-        
+
         // Substitute variables in input
         let substituted_inputs = self.substitute_variables(context);
-        
+
         // Build arguments for the sub-workflow
         let mut args = vec![
             "--dangerously-skip-permissions".to_string(),
@@ -563,11 +566,11 @@ impl Action for SubWorkflowAction {
             "run".to_string(),
             self.workflow_name.clone(),
         ];
-        
+
         // Add workflow stack to track circular dependencies
         let mut new_stack = workflow_stack;
         new_stack.push(Value::String(self.workflow_name.clone()));
-        
+
         // Add input variables as arguments
         for (key, value) in substituted_inputs {
             if !is_valid_argument_key(&key) {
@@ -578,25 +581,29 @@ impl Action for SubWorkflowAction {
             args.push("--var".to_string());
             args.push(format!("{}={}", key, value));
         }
-        
+
         // Pass the workflow stack to the sub-workflow
         args.push("--var".to_string());
-        args.push(format!("{}={}", WORKFLOW_STACK_KEY, serde_json::to_string(&new_stack).unwrap_or_default()));
-        
+        args.push(format!(
+            "{}={}",
+            WORKFLOW_STACK_KEY,
+            serde_json::to_string(&new_stack).unwrap_or_default()
+        ));
+
         // Execute the sub-workflow using the 'flow' command
         let mut cmd = Command::new("swissarmyhammer");
         for arg in args {
             cmd.arg(arg);
         }
-        
+
         cmd.stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .stdin(std::process::Stdio::null());
-        
+
         let child = cmd.spawn().map_err(|e| {
             ActionError::ExecutionError(format!("Failed to spawn sub-workflow: {}", e))
         })?;
-        
+
         // Execute with timeout
         let output = match timeout(self.timeout, child.wait_with_output()).await {
             Ok(Ok(output)) => output,
@@ -612,7 +619,7 @@ impl Action for SubWorkflowAction {
                 });
             }
         };
-        
+
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(ActionError::ExecutionError(format!(
@@ -620,19 +627,19 @@ impl Action for SubWorkflowAction {
                 self.workflow_name, stderr
             )));
         }
-        
+
         // Parse the output
         let stdout = String::from_utf8_lossy(&output.stdout);
         let result = parse_workflow_output(&stdout)?;
-        
+
         // Store result in context if variable name specified
         if let Some(var_name) = &self.result_variable {
             context.insert(var_name.clone(), result.clone());
         }
-        
+
         // Mark action as successful
         context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
-        
+
         Ok(result)
     }
 
@@ -654,16 +661,16 @@ fn parse_workflow_output(output: &str) -> ActionResult<Value> {
     if let Ok(json) = serde_json::from_str::<Value>(output) {
         return Ok(json);
     }
-    
+
     // Parse streaming JSON output
     let mut result = HashMap::new();
     let mut success = false;
-    
+
     for line in output.lines() {
         if line.trim().is_empty() {
             continue;
         }
-        
+
         if let Ok(json) = serde_json::from_str::<Value>(line) {
             if let Some(Value::String(event_type)) = json.get("type") {
                 match event_type.as_str() {
@@ -688,11 +695,13 @@ fn parse_workflow_output(output: &str) -> ActionResult<Value> {
             }
         }
     }
-    
+
     if !success {
-        return Err(ActionError::ExecutionError("Sub-workflow did not complete successfully".to_string()));
+        return Err(ActionError::ExecutionError(
+            "Sub-workflow did not complete successfully".to_string(),
+        ));
     }
-    
+
     Ok(Value::Object(serde_json::Map::from_iter(result)))
 }
 
@@ -725,11 +734,6 @@ pub fn parse_action_from_description(description: &str) -> ActionResult<Option<B
     Ok(None)
 }
 
-
-
-
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -760,22 +764,30 @@ mod tests {
     #[test]
     fn test_parse_wait_action() {
         let parser = ActionParser::new().unwrap();
-        let action = parser.parse_wait_action("Wait for user confirmation")
+        let action = parser
+            .parse_wait_action("Wait for user confirmation")
             .unwrap()
             .unwrap();
         assert!(action.duration.is_none());
 
-        let action = parser.parse_wait_action("Wait 30 seconds").unwrap().unwrap();
+        let action = parser
+            .parse_wait_action("Wait 30 seconds")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.duration, Some(Duration::from_secs(30)));
     }
 
     #[test]
     fn test_parse_log_action() {
         let parser = ActionParser::new().unwrap();
-        let action = parser.parse_log_action(r#"Log "Hello world""#).unwrap().unwrap();
+        let action = parser
+            .parse_log_action(r#"Log "Hello world""#)
+            .unwrap()
+            .unwrap();
         assert_eq!(action.message, "Hello world");
 
-        let action = parser.parse_log_action(r#"Log error "Something failed""#)
+        let action = parser
+            .parse_log_action(r#"Log error "Something failed""#)
             .unwrap()
             .unwrap();
         assert_eq!(action.message, "Something failed");
@@ -784,7 +796,8 @@ mod tests {
     #[test]
     fn test_parse_set_variable_action() {
         let parser = ActionParser::new().unwrap();
-        let action = parser.parse_set_variable_action(r#"Set result="${claude_response}""#)
+        let action = parser
+            .parse_set_variable_action(r#"Set result="${claude_response}""#)
             .unwrap()
             .unwrap();
         assert_eq!(action.variable_name, "result");
@@ -825,25 +838,28 @@ mod tests {
         let desc = r#"Run workflow "validation-workflow" with input="${data}""#;
         let action = parse_action_from_description(desc).unwrap().unwrap();
         assert_eq!(action.action_type(), "sub_workflow");
-        assert_eq!(action.description(), r#"Execute sub-workflow 'validation-workflow' with inputs: {"input": "${data}"}"#);
+        assert_eq!(
+            action.description(),
+            r#"Execute sub-workflow 'validation-workflow' with inputs: {"input": "${data}"}"#
+        );
     }
 
     #[tokio::test]
     async fn test_sub_workflow_circular_dependency_detection() {
         let action = SubWorkflowAction::new("workflow-a".to_string());
         let mut context = HashMap::new();
-        
+
         // Simulate that workflow-a is already in the execution stack
         let workflow_stack = vec![
             Value::String("workflow-main".to_string()),
             Value::String("workflow-a".to_string()),
         ];
         context.insert(WORKFLOW_STACK_KEY.to_string(), Value::Array(workflow_stack));
-        
+
         // This should fail with circular dependency error
         let result = action.execute(&mut context).await;
         assert!(result.is_err());
-        
+
         let error = result.unwrap_err();
         match error {
             ActionError::ExecutionError(msg) => {
@@ -857,12 +873,19 @@ mod tests {
     #[test]
     fn test_sub_workflow_variable_substitution() {
         let mut action = SubWorkflowAction::new("validation-workflow".to_string());
-        action.input_variables.insert("file".to_string(), "${current_file}".to_string());
-        action.input_variables.insert("mode".to_string(), "strict".to_string());
-        
+        action
+            .input_variables
+            .insert("file".to_string(), "${current_file}".to_string());
+        action
+            .input_variables
+            .insert("mode".to_string(), "strict".to_string());
+
         let mut context = HashMap::new();
-        context.insert("current_file".to_string(), Value::String("test.rs".to_string()));
-        
+        context.insert(
+            "current_file".to_string(),
+            Value::String("test.rs".to_string()),
+        );
+
         let substituted = action.substitute_variables(&context);
         assert_eq!(substituted.get("file"), Some(&"test.rs".to_string()));
         assert_eq!(substituted.get("mode"), Some(&"strict".to_string()));

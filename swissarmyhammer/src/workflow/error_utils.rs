@@ -31,9 +31,10 @@ use std::process::Output;
 pub fn handle_command_error(result: Output, command_name: &str) -> ActionResult<String> {
     if !result.status.success() {
         let stderr = String::from_utf8_lossy(&result.stderr);
-        return Err(ActionError::ExecutionError(
-            format!("{} command failed: {}", command_name, stderr)
-        ));
+        return Err(ActionError::ExecutionError(format!(
+            "{} command failed: {}",
+            command_name, stderr
+        )));
     }
     Ok(String::from_utf8_lossy(&result.stdout).into_owned())
 }
@@ -141,7 +142,7 @@ mod tests {
             .stderr(Stdio::piped())
             .output()
             .unwrap();
-        
+
         let result = handle_command_error(output, "echo");
         assert!(result.is_ok());
         assert_eq!(result.unwrap().trim(), "hello");
@@ -154,7 +155,7 @@ mod tests {
             .stderr(Stdio::piped())
             .output()
             .unwrap();
-        
+
         let result = handle_command_error(output, "false");
         assert!(result.is_err());
         if let Err(ActionError::ExecutionError(msg)) = result {
@@ -172,13 +173,13 @@ mod tests {
             .stderr(Stdio::piped())
             .output()
             .unwrap();
-        
+
         let failure_output = Command::new("false")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
             .unwrap();
-        
+
         assert!(command_succeeded(&success_output));
         assert!(!command_succeeded(&failure_output));
     }
@@ -191,10 +192,10 @@ mod tests {
             .stderr(Stdio::piped())
             .output()
             .unwrap();
-        
+
         let stdout = extract_stdout(&output);
         let stderr = extract_stderr(&output);
-        
+
         assert_eq!(stdout.trim(), "hello");
         assert_eq!(stderr.trim(), "");
     }
@@ -206,11 +207,11 @@ mod tests {
             .stderr(Stdio::piped())
             .output()
             .unwrap();
-        
+
         let result = handle_command_error_with_mapper(output, "false", |msg| {
             format!("Custom error: {}", msg)
         });
-        
+
         assert!(result.is_err());
         let error_msg = result.unwrap_err();
         assert!(error_msg.contains("Custom error: false command failed"));
@@ -224,7 +225,7 @@ mod tests {
             .stderr(Stdio::piped())
             .output()
             .unwrap();
-        
+
         let result = handle_claude_command_error(output);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().trim(), "test");
@@ -237,7 +238,7 @@ mod tests {
             .stderr(Stdio::piped())
             .output()
             .unwrap();
-        
+
         let result = handle_claude_command_error(output);
         assert!(result.is_err());
         if let Err(ActionError::ClaudeError(msg)) = result {

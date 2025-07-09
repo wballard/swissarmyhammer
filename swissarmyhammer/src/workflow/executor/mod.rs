@@ -2,9 +2,9 @@
 
 pub mod core;
 pub mod fork_join;
-pub mod validation;
 #[cfg(test)]
 mod tests;
+pub mod validation;
 
 use crate::workflow::{ActionError, StateId};
 use thiserror::Error;

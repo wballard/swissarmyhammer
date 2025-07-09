@@ -1,7 +1,8 @@
 //! Action parsing utilities for workflow state descriptions
 
 use crate::workflow::actions::{
-    ActionError, ActionResult, LogAction, LogLevel, PromptAction, SetVariableAction, SubWorkflowAction, WaitAction,
+    ActionError, ActionResult, LogAction, LogLevel, PromptAction, SetVariableAction,
+    SubWorkflowAction, WaitAction,
 };
 use regex::Regex;
 use serde_json::Value;
@@ -29,17 +30,33 @@ impl ActionParser {
     pub fn new() -> ActionResult<Self> {
         Ok(Self {
             prompt_regex: Regex::new(r#"^[Ee]xecute\s+prompt\s+"([^"]+)"(?:\s+with\s+(.+))?$"#)
-                .map_err(|e| ActionError::ParseError(format!("Failed to compile prompt regex: {}", e)))?,
-            wait_duration_regex: Regex::new(r#"^[Ww]ait\s+(\d+)\s+(seconds?|minutes?|hours?|sec|min|h|s|m)(?:\s+(.+))?$"#)
-                .map_err(|e| ActionError::ParseError(format!("Failed to compile wait duration regex: {}", e)))?,
-            log_regex: Regex::new(r#"^[Ll]og\s+(?:(error|warning)\s+)?"([^"]+)"$"#)
-                .map_err(|e| ActionError::ParseError(format!("Failed to compile log regex: {}", e)))?,
-            set_variable_regex: Regex::new(r#"^[Ss]et\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*"?([^"]*)"?$"#)
-                .map_err(|e| ActionError::ParseError(format!("Failed to compile set variable regex: {}", e)))?,
-            argument_regex: Regex::new(r#"([a-zA-Z_][a-zA-Z0-9_-]*)="([^"]*)"#)
-                .map_err(|e| ActionError::ParseError(format!("Failed to compile argument regex: {}", e)))?,
-            sub_workflow_regex: Regex::new(r#"^(?:[Rr]un\s+workflow|[Dd]elegate(?:\s+to)?)\s+"([^"]+)"(?:\s+with\s+(.+))?$"#)
-                .map_err(|e| ActionError::ParseError(format!("Failed to compile sub-workflow regex: {}", e)))?,
+                .map_err(|e| {
+                    ActionError::ParseError(format!("Failed to compile prompt regex: {}", e))
+                })?,
+            wait_duration_regex: Regex::new(
+                r#"^[Ww]ait\s+(\d+)\s+(seconds?|minutes?|hours?|sec|min|h|s|m)(?:\s+(.+))?$"#,
+            )
+            .map_err(|e| {
+                ActionError::ParseError(format!("Failed to compile wait duration regex: {}", e))
+            })?,
+            log_regex: Regex::new(r#"^[Ll]og\s+(?:(error|warning)\s+)?"([^"]+)"$"#).map_err(
+                |e| ActionError::ParseError(format!("Failed to compile log regex: {}", e)),
+            )?,
+            set_variable_regex: Regex::new(
+                r#"^[Ss]et\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*"?([^"]*)"?$"#,
+            )
+            .map_err(|e| {
+                ActionError::ParseError(format!("Failed to compile set variable regex: {}", e))
+            })?,
+            argument_regex: Regex::new(r#"([a-zA-Z_][a-zA-Z0-9_-]*)="([^"]*)"#).map_err(|e| {
+                ActionError::ParseError(format!("Failed to compile argument regex: {}", e))
+            })?,
+            sub_workflow_regex: Regex::new(
+                r#"^(?:[Rr]un\s+workflow|[Dd]elegate(?:\s+to)?)\s+"([^"]+)"(?:\s+with\s+(.+))?$"#,
+            )
+            .map_err(|e| {
+                ActionError::ParseError(format!("Failed to compile sub-workflow regex: {}", e))
+            })?,
         })
     }
 
@@ -57,14 +74,14 @@ impl ActionParser {
                     if let (Some(key), Some(value)) = (arg_capture.get(1), arg_capture.get(2)) {
                         let key = key.as_str().to_string();
                         let value = value.as_str().to_string();
-                        
+
                         // Validate key format
                         if !self.is_valid_argument_key(&key) {
                             return Err(ActionError::ParseError(
                                 format!("Invalid argument key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
                             ));
                         }
-                        
+
                         action.arguments.insert(key, value);
                     }
                 }
@@ -90,14 +107,18 @@ impl ActionParser {
 
         // Check for duration wait
         if let Some(captures) = self.wait_duration_regex.captures(description.trim()) {
-            let duration_value: u64 = captures.get(1).unwrap().as_str().parse()
+            let duration_value: u64 = captures
+                .get(1)
+                .unwrap()
+                .as_str()
+                .parse()
                 .map_err(|_| ActionError::ParseError("Invalid duration value".to_string()))?;
             let unit = captures.get(2).unwrap().as_str().to_lowercase();
             let message = captures.get(3).map(|m| m.as_str().to_string());
 
             let duration = self.parse_duration_unit(duration_value, &unit)?;
             let mut action = WaitAction::new_duration(duration);
-            
+
             if let Some(msg) = message {
                 action = action.with_message(msg);
             }
@@ -129,7 +150,10 @@ impl ActionParser {
 
     /// Parse a set variable action from description
     /// Format: Set variable_name="${value}"
-    pub fn parse_set_variable_action(&self, description: &str) -> ActionResult<Option<SetVariableAction>> {
+    pub fn parse_set_variable_action(
+        &self,
+        description: &str,
+    ) -> ActionResult<Option<SetVariableAction>> {
         if let Some(captures) = self.set_variable_regex.captures(description.trim()) {
             let var_name = captures.get(1).unwrap().as_str().to_string();
             let value = captures.get(2).unwrap().as_str().to_string();
@@ -150,7 +174,10 @@ impl ActionParser {
     /// Parse a sub-workflow action from description
     /// Format: Run workflow "workflow-name" with input1="value1" input2="value2"
     /// Format: Delegate to "workflow-name" with input="${data}"
-    pub fn parse_sub_workflow_action(&self, description: &str) -> ActionResult<Option<SubWorkflowAction>> {
+    pub fn parse_sub_workflow_action(
+        &self,
+        description: &str,
+    ) -> ActionResult<Option<SubWorkflowAction>> {
         if let Some(captures) = self.sub_workflow_regex.captures(description.trim()) {
             let workflow_name = captures.get(1).unwrap().as_str().to_string();
             let mut action = SubWorkflowAction::new(workflow_name);
@@ -158,26 +185,28 @@ impl ActionParser {
             // Parse input variables if present
             if let Some(inputs_match) = captures.get(2) {
                 let inputs_str = inputs_match.as_str();
-                
+
                 // Check if it's a single input without quotes (e.g., with input="${data}")
                 if inputs_str.starts_with("input=") {
                     let value = inputs_str.strip_prefix("input=").unwrap_or("");
                     let value = value.trim_matches('"');
-                    action.input_variables.insert("input".to_string(), value.to_string());
+                    action
+                        .input_variables
+                        .insert("input".to_string(), value.to_string());
                 } else {
                     // Parse multiple arguments
                     for arg_capture in self.argument_regex.captures_iter(inputs_str) {
                         if let (Some(key), Some(value)) = (arg_capture.get(1), arg_capture.get(2)) {
                             let key = key.as_str().to_string();
                             let value = value.as_str().to_string();
-                            
+
                             // Validate key format
                             if !self.is_valid_argument_key(&key) {
                                 return Err(ActionError::ParseError(
                                     format!("Invalid input variable key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
                                 ));
                             }
-                            
+
                             action.input_variables.insert(key, value);
                         }
                     }
@@ -191,13 +220,19 @@ impl ActionParser {
     }
 
     /// Safely substitute variables in a string using regex
-    pub fn substitute_variables_safe(&self, input: &str, context: &HashMap<String, Value>) -> ActionResult<String> {
-        let var_regex = Regex::new(r"\$\{([a-zA-Z_][a-zA-Z0-9_.-]*)\}")
-            .map_err(|e| ActionError::ParseError(format!("Failed to compile variable regex: {}", e)))?;
-        
+    pub fn substitute_variables_safe(
+        &self,
+        input: &str,
+        context: &HashMap<String, Value>,
+    ) -> ActionResult<String> {
+        let var_regex = Regex::new(r"\$\{([a-zA-Z_][a-zA-Z0-9_.-]*)\}").map_err(|e| {
+            ActionError::ParseError(format!("Failed to compile variable regex: {}", e))
+        })?;
+
         let result = var_regex.replace_all(input, |caps: &regex::Captures| {
             let var_name = &caps[1];
-            context.get(var_name)
+            context
+                .get(var_name)
                 .map(|v| self.value_to_string(v))
                 .unwrap_or_else(|| format!("${{{}}}", var_name))
         });
@@ -211,23 +246,29 @@ impl ActionParser {
             "second" | "seconds" | "sec" | "s" => Ok(Duration::from_secs(value)),
             "minute" | "minutes" | "min" | "m" => Ok(Duration::from_secs(value * 60)),
             "hour" | "hours" | "h" => Ok(Duration::from_secs(value * 3600)),
-            _ => Err(ActionError::ParseError(
-                format!("Invalid duration unit: {}", unit)
-            )),
+            _ => Err(ActionError::ParseError(format!(
+                "Invalid duration unit: {}",
+                unit
+            ))),
         }
     }
 
     /// Validate that an argument key is safe for command-line use
     fn is_valid_argument_key(&self, key: &str) -> bool {
-        !key.is_empty() && 
-        key.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        !key.is_empty()
+            && key
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
     }
 
     /// Validate that a variable name is valid
     fn is_valid_variable_name(&self, name: &str) -> bool {
-        !name.is_empty() && 
-        name.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_') &&
-        name.chars().all(|c| c.is_alphanumeric() || c == '_')
+        !name.is_empty()
+            && name
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_alphabetic() || c == '_')
+            && name.chars().all(|c| c.is_alphanumeric() || c == '_')
     }
 
     /// Convert a JSON Value to a string representation
@@ -255,14 +296,22 @@ mod tests {
     #[test]
     fn test_parse_prompt_action() {
         let parser = ActionParser::new().unwrap();
-        
+
         // Test basic prompt
-        let action = parser.parse_prompt_action("Execute prompt \"analyze-code\"").unwrap().unwrap();
+        let action = parser
+            .parse_prompt_action("Execute prompt \"analyze-code\"")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.prompt_name, "analyze-code");
         assert!(action.arguments.is_empty());
 
         // Test prompt with arguments
-        let action = parser.parse_prompt_action("Execute prompt \"analyze-code\" with file=\"test.rs\" verbose=\"true\"").unwrap().unwrap();
+        let action = parser
+            .parse_prompt_action(
+                "Execute prompt \"analyze-code\" with file=\"test.rs\" verbose=\"true\"",
+            )
+            .unwrap()
+            .unwrap();
         assert_eq!(action.prompt_name, "analyze-code");
         assert_eq!(action.arguments.get("file"), Some(&"test.rs".to_string()));
         assert_eq!(action.arguments.get("verbose"), Some(&"true".to_string()));
@@ -275,13 +324,19 @@ mod tests {
     #[test]
     fn test_parse_wait_action() {
         let parser = ActionParser::new().unwrap();
-        
+
         // Test user input wait
-        let action = parser.parse_wait_action("Wait for user confirmation").unwrap().unwrap();
+        let action = parser
+            .parse_wait_action("Wait for user confirmation")
+            .unwrap()
+            .unwrap();
         assert!(action.duration.is_none());
 
         // Test duration wait
-        let action = parser.parse_wait_action("Wait 30 seconds").unwrap().unwrap();
+        let action = parser
+            .parse_wait_action("Wait 30 seconds")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.duration, Some(Duration::from_secs(30)));
 
         // Test duration with different units
@@ -296,19 +351,28 @@ mod tests {
     #[test]
     fn test_parse_log_action() {
         let parser = ActionParser::new().unwrap();
-        
+
         // Test info log
-        let action = parser.parse_log_action("Log \"Hello world\"").unwrap().unwrap();
+        let action = parser
+            .parse_log_action("Log \"Hello world\"")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.message, "Hello world");
         assert!(matches!(action.level, LogLevel::Info));
 
         // Test error log
-        let action = parser.parse_log_action("Log error \"Something failed\"").unwrap().unwrap();
+        let action = parser
+            .parse_log_action("Log error \"Something failed\"")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.message, "Something failed");
         assert!(matches!(action.level, LogLevel::Error));
 
         // Test warning log
-        let action = parser.parse_log_action("Log warning \"Be careful\"").unwrap().unwrap();
+        let action = parser
+            .parse_log_action("Log warning \"Be careful\"")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.message, "Be careful");
         assert!(matches!(action.level, LogLevel::Warning));
     }
@@ -316,14 +380,20 @@ mod tests {
     #[test]
     fn test_parse_set_variable_action() {
         let parser = ActionParser::new().unwrap();
-        
+
         // Test basic set
-        let action = parser.parse_set_variable_action("Set result=\"success\"").unwrap().unwrap();
+        let action = parser
+            .parse_set_variable_action("Set result=\"success\"")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.variable_name, "result");
         assert_eq!(action.value, "success");
 
         // Test with variable substitution
-        let action = parser.parse_set_variable_action("Set output=\"${claude_response}\"").unwrap().unwrap();
+        let action = parser
+            .parse_set_variable_action("Set output=\"${claude_response}\"")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.variable_name, "output");
         assert_eq!(action.value, "${claude_response}");
 
@@ -339,36 +409,63 @@ mod tests {
         context.insert("file".to_string(), Value::String("test.rs".to_string()));
         context.insert("count".to_string(), Value::Number(42.into()));
 
-        let result = parser.substitute_variables_safe("Process ${file} with ${count} items", &context).unwrap();
+        let result = parser
+            .substitute_variables_safe("Process ${file} with ${count} items", &context)
+            .unwrap();
         assert_eq!(result, "Process test.rs with 42 items");
 
         // Test with missing variable
-        let result = parser.substitute_variables_safe("Process ${missing} file", &context).unwrap();
+        let result = parser
+            .substitute_variables_safe("Process ${missing} file", &context)
+            .unwrap();
         assert_eq!(result, "Process ${missing} file");
     }
 
     #[test]
     fn test_parse_sub_workflow_action() {
         let parser = ActionParser::new().unwrap();
-        
+
         // Test "Run workflow" format
-        let action = parser.parse_sub_workflow_action("Run workflow \"validation-workflow\"").unwrap().unwrap();
+        let action = parser
+            .parse_sub_workflow_action("Run workflow \"validation-workflow\"")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.workflow_name, "validation-workflow");
         assert!(action.input_variables.is_empty());
 
         // Test "Run workflow" with arguments
-        let action = parser.parse_sub_workflow_action("Run workflow \"analyze-code\" with file=\"test.rs\" mode=\"strict\"").unwrap().unwrap();
+        let action = parser
+            .parse_sub_workflow_action(
+                "Run workflow \"analyze-code\" with file=\"test.rs\" mode=\"strict\"",
+            )
+            .unwrap()
+            .unwrap();
         assert_eq!(action.workflow_name, "analyze-code");
-        assert_eq!(action.input_variables.get("file"), Some(&"test.rs".to_string()));
-        assert_eq!(action.input_variables.get("mode"), Some(&"strict".to_string()));
+        assert_eq!(
+            action.input_variables.get("file"),
+            Some(&"test.rs".to_string())
+        );
+        assert_eq!(
+            action.input_variables.get("mode"),
+            Some(&"strict".to_string())
+        );
 
         // Test "Delegate to" format
-        let action = parser.parse_sub_workflow_action("Delegate to \"validation-workflow\" with input=\"${data}\"").unwrap().unwrap();
+        let action = parser
+            .parse_sub_workflow_action("Delegate to \"validation-workflow\" with input=\"${data}\"")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.workflow_name, "validation-workflow");
-        assert_eq!(action.input_variables.get("input"), Some(&"${data}".to_string()));
+        assert_eq!(
+            action.input_variables.get("input"),
+            Some(&"${data}".to_string())
+        );
 
         // Test case insensitive
-        let action = parser.parse_sub_workflow_action("run workflow \"test-workflow\"").unwrap().unwrap();
+        let action = parser
+            .parse_sub_workflow_action("run workflow \"test-workflow\"")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.workflow_name, "test-workflow");
 
         // Test invalid format

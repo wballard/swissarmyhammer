@@ -86,3 +86,4 @@ inherits = "release"
 lto = false         # Disable LTO for faster startup
 codegen-units = 256 # Maximum parallelization
 incremental = true
+

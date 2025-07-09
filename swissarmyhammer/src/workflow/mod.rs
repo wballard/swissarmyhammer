@@ -5,6 +5,7 @@
 
 mod action_parser;
 mod actions;
+mod cache;
 mod definition;
 mod error_utils;
 mod executor;
@@ -24,30 +25,36 @@ pub use actions::{
     parse_action_from_description, Action, ActionError, ActionResult, LogAction, LogLevel,
     PromptAction, SetVariableAction, SubWorkflowAction, WaitAction,
 };
+pub use cache::{
+    CacheStats, CelProgramCache, TransitionCache, TransitionPath, WorkflowCache,
+    WorkflowCacheManager,
+};
 pub use definition::{Workflow, WorkflowError, WorkflowName, WorkflowResult};
 pub use error_utils::{
-    handle_command_error, handle_command_error_with_mapper, handle_claude_command_error,
-    command_succeeded, extract_stderr, extract_stdout,
+    command_succeeded, extract_stderr, extract_stdout, handle_claude_command_error,
+    handle_command_error, handle_command_error_with_mapper,
 };
 pub use executor::{
     ExecutionEvent, ExecutionEventType, ExecutorError, ExecutorResult, WorkflowExecutor,
 };
 pub use graph::{GraphError, GraphResult, WorkflowGraphAnalyzer};
 pub use metrics::{
-    WorkflowMetrics, RunMetrics, WorkflowSummaryMetrics, GlobalMetrics, MemoryMetrics,
-    StateExecutionCount, ResourceTrends,
+    GlobalMetrics, MemoryMetrics, ResourceTrends, RunMetrics, StateExecutionCount, WorkflowMetrics,
+    WorkflowSummaryMetrics,
 };
 pub use parser::{MermaidParser, ParseError, ParseResult};
 pub use run::{WorkflowRun, WorkflowRunId, WorkflowRunStatus};
-pub use state::{State, StateError, StateId, StateResult, StateType, CompensationKey, ErrorContext};
+pub use state::{
+    CompensationKey, ErrorContext, State, StateError, StateId, StateResult, StateType,
+};
 pub use storage::{
-    FileSystemWorkflowRunStorage, FileSystemWorkflowStorage, MemoryWorkflowRunStorage,
-    MemoryWorkflowStorage, WorkflowResolver, WorkflowRunStorageBackend, WorkflowSource,
-    WorkflowStorage, WorkflowStorageBackend,
+    CompressedWorkflowStorage, FileSystemWorkflowRunStorage, FileSystemWorkflowStorage,
+    MemoryWorkflowRunStorage, MemoryWorkflowStorage, WorkflowResolver, WorkflowRunStorageBackend,
+    WorkflowSource, WorkflowStorage, WorkflowStorageBackend,
 };
 pub use transition::{ConditionType, Transition, TransitionCondition};
 pub use transition_key::TransitionKey;
 pub use visualization::{
-    ExecutionVisualizer, ExecutionTrace, ExecutionStep, VisualizationFormat,
-    VisualizationOptions, ColorScheme,
+    ColorScheme, ExecutionStep, ExecutionTrace, ExecutionVisualizer, VisualizationFormat,
+    VisualizationOptions,
 };

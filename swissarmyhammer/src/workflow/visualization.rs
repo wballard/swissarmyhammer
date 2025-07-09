@@ -3,9 +3,7 @@
 //! This module provides functionality to visualize workflow execution using Mermaid diagrams
 //! with execution overlays showing actual paths taken, timing information, and execution status.
 
-use crate::workflow::{
-    StateId, Workflow, WorkflowRun, WorkflowRunStatus, RunMetrics,
-};
+use crate::workflow::{RunMetrics, StateId, Workflow, WorkflowRun, WorkflowRunStatus};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -143,15 +141,20 @@ impl ExecutionVisualizer {
     /// Generate execution trace from workflow run
     pub fn generate_trace(&self, run: &WorkflowRun) -> ExecutionTrace {
         let mut execution_path = Vec::new();
-        
+
         // Convert workflow run history to execution steps
         for (i, (state_id, timestamp)) in run.history.iter().enumerate() {
             let state = run.workflow.states.get(state_id);
-            let state_description = state.map(|s| s.description.clone()).unwrap_or_else(|| "Unknown state".to_string());
-            
+            let state_description = state
+                .map(|s| s.description.clone())
+                .unwrap_or_else(|| "Unknown state".to_string());
+
             // Try to get transition taken (next state in history)
-            let transition_taken = run.history.get(i + 1).map(|(next_state, _)| next_state.clone());
-            
+            let transition_taken = run
+                .history
+                .get(i + 1)
+                .map(|(next_state, _)| next_state.clone());
+
             let step = ExecutionStep {
                 state_id: state_id.clone(),
                 state_description,
@@ -161,7 +164,7 @@ impl ExecutionVisualizer {
                 error: None,
                 transition_taken,
             };
-            
+
             execution_path.push(step);
         }
 
@@ -174,7 +177,10 @@ impl ExecutionVisualizer {
                 match completed.signed_duration_since(run.started_at).to_std() {
                     Ok(duration) => duration,
                     Err(e) => {
-                        eprintln!("Warning: Failed to calculate duration for run {}: {}", run.id, e);
+                        eprintln!(
+                            "Warning: Failed to calculate duration for run {}: {}",
+                            run.id, e
+                        );
                         Duration::ZERO
                     }
                 }
@@ -186,38 +192,51 @@ impl ExecutionVisualizer {
     }
 
     /// Generate execution trace with metrics
-    pub fn generate_trace_with_metrics(&self, run: &WorkflowRun, metrics: &RunMetrics) -> ExecutionTrace {
+    pub fn generate_trace_with_metrics(
+        &self,
+        run: &WorkflowRun,
+        metrics: &RunMetrics,
+    ) -> ExecutionTrace {
         let mut trace = self.generate_trace(run);
-        
+
         // Enhance with timing information from metrics
         for step in &mut trace.execution_path {
             if let Some(duration) = metrics.state_durations.get(&step.state_id) {
                 step.duration = Some(*duration);
             }
         }
-        
+
         trace.total_duration = metrics.total_duration;
         trace.error_details = metrics.error_details.clone();
-        
+
         trace
     }
 
     /// Generate Mermaid diagram with execution overlay
-    pub fn generate_mermaid_with_execution(&self, workflow: &Workflow, trace: &ExecutionTrace) -> String {
+    pub fn generate_mermaid_with_execution(
+        &self,
+        workflow: &Workflow,
+        trace: &ExecutionTrace,
+    ) -> String {
         let mut diagram = String::new();
-        
+
         // Start the diagram
         diagram.push_str("stateDiagram-v2\n");
-        
+
         if !trace.workflow_name.is_empty() {
-            diagram.push_str(&format!("    title: {} - Execution Trace\n", trace.workflow_name));
+            diagram.push_str(&format!(
+                "    title: {} - Execution Trace\n",
+                trace.workflow_name
+            ));
         }
-        
+
         // Create a set of states that were executed
-        let executed_states: HashSet<StateId> = trace.execution_path.iter()
+        let executed_states: HashSet<StateId> = trace
+            .execution_path
+            .iter()
             .map(|step| step.state_id.clone())
             .collect();
-        
+
         // Generate states with execution annotations
         for state in workflow.states.values() {
             let state_line = if executed_states.contains(&state.id) {
@@ -227,20 +246,24 @@ impl ExecutionVisualizer {
             };
             diagram.push_str(&state_line);
         }
-        
+
         // Generate transitions with execution annotations
         for transition in &workflow.transitions {
             let transition_line = self.generate_transition_line(transition, trace);
             diagram.push_str(&transition_line);
         }
-        
+
         // Add execution path annotation
         diagram.push_str("\n    %% Execution Path\n");
         for (i, step) in trace.execution_path.iter().enumerate() {
             let annotation = if self.include_timing && step.duration.is_some() {
                 if let Some(duration) = step.duration {
-                    format!("    note right of {}: Step {}: {:?}\n", 
-                        step.state_id, i + 1, duration)
+                    format!(
+                        "    note right of {}: Step {}: {:?}\n",
+                        step.state_id,
+                        i + 1,
+                        duration
+                    )
                 } else {
                     format!("    note right of {}: Step {}\n", step.state_id, i + 1)
                 }
@@ -249,15 +272,21 @@ impl ExecutionVisualizer {
             };
             diagram.push_str(&annotation);
         }
-        
+
         diagram
     }
 
     /// Generate state line with execution status
-    fn generate_executed_state_line(&self, state: &crate::workflow::State, trace: &ExecutionTrace) -> String {
-        let step = trace.execution_path.iter()
+    fn generate_executed_state_line(
+        &self,
+        state: &crate::workflow::State,
+        trace: &ExecutionTrace,
+    ) -> String {
+        let step = trace
+            .execution_path
+            .iter()
             .find(|step| step.state_id == state.id);
-        
+
         if let Some(step) = step {
             let status_icon = if step.success { "✓" } else { "✗" };
             let timing_info = if self.include_timing {
@@ -269,12 +298,10 @@ impl ExecutionVisualizer {
             } else {
                 String::new()
             };
-            
-            format!("    {}: {}{}{}\n", 
-                state.id, 
-                status_icon,
-                state.description,
-                timing_info
+
+            format!(
+                "    {}: {}{}{}\n",
+                state.id, status_icon, state.description, timing_info
             )
         } else {
             format!("    {}: {}\n", state.id, state.description)
@@ -287,15 +314,25 @@ impl ExecutionVisualizer {
     }
 
     /// Generate transition line with execution status
-    fn generate_transition_line(&self, transition: &crate::workflow::Transition, trace: &ExecutionTrace) -> String {
+    fn generate_transition_line(
+        &self,
+        transition: &crate::workflow::Transition,
+        trace: &ExecutionTrace,
+    ) -> String {
         // Check if this transition was taken
-        let was_taken = trace.execution_path.iter()
+        let was_taken = trace
+            .execution_path
+            .iter()
             .any(|step| step.transition_taken.as_ref() == Some(&transition.to_state));
-        
+
         let status_icon = if was_taken { "✓" } else { "" };
         let timing_info = if self.include_timing && was_taken {
             // Find the step that took this transition
-            if let Some(step) = trace.execution_path.iter().find(|s| s.transition_taken.as_ref() == Some(&transition.to_state)) {
+            if let Some(step) = trace
+                .execution_path
+                .iter()
+                .find(|s| s.transition_taken.as_ref() == Some(&transition.to_state))
+            {
                 if let Some(duration) = step.duration {
                     format!(" {:.1}s", duration.as_secs_f64())
                 } else {
@@ -307,9 +344,10 @@ impl ExecutionVisualizer {
         } else {
             String::new()
         };
-        
-        format!("    {} --> {}: {}{}{}\n", 
-            transition.from_state, 
+
+        format!(
+            "    {} --> {}: {}{}{}\n",
+            transition.from_state,
             transition.to_state,
             status_icon,
             timing_info,
@@ -327,15 +365,16 @@ impl ExecutionVisualizer {
                 MAX_EXECUTION_STEPS
             );
         }
-        
+
         let mermaid_content = self.generate_mermaid_with_execution(workflow, trace);
-        
+
         // Sanitize inputs to prevent XSS
         let sanitized_workflow_name = Self::html_escape(&trace.workflow_name);
         let sanitized_run_id = Self::html_escape(&trace.run_id);
         let sanitized_mermaid_content = Self::html_escape(&mermaid_content);
-        
-        format!(r#"<!DOCTYPE html>
+
+        format!(
+            r#"<!DOCTYPE html>
 <html>
 <head>
     <title>Workflow Execution Trace: {}</title>
@@ -371,7 +410,13 @@ impl ExecutionVisualizer {
                 }
             },
             trace.started_at.format("%Y-%m-%d %H:%M:%S UTC"),
-            trace.completed_at.map(|t| format!("<p><strong>Completed:</strong> {}</p>", t.format("%Y-%m-%d %H:%M:%S UTC"))).unwrap_or_default(),
+            trace
+                .completed_at
+                .map(|t| format!(
+                    "<p><strong>Completed:</strong> {}</p>",
+                    t.format("%Y-%m-%d %H:%M:%S UTC")
+                ))
+                .unwrap_or_default(),
             sanitized_mermaid_content
         )
     }
@@ -395,43 +440,56 @@ impl ExecutionVisualizer {
     /// Generate execution report
     pub fn generate_execution_report(&self, trace: &ExecutionTrace) -> String {
         let mut report = String::new();
-        
+
         report.push_str(&format!("# Execution Report: {}\n\n", trace.workflow_name));
         report.push_str(&format!("**Run ID:** {}\n", trace.run_id));
         report.push_str(&format!("**Status:** {:?}\n", trace.status));
-        report.push_str(&format!("**Started:** {}\n", trace.started_at.format("%Y-%m-%d %H:%M:%S UTC")));
-        
+        report.push_str(&format!(
+            "**Started:** {}\n",
+            trace.started_at.format("%Y-%m-%d %H:%M:%S UTC")
+        ));
+
         if let Some(completed) = trace.completed_at {
-            report.push_str(&format!("**Completed:** {}\n", completed.format("%Y-%m-%d %H:%M:%S UTC")));
+            report.push_str(&format!(
+                "**Completed:** {}\n",
+                completed.format("%Y-%m-%d %H:%M:%S UTC")
+            ));
         }
-        
+
         if let Some(duration) = trace.total_duration {
-            report.push_str(&format!("**Total Duration:** {:.2}s\n", duration.as_secs_f64()));
+            report.push_str(&format!(
+                "**Total Duration:** {:.2}s\n",
+                duration.as_secs_f64()
+            ));
         }
-        
+
         report.push_str("\n## Execution Path\n\n");
-        
+
         for (i, step) in trace.execution_path.iter().enumerate() {
             let status = if step.success { "✓" } else { "✗" };
-            let timing = step.duration.map(|d| format!(" ({:.2}s)", d.as_secs_f64())).unwrap_or_default();
-            
-            report.push_str(&format!("{}. {} {} - {}{}\n", 
-                i + 1, 
+            let timing = step
+                .duration
+                .map(|d| format!(" ({:.2}s)", d.as_secs_f64()))
+                .unwrap_or_default();
+
+            report.push_str(&format!(
+                "{}. {} {} - {}{}\n",
+                i + 1,
                 status,
                 step.state_id,
                 step.state_description,
                 timing
             ));
-            
+
             if let Some(error) = &step.error {
                 report.push_str(&format!("   Error: {}\n", error));
             }
         }
-        
+
         if let Some(error) = &trace.error_details {
             report.push_str(&format!("\n## Error Details\n\n{}\n", error));
         }
-        
+
         report
     }
 }
@@ -458,10 +516,10 @@ impl Default for VisualizationOptions {
 impl Default for ColorScheme {
     fn default() -> Self {
         Self {
-            success_color: "#90EE90".to_string(), // Light green
-            error_color: "#FFB6C1".to_string(),   // Light red
-            active_color: "#87CEEB".to_string(),  // Sky blue
-            unvisited_color: "#F0F0F0".to_string(), // Light gray
+            success_color: "#90EE90".to_string(),    // Light green
+            error_color: "#FFB6C1".to_string(),      // Light red
+            active_color: "#87CEEB".to_string(),     // Sky blue
+            unvisited_color: "#F0F0F0".to_string(),  // Light gray
             transition_color: "#696969".to_string(), // Dim gray
         }
     }

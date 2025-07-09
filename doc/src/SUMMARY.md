@@ -33,6 +33,9 @@
 # Advanced Usage
 
 - [Advanced Prompt Techniques](./advanced-prompts.md)
+- [Workflows](./workflows.md)
+  - [Workflow Examples](./workflow-examples.md)
+  - [Workflow Patterns](./workflow-patterns.md)
 - [Search and Discovery](./search-guide.md)
 - [Testing and Debugging](./testing-guide.md)
 - [Sharing and Collaboration](./sharing-guide.md)

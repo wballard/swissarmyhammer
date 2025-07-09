@@ -100,16 +100,14 @@
 //! - Metrics and monitoring for CEL expression performance
 //! - Support for async CEL operations
 
-use crate::workflow::{
-    ConditionType, StateId, TransitionCondition, WorkflowRun,
-};
+use super::core::WorkflowExecutor;
+use super::{ExecutionEventType, ExecutorError, ExecutorResult, LAST_ACTION_RESULT_KEY};
+use crate::workflow::{ConditionType, StateId, TransitionCondition, WorkflowRun};
+use cel_interpreter::{Context, Value as CelValue};
 use serde_json::Value;
 use std::collections::HashMap;
-use super::{ExecutorError, ExecutorResult, ExecutionEventType, LAST_ACTION_RESULT_KEY};
-use super::core::WorkflowExecutor;
-use cel_interpreter::{Context, Value as CelValue};
-use std::time::{Duration, Instant};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 // Security constants for CEL expression evaluation
 const MAX_EXPRESSION_LENGTH: usize = 500;
@@ -119,8 +117,8 @@ const RESULT_VARIABLE_NAME: &str = "result";
 
 // Forbidden patterns that could be dangerous
 const FORBIDDEN_PATTERNS: &[&str] = &[
-    "import", "load", "eval", "exec", "system", "process", "file", "read", "write",
-    "delete", "create", "mkdir", "rmdir", "chmod", "chown", "kill", "spawn"
+    "import", "load", "eval", "exec", "system", "process", "file", "read", "write", "delete",
+    "create", "mkdir", "rmdir", "chmod", "chown", "kill", "spawn",
 ];
 
 // Result keys to look for in context
@@ -156,7 +154,7 @@ impl WorkflowExecutor {
                     ),
                 ));
             }
-            
+
             // Validate choice state has deterministic behavior
             self.validate_choice_state_determinism(current_state, &transitions)?;
         }
@@ -260,10 +258,15 @@ impl WorkflowExecutor {
     /// A default condition is either:
     /// - A transition with `ConditionType::Always`
     /// - A custom CEL expression that evaluates to "default"
-    fn validate_choice_state_determinism(&self, state_id: &StateId, transitions: &[&crate::workflow::Transition]) -> ExecutorResult<()> {
+    fn validate_choice_state_determinism(
+        &self,
+        state_id: &StateId,
+        transitions: &[&crate::workflow::Transition],
+    ) -> ExecutorResult<()> {
         // Check if there's a default condition (always true or "default" CEL expression)
-        let has_default = transitions.iter().any(|t| {
-            match &t.condition.condition_type {
+        let has_default = transitions
+            .iter()
+            .any(|t| match &t.condition.condition_type {
                 crate::workflow::ConditionType::Always => true,
                 crate::workflow::ConditionType::Custom => {
                     if let Some(expr) = &t.condition.expression {
@@ -273,24 +276,26 @@ impl WorkflowExecutor {
                     }
                 }
                 _ => false,
-            }
-        });
+            });
 
         // If there's no default condition, check for potential ambiguity
         if !has_default {
             // Check for potentially overlapping conditions
-            let condition_types: Vec<_> = transitions.iter()
+            let condition_types: Vec<_> = transitions
+                .iter()
                 .map(|t| &t.condition.condition_type)
                 .collect();
-            
+
             // If we have multiple OnSuccess or OnFailure conditions, that's ambiguous
-            let success_count = condition_types.iter()
+            let success_count = condition_types
+                .iter()
                 .filter(|ct| matches!(ct, crate::workflow::ConditionType::OnSuccess))
                 .count();
-            let failure_count = condition_types.iter()
+            let failure_count = condition_types
+                .iter()
                 .filter(|ct| matches!(ct, crate::workflow::ConditionType::OnFailure))
                 .count();
-            
+
             if success_count > 1 || failure_count > 1 {
                 return Err(ExecutorError::ExecutionFailed(
                     format!(
@@ -302,10 +307,16 @@ impl WorkflowExecutor {
         }
 
         // Check that Never conditions are not used in choice states (they would never be chosen)
-        let never_conditions = transitions.iter()
-            .filter(|t| matches!(t.condition.condition_type, crate::workflow::ConditionType::Never))
+        let never_conditions = transitions
+            .iter()
+            .filter(|t| {
+                matches!(
+                    t.condition.condition_type,
+                    crate::workflow::ConditionType::Never
+                )
+            })
             .count();
-        
+
         if never_conditions > 0 {
             return Err(ExecutorError::ExecutionFailed(
                 format!(
@@ -361,7 +372,7 @@ impl WorkflowExecutor {
         // Basic syntax validation - no nested quotes or suspicious characters
         if expression.contains("\"\"\"") || expression.contains("'''") {
             return Err(ExecutorError::ExpressionError(
-                "CEL expression contains suspicious quote patterns".to_string()
+                "CEL expression contains suspicious quote patterns".to_string(),
             ));
         }
 
@@ -420,13 +431,13 @@ impl WorkflowExecutor {
     /// ```rust,no_run
     /// // Simple boolean expression
     /// let expr1 = "default";  // Always true
-    /// 
+    ///
     /// // Variable comparison
     /// let expr2 = "status == \"active\"";
-    /// 
+    ///
     /// // Complex conditions
     /// let expr3 = "count > 10 && status == \"ready\"";
-    /// 
+    ///
     /// // Result text matching
     /// let expr4 = "result.contains(\"success\")";
     /// ```
@@ -436,61 +447,93 @@ impl WorkflowExecutor {
         context: &HashMap<String, Value>,
     ) -> ExecutorResult<bool> {
         let evaluation_start = Instant::now();
-        
+
         // Validate expression for security
         let validation_start = Instant::now();
         self.validate_cel_expression(expression)?;
         let validation_duration = validation_start.elapsed();
-        
+
         // Get or compile the CEL program from cache
         let compilation_start = Instant::now();
         let was_cached = self.is_cel_program_cached(expression);
         let compilation_duration = compilation_start.elapsed();
-        
+
         // Log cache performance metrics first
         if was_cached {
             self.log_event(
                 ExecutionEventType::StateExecution,
-                format!("CEL cache hit for expression: {} (retrieved in {:?})", expression, compilation_duration),
+                format!(
+                    "CEL cache hit for expression: {} (retrieved in {:?})",
+                    expression, compilation_duration
+                ),
             );
         } else {
             self.log_event(
                 ExecutionEventType::StateExecution,
-                format!("CEL cache miss - compiled expression: {} (compiled in {:?})", expression, compilation_duration),
+                format!(
+                    "CEL cache miss - compiled expression: {} (compiled in {:?})",
+                    expression, compilation_duration
+                ),
             );
         }
-        
+
         // Now get the compiled program
-        let program = self.get_compiled_cel_program(expression)
-            .map_err(|e| ExecutorError::ExpressionError(format!("CEL compilation failed: Unable to compile expression '{}' ({})", expression, e)))?;
+        let program = self.get_compiled_cel_program(expression).map_err(|e| {
+            ExecutorError::ExpressionError(format!(
+                "CEL compilation failed: Unable to compile expression '{}' ({})",
+                expression, e
+            ))
+        })?;
 
         // Create CEL context with workflow variables
         let context_start = Instant::now();
         let mut cel_context = Context::default();
-        
+
         // Add 'default' variable that is always true
-        cel_context.add_variable(DEFAULT_VARIABLE_NAME, true)
-            .map_err(|e| ExecutorError::ExpressionError(format!("CEL context error: Failed to add '{}' variable ({})", DEFAULT_VARIABLE_NAME, e)))?;
-        
+        cel_context
+            .add_variable(DEFAULT_VARIABLE_NAME, true)
+            .map_err(|e| {
+                ExecutorError::ExpressionError(format!(
+                    "CEL context error: Failed to add '{}' variable ({})",
+                    DEFAULT_VARIABLE_NAME, e
+                ))
+            })?;
+
         // Add 'result' variable from the final response
         let result_text = Self::extract_result_text_static(context);
-        cel_context.add_variable(RESULT_VARIABLE_NAME, result_text)
-            .map_err(|e| ExecutorError::ExpressionError(format!("CEL context error: Failed to add '{}' variable ({})", RESULT_VARIABLE_NAME, e)))?;
-        
+        cel_context
+            .add_variable(RESULT_VARIABLE_NAME, result_text)
+            .map_err(|e| {
+                ExecutorError::ExpressionError(format!(
+                    "CEL context error: Failed to add '{}' variable ({})",
+                    RESULT_VARIABLE_NAME, e
+                ))
+            })?;
+
         // Add other context variables
         for (key, value) in context {
-            Self::add_json_variable_to_cel_context_static(&mut cel_context, key, value)
-                .map_err(|e| ExecutorError::ExpressionError(format!("CEL context error: Failed to add variable '{}' ({})", key, e)))?;
+            Self::add_json_variable_to_cel_context_static(&mut cel_context, key, value).map_err(
+                |e| {
+                    ExecutorError::ExpressionError(format!(
+                        "CEL context error: Failed to add variable '{}' ({})",
+                        key, e
+                    ))
+                },
+            )?;
         }
-        
+
         let context_duration = context_start.elapsed();
 
         // Execute the expression with timeout
         let execution_start = Instant::now();
-        let result = program.execute(&cel_context)
-            .map_err(|e| ExecutorError::ExpressionError(format!("CEL execution failed: Unable to execute expression '{}' ({})", expression, e)))?;
+        let result = program.execute(&cel_context).map_err(|e| {
+            ExecutorError::ExpressionError(format!(
+                "CEL execution failed: Unable to execute expression '{}' ({})",
+                expression, e
+            ))
+        })?;
         let execution_duration = execution_start.elapsed();
-        
+
         // Check if execution took too long
         if execution_duration > MAX_EXECUTION_TIME {
             return Err(ExecutorError::ExpressionError(format!(
@@ -505,9 +548,9 @@ impl WorkflowExecutor {
         let conversion_start = Instant::now();
         let boolean_result = Self::cel_value_to_bool_static(&result, expression)?;
         let conversion_duration = conversion_start.elapsed();
-        
+
         let total_evaluation_time = evaluation_start.elapsed();
-        
+
         // Log comprehensive performance metrics after program execution is complete
         self.log_event(
             ExecutionEventType::StateExecution,
@@ -523,7 +566,7 @@ impl WorkflowExecutor {
                 context.len() + 2
             ),
         );
-        
+
         // Log performance warning if evaluation is slow
         if total_evaluation_time > Duration::from_millis(50) {
             self.log_event(
@@ -531,7 +574,7 @@ impl WorkflowExecutor {
                 format!("CEL performance warning: Expression '{}' took {:?} to evaluate (consider optimization)", expression, total_evaluation_time),
             );
         }
-        
+
         Ok(boolean_result)
     }
 
@@ -568,7 +611,7 @@ impl WorkflowExecutor {
                 };
             }
         }
-        
+
         // Default empty string if no result found
         String::new()
     }
@@ -594,7 +637,11 @@ impl WorkflowExecutor {
     /// # Error Handling
     /// For unsupported or complex types, the function falls back to string representation
     /// to ensure the CEL expression can still be evaluated.
-    fn add_json_variable_to_cel_context_static(cel_context: &mut Context, key: &str, value: &Value) -> Result<(), Box<dyn std::error::Error>> {
+    fn add_json_variable_to_cel_context_static(
+        cel_context: &mut Context,
+        key: &str,
+        value: &Value,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         match value {
             Value::Bool(b) => {
                 cel_context.add_variable(key, *b)?;
@@ -615,9 +662,8 @@ impl WorkflowExecutor {
             }
             Value::Array(arr) => {
                 // Convert array to CEL list
-                let cel_list: Result<Vec<_>, _> = arr.iter()
-                    .map(|v| Self::json_to_cel_value(v))
-                    .collect();
+                let cel_list: Result<Vec<_>, _> =
+                    arr.iter().map(|v| Self::json_to_cel_value(v)).collect();
                 match cel_list {
                     Ok(list) => {
                         cel_context.add_variable(key, cel_interpreter::Value::List(list.into()))?;
@@ -642,7 +688,10 @@ impl WorkflowExecutor {
                             // If conversion fails, use string representation
                             let val_str = serde_json::to_string(v)
                                 .unwrap_or_else(|_| "complex_value".to_string());
-                            cel_map.insert(k.clone(), cel_interpreter::Value::String(Arc::new(val_str)));
+                            cel_map.insert(
+                                k.clone(),
+                                cel_interpreter::Value::String(Arc::new(val_str)),
+                            );
                         }
                     }
                 }
@@ -672,7 +721,9 @@ impl WorkflowExecutor {
     /// # Performance Notes
     /// This function uses `.into()` for type conversion which leverages the CEL
     /// interpreter's built-in conversion mechanisms for optimal performance.
-    fn json_to_cel_value(value: &Value) -> Result<cel_interpreter::Value, Box<dyn std::error::Error>> {
+    fn json_to_cel_value(
+        value: &Value,
+    ) -> Result<cel_interpreter::Value, Box<dyn std::error::Error>> {
         match value {
             Value::Bool(b) => Ok(cel_interpreter::Value::Bool(*b)),
             Value::Number(n) => {
@@ -687,9 +738,8 @@ impl WorkflowExecutor {
             Value::String(s) => Ok(cel_interpreter::Value::String(Arc::new(s.clone()))),
             Value::Null => Ok(cel_interpreter::Value::Null),
             Value::Array(arr) => {
-                let cel_list: Result<Vec<_>, _> = arr.iter()
-                    .map(|v| Self::json_to_cel_value(v))
-                    .collect();
+                let cel_list: Result<Vec<_>, _> =
+                    arr.iter().map(|v| Self::json_to_cel_value(v)).collect();
                 Ok(cel_interpreter::Value::List(cel_list?.into()))
             }
             Value::Object(obj) => {

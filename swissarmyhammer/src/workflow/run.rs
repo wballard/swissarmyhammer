@@ -21,7 +21,6 @@ impl WorkflowRunId {
             .map(Self)
             .map_err(|e| format!("Invalid workflow run ID '{}': {}", s, e))
     }
-
 }
 
 impl Default for WorkflowRunId {
@@ -128,7 +127,7 @@ mod tests {
     fn test_workflow_run_id_parse_and_to_string() {
         let id = WorkflowRunId::new();
         let id_str = id.to_string();
-        
+
         // Test round-trip conversion
         let parsed_id = WorkflowRunId::parse(&id_str).unwrap();
         assert_eq!(id, parsed_id);
@@ -148,7 +147,7 @@ mod tests {
         // Generate a valid ULID string
         let ulid = Ulid::new();
         let ulid_str = ulid.to_string();
-        
+
         let parsed_id = WorkflowRunId::parse(&ulid_str).unwrap();
         assert_eq!(parsed_id.to_string(), ulid_str);
     }

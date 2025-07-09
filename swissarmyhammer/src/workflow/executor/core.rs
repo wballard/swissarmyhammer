@@ -139,24 +139,48 @@ impl WorkflowExecutor {
 
     /// Execute a single execution cycle: state execution and potential transition
     pub async fn execute_single_cycle(&mut self, run: &mut WorkflowRun) -> ExecutorResult<bool> {
+        // Execute the state and capture any errors
+        let state_error = self.execute_state_and_capture_errors(run).await?;
+
+        // Check if workflow is complete after state execution
+        if self.is_workflow_finished(run) {
+            return Ok(false); // No transition needed, workflow finished
+        }
+
+        // Evaluate and perform transition
+        self.evaluate_and_perform_transition(run, state_error).await
+    }
+
+    /// Execute state and capture errors for later processing
+    async fn execute_state_and_capture_errors(
+        &mut self,
+        run: &mut WorkflowRun,
+    ) -> ExecutorResult<Option<ExecutorError>> {
         // Execute the state, but don't propagate action errors immediately
         // We need to check for OnFailure transitions first
         let state_result = self.execute_single_state(run).await;
 
         // If it's an action error, we'll handle it after checking transitions
-        let state_error = match state_result {
-            Err(ExecutorError::ActionError(e)) => Some(ExecutorError::ActionError(e)),
-            Err(ExecutorError::ManualInterventionRequired(_)) => {
+        match state_result {
+            Err(ExecutorError::ActionError(e)) => Ok(Some(ExecutorError::ActionError(e))),
+            Err(ExecutorError::ManualInterventionRequired(msg)) => {
                 // Manual intervention required, workflow is paused
-                return Ok(false);
+                Ok(Some(ExecutorError::ManualInterventionRequired(msg)))
             }
-            Err(other) => return Err(other), // Propagate non-action errors
-            Ok(()) => None,
-        };
+            Err(other) => Err(other), // Propagate non-action errors
+            Ok(()) => Ok(None),       // No error
+        }
+    }
 
-        // Check if workflow is complete after state execution
-        if self.is_workflow_finished(run) {
-            return Ok(false); // No transition needed, workflow finished
+    /// Evaluate transitions and perform them if available
+    async fn evaluate_and_perform_transition(
+        &mut self,
+        run: &mut WorkflowRun,
+        state_error: Option<ExecutorError>,
+    ) -> ExecutorResult<bool> {
+        // Handle manual intervention case
+        if let Some(ExecutorError::ManualInterventionRequired(_)) = state_error {
+            return Ok(false);
         }
 
         // Evaluate and perform transition
@@ -447,33 +471,15 @@ impl WorkflowExecutor {
 
             match action.execute(&mut run.context).await {
                 Ok(result) => {
-                    if attempt > 1 {
-                        self.log_event(
-                            ExecutionEventType::StateExecution,
-                            format!("Action succeeded on retry attempt {}", attempt),
-                        );
-                    }
-                    // Update error context with retry attempts if it exists
-                    if let Some(Value::Object(error_obj)) =
-                        run.context.get_mut(ErrorContext::CONTEXT_KEY)
-                    {
-                        error_obj
-                            .insert("retry_attempts".to_string(), Value::Number(attempt.into()));
-                    }
+                    self.handle_retry_success(run, attempt);
                     return Ok(result);
                 }
                 Err(error) => {
                     last_error = Some(error);
 
                     if attempt < retry_config.max_attempts {
-                        self.log_event(
-                            ExecutionEventType::Failed,
-                            format!("Action failed, waiting {}ms before retry", backoff_ms),
-                        );
-
-                        // Wait with exponential backoff
-                        tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
-                        backoff_ms = (backoff_ms as f64 * retry_config.backoff_multiplier) as u64;
+                        self.handle_retry_failure(backoff_ms).await;
+                        backoff_ms = self.calculate_next_backoff(backoff_ms, retry_config);
                     }
                 }
             }
@@ -485,6 +491,37 @@ impl WorkflowExecutor {
             Value::Number(retry_config.max_attempts.into()),
         );
         Err(last_error.unwrap())
+    }
+
+    /// Handle successful retry attempt
+    fn handle_retry_success(&mut self, run: &mut WorkflowRun, attempt: usize) {
+        if attempt > 1 {
+            self.log_event(
+                ExecutionEventType::StateExecution,
+                format!("Action succeeded on retry attempt {}", attempt),
+            );
+        }
+
+        // Update error context with retry attempts if it exists
+        if let Some(Value::Object(error_obj)) = run.context.get_mut(ErrorContext::CONTEXT_KEY) {
+            error_obj.insert("retry_attempts".to_string(), Value::Number(attempt.into()));
+        }
+    }
+
+    /// Handle failed retry attempt
+    async fn handle_retry_failure(&mut self, backoff_ms: u64) {
+        self.log_event(
+            ExecutionEventType::Failed,
+            format!("Action failed, waiting {}ms before retry", backoff_ms),
+        );
+
+        // Wait with exponential backoff
+        tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+    }
+
+    /// Calculate next backoff duration
+    fn calculate_next_backoff(&self, current_backoff: u64, retry_config: &RetryConfig) -> u64 {
+        (current_backoff as f64 * retry_config.backoff_multiplier) as u64
     }
 
     /// Execute action parsed from state description
@@ -500,122 +537,165 @@ impl WorkflowExecutor {
                 format!("Executing action: {}", action.description()),
             );
 
-            // Check for retry configuration
-            let retry_config = self.get_retry_config(run);
+            // Execute the action and handle result
+            let result = self.execute_action_with_config(run, action).await;
+            self.handle_action_result(run, result).await
+        } else {
+            Ok(())
+        }
+    }
 
-            // Execute the action (with retry if configured)
-            let result = if let Some(config) = retry_config {
-                self.execute_action_with_retry(run, action, &config).await
-            } else {
-                action.execute(&mut run.context).await
-            };
+    /// Execute action with retry configuration if available
+    async fn execute_action_with_config(
+        &mut self,
+        run: &mut WorkflowRun,
+        action: Box<dyn crate::workflow::Action>,
+    ) -> Result<Value, ActionError> {
+        let retry_config = self.get_retry_config(run);
 
-            match result {
-                Ok(result_value) => {
-                    self.log_event(
-                        ExecutionEventType::StateExecution,
-                        format!(
-                            "Action completed successfully with result: {}",
-                            result_value
-                        ),
-                    );
-                }
-                Err(action_error) => {
-                    // Mark action as failed in context
-                    run.context
-                        .insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(false));
+        if let Some(config) = retry_config {
+            self.execute_action_with_retry(run, action, &config).await
+        } else {
+            action.execute(&mut run.context).await
+        }
+    }
 
-                    // Capture error context
-                    let retry_attempts = run
-                        .context
-                        .get("retry_attempts")
-                        .and_then(|v| v.as_u64())
-                        .map(|v| v as usize);
-
-                    let error_context = if let Some(attempts) = retry_attempts {
-                        ErrorContext::with_retries(
-                            action_error.to_string(),
-                            run.current_state.clone(),
-                            attempts,
-                        )
-                    } else {
-                        ErrorContext::new(action_error.to_string(), run.current_state.clone())
-                    };
-
-                    let error_context_json =
-                        serde_json::to_value(&error_context).unwrap_or_else(|_| Value::Null);
-                    run.context
-                        .insert(ErrorContext::CONTEXT_KEY.to_string(), error_context_json);
-
-                    // Log the error with appropriate details
-                    let error_details = match &action_error {
-                        ActionError::Timeout { timeout } => {
-                            format!("Action timed out after {:?}", timeout)
-                        }
-                        ActionError::ClaudeError(msg) => format!("Claude command failed: {}", msg),
-                        ActionError::VariableError(msg) => {
-                            format!("Variable operation failed: {}", msg)
-                        }
-                        ActionError::IoError(io_err) => format!("IO operation failed: {}", io_err),
-                        ActionError::JsonError(json_err) => {
-                            format!("JSON parsing failed: {}", json_err)
-                        }
-                        ActionError::ParseError(msg) => format!("Action parsing failed: {}", msg),
-                        ActionError::ExecutionError(msg) => {
-                            format!("Action execution failed: {}", msg)
-                        }
-                    };
-
-                    self.log_event(ExecutionEventType::Failed, error_details);
-
-                    // Check for dead letter state configuration
-                    if let Some(dead_letter_state) = self.get_dead_letter_state(run) {
-                        // Add dead letter reason to context
-                        run.context.insert(
-                            "dead_letter_reason".to_string(),
-                            Value::String(format!("Max retries exhausted: {}", action_error)),
-                        );
-
-                        // Transition to dead letter state
-                        self.log_event(
-                            ExecutionEventType::StateTransition,
-                            format!("Transitioning to dead letter state: {}", dead_letter_state),
-                        );
-                        self.perform_transition(run, dead_letter_state)?;
-                        // Mark action as successful to allow workflow to continue
-                        run.context
-                            .insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
-                        return Ok(());
-                    }
-
-                    // Note: Error handling via OnFailure transitions is handled by normal
-                    // transition evaluation in the main execution loop
-
-                    // Execute compensation if needed
-                    if let Err(comp_error) = self.execute_compensation(run).await {
-                        self.log_event(
-                            ExecutionEventType::Failed,
-                            format!("Compensation failed: {}", comp_error),
-                        );
-                    }
-
-                    // Check if this state should be skipped on failure
-                    if self.should_skip_on_failure(run) {
-                        self.log_event(
-                            ExecutionEventType::StateExecution,
-                            "Skipped failed state due to skip_on_failure configuration".to_string(),
-                        );
-                        run.context
-                            .insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true)); // Mark as success to continue
-                        return Ok(());
-                    }
-
-                    // Propagate the error
-                    return Err(ExecutorError::ActionError(action_error));
-                }
+    /// Handle the result of action execution
+    async fn handle_action_result(
+        &mut self,
+        run: &mut WorkflowRun,
+        result: Result<Value, ActionError>,
+    ) -> ExecutorResult<()> {
+        match result {
+            Ok(result_value) => {
+                self.log_event(
+                    ExecutionEventType::StateExecution,
+                    format!(
+                        "Action completed successfully with result: {}",
+                        result_value
+                    ),
+                );
+                Ok(())
             }
+            Err(action_error) => self.handle_action_error(run, action_error).await,
+        }
+    }
+
+    /// Handle action execution error
+    async fn handle_action_error(
+        &mut self,
+        run: &mut WorkflowRun,
+        action_error: ActionError,
+    ) -> ExecutorResult<()> {
+        // Mark action as failed in context
+        run.context
+            .insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(false));
+
+        // Capture error context
+        self.capture_error_context(run, &action_error);
+
+        // Log the error with appropriate details
+        let error_details = self.format_action_error(&action_error);
+        self.log_event(ExecutionEventType::Failed, error_details);
+
+        // Check for dead letter state configuration
+        if let Some(dead_letter_state) = self.get_dead_letter_state(run) {
+            return self
+                .handle_dead_letter_transition(run, dead_letter_state, &action_error)
+                .await;
         }
 
+        // Execute compensation if needed
+        if let Err(comp_error) = self.execute_compensation(run).await {
+            self.log_event(
+                ExecutionEventType::Failed,
+                format!("Compensation failed: {}", comp_error),
+            );
+        }
+
+        // Check if this state should be skipped on failure
+        if self.should_skip_on_failure(run) {
+            self.log_event(
+                ExecutionEventType::StateExecution,
+                "Skipped failed state due to skip_on_failure configuration".to_string(),
+            );
+            run.context
+                .insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
+            return Ok(());
+        }
+
+        // Propagate the error
+        Err(ExecutorError::ActionError(action_error))
+    }
+
+    /// Capture error context for the action error
+    fn capture_error_context(&mut self, run: &mut WorkflowRun, action_error: &ActionError) {
+        let retry_attempts = run
+            .context
+            .get("retry_attempts")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize);
+
+        let error_context = if let Some(attempts) = retry_attempts {
+            ErrorContext::with_retries(
+                action_error.to_string(),
+                run.current_state.clone(),
+                attempts,
+            )
+        } else {
+            ErrorContext::new(action_error.to_string(), run.current_state.clone())
+        };
+
+        let error_context_json =
+            serde_json::to_value(&error_context).unwrap_or_else(|_| Value::Null);
+        run.context
+            .insert(ErrorContext::CONTEXT_KEY.to_string(), error_context_json);
+    }
+
+    /// Format action error for logging
+    fn format_action_error(&self, action_error: &ActionError) -> String {
+        match action_error {
+            ActionError::Timeout { timeout } => {
+                format!("Action timed out after {:?}", timeout)
+            }
+            ActionError::ClaudeError(msg) => format!("Claude command failed: {}", msg),
+            ActionError::VariableError(msg) => {
+                format!("Variable operation failed: {}", msg)
+            }
+            ActionError::IoError(io_err) => format!("IO operation failed: {}", io_err),
+            ActionError::JsonError(json_err) => {
+                format!("JSON parsing failed: {}", json_err)
+            }
+            ActionError::ParseError(msg) => format!("Action parsing failed: {}", msg),
+            ActionError::ExecutionError(msg) => {
+                format!("Action execution failed: {}", msg)
+            }
+        }
+    }
+
+    /// Handle transition to dead letter state
+    async fn handle_dead_letter_transition(
+        &mut self,
+        run: &mut WorkflowRun,
+        dead_letter_state: StateId,
+        action_error: &ActionError,
+    ) -> ExecutorResult<()> {
+        // Add dead letter reason to context
+        run.context.insert(
+            "dead_letter_reason".to_string(),
+            Value::String(format!("Max retries exhausted: {}", action_error)),
+        );
+
+        // Transition to dead letter state
+        self.log_event(
+            ExecutionEventType::StateTransition,
+            format!("Transitioning to dead letter state: {}", dead_letter_state),
+        );
+        self.perform_transition(run, dead_letter_state)?;
+
+        // Mark action as successful to allow workflow to continue
+        run.context
+            .insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
         Ok(())
     }
 

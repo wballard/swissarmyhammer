@@ -11,13 +11,13 @@ use std::fmt;
 use std::time::Duration;
 
 /// Maximum path length for full visualization
-const MAX_PATH_LENGTH_FULL: usize = 1000;
+pub const MAX_PATH_LENGTH_FULL: usize = 1000;
 
 /// Maximum path length for minimal visualization
-const MAX_PATH_LENGTH_MINIMAL: usize = 100;
+pub const MAX_PATH_LENGTH_MINIMAL: usize = 100;
 
 /// Maximum execution steps allowed in a trace to prevent DoS
-const MAX_EXECUTION_STEPS: usize = 500;
+pub const MAX_EXECUTION_STEPS: usize = 500;
 
 /// Execution visualization generator
 #[derive(Debug, Clone)]

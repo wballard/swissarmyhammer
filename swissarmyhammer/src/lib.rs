@@ -64,6 +64,9 @@ pub mod workflow;
 /// Security utilities for path validation and resource limits
 pub mod security;
 
+/// File watching functionality for prompt directories
+pub mod file_watcher;
+
 // Re-export core types
 pub use plugins::{CustomLiquidFilter, PluginRegistry, SwissArmyHammerPlugin};
 pub use prompt_resolver::{PromptResolver, PromptSource};

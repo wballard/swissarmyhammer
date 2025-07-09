@@ -5,11 +5,15 @@
 
 mod action_parser;
 mod actions;
+#[cfg(test)]
+mod actions_tests;
 mod cache;
 mod definition;
 mod error_utils;
 mod executor;
 mod graph;
+#[cfg(test)]
+mod graph_tests;
 mod metrics;
 mod parser;
 mod run;
@@ -20,6 +24,8 @@ mod test_helpers;
 mod transition;
 mod transition_key;
 mod visualization;
+#[cfg(test)]
+mod visualization_tests;
 
 pub use actions::{
     parse_action_from_description, Action, ActionError, ActionResult, LogAction, LogLevel,

@@ -4,9 +4,7 @@
 //! reachability analysis, cycle detection, path finding, and topological sorting.
 
 use super::*;
-use crate::workflow::{
-    test_helpers::*, ConditionType, WorkflowName,
-};
+use crate::workflow::{test_helpers::*, ConditionType, WorkflowName};
 
 /// Helper function to create a workflow with unreachable states
 fn create_workflow_with_unreachable_states() -> Workflow {
@@ -30,7 +28,11 @@ fn create_workflow_with_unreachable_states() -> Workflow {
     workflow.add_transition(create_transition("middle", "end", ConditionType::Always));
 
     // Add transition between unreachable states
-    workflow.add_transition(create_transition("unreachable1", "unreachable2", ConditionType::Always));
+    workflow.add_transition(create_transition(
+        "unreachable1",
+        "unreachable2",
+        ConditionType::Always,
+    ));
 
     workflow
 }
@@ -126,7 +128,7 @@ mod tests {
     fn test_graph_analyzer_creation() {
         let workflow = create_basic_workflow();
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
-        
+
         // Test that analyzer is created successfully by calling a method
         let reachable = analyzer.find_reachable_states(&StateId::new("start"));
         assert!(!reachable.is_empty());
@@ -138,7 +140,7 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let reachable = analyzer.find_reachable_states(&StateId::new("start"));
-        
+
         assert_eq!(reachable.len(), 2);
         assert!(reachable.contains(&StateId::new("start")));
         assert!(reachable.contains(&StateId::new("end")));
@@ -154,7 +156,7 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let reachable = analyzer.find_reachable_states(&StateId::new("start"));
-        
+
         assert_eq!(reachable.len(), 1);
         assert!(reachable.contains(&StateId::new("start")));
     }
@@ -165,7 +167,7 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let reachable = analyzer.find_reachable_states(&StateId::new("start"));
-        
+
         assert_eq!(reachable.len(), 3);
         assert!(reachable.contains(&StateId::new("start")));
         assert!(reachable.contains(&StateId::new("loop")));
@@ -178,7 +180,7 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let unreachable = analyzer.find_unreachable_states();
-        
+
         assert_eq!(unreachable.len(), 2);
         assert!(unreachable.contains(&StateId::new("unreachable1")));
         assert!(unreachable.contains(&StateId::new("unreachable2")));
@@ -190,7 +192,7 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let unreachable = analyzer.find_unreachable_states();
-        
+
         assert_eq!(unreachable.len(), 0);
     }
 
@@ -200,7 +202,7 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let cycle = analyzer.detect_cycle_from(&StateId::new("start"));
-        
+
         assert!(cycle.is_none());
     }
 
@@ -210,7 +212,7 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let cycle = analyzer.detect_cycle_from(&StateId::new("start"));
-        
+
         assert!(cycle.is_some());
         let cycle_path = cycle.unwrap();
         assert!(cycle_path.contains(&StateId::new("loop")));
@@ -221,10 +223,10 @@ mod tests {
         let mut workflow = create_basic_workflow();
         // Create a simple cycle: start -> end -> start
         workflow.add_transition(create_transition("end", "start", ConditionType::Always));
-        
+
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
         let cycle = analyzer.detect_cycle_from(&StateId::new("start"));
-        
+
         assert!(cycle.is_some());
         let cycle_path = cycle.unwrap();
         assert!(cycle_path.len() >= 2);
@@ -238,7 +240,7 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let cycles = analyzer.detect_all_cycles();
-        
+
         assert_eq!(cycles.len(), 0);
     }
 
@@ -248,10 +250,12 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let cycles = analyzer.detect_all_cycles();
-        
+
         assert!(cycles.len() >= 1);
         // Should find the self-loop cycle
-        assert!(cycles.iter().any(|cycle| cycle.contains(&StateId::new("loop"))));
+        assert!(cycles
+            .iter()
+            .any(|cycle| cycle.contains(&StateId::new("loop"))));
     }
 
     #[test]
@@ -260,11 +264,15 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let cycles = analyzer.detect_all_cycles();
-        
+
         assert!(cycles.len() >= 2);
         // Should find cycles involving a-b and c-d
-        assert!(cycles.iter().any(|cycle| cycle.contains(&StateId::new("a")) && cycle.contains(&StateId::new("b"))));
-        assert!(cycles.iter().any(|cycle| cycle.contains(&StateId::new("c")) && cycle.contains(&StateId::new("d"))));
+        assert!(cycles
+            .iter()
+            .any(|cycle| cycle.contains(&StateId::new("a")) && cycle.contains(&StateId::new("b"))));
+        assert!(cycles
+            .iter()
+            .any(|cycle| cycle.contains(&StateId::new("c")) && cycle.contains(&StateId::new("d"))));
     }
 
     #[test]
@@ -273,7 +281,7 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let paths = analyzer.find_paths(&StateId::new("start"), &StateId::new("end"));
-        
+
         assert_eq!(paths.len(), 1);
         assert_eq!(paths[0].len(), 2);
         assert_eq!(paths[0][0], StateId::new("start"));
@@ -286,13 +294,17 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let paths = analyzer.find_paths(&StateId::new("start"), &StateId::new("end"));
-        
+
         assert!(paths.len() >= 2);
-        
+
         // Should find direct paths: start -> a -> end, start -> b -> end
-        assert!(paths.iter().any(|path| path.len() == 3 && path[1] == StateId::new("a")));
-        assert!(paths.iter().any(|path| path.len() == 3 && path[1] == StateId::new("b")));
-        
+        assert!(paths
+            .iter()
+            .any(|path| path.len() == 3 && path[1] == StateId::new("a")));
+        assert!(paths
+            .iter()
+            .any(|path| path.len() == 3 && path[1] == StateId::new("b")));
+
         // Should find longer paths too
         assert!(paths.iter().any(|path| path.len() >= 4));
     }
@@ -303,7 +315,7 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let paths = analyzer.find_paths(&StateId::new("start"), &StateId::new("unreachable1"));
-        
+
         assert_eq!(paths.len(), 0);
     }
 
@@ -313,7 +325,7 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let paths = analyzer.find_paths(&StateId::new("start"), &StateId::new("start"));
-        
+
         assert_eq!(paths.len(), 1);
         assert_eq!(paths[0].len(), 1);
         assert_eq!(paths[0][0], StateId::new("start"));
@@ -325,15 +337,15 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let adjacency = analyzer.build_adjacency_list();
-        
+
         assert_eq!(adjacency.len(), 2);
         assert!(adjacency.contains_key(&StateId::new("start")));
         assert!(adjacency.contains_key(&StateId::new("end")));
-        
+
         let start_neighbors = adjacency.get(&StateId::new("start")).unwrap();
         assert_eq!(start_neighbors.len(), 1);
         assert_eq!(start_neighbors[0], StateId::new("end"));
-        
+
         let end_neighbors = adjacency.get(&StateId::new("end")).unwrap();
         assert_eq!(end_neighbors.len(), 0);
     }
@@ -344,9 +356,9 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let adjacency = analyzer.build_adjacency_list();
-        
+
         assert_eq!(adjacency.len(), 5);
-        
+
         // Check start state has multiple neighbors
         let start_neighbors = adjacency.get(&StateId::new("start")).unwrap();
         assert!(start_neighbors.len() >= 3);
@@ -365,7 +377,7 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let adjacency = analyzer.build_adjacency_list();
-        
+
         assert_eq!(adjacency.len(), 0);
     }
 
@@ -375,14 +387,20 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let sorted = analyzer.topological_sort();
-        
+
         assert!(sorted.is_some());
         let sorted_states = sorted.unwrap();
         assert_eq!(sorted_states.len(), 2);
-        
+
         // Start should come before end
-        let start_pos = sorted_states.iter().position(|s| s == &StateId::new("start")).unwrap();
-        let end_pos = sorted_states.iter().position(|s| s == &StateId::new("end")).unwrap();
+        let start_pos = sorted_states
+            .iter()
+            .position(|s| s == &StateId::new("start"))
+            .unwrap();
+        let end_pos = sorted_states
+            .iter()
+            .position(|s| s == &StateId::new("end"))
+            .unwrap();
         assert!(start_pos < end_pos);
     }
 
@@ -392,7 +410,7 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let sorted = analyzer.topological_sort();
-        
+
         assert!(sorted.is_none());
     }
 
@@ -419,18 +437,33 @@ mod tests {
 
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
         let sorted = analyzer.topological_sort();
-        
+
         assert!(sorted.is_some());
         let sorted_states = sorted.unwrap();
         assert_eq!(sorted_states.len(), 5);
-        
+
         // Check ordering constraints
-        let start_pos = sorted_states.iter().position(|s| s == &StateId::new("start")).unwrap();
-        let a_pos = sorted_states.iter().position(|s| s == &StateId::new("a")).unwrap();
-        let b_pos = sorted_states.iter().position(|s| s == &StateId::new("b")).unwrap();
-        let c_pos = sorted_states.iter().position(|s| s == &StateId::new("c")).unwrap();
-        let end_pos = sorted_states.iter().position(|s| s == &StateId::new("end")).unwrap();
-        
+        let start_pos = sorted_states
+            .iter()
+            .position(|s| s == &StateId::new("start"))
+            .unwrap();
+        let a_pos = sorted_states
+            .iter()
+            .position(|s| s == &StateId::new("a"))
+            .unwrap();
+        let b_pos = sorted_states
+            .iter()
+            .position(|s| s == &StateId::new("b"))
+            .unwrap();
+        let c_pos = sorted_states
+            .iter()
+            .position(|s| s == &StateId::new("c"))
+            .unwrap();
+        let end_pos = sorted_states
+            .iter()
+            .position(|s| s == &StateId::new("end"))
+            .unwrap();
+
         assert!(start_pos < a_pos);
         assert!(start_pos < b_pos);
         assert!(a_pos < c_pos);
@@ -448,7 +481,7 @@ mod tests {
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
 
         let sorted = analyzer.topological_sort();
-        
+
         assert!(sorted.is_some());
         let sorted_states = sorted.unwrap();
         assert_eq!(sorted_states.len(), 0);
@@ -461,12 +494,12 @@ mod tests {
             "Single state".to_string(),
             StateId::new("only"),
         );
-        
+
         workflow.add_state(create_state("only", "Only state", true));
 
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
         let sorted = analyzer.topological_sort();
-        
+
         assert!(sorted.is_some());
         let sorted_states = sorted.unwrap();
         assert_eq!(sorted_states.len(), 1);
@@ -478,7 +511,7 @@ mod tests {
         let error1 = GraphError::CycleDetected(StateId::new("test"));
         assert!(error1.to_string().contains("cycle"));
         assert!(error1.to_string().contains("test"));
-        
+
         let error2 = GraphError::StateNotFound(StateId::new("missing"));
         assert!(error2.to_string().contains("not found"));
         assert!(error2.to_string().contains("missing"));
@@ -505,17 +538,17 @@ mod tests {
         workflow.add_transition(create_transition("middle", "end", ConditionType::Always));
 
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
-        
+
         // Test reachability
         let reachable = analyzer.find_reachable_states(&StateId::new("start"));
         assert_eq!(reachable.len(), 3);
         assert!(!reachable.contains(&StateId::new("isolated")));
-        
+
         // Test unreachable states
         let unreachable = analyzer.find_unreachable_states();
         assert_eq!(unreachable.len(), 1);
         assert!(unreachable.contains(&StateId::new("isolated")));
-        
+
         // Test adjacency list
         let adjacency = analyzer.build_adjacency_list();
         assert_eq!(adjacency.len(), 4);
@@ -530,15 +563,13 @@ mod tests {
 
         // Should still find paths even with cycles due to visited tracking
         let paths = analyzer.find_paths(&StateId::new("start"), &StateId::new("end"));
-        
+
         assert!(paths.len() >= 1);
         // Should find path: start -> loop -> end
-        assert!(paths.iter().any(|path| 
-            path.len() == 3 && 
-            path[0] == StateId::new("start") && 
-            path[1] == StateId::new("loop") && 
-            path[2] == StateId::new("end")
-        ));
+        assert!(paths.iter().any(|path| path.len() == 3
+            && path[0] == StateId::new("start")
+            && path[1] == StateId::new("loop")
+            && path[2] == StateId::new("end")));
     }
 
     #[test]
@@ -554,11 +585,15 @@ mod tests {
 
         // Add multiple transitions from start to target
         workflow.add_transition(create_transition("start", "target", ConditionType::Always));
-        workflow.add_transition(create_transition("start", "target", ConditionType::OnSuccess));
+        workflow.add_transition(create_transition(
+            "start",
+            "target",
+            ConditionType::OnSuccess,
+        ));
 
         let analyzer = WorkflowGraphAnalyzer::new(&workflow);
         let adjacency = analyzer.build_adjacency_list();
-        
+
         // Should have both transitions in adjacency list
         let start_neighbors = adjacency.get(&StateId::new("start")).unwrap();
         assert_eq!(start_neighbors.len(), 2);

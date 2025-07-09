@@ -209,25 +209,28 @@ async fn test_mcp_server_prompt_loading() {
 
     // Debug: Print the response to see what's loaded
     eprintln!("Prompts response: {}", response);
-    
+
     // Verify our test prompt is loaded
     let prompts = response["result"]["prompts"].as_array().unwrap();
     eprintln!("Loaded prompts count: {}", prompts.len());
-    
+
     // Print all prompt names for debugging
     for prompt in prompts {
         if let Some(name) = prompt["name"].as_str() {
             eprintln!("Prompt name: {}", name);
         }
     }
-    
+
     let has_test_prompt = prompts
         .iter()
         .any(|p| p["name"].as_str() == Some("test-prompt"));
 
     if !has_test_prompt {
         eprintln!("Test prompt file exists: {}", test_prompt.exists());
-        eprintln!("Test prompt content: {}", std::fs::read_to_string(&test_prompt).unwrap_or_default());
+        eprintln!(
+            "Test prompt content: {}",
+            std::fs::read_to_string(&test_prompt).unwrap_or_default()
+        );
     }
 
     // For now, just verify that the server loads built-in prompts

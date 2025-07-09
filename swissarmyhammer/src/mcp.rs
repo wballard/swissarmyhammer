@@ -1,24 +1,19 @@
 //! Model Context Protocol (MCP) server support
 
-use crate::{PromptLibrary, PromptResolver};
+use crate::file_watcher::{FileWatcher, FileWatcherCallback};
 use crate::workflow::{
-    WorkflowStorage, WorkflowStorageBackend, WorkflowRunStorageBackend,
-    FileSystemWorkflowStorage, FileSystemWorkflowRunStorage,
+    FileSystemWorkflowRunStorage, FileSystemWorkflowStorage, WorkflowRunStorageBackend,
+    WorkflowStorage, WorkflowStorageBackend,
 };
+use crate::{PromptLibrary, PromptResolver};
 use rmcp::model::*;
 use rmcp::service::RequestContext;
 use rmcp::{Error as McpError, RoleServer, ServerHandler};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use tokio::sync::RwLock;
-
-use notify::{
-    event::{Event, EventKind},
-    RecommendedWatcher, RecursiveMode, Watcher,
-};
-use tokio::sync::mpsc;
+use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock};
 
 /// Request structure for getting a prompt
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -42,7 +37,7 @@ pub struct ListPromptsRequest {
 pub struct McpServer {
     library: Arc<RwLock<PromptLibrary>>,
     workflow_storage: Arc<RwLock<WorkflowStorage>>,
-    watcher_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    file_watcher: Arc<Mutex<FileWatcher>>,
 }
 
 impl McpServer {
@@ -53,21 +48,21 @@ impl McpServer {
             tracing::error!("Failed to create workflow storage: {}", e);
             anyhow::anyhow!("Failed to create workflow storage: {}", e)
         })?) as Arc<dyn WorkflowStorageBackend>;
-        
+
         // Create runs directory in user's home directory
         let runs_path = Self::get_workflow_runs_path();
-        
+
         let run_backend = Arc::new(FileSystemWorkflowRunStorage::new(runs_path).map_err(|e| {
             tracing::error!("Failed to create workflow run storage: {}", e);
             anyhow::anyhow!("Failed to create workflow run storage: {}", e)
         })?) as Arc<dyn WorkflowRunStorageBackend>;
-        
+
         let workflow_storage = WorkflowStorage::new(workflow_backend, run_backend);
-        
+
         Ok(Self {
             library: Arc::new(RwLock::new(library)),
             workflow_storage: Arc::new(RwLock::new(workflow_storage)),
-            watcher_handle: Arc::new(Mutex::new(None)),
+            file_watcher: Arc::new(Mutex::new(FileWatcher::new())),
         })
     }
 
@@ -120,14 +115,14 @@ impl McpServer {
         if prompt.template.trim().starts_with("{% partial %}") {
             return true;
         }
-        
+
         // Check if the description indicates it's a partial template
         if let Some(description) = &prompt.description {
             if description.contains("Partial template for reuse in other prompts") {
                 return true;
             }
         }
-        
+
         false
     }
 
@@ -157,120 +152,120 @@ impl McpServer {
 
         Ok(content)
     }
+}
 
-    /// Start watching prompt directories for changes
-    pub async fn start_file_watching(&self, peer: rmcp::Peer<RoleServer>) -> anyhow::Result<()> {
-        tracing::info!("Starting file watching for prompt directories");
+/// Callback implementation for file watcher that handles prompt reloading
+#[derive(Clone)]
+struct McpFileWatcherCallback {
+    server: McpServer,
+    peer: rmcp::Peer<RoleServer>,
+}
 
-        // Get the directories to watch using the same logic as PromptResolver
-        let resolver = PromptResolver::new();
-        let watch_paths = resolver.get_prompt_directories()?;
+impl McpFileWatcherCallback {
+    fn new(server: McpServer, peer: rmcp::Peer<RoleServer>) -> Self {
+        Self { server, peer }
+    }
+}
 
-        tracing::info!(
-            "Found {} directories to watch: {:?}",
-            watch_paths.len(),
-            watch_paths
-        );
+impl FileWatcherCallback for McpFileWatcherCallback {
+    async fn on_file_changed(&self, paths: Vec<std::path::PathBuf>) -> anyhow::Result<()> {
+        tracing::info!("📄 Prompt file changed: {:?}", paths);
 
-        // The resolver already returns only existing paths
-        if watch_paths.is_empty() {
-            tracing::warn!("No prompt directories found to watch");
-            return Ok(());
+        // Reload the library
+        if let Err(e) = self.server.reload_prompts().await {
+            tracing::error!("❌ Failed to reload prompts: {}", e);
+            return Err(e);
+        } else {
+            tracing::info!("✅ Prompts reloaded successfully");
         }
 
-        // Create the file watcher
-        let (tx, mut rx) = mpsc::channel(100);
-        let mut watcher = RecommendedWatcher::new(
-            move |result: Result<Event, notify::Error>| {
-                if let Ok(event) = result {
-                    if let Err(e) = tx.blocking_send(event) {
-                        tracing::error!("Failed to send file watch event: {}", e);
-                    }
+        // Send notification to client about prompt list change
+        let peer_clone = self.peer.clone();
+        tokio::spawn(async move {
+            match peer_clone.notify_prompt_list_changed().await {
+                Ok(_) => {
+                    tracing::info!("📢 Sent prompts/listChanged notification to client");
                 }
-            },
-            notify::Config::default(),
-        )?;
-
-        // Watch all directories
-        for path in &watch_paths {
-            watcher.watch(path, RecursiveMode::Recursive)?;
-            tracing::info!("Watching directory: {:?}", path);
-        }
-
-        // Spawn the event handler task
-        let server = self.clone();
-        let handle = tokio::spawn(async move {
-            // Keep the watcher alive for the duration of this task
-            // The watcher must be moved into the task to prevent it from being dropped
-            let _watcher = watcher;
-
-            while let Some(event) = rx.recv().await {
-                tracing::debug!("📁 File system event: {:?}", event);
-
-                // Check if this is a relevant event
-                match event.kind {
-                    EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
-                        // Check if it's a prompt file (*.md, *.yaml, *.yml)
-                        let is_prompt_file = event.paths.iter().any(|p| {
-                            if let Some(ext) = p.extension() {
-                                matches!(ext.to_str(), Some("md") | Some("yaml") | Some("yml"))
-                            } else {
-                                false
-                            }
-                        });
-
-                        if is_prompt_file {
-                            tracing::info!("📄 Prompt file changed: {:?}", event.paths);
-
-                            // Reload the library
-                            if let Err(e) = server.reload_prompts().await {
-                                tracing::error!("❌ Failed to reload prompts: {}", e);
-                            } else {
-                                tracing::info!("✅ Prompts reloaded successfully");
-                            }
-
-                            // Send notification to client about prompt list change
-                            let peer_clone = peer.clone();
-                            tokio::spawn(async move {
-                                match peer_clone.notify_prompt_list_changed().await {
-                                    Ok(_) => {
-                                        tracing::info!(
-                                            "📢 Sent prompts/listChanged notification to client"
-                                        );
-                                    }
-                                    Err(e) => {
-                                        tracing::error!("❌ Failed to send notification: {}", e);
-                                    }
-                                }
-                            });
-                        } else {
-                            tracing::debug!("🚫 Ignoring non-prompt file: {:?}", event.paths);
-                        }
-                    }
-                    _ => {
-                        tracing::debug!("🚫 Ignoring event type: {:?}", event.kind);
-                    }
+                Err(e) => {
+                    tracing::error!("❌ Failed to send notification: {}", e);
                 }
             }
         });
 
-        // Store the handle
-        *self.watcher_handle.lock().unwrap() = Some(handle);
-
         Ok(())
     }
 
-    /// Stop file watching
-    pub fn stop_file_watching(&self) {
-        if let Some(handle) = self.watcher_handle.lock().unwrap().take() {
-            handle.abort();
+    async fn on_error(&self, error: String) {
+        tracing::error!("❌ File watcher error: {}", error);
+    }
+}
+
+impl McpServer {
+    /// Start watching prompt directories for changes
+    pub async fn start_file_watching(&self, peer: rmcp::Peer<RoleServer>) -> anyhow::Result<()> {
+        const MAX_RETRIES: u32 = 3;
+        const INITIAL_BACKOFF_MS: u64 = 100;
+
+        // Create callback that handles file changes and notifications
+        let callback = McpFileWatcherCallback::new(self.clone(), peer);
+
+        let mut last_error = None;
+        let mut backoff_ms = INITIAL_BACKOFF_MS;
+
+        for attempt in 1..=MAX_RETRIES {
+            // Start watching using the file watcher module
+            let result = {
+                let mut watcher = self.file_watcher.lock().await;
+                watcher.start_watching(callback.clone()).await
+            };
+
+            match result {
+                Ok(()) => {
+                    if attempt > 1 {
+                        tracing::info!(
+                            "✅ File watcher started successfully on attempt {}",
+                            attempt
+                        );
+                    }
+                    return Ok(());
+                }
+                Err(e) => {
+                    last_error = Some(e);
+
+                    if attempt < MAX_RETRIES
+                        && Self::is_retryable_fs_error(&last_error.as_ref().unwrap())
+                    {
+                        tracing::warn!(
+                            "⚠️ File watcher initialization attempt {} failed, retrying in {}ms: {}",
+                            attempt,
+                            backoff_ms,
+                            last_error.as_ref().unwrap()
+                        );
+
+                        tokio::time::sleep(tokio::time::Duration::from_millis(backoff_ms)).await;
+                        backoff_ms *= 2; // Exponential backoff
+                    } else {
+                        break;
+                    }
+                }
+            }
         }
+
+        Err(last_error.unwrap())
+    }
+
+    /// Stop file watching
+    pub async fn stop_file_watching(&self) {
+        let mut watcher = self.file_watcher.lock().await;
+        watcher.stop_watching();
     }
 
     /// Get the workflow runs directory path
     fn get_workflow_runs_path() -> std::path::PathBuf {
         dirs::home_dir()
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")))
+            .unwrap_or_else(|| {
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+            })
             .join(".swissarmyhammer")
             .join("workflow-runs")
     }
@@ -307,6 +302,68 @@ impl McpServer {
 
     /// Reload prompts from disk
     async fn reload_prompts(&self) -> anyhow::Result<()> {
+        self.reload_prompts_with_retry().await
+    }
+
+    /// Reload prompts with retry logic for transient file system errors
+    async fn reload_prompts_with_retry(&self) -> anyhow::Result<()> {
+        const MAX_RETRIES: u32 = 3;
+        const INITIAL_BACKOFF_MS: u64 = 100;
+
+        let mut last_error = None;
+        let mut backoff_ms = INITIAL_BACKOFF_MS;
+
+        for attempt in 1..=MAX_RETRIES {
+            match self.reload_prompts_internal().await {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    last_error = Some(e);
+
+                    // Check if this is a retryable error
+                    if attempt < MAX_RETRIES
+                        && Self::is_retryable_fs_error(&last_error.as_ref().unwrap())
+                    {
+                        tracing::warn!(
+                            "⚠️ Reload attempt {} failed, retrying in {}ms: {}",
+                            attempt,
+                            backoff_ms,
+                            last_error.as_ref().unwrap()
+                        );
+
+                        tokio::time::sleep(tokio::time::Duration::from_millis(backoff_ms)).await;
+                        backoff_ms *= 2; // Exponential backoff
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+
+        Err(last_error.unwrap())
+    }
+
+    /// Check if an error is a retryable file system error
+    fn is_retryable_fs_error(error: &anyhow::Error) -> bool {
+        // Check for common transient file system errors
+        if let Some(io_err) = error.downcast_ref::<std::io::Error>() {
+            matches!(
+                io_err.kind(),
+                std::io::ErrorKind::TimedOut
+                    | std::io::ErrorKind::Interrupted
+                    | std::io::ErrorKind::WouldBlock
+                    | std::io::ErrorKind::UnexpectedEof
+            )
+        } else {
+            // Also retry if the error message contains certain patterns
+            let error_str = error.to_string().to_lowercase();
+            error_str.contains("temporarily unavailable")
+                || error_str.contains("resource busy")
+                || error_str.contains("locked")
+        }
+    }
+
+    /// Internal reload method that performs the actual reload
+    async fn reload_prompts_internal(&self) -> anyhow::Result<()> {
         let mut library = self.library.write().await;
         let mut resolver = PromptResolver::new();
 
@@ -383,7 +440,7 @@ impl ServerHandler for McpServer {
             Ok(prompts) => {
                 let prompt_list: Vec<Prompt> = prompts
                     .iter()
-                    .filter(|p| !Self::is_partial_template(p))  // Filter out partial templates
+                    .filter(|p| !Self::is_partial_template(p)) // Filter out partial templates
                     .map(|p| {
                         let arguments = Self::convert_prompt_arguments(&p.arguments);
 
@@ -555,7 +612,10 @@ mod tests {
 
         // Verify instructions are provided
         assert!(info.instructions.is_some());
-        assert!(info.instructions.unwrap().contains("prompt and workflow management"));
+        assert!(info
+            .instructions
+            .unwrap()
+            .contains("prompt and workflow management"));
     }
 
     #[tokio::test]
@@ -698,20 +758,23 @@ mod tests {
     async fn test_mcp_server_does_not_expose_partial_templates() {
         // Create a test library with both regular and partial templates
         let mut library = PromptLibrary::new();
-        
+
         // Add a regular prompt
         let regular_prompt = Prompt::new("regular_prompt", "This is a regular prompt: {{ name }}")
             .with_description("A regular prompt".to_string());
         library.add(regular_prompt).unwrap();
-        
+
         // Add a partial template (marked as partial in description)
         let partial_prompt = Prompt::new("partial_template", "This is a partial template")
             .with_description("Partial template for reuse in other prompts".to_string());
         library.add(partial_prompt).unwrap();
-        
+
         // Add another partial template with {% partial %} marker
-        let partial_with_marker = Prompt::new("partial_with_marker", "{% partial %}\nThis is a partial with marker")
-            .with_description("Another partial template".to_string());
+        let partial_with_marker = Prompt::new(
+            "partial_with_marker",
+            "{% partial %}\nThis is a partial with marker",
+        )
+        .with_description("Another partial template".to_string());
         library.add(partial_with_marker).unwrap();
 
         let server = McpServer::new(library).unwrap();

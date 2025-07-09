@@ -22,10 +22,10 @@ mod storage;
 #[cfg(test)]
 mod test_helpers;
 mod transition;
-#[cfg(test)]
-mod visualization_tests;
 mod transition_key;
 mod visualization;
+#[cfg(test)]
+mod visualization_tests;
 
 pub use actions::{
     parse_action_from_description, Action, ActionError, ActionResult, LogAction, LogLevel,

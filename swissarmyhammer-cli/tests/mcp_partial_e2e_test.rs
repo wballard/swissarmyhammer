@@ -9,7 +9,7 @@ use tokio::time::timeout;
 async fn test_mcp_server_partial_rendering() {
     // Start the MCP server process
     let mut child = Command::new("cargo")
-        .args(&["run", "--", "serve"])
+        .args(["run", "--", "serve"])
         .current_dir("..") // Run from project root
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -28,10 +28,8 @@ async fn test_mcp_server_partial_rendering() {
     // Spawn stderr reader for debugging
     std::thread::spawn(move || {
         let stderr_reader = BufReader::new(stderr);
-        for line in stderr_reader.lines() {
-            if let Ok(line) = line {
-                eprintln!("SERVER: {}", line);
-            }
+        for line in stderr_reader.lines().flatten() {
+            eprintln!("SERVER: {}", line);
         }
     });
 

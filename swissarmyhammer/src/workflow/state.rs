@@ -88,6 +88,84 @@ impl std::fmt::Display for StateId {
     }
 }
 
+/// Key for storing compensation state information in workflow context
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct CompensationKey(String);
+
+impl CompensationKey {
+    /// Create a new compensation key for a state
+    pub fn for_state(state_id: &StateId) -> Self {
+        Self(format!("compensation_for_{}", state_id.as_str()))
+    }
+
+    /// Get the string representation of the key
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Check if a key is a compensation key
+    pub fn is_compensation_key(key: &str) -> bool {
+        key.starts_with("compensation_for_")
+    }
+
+    /// Extract the state ID from a compensation key
+    pub fn extract_state_id(&self) -> Option<StateId> {
+        self.0.strip_prefix("compensation_for_")
+            .filter(|s| !s.is_empty())
+            .map(StateId::new)
+    }
+}
+
+impl From<CompensationKey> for String {
+    fn from(key: CompensationKey) -> Self {
+        key.0
+    }
+}
+
+impl std::fmt::Display for CompensationKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// Context for error information in workflow execution
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ErrorContext {
+    /// The error message
+    pub error_message: String,
+    /// The state where the error occurred
+    pub error_state: StateId,
+    /// The timestamp when the error occurred
+    pub error_timestamp: String,
+    /// The number of retry attempts made (if any)
+    pub retry_attempts: Option<usize>,
+}
+
+impl ErrorContext {
+    /// Create a new error context
+    pub fn new(error_message: String, error_state: StateId) -> Self {
+        Self {
+            error_message,
+            error_state,
+            error_timestamp: chrono::Utc::now().to_rfc3339(),
+            retry_attempts: None,
+        }
+    }
+
+    /// Create error context with retry information
+    pub fn with_retries(error_message: String, error_state: StateId, retry_attempts: usize) -> Self {
+        Self {
+            error_message,
+            error_state,
+            error_timestamp: chrono::Utc::now().to_rfc3339(),
+            retry_attempts: Some(retry_attempts),
+        }
+    }
+
+    /// Storage key for error context in workflow context
+    pub const CONTEXT_KEY: &'static str = "error_context";
+}
+
 /// Represents a state in the workflow
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct State {

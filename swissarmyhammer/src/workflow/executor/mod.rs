@@ -39,6 +39,9 @@ pub enum ExecutorError {
     /// Action execution failed
     #[error("Action execution failed: {0}")]
     ActionError(#[from] ActionError),
+    /// Manual intervention required to continue workflow
+    #[error("Manual intervention required: {0}")]
+    ManualInterventionRequired(String),
 }
 
 /// Result type for executor operations

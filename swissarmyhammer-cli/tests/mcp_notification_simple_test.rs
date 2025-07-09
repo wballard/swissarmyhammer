@@ -21,7 +21,7 @@ fn test_mcp_notification_simple() -> Result<()> {
 
     // Start the MCP server with HOME set to temp dir
     let mut server_process = Command::new("cargo")
-        .args(&["run", "--bin", "swissarmyhammer", "--", "serve"])
+        .args(["run", "--bin", "swissarmyhammer", "--", "serve"])
         .env("HOME", temp_dir.path())
         .env("RUST_LOG", "debug")
         .stdin(Stdio::piped())
@@ -40,10 +40,8 @@ fn test_mcp_notification_simple() -> Result<()> {
     // Spawn thread to read stderr
     std::thread::spawn(move || {
         let reader = BufReader::new(stderr);
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                eprintln!("STDERR: {}", line);
-            }
+        for line in reader.lines().flatten() {
+            eprintln!("STDERR: {}", line);
         }
     });
 
@@ -123,6 +121,7 @@ fn test_mcp_notification_simple() -> Result<()> {
 
     // Check if we got the notification
     server_process.kill()?;
+    server_process.wait()?; // Wait for process to fully terminate
     let notification_found = reader_thread.join().unwrap();
 
     assert!(

@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::workflow::test_helpers::*;
-use crate::workflow::{Transition, WorkflowName, ConditionType, TransitionCondition, StateType, Workflow, WorkflowRun, WorkflowRunStatus};
+use crate::workflow::{Transition, WorkflowName, ConditionType, TransitionCondition, StateType, Workflow, WorkflowRun, WorkflowRunStatus, ErrorContext, StateId};
 use std::collections::HashMap;
 use serde_json::Value;
 
@@ -1196,13 +1196,15 @@ use serde_json::Value;
         let run = executor.start_workflow(workflow).await.unwrap();
         
         // Check error context was captured
-        assert!(run.context.contains_key("last_error"));
-        assert!(run.context.contains_key("error_state"));
-        assert!(run.context.contains_key("error_timestamp"));
+        assert!(run.context.contains_key(ErrorContext::CONTEXT_KEY));
         
-        // Verify error message is present
-        if let Some(last_error) = run.context.get("last_error") {
-            assert!(matches!(last_error, Value::String(_)));
+        // Verify error context structure
+        if let Some(error_context_value) = run.context.get(ErrorContext::CONTEXT_KEY) {
+            let error_context: ErrorContext = serde_json::from_value(error_context_value.clone())
+                .expect("Should be able to deserialize error context");
+            assert!(!error_context.error_message.is_empty());
+            assert_eq!(error_context.error_state, StateId::new("failing"));
+            assert!(!error_context.error_timestamp.is_empty());
         }
     }
 

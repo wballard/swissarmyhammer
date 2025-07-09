@@ -320,10 +320,12 @@ impl WorkflowMetrics {
         completed_runs.sort_by_key(|(_, completed_at)| *completed_at);
         
         // Remove the oldest runs to get back under the limit
-        let excess_count = self.run_metrics.len() - MAX_RUN_METRICS;
-        for (run_id, _) in completed_runs.iter().take(excess_count.min(completed_runs.len())) {
-            self.run_metrics.remove(run_id);
-        }
+        let excess_count = self.run_metrics.len().saturating_sub(MAX_RUN_METRICS);
+        completed_runs.into_iter()
+            .take(excess_count)
+            .for_each(|(run_id, _)| {
+                self.run_metrics.remove(&run_id);
+            });
     }
 
     /// Comprehensive cleanup of old metrics data

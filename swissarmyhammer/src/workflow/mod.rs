@@ -5,11 +5,15 @@
 
 mod action_parser;
 mod actions;
+#[cfg(test)]
+mod actions_tests;
 mod cache;
 mod definition;
 mod error_utils;
 mod executor;
 mod graph;
+#[cfg(test)]
+mod graph_tests;
 mod metrics;
 mod parser;
 mod run;
@@ -18,6 +22,8 @@ mod storage;
 #[cfg(test)]
 mod test_helpers;
 mod transition;
+#[cfg(test)]
+mod visualization_tests;
 mod transition_key;
 mod visualization;
 

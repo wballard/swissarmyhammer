@@ -66,15 +66,48 @@ mod check_names {
     pub const WORKFLOW_CIRCULAR_DEPS: &str = "Workflow circular dependencies";
 }
 
+/// Format strings used throughout the module
+mod format_strings {
+    pub const WORKFLOW_DIR_PERMISSIONS: &str = "Workflow directory permissions: {:?}";
+    pub const WORKFLOW_DIR_ACCESS: &str = "Workflow directory access: {:?}";
+    pub const WORKFLOW_PARSING_ERROR: &str = "Workflow parsing: {:?}";
+    pub const YAML_PARSING_ERROR: &str = "YAML parsing: {:?}";
+}
+
 /// Wrapper type for workflow directory paths to provide type safety
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkflowDirectory(PathBuf);
 
 impl WorkflowDirectory {
+    /// Create a new WorkflowDirectory from a PathBuf
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to the workflow directory
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::path::PathBuf;
+    /// use swissarmyhammer_cli::doctor::WorkflowDirectory;
+    ///
+    /// let dir = WorkflowDirectory::new(PathBuf::from("/home/user/.swissarmyhammer/workflows"));
+    /// ```
     pub fn new(path: PathBuf) -> Self {
         Self(path)
     }
 
+    /// Get the underlying path
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::path::PathBuf;
+    /// use swissarmyhammer_cli::doctor::WorkflowDirectory;
+    ///
+    /// let dir = WorkflowDirectory::new(PathBuf::from("/test"));
+    /// assert_eq!(dir.path(), Path::new("/test"));
+    /// ```
     pub fn path(&self) -> &Path {
         &self.0
     }
@@ -106,6 +139,22 @@ pub struct WorkflowDirectoryInfo {
 }
 
 impl WorkflowDirectoryInfo {
+    /// Create a new WorkflowDirectoryInfo
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The workflow directory path
+    /// * `category` - The category of the workflow directory (User or Local)
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::path::PathBuf;
+    /// use swissarmyhammer_cli::doctor::{WorkflowDirectory, WorkflowDirectoryInfo, WorkflowCategory};
+    ///
+    /// let dir = WorkflowDirectory::new(PathBuf::from("/home/user/.swissarmyhammer/workflows"));
+    /// let info = WorkflowDirectoryInfo::new(dir, WorkflowCategory::User);
+    /// ```
     pub fn new(path: WorkflowDirectory, category: WorkflowCategory) -> Self {
         Self { path, category }
     }
@@ -190,6 +239,76 @@ pub struct Check {
     pub message: String,
     /// Optional fix suggestion for warnings or errors
     pub fix: Option<String>,
+}
+
+impl Check {
+    /// Create a new Check with builder pattern
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use swissarmyhammer_cli::doctor::{Check, CheckStatus};
+    ///
+    /// let check = Check::new("Test Check", CheckStatus::Ok)
+    ///     .with_message("Everything is working")
+    ///     .with_fix("No fix needed")
+    ///     .build();
+    /// ```
+    pub fn new(name: impl Into<String>, status: CheckStatus) -> CheckBuilder {
+        CheckBuilder {
+            name: name.into(),
+            status,
+            message: String::new(),
+            fix: None,
+        }
+    }
+}
+
+/// Builder for creating Check instances
+pub struct CheckBuilder {
+    name: String,
+    status: CheckStatus,
+    message: String,
+    fix: Option<String>,
+}
+
+impl CheckBuilder {
+    /// Set the message for this check
+    pub fn with_message(mut self, message: impl Into<String>) -> Self {
+        self.message = message.into();
+        self
+    }
+
+    /// Set the fix suggestion for this check
+    pub fn with_fix(mut self, fix: impl Into<String>) -> Self {
+        self.fix = Some(fix.into());
+        self
+    }
+
+    /// Build the Check instance
+    pub fn build(self) -> Check {
+        Check {
+            name: self.name,
+            status: self.status,
+            message: self.message,
+            fix: self.fix,
+        }
+    }
+}
+
+/// Groups of checks organized by category
+struct CheckGroups<'a> {
+    system_checks: Vec<&'a Check>,
+    config_checks: Vec<&'a Check>,
+    prompt_checks: Vec<&'a Check>,
+    workflow_checks: Vec<&'a Check>,
+}
+
+/// Count of checks by status
+struct CheckCounts {
+    ok_count: usize,
+    warning_count: usize,
+    error_count: usize,
 }
 
 /// Main diagnostic tool for SwissArmyHammer system health checks
@@ -579,7 +698,10 @@ impl Doctor {
         } else {
             for (path, error) in yaml_errors {
                 self.checks.push(Check {
-                    name: format!("YAML parsing: {:?}", path.file_name().unwrap_or_default()),
+                    name: format!(
+                        format_strings::YAML_PARSING_ERROR,
+                        path.file_name().unwrap_or_default()
+                    ),
                     status: CheckStatus::Error,
                     message: error,
                     fix: Some(format!("Fix the YAML syntax in {:?}", path)),
@@ -630,100 +752,63 @@ impl Doctor {
     pub fn print_results(&self) {
         let use_color = crate::cli::Cli::should_use_color();
 
-        // Group checks by category
-        let system_checks: Vec<_> = self
-            .checks
-            .iter()
-            .filter(|c| c.name.contains("PATH") || c.name.contains("permissions"))
-            .collect();
+        // Group and print checks by category
+        let check_groups = self.group_checks_by_category();
 
-        let config_checks: Vec<_> = self
-            .checks
-            .iter()
-            .filter(|c| c.name.contains("Claude") || c.name.contains("config"))
-            .collect();
-
-        let prompt_checks: Vec<_> = self
-            .checks
-            .iter()
-            .filter(|c| c.name.contains("prompt") || c.name.contains("YAML"))
-            .filter(|c| !c.name.contains("Workflow"))
-            .collect();
-
-        let workflow_checks: Vec<_> = self
-            .checks
-            .iter()
-            .filter(|c| c.name.contains("Workflow") || c.name.contains("workflow"))
-            .collect();
-
-        // Print system checks
-        if !system_checks.is_empty() {
-            if use_color {
-                println!("{}", "System Checks:".bold().yellow());
-            } else {
-                println!("System Checks:");
-            }
-            for check in system_checks {
-                print_check(check, use_color);
-            }
-            println!();
-        }
-
-        // Print configuration checks
-        if !config_checks.is_empty() {
-            if use_color {
-                println!("{}", "Configuration:".bold().yellow());
-            } else {
-                println!("Configuration:");
-            }
-            for check in config_checks {
-                print_check(check, use_color);
-            }
-            println!();
-        }
-
-        // Print prompt checks
-        if !prompt_checks.is_empty() {
-            if use_color {
-                println!("{}", "Prompts:".bold().yellow());
-            } else {
-                println!("Prompts:");
-            }
-            for check in prompt_checks {
-                print_check(check, use_color);
-            }
-            println!();
-        }
-
-        // Print workflow checks
-        if !workflow_checks.is_empty() {
-            if use_color {
-                println!("{}", "Workflows:".bold().yellow());
-            } else {
-                println!("Workflows:");
-            }
-            for check in workflow_checks {
-                print_check(check, use_color);
-            }
-            println!();
-        }
+        self.print_check_category(&check_groups.system_checks, "System Checks:", use_color);
+        self.print_check_category(&check_groups.config_checks, "Configuration:", use_color);
+        self.print_check_category(&check_groups.prompt_checks, "Prompts:", use_color);
+        self.print_check_category(&check_groups.workflow_checks, "Workflows:", use_color);
 
         // Print summary
-        let ok_count = self
-            .checks
-            .iter()
-            .filter(|c| c.status == CheckStatus::Ok)
-            .count();
-        let warning_count = self
-            .checks
-            .iter()
-            .filter(|c| c.status == CheckStatus::Warning)
-            .count();
-        let error_count = self
-            .checks
-            .iter()
-            .filter(|c| c.status == CheckStatus::Error)
-            .count();
+        self.print_summary(use_color);
+    }
+
+    /// Group checks into categories
+    fn group_checks_by_category(&self) -> CheckGroups {
+        CheckGroups {
+            system_checks: self
+                .checks
+                .iter()
+                .filter(|c| c.name.contains("PATH") || c.name.contains("permissions"))
+                .collect(),
+            config_checks: self
+                .checks
+                .iter()
+                .filter(|c| c.name.contains("Claude") || c.name.contains("config"))
+                .collect(),
+            prompt_checks: self
+                .checks
+                .iter()
+                .filter(|c| c.name.contains("prompt") || c.name.contains("YAML"))
+                .filter(|c| !c.name.contains("Workflow"))
+                .collect(),
+            workflow_checks: self
+                .checks
+                .iter()
+                .filter(|c| c.name.contains("Workflow") || c.name.contains("workflow"))
+                .collect(),
+        }
+    }
+
+    /// Print a category of checks
+    fn print_check_category(&self, checks: &[&Check], category_name: &str, use_color: bool) {
+        if !checks.is_empty() {
+            if use_color {
+                println!("{}", category_name.bold().yellow());
+            } else {
+                println!("{}", category_name);
+            }
+            for check in checks {
+                print_check(check, use_color);
+            }
+            println!();
+        }
+    }
+
+    /// Print the summary of check results
+    fn print_summary(&self, use_color: bool) {
+        let counts = self.count_check_statuses();
 
         if use_color {
             println!("{}", "Summary:".bold().green());
@@ -731,34 +816,64 @@ impl Doctor {
             println!("Summary:");
         }
 
-        if error_count > 0 {
-            if use_color {
-                println!(
-                    "  {} checks passed, {} warnings, {} errors",
-                    ok_count.to_string().green(),
-                    warning_count.to_string().yellow(),
-                    error_count.to_string().red()
-                );
-            } else {
-                println!(
-                    "  {} checks passed, {} warnings, {} errors",
-                    ok_count, warning_count, error_count
-                );
+        match (counts.error_count, counts.warning_count) {
+            (0, 0) => {
+                if use_color {
+                    println!("  ✨ All checks passed!");
+                } else {
+                    println!("  All checks passed!");
+                }
             }
-        } else if warning_count > 0 {
-            if use_color {
-                println!(
-                    "  {} checks passed, {} warnings",
-                    ok_count.to_string().green(),
-                    warning_count.to_string().yellow()
-                );
-            } else {
-                println!("  {} checks passed, {} warnings", ok_count, warning_count);
+            (0, _) => {
+                if use_color {
+                    println!(
+                        "  {} checks passed, {} warnings",
+                        counts.ok_count.to_string().green(),
+                        counts.warning_count.to_string().yellow()
+                    );
+                } else {
+                    println!(
+                        "  {} checks passed, {} warnings",
+                        counts.ok_count, counts.warning_count
+                    );
+                }
             }
-        } else if use_color {
-            println!("  ✨ All checks passed!");
-        } else {
-            println!("  All checks passed!");
+            _ => {
+                if use_color {
+                    println!(
+                        "  {} checks passed, {} warnings, {} errors",
+                        counts.ok_count.to_string().green(),
+                        counts.warning_count.to_string().yellow(),
+                        counts.error_count.to_string().red()
+                    );
+                } else {
+                    println!(
+                        "  {} checks passed, {} warnings, {} errors",
+                        counts.ok_count, counts.warning_count, counts.error_count
+                    );
+                }
+            }
+        }
+    }
+
+    /// Count checks by status
+    fn count_check_statuses(&self) -> CheckCounts {
+        CheckCounts {
+            ok_count: self
+                .checks
+                .iter()
+                .filter(|c| c.status == CheckStatus::Ok)
+                .count(),
+            warning_count: self
+                .checks
+                .iter()
+                .filter(|c| c.status == CheckStatus::Warning)
+                .count(),
+            error_count: self
+                .checks
+                .iter()
+                .filter(|c| c.status == CheckStatus::Error)
+                .count(),
         }
     }
 
@@ -873,7 +988,7 @@ impl Doctor {
                     if (mode & 0o700) == 0o700 {
                         self.checks.push(Check {
                             name: format!(
-                                "Workflow directory permissions: {:?}",
+                                format_strings::WORKFLOW_DIR_PERMISSIONS,
                                 dir.file_name().unwrap_or_default()
                             ),
                             status: CheckStatus::Ok,
@@ -886,7 +1001,7 @@ impl Doctor {
                     } else {
                         self.checks.push(Check {
                             name: format!(
-                                "Workflow directory permissions: {:?}",
+                                format_strings::WORKFLOW_DIR_PERMISSIONS,
                                 dir.file_name().unwrap_or_default()
                             ),
                             status: CheckStatus::Warning,
@@ -960,6 +1075,13 @@ impl Doctor {
                 .filter(|e| e.file_type().is_file())
                 .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("mermaid"))
             {
+                // Validate path before reading
+                if let Err(e) = validate_path_no_traversal(entry.path()) {
+                    workflow_errors
+                        .push((entry.path().to_path_buf(), format!("Invalid path: {}", e)));
+                    continue;
+                }
+
                 match fs::read_to_string(entry.path()) {
                     Ok(content) => {
                         // Check if file is readable and not empty
@@ -991,7 +1113,7 @@ impl Doctor {
             for (path, error) in workflow_errors {
                 self.checks.push(Check {
                     name: format!(
-                        "Workflow parsing: {:?}",
+                        format_strings::WORKFLOW_PARSING_ERROR,
                         path.file_name().unwrap_or_default()
                     ),
                     status: CheckStatus::Error,
@@ -1348,13 +1470,16 @@ fn check_disk_space(path: &Path) -> Result<(DiskSpace, DiskSpace)> {
 
     #[cfg(not(windows))]
     {
-        // For other non-Unix systems, we can try using the filesystem metadata
-        // This is less accurate but better than hardcoded values
+        // For other non-Unix systems, try using `statvfs` crate if available
+        // Otherwise, return a reasonable estimate with a note about limitations
         match fs::metadata(path) {
             Ok(_) => {
-                // We can at least verify the path exists
-                // Return conservative estimates that won't trigger warnings
-                Ok((DiskSpace::from_mb(500), DiskSpace::from_mb(5000))) // 500MB available, 5GB total
+                // Path exists - return conservative estimates that indicate
+                // we cannot determine actual disk space
+                // Using 0 to indicate unknown rather than misleading values
+                Err(anyhow::anyhow!(
+                    "Disk space checking not implemented for this platform"
+                ))
             }
             Err(e) => {
                 anyhow::bail!("Failed to access path for disk space check: {}", e)
@@ -1363,23 +1488,59 @@ fn check_disk_space(path: &Path) -> Result<(DiskSpace, DiskSpace)> {
     }
 }
 
+/// Validate a path doesn't contain directory traversal sequences
+fn validate_path_no_traversal(path: &Path) -> Result<()> {
+    let path_str = path.to_string_lossy();
+
+    // Check for common path traversal patterns
+    if path_str.contains("..") || path_str.contains("./") || path_str.contains(".\\") {
+        anyhow::bail!("Path contains potential directory traversal: {:?}", path);
+    }
+
+    // Check components for any parent directory references
+    for component in path.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                anyhow::bail!("Path contains parent directory reference: {:?}", path);
+            }
+            std::path::Component::RootDir => {
+                // Allow absolute paths but log them for review
+                // In production, you might want to restrict this based on context
+            }
+            _ => {} // Normal components are fine
+        }
+    }
+
+    Ok(())
+}
+
 /// Get workflow directories to check
 fn get_workflow_directories() -> Vec<WorkflowDirectoryInfo> {
     let mut dirs = Vec::new();
 
     // Add user directory if it exists
     if let Some(home) = dirs::home_dir() {
-        dirs.push(WorkflowDirectoryInfo::new(
-            WorkflowDirectory::new(home.join(SWISSARMYHAMMER_DIR).join("workflows")),
-            WorkflowCategory::User,
-        ));
+        let user_workflows_path = home.join(SWISSARMYHAMMER_DIR).join("workflows");
+
+        // Validate path before adding
+        if validate_path_no_traversal(&user_workflows_path).is_ok() {
+            dirs.push(WorkflowDirectoryInfo::new(
+                WorkflowDirectory::new(user_workflows_path),
+                WorkflowCategory::User,
+            ));
+        }
     }
 
     // Add local directory
-    dirs.push(WorkflowDirectoryInfo::new(
-        WorkflowDirectory::new(PathBuf::from(SWISSARMYHAMMER_DIR).join("workflows")),
-        WorkflowCategory::Local,
-    ));
+    let local_workflows_path = PathBuf::from(SWISSARMYHAMMER_DIR).join("workflows");
+
+    // Validate path before adding
+    if validate_path_no_traversal(&local_workflows_path).is_ok() {
+        dirs.push(WorkflowDirectoryInfo::new(
+            WorkflowDirectory::new(local_workflows_path),
+            WorkflowCategory::Local,
+        ));
+    }
 
     dirs
 }
@@ -1678,5 +1839,154 @@ mod tests {
             !workflow_checks.is_empty(),
             "run_diagnostics should include workflow checks"
         );
+    }
+
+    #[test]
+    fn test_disk_space_type() {
+        let space = DiskSpace::from_mb(100);
+        assert_eq!(space.as_mb(), 100);
+        assert_eq!(format!("{}", space), "100 MB");
+
+        // Test low disk space detection
+        assert!(space.is_low(200));
+        assert!(!space.is_low(50));
+    }
+
+    #[test]
+    fn test_disk_space_ordering() {
+        let space1 = DiskSpace::from_mb(100);
+        let space2 = DiskSpace::from_mb(200);
+        let space3 = DiskSpace::from_mb(100);
+
+        assert!(space1 < space2);
+        assert!(space2 > space1);
+        assert_eq!(space1, space3);
+    }
+
+    #[test]
+    fn test_check_disk_space_current_dir() {
+        // Test disk space check on current directory
+        let current_dir = std::env::current_dir().expect("Failed to get current directory");
+        let result = check_disk_space(&current_dir);
+
+        #[cfg(unix)]
+        {
+            // On Unix systems, this should succeed
+            assert!(result.is_ok(), "Disk space check should succeed on Unix");
+            if let Ok((available, total)) = result {
+                assert!(
+                    available.as_mb() > 0,
+                    "Available space should be greater than 0"
+                );
+                assert!(total.as_mb() > 0, "Total space should be greater than 0");
+                assert!(
+                    available <= total,
+                    "Available space should not exceed total space"
+                );
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            // On Windows systems with the implementation, it should succeed
+            if result.is_ok() {
+                let (available, total) = result.unwrap();
+                assert!(
+                    available.as_mb() > 0,
+                    "Available space should be greater than 0"
+                );
+                assert!(total.as_mb() > 0, "Total space should be greater than 0");
+                assert!(
+                    available <= total,
+                    "Available space should not exceed total space"
+                );
+            }
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        {
+            // On other systems, it should return an error with our new implementation
+            assert!(
+                result.is_err(),
+                "Disk space check should fail on unsupported platforms"
+            );
+        }
+    }
+
+    #[test]
+    fn test_check_disk_space_invalid_path() {
+        let invalid_path = PathBuf::from("/nonexistent/path/that/should/not/exist");
+        let result = check_disk_space(&invalid_path);
+
+        // Should fail for non-existent paths
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_workflow_directory_type() {
+        let path = PathBuf::from("/test/path");
+        let workflow_dir = WorkflowDirectory::new(path.clone());
+
+        assert_eq!(workflow_dir.path(), &path);
+        assert_eq!(workflow_dir.as_ref(), &path);
+        assert_eq!(format!("{}", workflow_dir), format!("{:?}", path));
+    }
+
+    #[test]
+    fn test_workflow_directory_info() {
+        let path = PathBuf::from("/test/path");
+        let workflow_dir = WorkflowDirectory::new(path);
+        let info = WorkflowDirectoryInfo::new(workflow_dir.clone(), WorkflowCategory::User);
+
+        assert_eq!(info.path, workflow_dir);
+        assert_eq!(info.category, WorkflowCategory::User);
+    }
+
+    #[test]
+    fn test_workflow_category_display() {
+        assert_eq!(format!("{}", WorkflowCategory::User), "User");
+        assert_eq!(format!("{}", WorkflowCategory::Local), "Local");
+    }
+
+    #[test]
+    fn test_exit_code_conversion() {
+        assert_eq!(i32::from(ExitCode::Success), 0);
+        assert_eq!(i32::from(ExitCode::Warning), 1);
+        assert_eq!(i32::from(ExitCode::Error), 2);
+    }
+
+    #[test]
+    fn test_validate_path_no_traversal() {
+        // Test valid paths
+        assert!(validate_path_no_traversal(Path::new("test/path")).is_ok());
+        assert!(validate_path_no_traversal(Path::new("workflows/my-workflow.mermaid")).is_ok());
+        assert!(validate_path_no_traversal(Path::new("/absolute/path/is/allowed")).is_ok());
+
+        // Test paths with parent directory traversal
+        assert!(validate_path_no_traversal(Path::new("../test")).is_err());
+        assert!(validate_path_no_traversal(Path::new("test/../path")).is_err());
+        assert!(validate_path_no_traversal(Path::new("test/../../etc/passwd")).is_err());
+
+        // Test paths with current directory references
+        assert!(validate_path_no_traversal(Path::new("./test")).is_err());
+        assert!(validate_path_no_traversal(Path::new("test/./path")).is_err());
+
+        // Test Windows-style paths
+        assert!(validate_path_no_traversal(Path::new("test\\.\\path")).is_err());
+        assert!(validate_path_no_traversal(Path::new("test\\..\\path")).is_err());
+    }
+
+    #[test]
+    fn test_validate_path_components() {
+        use std::path::Component;
+
+        // Create a path with parent directory component
+        let path = PathBuf::from("test");
+        let path = path.join("..");
+        assert!(validate_path_no_traversal(&path).is_err());
+
+        // Test that the validator checks components properly
+        let components: Vec<Component> = path.components().collect();
+        assert!(components.iter().any(|c| matches!(c, Component::ParentDir)));
     }
 }

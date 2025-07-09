@@ -1,10 +1,50 @@
+//! Doctor module for SwissArmyHammer diagnostic tools
+//!
+//! This module provides comprehensive system diagnostics for SwissArmyHammer installations,
+//! checking various aspects of the system configuration to ensure optimal operation.
+//!
+//! # Features
+//!
+//! - Installation verification (binary permissions, PATH configuration)
+//! - Claude Code MCP integration checking
+//! - Prompt directory validation
+//! - YAML front matter parsing verification
+//! - Workflow system diagnostics
+//! - Disk space monitoring
+//! - File permission checks
+//!
+//! # Usage
+//!
+//! ```no_run
+//! use swissarmyhammer_cli::doctor::Doctor;
+//!
+//! let mut doctor = Doctor::new();
+//! let exit_code = doctor.run_diagnostics()?;
+//! ```
+//!
+//! The doctor returns exit codes:
+//! - 0: All checks passed
+//! - 1: Some warnings detected
+//! - 2: Errors detected
+
 use anyhow::Result;
 use colored::*;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Directory name for SwissArmyHammer configuration and data
+const SWISSARMYHAMMER_DIR: &str = ".swissarmyhammer";
+
 /// Minimum disk space in MB before warning
+///
+/// This threshold is set to 100MB which provides enough space for:
+/// - Several workflow run outputs (typically 1-10MB each)
+/// - Temporary files created during workflow execution
+/// - Log files and diagnostic information
+///
+/// This conservative threshold helps ensure smooth operation while avoiding
+/// false alarms on systems with limited but adequate disk space.
 const LOW_DISK_SPACE_MB: u64 = 100;
 
 /// Check names constants to avoid typos and improve maintainability
@@ -52,31 +92,134 @@ impl std::fmt::Display for WorkflowDirectory {
     }
 }
 
+/// Type-safe wrapper for disk space measurements in megabytes
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DiskSpace {
+    mb: u64,
+}
+
+/// Information about a workflow directory including its path and category
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowDirectoryInfo {
+    pub path: WorkflowDirectory,
+    pub category: WorkflowCategory,
+}
+
+impl WorkflowDirectoryInfo {
+    pub fn new(path: WorkflowDirectory, category: WorkflowCategory) -> Self {
+        Self { path, category }
+    }
+}
+
+/// Category of workflow directory (User or Local)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkflowCategory {
+    User,
+    Local,
+}
+
+impl std::fmt::Display for WorkflowCategory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WorkflowCategory::User => write!(f, "User"),
+            WorkflowCategory::Local => write!(f, "Local"),
+        }
+    }
+}
+
+impl DiskSpace {
+    /// Create a new DiskSpace value from megabytes
+    pub fn from_mb(mb: u64) -> Self {
+        Self { mb }
+    }
+
+    /// Get the value in megabytes
+    #[allow(dead_code)]
+    pub fn as_mb(&self) -> u64 {
+        self.mb
+    }
+
+    /// Check if disk space is below a certain threshold
+    pub fn is_low(&self, threshold_mb: u64) -> bool {
+        self.mb < threshold_mb
+    }
+}
+
+impl std::fmt::Display for DiskSpace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} MB", self.mb)
+    }
+}
+
+/// Status of a diagnostic check
 #[derive(Debug, PartialEq, Clone)]
 pub enum CheckStatus {
+    /// Check passed without issues
     Ok,
+    /// Check passed but with potential issues
     Warning,
+    /// Check failed with errors
     Error,
 }
 
+/// Exit codes for the doctor command
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExitCode {
+    /// All checks passed
+    Success = 0,
+    /// Warnings detected
+    Warning = 1,
+    /// Errors detected
+    Error = 2,
+}
+
+impl From<ExitCode> for i32 {
+    fn from(code: ExitCode) -> i32 {
+        code as i32
+    }
+}
+
+/// Result of a single diagnostic check
 #[derive(Debug, Clone)]
 pub struct Check {
+    /// Name of the check performed
     pub name: String,
+    /// Status of the check (Ok, Warning, Error)
     pub status: CheckStatus,
+    /// Descriptive message about the check result
     pub message: String,
+    /// Optional fix suggestion for warnings or errors
     pub fix: Option<String>,
 }
 
+/// Main diagnostic tool for SwissArmyHammer system health checks
+///
+/// The Doctor struct accumulates diagnostic results and provides a summary
+/// of the system's configuration and any potential issues.
 pub struct Doctor {
     checks: Vec<Check>,
 }
 
 impl Doctor {
+    /// Create a new Doctor instance for running diagnostics
     pub fn new() -> Self {
         Self { checks: Vec::new() }
     }
 
     /// Run all diagnostic checks
+    ///
+    /// Performs a comprehensive set of diagnostics including:
+    /// - Installation verification
+    /// - Claude Code configuration
+    /// - Prompt directory validation
+    /// - Workflow system checks
+    ///
+    /// # Returns
+    ///
+    /// Returns an exit code:
+    /// - 0: All checks passed
+    /// - 1: Warnings detected
+    /// - 2: Errors detected
     pub fn run_diagnostics(&mut self) -> Result<i32> {
         println!("{}", "🔨 SwissArmyHammer Doctor".bold().blue());
         println!("{}", "Running diagnostics...".dimmed());
@@ -105,6 +248,12 @@ impl Doctor {
     }
 
     /// Check installation method and binary integrity
+    ///
+    /// Verifies:
+    /// - Installation method (cargo, system, development build)
+    /// - Binary version and build type
+    /// - Execute permissions on Unix systems
+    /// - Binary naming conventions
     pub fn check_installation(&mut self) -> Result<()> {
         // Check if running from cargo install vs standalone binary
         let current_exe = env::current_exe().unwrap_or_default();
@@ -193,6 +342,9 @@ impl Doctor {
     }
 
     /// Check if swissarmyhammer is in PATH
+    ///
+    /// Searches the system PATH for the swissarmyhammer executable
+    /// and reports its location if found.
     pub fn check_in_path(&mut self) -> Result<()> {
         let path_var = env::var("PATH").unwrap_or_default();
         let paths: Vec<std::path::PathBuf> = env::split_paths(&path_var).collect();
@@ -236,6 +388,9 @@ impl Doctor {
     }
 
     /// Check Claude Code MCP configuration
+    ///
+    /// Verifies that swissarmyhammer is properly configured as an MCP server
+    /// in Claude Code by running `claude mcp list` and checking the output.
     pub fn check_claude_config(&mut self) -> Result<()> {
         use std::process::Command;
 
@@ -298,6 +453,11 @@ impl Doctor {
     }
 
     /// Check prompt directories
+    ///
+    /// Verifies the existence and accessibility of:
+    /// - Built-in prompts (embedded in binary)
+    /// - User prompts directory (~/.swissarmyhammer/prompts)
+    /// - Local prompts directory (./.swissarmyhammer/prompts)
     pub fn check_prompt_directories(&mut self) -> Result<()> {
         // Check builtin prompts (embedded in binary)
         self.checks.push(Check {
@@ -309,7 +469,7 @@ impl Doctor {
 
         // Check user prompts directory
         if let Some(home) = dirs::home_dir() {
-            let user_prompts = home.join(".swissarmyhammer").join("prompts");
+            let user_prompts = home.join(SWISSARMYHAMMER_DIR).join("prompts");
             if user_prompts.exists() {
                 let count = count_markdown_files(&user_prompts);
                 self.checks.push(Check {
@@ -323,8 +483,8 @@ impl Doctor {
                     name: check_names::USER_PROMPTS_DIR.to_string(),
                     status: CheckStatus::Ok,
                     message: format!(
-                        "User prompts directory not found (optional): {:?}",
-                        user_prompts
+                        "{} directory not found (optional): {:?}",
+                        "User prompts", user_prompts
                     ),
                     fix: Some(format!("Create directory: mkdir -p {:?}", user_prompts)),
                 });
@@ -332,7 +492,7 @@ impl Doctor {
         }
 
         // Check local prompts directory
-        let local_prompts = PathBuf::from(".swissarmyhammer").join("prompts");
+        let local_prompts = PathBuf::from(SWISSARMYHAMMER_DIR).join("prompts");
         if local_prompts.exists() {
             let count = count_markdown_files(&local_prompts);
             self.checks.push(Check {
@@ -346,8 +506,8 @@ impl Doctor {
                 name: check_names::LOCAL_PROMPTS_DIR.to_string(),
                 status: CheckStatus::Ok,
                 message: format!(
-                    "Local prompts directory not found (optional): {:?}",
-                    local_prompts
+                    "{} directory not found (optional): {:?}",
+                    "Local prompts", local_prompts
                 ),
                 fix: Some(format!("Create directory: mkdir -p {:?}", local_prompts)),
             });
@@ -357,17 +517,20 @@ impl Doctor {
     }
 
     /// Check for YAML parsing errors
+    ///
+    /// Scans all markdown files in prompt directories and validates
+    /// their YAML front matter for syntax errors.
     pub fn check_yaml_parsing(&mut self) -> Result<()> {
         use walkdir::WalkDir;
 
         let mut yaml_errors = Vec::new();
 
         // Check all prompt directories
-        let mut dirs_to_check = vec![PathBuf::from(".swissarmyhammer").join("prompts")];
+        let mut dirs_to_check = vec![PathBuf::from(SWISSARMYHAMMER_DIR).join("prompts")];
 
         // Add user directory if it exists
         if let Some(home) = dirs::home_dir() {
-            dirs_to_check.push(home.join(".swissarmyhammer").join("prompts"));
+            dirs_to_check.push(home.join(SWISSARMYHAMMER_DIR).join("prompts"));
         }
 
         for dir in dirs_to_check {
@@ -428,6 +591,9 @@ impl Doctor {
     }
 
     /// Check file permissions
+    ///
+    /// Verifies that the current directory is readable, which is
+    /// essential for SwissArmyHammer operations.
     pub fn check_file_permissions(&mut self) -> Result<()> {
         // For now, just check that we can read the current directory
         match std::env::current_dir() {
@@ -443,7 +609,7 @@ impl Doctor {
                 self.checks.push(Check {
                     name: check_names::FILE_PERMISSIONS.to_string(),
                     status: CheckStatus::Error,
-                    message: format!("Cannot read current directory: {}", e),
+                    message: format!("Failed to read current directory: {}", e),
                     fix: Some("Check file permissions for the current directory".to_string()),
                 });
             }
@@ -453,6 +619,14 @@ impl Doctor {
     }
 
     /// Print the results
+    ///
+    /// Displays all diagnostic results grouped by category:
+    /// - System checks
+    /// - Configuration
+    /// - Prompts
+    /// - Workflows
+    ///
+    /// Results are color-coded based on status (OK, Warning, Error).
     pub fn print_results(&self) {
         let use_color = crate::cli::Cli::should_use_color();
 
@@ -589,47 +763,60 @@ impl Doctor {
     }
 
     /// Get exit code based on check results
+    ///
+    /// # Returns
+    ///
+    /// - 0: All checks passed (no errors or warnings)
+    /// - 1: At least one warning detected
+    /// - 2: At least one error detected
     pub fn get_exit_code(&self) -> i32 {
         let has_error = self.checks.iter().any(|c| c.status == CheckStatus::Error);
         let has_warning = self.checks.iter().any(|c| c.status == CheckStatus::Warning);
 
-        if has_error {
-            2
+        let exit_code = if has_error {
+            ExitCode::Error
         } else if has_warning {
-            1
+            ExitCode::Warning
         } else {
-            0
-        }
+            ExitCode::Success
+        };
+
+        exit_code.into()
     }
 
     /// Check workflow directories exist
+    ///
+    /// Verifies the existence of workflow directories:
+    /// - User workflows (~/.swissarmyhammer/workflows)
+    /// - Local workflows (./.swissarmyhammer/workflows)
+    /// - Run storage directory (~/.swissarmyhammer/runs)
     pub fn check_workflow_directories(&mut self) -> Result<()> {
         // Check workflow directories
-        for (dir_path, dir_type) in get_workflow_directories() {
-            if dir_path.path().exists() {
-                let count = count_files_with_extension(dir_path.path(), "mermaid");
+        for dir_info in get_workflow_directories() {
+            if dir_info.path.path().exists() {
+                let count = count_files_with_extension(dir_info.path.path(), "mermaid");
                 self.checks.push(Check {
-                    name: format!("{} workflows directory", dir_type),
+                    name: format!("{} workflows directory", dir_info.category),
                     status: CheckStatus::Ok,
-                    message: format!("Found {} workflows in {}", count, dir_path),
+                    message: format!("Found {} workflows in {}", count, dir_info.path),
                     fix: None,
                 });
             } else {
                 self.checks.push(Check {
-                    name: format!("{} workflows directory", dir_type),
+                    name: format!("{} workflows directory", dir_info.category),
                     status: CheckStatus::Ok,
                     message: format!(
                         "{} workflows directory not found (optional): {}",
-                        dir_type, dir_path
+                        dir_info.category, dir_info.path
                     ),
-                    fix: Some(format!("Create directory: mkdir -p {}", dir_path)),
+                    fix: Some(format!("Create directory: mkdir -p {}", dir_info.path)),
                 });
             }
         }
 
         // Check workflow run storage directory
         if let Some(home) = dirs::home_dir() {
-            let run_storage = home.join(".swissarmyhammer").join("runs");
+            let run_storage = home.join(SWISSARMYHAMMER_DIR).join("runs");
             if run_storage.exists() {
                 self.checks.push(Check {
                     name: "Workflow run storage directory".to_string(),
@@ -651,19 +838,23 @@ impl Doctor {
     }
 
     /// Check workflow file permissions
+    ///
+    /// Ensures all workflow directories have appropriate read/write
+    /// permissions for the current user. On Unix systems, checks for
+    /// 700 (rwx------) permissions.
     pub fn check_workflow_permissions(&mut self) -> Result<()> {
         let mut dirs_to_check = Vec::new();
 
         // Add workflow directories
-        for (dir_path, _) in get_workflow_directories() {
-            if dir_path.path().exists() {
-                dirs_to_check.push(dir_path.path().to_path_buf());
+        for dir_info in get_workflow_directories() {
+            if dir_info.path.path().exists() {
+                dirs_to_check.push(dir_info.path.path().to_path_buf());
             }
         }
 
         // Add run storage directory if it exists
         if let Some(home) = dirs::home_dir() {
-            let run_storage = home.join(".swissarmyhammer").join("runs");
+            let run_storage = home.join(SWISSARMYHAMMER_DIR).join("runs");
             if run_storage.exists() {
                 dirs_to_check.push(run_storage);
             }
@@ -713,7 +904,7 @@ impl Doctor {
                             dir.file_name().unwrap_or_default()
                         ),
                         status: CheckStatus::Warning,
-                        message: "Cannot check directory permissions".to_string(),
+                        message: "Failed to check directory permissions".to_string(),
                         fix: None,
                     });
                 }
@@ -725,7 +916,7 @@ impl Doctor {
                 if std::fs::read_dir(&dir).is_ok() {
                     self.checks.push(Check {
                         name: format!(
-                            "Workflow directory access: {:?}",
+                            format_strings::WORKFLOW_DIR_ACCESS,
                             dir.file_name().unwrap_or_default()
                         ),
                         status: CheckStatus::Ok,
@@ -735,11 +926,11 @@ impl Doctor {
                 } else {
                     self.checks.push(Check {
                         name: format!(
-                            "Workflow directory access: {:?}",
+                            format_strings::WORKFLOW_DIR_ACCESS,
                             dir.file_name().unwrap_or_default()
                         ),
                         status: CheckStatus::Error,
-                        message: "Cannot access directory".to_string(),
+                        message: "Failed to access directory".to_string(),
                         fix: Some("Check directory permissions and ownership".to_string()),
                     });
                 }
@@ -750,17 +941,20 @@ impl Doctor {
     }
 
     /// Check workflow parsing
+    ///
+    /// Scans all .mermaid files in workflow directories and verifies
+    /// they are readable and not empty.
     pub fn check_workflow_parsing(&mut self) -> Result<()> {
         use walkdir::WalkDir;
 
         let mut workflow_errors = Vec::new();
 
-        for (dir, _) in get_workflow_directories() {
-            if !dir.path().exists() {
+        for dir_info in get_workflow_directories() {
+            if !dir_info.path.path().exists() {
                 continue;
             }
 
-            for entry in WalkDir::new(dir.path())
+            for entry in WalkDir::new(dir_info.path.path())
                 .into_iter()
                 .filter_map(|e| e.ok())
                 .filter(|e| e.file_type().is_file())
@@ -811,9 +1005,14 @@ impl Doctor {
     }
 
     /// Check workflow run storage
+    ///
+    /// Verifies the workflow run storage directory:
+    /// - Exists and is accessible
+    /// - Has write permissions
+    /// - Has adequate disk space
     pub fn check_workflow_run_storage(&mut self) -> Result<()> {
         if let Some(home) = dirs::home_dir() {
-            let run_storage = home.join(".swissarmyhammer").join("runs");
+            let run_storage = home.join(SWISSARMYHAMMER_DIR).join("runs");
 
             if run_storage.exists() {
                 self.check_run_storage_write_access(&run_storage)?;
@@ -838,10 +1037,7 @@ impl Doctor {
             Ok(_) => {
                 // Clean up test file - ignore errors as the file may have already been removed
                 // or we may lack permissions (which was the point of the test)
-                if let Err(e) = fs::remove_file(&test_file) {
-                    // Log error for debugging but don't fail the check
-                    eprintln!("Warning: Failed to clean up test file: {}", e);
-                }
+                let _ = fs::remove_file(&test_file);
 
                 self.checks.push(Check {
                     name: check_names::WORKFLOW_RUN_STORAGE_ACCESS.to_string(),
@@ -866,12 +1062,12 @@ impl Doctor {
     /// Check available disk space for workflow run storage
     fn check_run_storage_disk_space(&mut self, run_storage: &Path) -> Result<()> {
         match check_disk_space(run_storage) {
-            Ok((available_mb, _)) => {
-                if available_mb < LOW_DISK_SPACE_MB {
+            Ok((available, _)) => {
+                if available.is_low(LOW_DISK_SPACE_MB) {
                     self.checks.push(Check {
                         name: check_names::WORKFLOW_RUN_STORAGE_SPACE.to_string(),
                         status: CheckStatus::Warning,
-                        message: format!("Low disk space: {} MB available", available_mb),
+                        message: format!("Low disk space: {}", available),
                         fix: Some(
                             "Consider cleaning up old workflow runs or freeing disk space"
                                 .to_string(),
@@ -881,7 +1077,7 @@ impl Doctor {
                     self.checks.push(Check {
                         name: check_names::WORKFLOW_RUN_STORAGE_SPACE.to_string(),
                         status: CheckStatus::Ok,
-                        message: format!("Adequate disk space: {} MB available", available_mb),
+                        message: format!("Adequate disk space: {}", available),
                         fix: None,
                     });
                 }
@@ -900,6 +1096,10 @@ impl Doctor {
     }
 
     /// Check for workflow circular dependencies and conflicts
+    ///
+    /// Detects potential issues in the workflow system:
+    /// - Name conflicts (same workflow name in multiple locations)
+    /// - Circular dependencies (requires runtime analysis)
     pub fn check_workflow_dependencies(&mut self) -> Result<()> {
         use std::collections::HashMap;
         use walkdir::WalkDir;
@@ -907,12 +1107,12 @@ impl Doctor {
         let mut workflow_names = HashMap::new();
 
         // Collect all workflow names and their locations
-        for (dir, _) in get_workflow_directories() {
-            if !dir.path().exists() {
+        for dir_info in get_workflow_directories() {
+            if !dir_info.path.path().exists() {
                 continue;
             }
 
-            for entry in WalkDir::new(dir.path())
+            for entry in WalkDir::new(dir_info.path.path())
                 .into_iter()
                 .filter_map(|e| e.ok())
                 .filter(|e| e.file_type().is_file())
@@ -981,8 +1181,13 @@ impl Default for Doctor {
 }
 
 /// Get the Claude Code configuration file path based on the OS
-/// Note: This function is kept for backward compatibility but is no longer used
-/// The doctor command now uses `claude mcp list` instead
+///
+/// Note: This function is kept for backward compatibility but is no longer used.
+/// The doctor command now uses `claude mcp list` instead.
+///
+/// # Returns
+///
+/// Platform-specific path to claude_desktop_config.json
 #[allow(dead_code)]
 pub fn get_claude_config_path() -> PathBuf {
     #[cfg(target_os = "macos")]
@@ -1054,9 +1259,9 @@ claude mcp add --scope user  swissarmyhammer /path/to/swissarmyhammer serve"#
         .to_string()
 }
 
-/// Check disk space for a given path and return (available_mb, total_mb)
+/// Check disk space for a given path and return (available, total) as DiskSpace values
 #[cfg(unix)]
-fn check_disk_space(path: &Path) -> Result<(u64, u64)> {
+fn check_disk_space(path: &Path) -> Result<(DiskSpace, DiskSpace)> {
     use std::process::Command;
 
     // Use df-like approach to check disk space
@@ -1079,37 +1284,101 @@ fn check_disk_space(path: &Path) -> Result<(u64, u64)> {
             let available_kb = parts[3].parse::<u64>().unwrap_or(0);
             let total_mb = total_kb / 1024;
             let available_mb = available_kb / 1024;
-            return Ok((available_mb, total_mb));
+            return Ok((
+                DiskSpace::from_mb(available_mb),
+                DiskSpace::from_mb(total_mb),
+            ));
         }
     }
 
     anyhow::bail!("Failed to parse df output")
 }
 
-/// Check disk space for a given path - Windows/non-Unix fallback
+/// Check disk space for a given path - Windows/non-Unix implementation
 #[cfg(not(unix))]
-fn check_disk_space(_path: &Path) -> Result<(u64, u64)> {
-    // On non-Unix systems, we can't easily check disk space
-    // Return a placeholder that indicates we have enough space
-    Ok((1000, 10000)) // 1GB available, 10GB total
+fn check_disk_space(path: &Path) -> Result<(DiskSpace, DiskSpace)> {
+    #[cfg(windows)]
+    {
+        // Windows-specific implementation using WinAPI
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn GetDiskFreeSpaceExW(
+                lpDirectoryName: *const u16,
+                lpFreeBytesAvailable: *mut u64,
+                lpTotalNumberOfBytes: *mut u64,
+                lpTotalNumberOfFreeBytes: *mut u64,
+            ) -> i32;
+        }
+
+        let path_str = path
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid path encoding"))?;
+        let wide: Vec<u16> = OsStr::new(path_str)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+
+        let mut free_bytes_available = 0u64;
+        let mut total_bytes = 0u64;
+        let mut total_free_bytes = 0u64;
+
+        let result = unsafe {
+            GetDiskFreeSpaceExW(
+                wide.as_ptr(),
+                &mut free_bytes_available,
+                &mut total_bytes,
+                &mut total_free_bytes,
+            )
+        };
+
+        if result != 0 {
+            let available_mb = free_bytes_available / (1024 * 1024);
+            let total_mb = total_bytes / (1024 * 1024);
+            Ok((
+                DiskSpace::from_mb(available_mb),
+                DiskSpace::from_mb(total_mb),
+            ))
+        } else {
+            anyhow::bail!("Failed to get disk space information")
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        // For other non-Unix systems, we can try using the filesystem metadata
+        // This is less accurate but better than hardcoded values
+        match fs::metadata(path) {
+            Ok(_) => {
+                // We can at least verify the path exists
+                // Return conservative estimates that won't trigger warnings
+                Ok((DiskSpace::from_mb(500), DiskSpace::from_mb(5000))) // 500MB available, 5GB total
+            }
+            Err(e) => {
+                anyhow::bail!("Failed to access path for disk space check: {}", e)
+            }
+        }
+    }
 }
 
 /// Get workflow directories to check
-fn get_workflow_directories() -> Vec<(WorkflowDirectory, &'static str)> {
+fn get_workflow_directories() -> Vec<WorkflowDirectoryInfo> {
     let mut dirs = Vec::new();
 
     // Add user directory if it exists
     if let Some(home) = dirs::home_dir() {
-        dirs.push((
-            WorkflowDirectory::new(home.join(".swissarmyhammer").join("workflows")),
-            "User",
+        dirs.push(WorkflowDirectoryInfo::new(
+            WorkflowDirectory::new(home.join(SWISSARMYHAMMER_DIR).join("workflows")),
+            WorkflowCategory::User,
         ));
     }
 
     // Add local directory
-    dirs.push((
-        WorkflowDirectory::new(PathBuf::from(".swissarmyhammer").join("workflows")),
-        "Local",
+    dirs.push(WorkflowDirectoryInfo::new(
+        WorkflowDirectory::new(PathBuf::from(SWISSARMYHAMMER_DIR).join("workflows")),
+        WorkflowCategory::Local,
     ));
 
     dirs

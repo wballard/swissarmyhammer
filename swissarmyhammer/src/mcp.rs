@@ -1,6 +1,10 @@
 //! Model Context Protocol (MCP) server support
 
 use crate::{PromptLibrary, PromptResolver};
+use crate::workflow::{
+    WorkflowStorage, WorkflowStorageBackend, WorkflowRunStorageBackend,
+    FileSystemWorkflowStorage, FileSystemWorkflowRunStorage,
+};
 use rmcp::model::*;
 use rmcp::service::RequestContext;
 use rmcp::{Error as McpError, RoleServer, ServerHandler};
@@ -33,18 +37,39 @@ pub struct ListPromptsRequest {
     pub category: Option<String>,
 }
 
-/// MCP server for serving prompts
+/// MCP server for serving prompts and workflows
 #[derive(Clone)]
 pub struct McpServer {
     library: Arc<RwLock<PromptLibrary>>,
+    workflow_storage: Arc<RwLock<WorkflowStorage>>,
     watcher_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 impl McpServer {
     /// Create a new MCP server
     pub fn new(library: PromptLibrary) -> Self {
+        // Initialize workflow storage with filesystem backend
+        let workflow_backend = Arc::new(FileSystemWorkflowStorage::new().unwrap_or_else(|e| {
+            tracing::error!("Failed to create workflow storage: {}", e);
+            panic!("Failed to create workflow storage: {}", e);
+        })) as Arc<dyn WorkflowStorageBackend>;
+        
+        // Create runs directory in user's home directory
+        let runs_path = dirs::home_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")))
+            .join(".swissarmyhammer")
+            .join("workflow-runs");
+        
+        let run_backend = Arc::new(FileSystemWorkflowRunStorage::new(runs_path).unwrap_or_else(|e| {
+            tracing::error!("Failed to create workflow run storage: {}", e);
+            panic!("Failed to create workflow run storage: {}", e);
+        })) as Arc<dyn WorkflowRunStorageBackend>;
+        
+        let workflow_storage = WorkflowStorage::new(workflow_backend, run_backend);
+        
         Self {
             library: Arc::new(RwLock::new(library)),
+            workflow_storage: Arc::new(RwLock::new(workflow_storage)),
             watcher_handle: Arc::new(Mutex::new(None)),
         }
     }
@@ -65,17 +90,51 @@ impl McpServer {
         let total = library.list()?.len();
         tracing::info!("Loaded {} prompts total", total);
 
+        // Initialize workflows - workflows are loaded automatically by FileSystemWorkflowStorage
+        // so we just need to check how many are available
+        let workflow_storage = self.workflow_storage.read().await;
+        let workflow_count = workflow_storage.list_workflows()?.len();
+        tracing::info!("Loaded {} workflows total", workflow_count);
+
         Ok(())
     }
 
-    /// List all available prompts  
+    /// List all available prompts (excluding partial templates)
     pub async fn list_prompts(&self) -> anyhow::Result<Vec<String>> {
         let library = self.library.read().await;
         let prompts = library.list()?;
-        Ok(prompts.iter().map(|p| p.name.clone()).collect())
+        Ok(prompts
+            .iter()
+            .filter(|p| !Self::is_partial_template(p))
+            .map(|p| p.name.clone())
+            .collect())
     }
 
-    /// Get a specific prompt by name
+    /// List all available workflows
+    pub async fn list_workflows(&self) -> anyhow::Result<Vec<String>> {
+        let workflow_storage = self.workflow_storage.read().await;
+        let workflows = workflow_storage.list_workflows()?;
+        Ok(workflows.iter().map(|w| w.name.to_string()).collect())
+    }
+
+    /// Check if a prompt is a partial template that should not be exposed over MCP
+    fn is_partial_template(prompt: &crate::prompts::Prompt) -> bool {
+        // Check if the template starts with the partial marker
+        if prompt.template.trim().starts_with("{% partial %}") {
+            return true;
+        }
+        
+        // Check if the description indicates it's a partial template
+        if let Some(description) = &prompt.description {
+            if description.contains("Partial template for reuse in other prompts") {
+                return true;
+            }
+        }
+        
+        false
+    }
+
+    /// Get a specific prompt by name (excluding partial templates)
     pub async fn get_prompt(
         &self,
         name: &str,
@@ -83,6 +142,14 @@ impl McpServer {
     ) -> anyhow::Result<String> {
         let library = self.library.read().await;
         let prompt = library.get(name)?;
+
+        // Check if this is a partial template
+        if Self::is_partial_template(&prompt) {
+            return Err(anyhow::anyhow!(
+                "Cannot access partial template '{}' via MCP. Partial templates are for internal use only.",
+                name
+            ));
+        }
 
         // Handle arguments if provided
         let content = if let Some(args) = arguments {
@@ -252,13 +319,15 @@ impl ServerHandler for McpServer {
                 prompts: Some(PromptsCapability {
                     list_changed: Some(true),
                 }),
-                tools: None,
+                tools: Some(ToolsCapability {
+                    list_changed: Some(true),
+                }),
                 resources: None,
                 logging: None,
                 completions: None,
                 experimental: None,
             },
-            instructions: Some("A flexible prompt management server for AI assistants. Use list_prompts to see available prompts and get_prompt to retrieve and render them.".into()),
+            instructions: Some("A flexible prompt and workflow management server for AI assistants. Use list_prompts to see available prompts and get_prompt to retrieve and render them. Use workflow tools to execute and manage workflows.".into()),
             server_info: Implementation {
                 name: "SwissArmyHammer".into(),
                 version: crate::VERSION.into(),
@@ -276,6 +345,7 @@ impl ServerHandler for McpServer {
             Ok(prompts) => {
                 let prompt_list: Vec<Prompt> = prompts
                     .iter()
+                    .filter(|p| !Self::is_partial_template(p))  // Filter out partial templates
                     .map(|p| {
                         let arguments = if p.arguments.is_empty() {
                             None
@@ -317,6 +387,17 @@ impl ServerHandler for McpServer {
         let library = self.library.read().await;
         match library.get(&request.name) {
             Ok(prompt) => {
+                // Check if this is a partial template
+                if Self::is_partial_template(&prompt) {
+                    return Err(McpError::invalid_request(
+                        format!(
+                            "Cannot access partial template '{}' via MCP. Partial templates are for internal use only.",
+                            request.name
+                        ),
+                        None,
+                    ));
+                }
+
                 // Handle arguments if provided
                 let content = if let Some(args) = &request.arguments {
                     // Convert serde_json::Map to HashMap<String, String>
@@ -370,7 +451,9 @@ impl ServerHandler for McpServer {
                 prompts: Some(PromptsCapability {
                     list_changed: Some(true),
                 }),
-                tools: None,
+                tools: Some(ToolsCapability {
+                    list_changed: Some(true),
+                }),
                 resources: None,
                 logging: None,
                 completions: None,
@@ -380,7 +463,7 @@ impl ServerHandler for McpServer {
                 name: "SwissArmyHammer".into(),
                 version: crate::VERSION.into(),
             },
-            instructions: Some("A flexible prompt management server for AI assistants. Use list_prompts to see available prompts and get_prompt to retrieve and render them.".into()),
+            instructions: Some("A flexible prompt and workflow management server for AI assistants. Use list_prompts to see available prompts and get_prompt to retrieve and render them. Use workflow tools to execute and manage workflows.".into()),
         }
     }
 }
@@ -455,7 +538,7 @@ mod tests {
 
         // Verify instructions are provided
         assert!(info.instructions.is_some());
-        assert!(info.instructions.unwrap().contains("prompt management"));
+        assert!(info.instructions.unwrap().contains("prompt and workflow management"));
     }
 
     #[tokio::test]
@@ -563,5 +646,79 @@ mod tests {
             "Error should mention prompt issue: {}",
             error_msg
         );
+    }
+
+    #[tokio::test]
+    async fn test_mcp_server_exposes_workflow_tools_capability() {
+        // Create a test library and server
+        let library = PromptLibrary::new();
+        let server = McpServer::new(library);
+
+        let info = server.get_info();
+
+        // Verify server exposes tools capabilities for workflows
+        assert!(info.capabilities.tools.is_some());
+        let tools_cap = info.capabilities.tools.unwrap();
+        assert_eq!(tools_cap.list_changed, Some(true));
+
+        // Verify prompts capability is still present
+        assert!(info.capabilities.prompts.is_some());
+        let prompts_cap = info.capabilities.prompts.unwrap();
+        assert_eq!(prompts_cap.list_changed, Some(true));
+
+        // Verify server info is set correctly
+        assert_eq!(info.server_info.name, "SwissArmyHammer");
+        assert_eq!(info.server_info.version, crate::VERSION);
+
+        // Verify instructions mention both prompts and workflows
+        assert!(info.instructions.is_some());
+        let instructions = info.instructions.unwrap();
+        assert!(instructions.contains("prompt"));
+        assert!(instructions.contains("workflow"));
+    }
+
+    #[tokio::test]
+    async fn test_mcp_server_does_not_expose_partial_templates() {
+        // Create a test library with both regular and partial templates
+        let mut library = PromptLibrary::new();
+        
+        // Add a regular prompt
+        let regular_prompt = Prompt::new("regular_prompt", "This is a regular prompt: {{ name }}")
+            .with_description("A regular prompt".to_string());
+        library.add(regular_prompt).unwrap();
+        
+        // Add a partial template (marked as partial in description)
+        let partial_prompt = Prompt::new("partial_template", "This is a partial template")
+            .with_description("Partial template for reuse in other prompts".to_string());
+        library.add(partial_prompt).unwrap();
+        
+        // Add another partial template with {% partial %} marker
+        let partial_with_marker = Prompt::new("partial_with_marker", "{% partial %}\nThis is a partial with marker")
+            .with_description("Another partial template".to_string());
+        library.add(partial_with_marker).unwrap();
+
+        let server = McpServer::new(library);
+
+        // Test list_prompts - should only return regular prompts
+        let prompts = server.list_prompts().await.unwrap();
+        assert_eq!(prompts.len(), 1);
+        assert_eq!(prompts[0], "regular_prompt");
+        assert!(!prompts.contains(&"partial_template".to_string()));
+        assert!(!prompts.contains(&"partial_with_marker".to_string()));
+
+        // Test get_prompt - should work for regular prompts
+        let result = server.get_prompt("regular_prompt", None).await;
+        assert!(result.is_ok());
+
+        // Test get_prompt - should fail for partial templates
+        let result = server.get_prompt("partial_template", None).await;
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("partial template"));
+
+        let result = server.get_prompt("partial_with_marker", None).await;
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("partial template"));
     }
 }

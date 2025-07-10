@@ -183,6 +183,37 @@ Examples:
         #[arg(value_enum)]
         shell: clap_complete::Shell,
     },
+    /// Validate prompt files and workflows for syntax and best practices
+    #[command(long_about = "
+Validates all prompt files and workflows for syntax errors and best practices.
+Checks YAML front matter, template variables, and suggests improvements.
+
+Validation checks:
+- YAML front matter syntax (skipped for .liquid files with {% partial %} marker)
+- Required fields (title, description)
+- Template variables match arguments
+- Liquid template syntax
+- Workflow structure and connectivity
+- Best practice recommendations
+
+Examples:
+  swissarmyhammer validate                 # Validate all prompts and workflows
+  swissarmyhammer validate --quiet         # CI/CD mode (exit code only)
+  swissarmyhammer validate --format json   # JSON output for tooling
+")]
+    Validate {
+        /// Only show errors, no warnings or info
+        #[arg(short, long)]
+        quiet: bool,
+
+        /// Output format
+        #[arg(long, value_enum, default_value = "text")]
+        format: ValidateFormat,
+
+        /// Specific workflow directories to validate (can be specified multiple times)
+        #[arg(long = "workflow-dir", value_name = "DIR")]
+        workflow_dirs: Vec<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -224,36 +255,6 @@ Examples:
         /// Search prompts by name or description
         #[arg(long)]
         search: Option<String>,
-    },
-    /// Validate prompt files for syntax and best practices
-    #[command(long_about = "
-Validates all prompt files for syntax errors and best practices.
-Checks YAML front matter, template variables, and suggests improvements.
-
-Validation checks:
-- YAML front matter syntax (skipped for .liquid files with {% partial %} marker)
-- Required fields (title, description)
-- Template variables match arguments
-- Liquid template syntax
-- Best practice recommendations
-
-Examples:
-  swissarmyhammer prompt validate                 # Validate all prompts
-  swissarmyhammer prompt validate --quiet         # CI/CD mode (exit code only)
-  swissarmyhammer prompt validate --format json   # JSON output for tooling
-")]
-    Validate {
-        /// Only show errors, no warnings or info
-        #[arg(short, long)]
-        quiet: bool,
-
-        /// Output format
-        #[arg(long, value_enum, default_value = "text")]
-        format: ValidateFormat,
-
-        /// Specific workflow directories to validate (can be specified multiple times)
-        #[arg(long = "workflow-dir", value_name = "DIR")]
-        workflow_dirs: Vec<String>,
     },
     /// Test prompts interactively with sample arguments
     #[command(long_about = "
@@ -941,26 +942,50 @@ mod tests {
     }
 
     #[test]
-    fn test_cli_prompt_validate_subcommand() {
-        let result = Cli::try_parse_from_args(["swissarmyhammer", "prompt", "validate"]);
+    fn test_cli_validate_command() {
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "validate"]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Prompt { subcommand }) = cli.command {
-            if let PromptSubcommand::Validate {
-                quiet,
-                format,
-                workflow_dirs,
-            } = subcommand
-            {
-                assert!(!quiet);
-                assert!(matches!(format, ValidateFormat::Text));
-                assert!(workflow_dirs.is_empty());
-            } else {
-                panic!("Expected Validate subcommand");
-            }
+        if let Some(Commands::Validate {
+            quiet,
+            format,
+            workflow_dirs,
+        }) = cli.command
+        {
+            assert!(!quiet);
+            assert!(matches!(format, ValidateFormat::Text));
+            assert!(workflow_dirs.is_empty());
         } else {
-            panic!("Expected Prompt command");
+            panic!("Expected Validate command");
+        }
+    }
+
+    #[test]
+    fn test_cli_validate_command_with_options() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer",
+            "validate",
+            "--quiet",
+            "--format",
+            "json",
+            "--workflow-dir",
+            "./workflows",
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Validate {
+            quiet,
+            format,
+            workflow_dirs,
+        }) = cli.command
+        {
+            assert!(quiet);
+            assert!(matches!(format, ValidateFormat::Json));
+            assert_eq!(workflow_dirs, vec!["./workflows"]);
+        } else {
+            panic!("Expected Validate command");
         }
     }
 }

@@ -111,6 +111,14 @@ async fn main() {
             tracing::info!("Running flow command");
             run_flow(subcommand).await
         }
+        Some(Commands::Validate {
+            quiet,
+            format,
+            workflow_dirs,
+        }) => {
+            tracing::info!("Running validate command");
+            run_validate(quiet, format, workflow_dirs.clone())
+        }
         None => {
             // This case is handled early above for performance
             unreachable!()
@@ -218,6 +226,22 @@ async fn run_flow(subcommand: cli::FlowSubcommand) -> i32 {
         Err(e) => {
             eprintln!("Flow error: {}", e);
             1
+        }
+    }
+}
+
+fn run_validate(
+    quiet: bool,
+    format: cli::ValidateFormat,
+    workflow_dirs: Vec<String>,
+) -> i32 {
+    use validate;
+
+    match validate::run_validate_command(quiet, format, workflow_dirs) {
+        Ok(exit_code) => exit_code,
+        Err(e) => {
+            eprintln!("Validate error: {}", e);
+            2
         }
     }
 }

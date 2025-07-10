@@ -2,7 +2,7 @@
 
 use crate::cli::PromptSubcommand;
 use crate::error::{CliError, CliResult};
-use crate::{list, search, test, validate};
+use crate::{list, search, test};
 
 /// Main entry point for prompt command
 pub async fn run_prompt_command(subcommand: PromptSubcommand) -> CliResult<()> {
@@ -16,18 +16,6 @@ pub async fn run_prompt_command(subcommand: PromptSubcommand) -> CliResult<()> {
         } => list::run_list_command(format, verbose, source, category, search)
             .map(|_| ())
             .map_err(|e| CliError::new(e.to_string(), 1)),
-        PromptSubcommand::Validate {
-            quiet,
-            format,
-            workflow_dirs,
-        } => {
-            let exit_code = validate::run_validate_command(quiet, format, workflow_dirs)
-                .map_err(|e| CliError::new(e.to_string(), 2))?;
-            if exit_code != 0 {
-                return Err(CliError::new("Validation failed", exit_code));
-            }
-            Ok(())
-        }
         PromptSubcommand::Test {
             prompt_name,
             file,
@@ -106,20 +94,6 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[tokio::test]
-    async fn test_run_prompt_command_validate() {
-        // Create a Validate subcommand
-        let subcommand = PromptSubcommand::Validate {
-            quiet: false,
-            format: crate::cli::ValidateFormat::Text,
-            workflow_dirs: vec![],
-        };
-
-        // Run the command - validation might fail with errors, but the command itself should execute
-        let _result = run_prompt_command(subcommand).await;
-        // The command might return an error if validation fails, but that's expected
-        // We're just testing that the command runs without panicking
-    }
 
     #[tokio::test]
     async fn test_run_prompt_command_search() {

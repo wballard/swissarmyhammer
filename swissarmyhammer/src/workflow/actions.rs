@@ -39,6 +39,14 @@ pub enum ActionError {
     /// JSON parsing error
     #[error("JSON parsing error: {0}")]
     JsonError(#[from] serde_json::Error),
+    /// Rate limit error with retry time
+    #[error("Rate limit reached. Please wait {wait_time:?} and try again. Details: {message}")]
+    RateLimit {
+        /// The error message
+        message: String,
+        /// How long to wait before retrying
+        wait_time: Duration,
+    },
 }
 
 /// Result type for action operations
@@ -85,6 +93,8 @@ pub struct PromptAction {
     ///
     /// The quiet mode can also be controlled via the `_quiet` context variable in workflows.
     pub quiet: bool,
+    /// Maximum number of retries for rate limit errors
+    pub max_retries: u32,
 }
 
 impl PromptAction {
@@ -96,6 +106,7 @@ impl PromptAction {
             result_variable: None,
             timeout: Duration::from_secs(300), // 5 minute default
             quiet: false,                      // Default to showing output
+            max_retries: 2,                    // Default to 2 retries for rate limits
         }
     }
 
@@ -139,6 +150,50 @@ impl PromptAction {
 #[async_trait::async_trait]
 impl Action for PromptAction {
     async fn execute(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
+        let mut retries = 0;
+
+        loop {
+            // Execute the command and handle rate limit errors
+            match self.execute_once(context).await {
+                Ok(response) => return Ok(response),
+                Err(ActionError::RateLimit { message, wait_time }) => {
+                    if retries >= self.max_retries {
+                        // Max retries exceeded, return the rate limit error
+                        return Err(ActionError::RateLimit { message, wait_time });
+                    }
+
+                    retries += 1;
+                    eprintln!(
+                        "[WARNING] Rate limit reached (attempt {}/{}). Waiting {:?} until next hour...",
+                        retries, self.max_retries + 1, wait_time
+                    );
+
+                    // Wait until the next hour
+                    tokio::time::sleep(wait_time).await;
+
+                    eprintln!("[INFO] Retrying after rate limit wait...");
+                    // Continue to retry
+                }
+                Err(e) => return Err(e), // Other errors are not retried
+            }
+        }
+    }
+
+    fn description(&self) -> String {
+        format!(
+            "Execute prompt '{}' with arguments: {:?}",
+            self.prompt_name, self.arguments
+        )
+    }
+
+    fn action_type(&self) -> &'static str {
+        "prompt"
+    }
+}
+
+impl PromptAction {
+    /// Execute the command once (without retry logic)
+    async fn execute_once(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
         // Substitute variables in arguments
         let args = self.substitute_variables(context);
 
@@ -213,17 +268,6 @@ impl Action for PromptAction {
         context.insert(CLAUDE_RESPONSE_KEY.to_string(), response.clone());
 
         Ok(response)
-    }
-
-    fn description(&self) -> String {
-        format!(
-            "Execute prompt '{}' with arguments: {:?}",
-            self.prompt_name, self.arguments
-        )
-    }
-
-    fn action_type(&self) -> &'static str {
-        "prompt"
     }
 }
 
@@ -988,5 +1032,20 @@ mod tests {
         } else {
             panic!("Expected ParseError");
         }
+    }
+
+    #[tokio::test]
+    async fn test_prompt_action_with_rate_limit_retry() {
+        let action = PromptAction::new("test-prompt".to_string());
+
+        // The action should have default max_retries
+        assert_eq!(action.max_retries, 2);
+
+        // Verify other defaults
+        assert_eq!(action.prompt_name, "test-prompt");
+        assert_eq!(action.timeout, Duration::from_secs(300));
+        assert!(!action.quiet);
+        assert!(action.arguments.is_empty());
+        assert!(action.result_variable.is_none());
     }
 }

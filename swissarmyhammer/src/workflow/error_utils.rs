@@ -5,6 +5,7 @@
 
 use crate::workflow::actions::{ActionError, ActionResult};
 use std::process::Output;
+use std::time::Duration;
 
 /// Handle command execution results with consistent error formatting
 ///
@@ -107,20 +108,91 @@ pub fn extract_stdout(result: &Output) -> String {
     String::from_utf8_lossy(&result.stdout).into_owned()
 }
 
+/// Check if an error message indicates a rate limit error
+///
+/// This function checks for common rate limit error patterns in error messages
+/// from Claude or HTTP responses.
+///
+/// # Arguments
+/// * `error_msg` - The error message to check
+///
+/// # Returns
+/// * `true` if the message indicates a rate limit error
+/// * `false` otherwise
+pub fn is_rate_limit_error(error_msg: &str) -> bool {
+    let error_lower = error_msg.to_lowercase();
+
+    // Check for common rate limit patterns
+    error_lower.contains("usage limit")
+        || error_lower.contains("rate limit")
+        || error_lower.contains("429")
+        || error_lower.contains("quota")
+        || error_lower.contains("too many requests")
+        || error_lower.contains("rate limited")
+}
+
+/// Calculate the duration until the next hour
+///
+/// This function calculates how long to wait until the top of the next hour,
+/// which is useful for rate limit resets that occur on hourly boundaries.
+///
+/// # Returns
+/// * Duration until the next hour (minimum 1 second)
+pub fn time_until_next_hour() -> Duration {
+    use chrono::Utc;
+    time_until_next_hour_from(Utc::now())
+}
+
+/// Calculate the duration until the next hour from a specific time
+///
+/// This function is primarily for testing purposes.
+///
+/// # Arguments
+/// * `now` - The current time to calculate from
+///
+/// # Returns
+/// * Duration until the next hour (minimum 1 second)
+fn time_until_next_hour_from(now: chrono::DateTime<chrono::Utc>) -> Duration {
+    use chrono::Timelike;
+
+    let minutes_remaining = 60 - now.minute() as u64;
+    let seconds_remaining = 60 - now.second() as u64;
+
+    // Calculate total seconds until next hour
+    let total_seconds = if minutes_remaining == 60 {
+        // We're at exactly the top of the hour, wait for the next one
+        3600
+    } else {
+        (minutes_remaining - 1) * 60 + seconds_remaining
+    };
+
+    Duration::from_secs(total_seconds.max(1))
+}
+
 /// Handle Claude command execution results with appropriate error type
 ///
 /// This function provides specialized error handling for Claude command execution,
-/// returning ActionError::ClaudeError for command failures.
+/// returning ActionError::ClaudeError for command failures or ActionError::RateLimit
+/// for rate limit errors.
 ///
 /// # Arguments
 /// * `result` - The output from a Claude command execution
 ///
 /// # Returns
 /// * `Ok(String)` - The stdout as a string if the command succeeded
-/// * `Err(ActionError)` - A ClaudeError if the command failed
+/// * `Err(ActionError)` - A ClaudeError or RateLimit error if the command failed
 pub fn handle_claude_command_error(result: Output) -> ActionResult<String> {
     if !result.status.success() {
         let stderr = String::from_utf8_lossy(&result.stderr);
+
+        // Check if this is a rate limit error
+        if is_rate_limit_error(&stderr) {
+            return Err(ActionError::RateLimit {
+                message: stderr.into_owned(),
+                wait_time: time_until_next_hour(),
+            });
+        }
+
         return Err(ActionError::ClaudeError(format!(
             "Claude command failed: {}",
             stderr
@@ -245,6 +317,78 @@ mod tests {
             assert!(msg.contains("Claude command failed"));
         } else {
             panic!("Expected ClaudeError");
+        }
+    }
+
+    #[test]
+    fn test_is_rate_limit_error() {
+        // Test various rate limit error messages
+        assert!(is_rate_limit_error("Error: Usage limit reached"));
+        assert!(is_rate_limit_error("HTTP 429: Too Many Requests"));
+        assert!(is_rate_limit_error(
+            "Rate limit exceeded. Please try again later."
+        ));
+        assert!(is_rate_limit_error(
+            "You have reached your quota for this hour"
+        ));
+        assert!(is_rate_limit_error(
+            "Rate limited: please wait before retrying"
+        ));
+
+        // Test non-rate-limit errors
+        assert!(!is_rate_limit_error("Error: File not found"));
+        assert!(!is_rate_limit_error("Connection refused"));
+        assert!(!is_rate_limit_error("Invalid authentication"));
+    }
+
+    #[test]
+    fn test_time_until_next_hour() {
+        use chrono::{TimeZone, Utc};
+
+        // Test at the beginning of an hour
+        let time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+        let duration = time_until_next_hour_from(time);
+        assert_eq!(duration, Duration::from_secs(3600)); // Exactly 1 hour
+
+        // Test in the middle of an hour
+        let time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 30, 0).unwrap();
+        let duration = time_until_next_hour_from(time);
+        assert_eq!(duration, Duration::from_secs(1800)); // 30 minutes
+
+        // Test near the end of an hour
+        let time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 59, 30).unwrap();
+        let duration = time_until_next_hour_from(time);
+        assert_eq!(duration, Duration::from_secs(30)); // 30 seconds
+
+        // Test at the last second of an hour
+        let time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 59, 59).unwrap();
+        let duration = time_until_next_hour_from(time);
+        assert_eq!(duration, Duration::from_secs(1)); // 1 second
+    }
+
+    #[test]
+    fn test_handle_claude_command_error_rate_limit() {
+        use std::os::unix::process::ExitStatusExt;
+        use std::process::ExitStatus;
+
+        // Create a mock failed output with rate limit error
+        let output = Output {
+            status: ExitStatus::from_raw(1),
+            stdout: Vec::new(),
+            stderr: b"Error: Usage limit reached. Please try again later.".to_vec(),
+        };
+
+        let result = handle_claude_command_error(output);
+        assert!(result.is_err());
+
+        if let Err(ActionError::RateLimit { message, wait_time }) = result {
+            assert!(message.contains("Usage limit reached"));
+            // The wait time should be at least 1 second
+            assert!(wait_time >= Duration::from_secs(1));
+            // And at most 1 hour
+            assert!(wait_time <= Duration::from_secs(3600));
+        } else {
+            panic!("Expected RateLimit error");
         }
     }
 }

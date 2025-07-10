@@ -669,6 +669,12 @@ impl WorkflowExecutor {
             ActionError::ExecutionError(msg) => {
                 format!("Action execution failed: {}", msg)
             }
+            ActionError::RateLimit { message, wait_time } => {
+                format!(
+                    "Rate limit reached: {}. Please wait {:?} before retrying.",
+                    message, wait_time
+                )
+            }
         }
     }
 

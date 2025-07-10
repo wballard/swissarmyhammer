@@ -241,7 +241,7 @@ File will not be loaded. Fix errors and save again.
    watch:
      # Only watch specific directories
      directories:
-       - ./prompts
+       - ./.swissarmyhammer/prompts
        - ~/.swissarmyhammer/prompts
      # Don't watch subdirectories
      recursive: false

@@ -38,7 +38,7 @@ swissarmyhammer serve --host 127.0.0.1
 
 ### `--prompts <DIRECTORY>`
 - **Description**: Additional directories to load prompts from
-- **Default**: Standard locations (`~/.swissarmyhammer/prompts`, `./prompts`)
+- **Default**: Standard locations (`~/.swissarmyhammer/prompts`, `./.swissarmyhammer/prompts`)
 - **Repeatable**: Can be used multiple times
 - **Example**: `--prompts ./custom-prompts`
 
@@ -106,7 +106,7 @@ swissarmyhammer serve
 This loads:
 - Built-in prompts
 - User prompts from `~/.swissarmyhammer/prompts/`
-- Local prompts from `./prompts/` (if exists)
+- Local prompts from `./.swissarmyhammer/prompts/` (if exists)
 - Enables file watching
 
 ### Development Server
@@ -189,7 +189,7 @@ SwissArmyHammer loads prompts in this order:
    - Can override earlier prompts with same name
 
 4. **Local prompts** (always checked)
-   - Location: `./prompts/` in current directory
+   - Location: `./.swissarmyhammer/prompts/` in current directory
    - Project-specific prompts
 
 ### Prompt Override Behavior
@@ -201,7 +201,7 @@ When prompts have the same name:
 
 Example hierarchy:
 ```
-./prompts/code-review.md          (highest priority)
+./.swissarmyhammer/prompts/code-review.md          (highest priority)
 ~/.custom/code-review.md          (from --prompts ~/.custom)
 ~/.swissarmyhammer/prompts/code-review.md  (user prompts)
 built-in:code-review              (lowest priority)
@@ -395,7 +395,7 @@ swissarmyhammer serve --debug
 ```bash
 # Check default directories
 ls -la ~/.swissarmyhammer/prompts
-ls -la ./prompts
+ls -la ./.swissarmyhammer/prompts
 
 # Check custom directories
 ls -la /path/to/custom/prompts
@@ -467,7 +467,7 @@ builtin = true
 watch = true
 directories = [
     "~/.swissarmyhammer/prompts",
-    "./prompts",
+    "./.swissarmyhammer/prompts",
     "/team/shared-prompts"
 ]
 ```

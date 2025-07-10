@@ -50,8 +50,8 @@ Focus on:
     library.add(code_review_prompt)?;
 
     // Load prompts from a directory (if it exists)
-    if std::path::Path::new("./prompts").exists() {
-        let count = library.add_directory("./prompts")?;
+    if std::path::Path::new("./.swissarmyhammer/prompts").exists() {
+        let count = library.add_directory("./.swissarmyhammer/prompts")?;
         println!("Loaded {} prompts from directory", count);
     }
 

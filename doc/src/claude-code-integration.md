@@ -182,7 +182,7 @@ Use multiple prompts in sequence:
 Create project-specific prompt workflows:
 
 ```markdown
-# Project prompts in ./prompts/
+# Project prompts in ./.swissarmyhammer/prompts/
 
 ## development/
 - project-setup.md - Initialize new features
@@ -481,8 +481,8 @@ Here's a complete example of setting up SwissArmyHammer for a development projec
 curl -sSL https://raw.githubusercontent.com/wballard/swissarmyhammer/main/install.sh | bash
 
 # 2. Create project prompts
-mkdir -p ./prompts/development
-cat > ./prompts/development/project-review.md << 'EOF'
+mkdir -p ./.swissarmyhammer/prompts/development
+cat > ./.swissarmyhammer/prompts/development/project-review.md << 'EOF'
 ---
 name: project-code-review
 title: Project Code Review

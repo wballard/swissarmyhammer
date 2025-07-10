@@ -221,7 +221,7 @@ fn display_table(prompt_infos: &[PromptInfo], _verbose: bool) -> Result<()> {
             "  {} User prompts (~/.swissarmyhammer/prompts/)",
             "●".blue()
         );
-        println!("  {} Local prompts (./prompts/)", "●".yellow());
+        println!("  {} Local prompts (./.swissarmyhammer/prompts/)", "●".yellow());
         println!("  {} Dynamic prompts", "●".magenta());
     }
 

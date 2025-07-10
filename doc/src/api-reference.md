@@ -131,7 +131,7 @@ use swissarmyhammer::PromptLibrary;
 
 // Create a library and load prompts from directory
 let mut library = PromptLibrary::new();
-library.add_directory("./prompts")?;
+library.add_directory("./.swissarmyhammer/prompts")?;
 
 // Get and render a prompt
 let prompt = library.get("code-review")?;
@@ -448,7 +448,7 @@ fn main() -> Result<()> {
     let mut library = PromptLibrary::new();
     
     // Add prompts from directory
-    library.add_directory("./prompts")?;
+    library.add_directory("./.swissarmyhammer/prompts")?;
     
     // Get a prompt
     let prompt = library.get("code-review")?;

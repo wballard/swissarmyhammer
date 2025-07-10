@@ -166,7 +166,7 @@ sudo chmod +x /usr/local/bin/swissarmyhammer
    ```bash
    # List prompt directories
    ls -la ~/.swissarmyhammer/prompts
-   ls -la ./prompts
+   ls -la ./.swissarmyhammer/prompts
    ```
 
 2. **Validate prompts**:
@@ -553,7 +553,7 @@ cat ~/.swissarmyhammer/config.toml 2>/dev/null || echo "No config file"
 echo ""
 echo "=== Prompt Directories ==="
 ls -la ~/.swissarmyhammer/prompts 2>/dev/null || echo "No user prompts"
-ls -la ./prompts 2>/dev/null || echo "No local prompts"
+ls -la ./.swissarmyhammer/prompts 2>/dev/null || echo "No local prompts"
 echo ""
 echo "=== Process Check ==="
 ps aux | grep swissarmyhammer | grep -v grep

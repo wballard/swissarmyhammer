@@ -30,7 +30,7 @@ timeout = 30000  # milliseconds
 [prompts]
 directories = [
     "~/.swissarmyhammer/prompts",
-    "./prompts",
+    "./.swissarmyhammer/prompts",
     "/opt/company/prompts"
 ]
 builtin = true
@@ -192,7 +192,7 @@ Manages prompt loading and directories:
 # Directories to load prompts from
 directories = [
     "~/.swissarmyhammer/prompts",    # User prompts
-    "./prompts",                      # Project prompts
+    "./.swissarmyhammer/prompts",                      # Project prompts
     "/opt/shared/prompts"             # Shared prompts
 ]
 
@@ -582,7 +582,7 @@ debug = true
 
 [prompts]
 directories = [
-    "./prompts",
+    "./.swissarmyhammer/prompts",
     "~/.swissarmyhammer/prompts"
 ]
 watch = true

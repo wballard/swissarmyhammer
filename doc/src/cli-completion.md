@@ -329,7 +329,7 @@ Add project-specific completions:
 ```bash
 # .envrc (direnv) or project script
 _project_prompts() {
-    ls ./prompts/*.md 2>/dev/null | xargs -n1 basename | sed 's/\.md$//'
+    ls ./.swissarmyhammer/prompts/*.md 2>/dev/null | xargs -n1 basename | sed 's/\.md$//'
 }
 
 # Export for use in completions

@@ -93,7 +93,7 @@ pub struct PromptLibrary {
 use swissarmyhammer::PromptLibrary;
 
 let mut library = PromptLibrary::new();
-library.add_directory("./prompts")?;
+library.add_directory("./.swissarmyhammer/prompts")?;
 
 let prompt = library.get("code-review")?;
 let rendered = prompt.render(&args)?;
@@ -318,7 +318,7 @@ use std::collections::HashMap;
 fn main() -> Result<()> {
     // Create library and load prompts
     let mut library = PromptLibrary::new();
-    library.add_directory("./prompts")?;
+    library.add_directory("./.swissarmyhammer/prompts")?;
     
     // Get a prompt
     let prompt = library.get("code-review")?;

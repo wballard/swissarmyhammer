@@ -20,7 +20,7 @@
 //! let mut library = PromptLibrary::new();
 //!
 //! // Add prompts from a directory
-//! library.add_directory("./prompts")?;
+//! library.add_directory("./.swissarmyhammer/prompts")?;
 //!
 //! // Get a prompt and render it
 //! let prompt = library.get("code-review")?;

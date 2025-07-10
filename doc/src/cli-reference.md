@@ -89,6 +89,6 @@ SwissArmyHammer looks for prompts in these directories (in order):
 
 1. Built-in prompts (embedded in the binary)
 2. User prompts: `~/.swissarmyhammer/prompts/`
-3. Local prompts: `./prompts/` (current directory)
+3. Local prompts: `./.swissarmyhammer/prompts/` (current directory)
 
 For detailed command documentation, see the individual command pages linked in the table above.

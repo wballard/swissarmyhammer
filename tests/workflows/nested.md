@@ -1,14 +1,23 @@
 ---
-name: Nested Test Workflow
+name: nested-test-workflow
+title: Nested Test Workflow
 description: A workflow that executes other workflows for testing nested execution
 category: test
 tags:
   - test
   - nested
   - orchestration
-variables:
-  orchestration_mode: "sequential"
-  child_timeout: "30"
+arguments:
+  - name: orchestration_mode
+    description: How to execute child workflows (sequential or parallel)
+    required: false
+    default: "sequential"
+    type_hint: string
+  - name: child_timeout
+    description: Timeout in seconds for child workflow execution
+    required: false
+    default: "30"
+    type_hint: string
 ---
 
 # Nested Test Workflow

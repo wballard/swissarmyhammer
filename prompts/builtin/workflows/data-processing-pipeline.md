@@ -1,5 +1,6 @@
 ---
-name: Data Processing Pipeline
+name: data-processing-pipeline
+title: Data Processing Pipeline
 description: Parallel data processing workflow for analyzing multiple data sources simultaneously
 category: workflows
 tags:
@@ -7,10 +8,22 @@ tags:
   - parallel
   - analytics
   - example
-variables:
-  data_sources: "logs,metrics,events"
-  output_format: "json"
-  processing_mode: "parallel"
+arguments:
+  - name: data_sources
+    description: Comma-separated list of data sources to process
+    required: false
+    default: "logs,metrics,events"
+    type_hint: string
+  - name: output_format
+    description: Format for the output data (json, csv, xml)
+    required: false
+    default: "json"
+    type_hint: string
+  - name: processing_mode
+    description: Mode of processing (parallel, sequential)
+    required: false
+    default: "parallel"
+    type_hint: string
 ---
 
 # Data Processing Pipeline

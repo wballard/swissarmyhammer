@@ -1,14 +1,23 @@
 ---
-name: Parallel Test Workflow
+name: parallel-test-workflow
+title: Parallel Test Workflow
 description: A workflow with fork/join for testing parallel execution
 category: test
 tags:
   - test
   - parallel
   - fork-join
-variables:
-  task_count: "3"
-  timeout: "10"
+arguments:
+  - name: task_count
+    description: Number of parallel tasks to execute
+    required: false
+    default: "3"
+    type_hint: string
+  - name: timeout
+    description: Timeout in seconds for parallel execution
+    required: false
+    default: "10"
+    type_hint: string
 ---
 
 # Parallel Test Workflow

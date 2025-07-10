@@ -1,5 +1,6 @@
 ---
-name: Database Migration
+name: database-migration
+title: Database Migration
 description: Robust database migration workflow with comprehensive error handling and recovery
 category: workflows
 tags:
@@ -7,11 +8,27 @@ tags:
   - migration
   - error-handling
   - example
-variables:
-  migration_path: "migrations/"
-  target_version: "latest"
-  backup_enabled: "true"
-  dry_run: "false"
+arguments:
+  - name: migration_path
+    description: Path to the directory containing migration files
+    required: false
+    default: "migrations/"
+    type_hint: string
+  - name: target_version
+    description: Target database version to migrate to
+    required: false
+    default: "latest"
+    type_hint: string
+  - name: backup_enabled
+    description: Whether to create a backup before migration
+    required: false
+    default: "true"
+    type_hint: string
+  - name: dry_run
+    description: Whether to perform a dry run without making changes
+    required: false
+    default: "false"
+    type_hint: string
 ---
 
 # Database Migration Workflow

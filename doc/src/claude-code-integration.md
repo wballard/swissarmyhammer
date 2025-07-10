@@ -124,14 +124,18 @@ Prompts with arguments become interactive forms in Claude Code:
 ```markdown
 ---
 name: code-review
+title: Code Review
+description: Reviews code for best practices, bugs, and improvements
 arguments:
   - name: code
     description: Code to review
     required: true
+    type_hint: string
   - name: language
     description: Programming language
     required: false
     default: auto-detect
+    type_hint: string
 ---
 ```
 

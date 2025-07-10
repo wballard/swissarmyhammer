@@ -1,15 +1,28 @@
 ---
-name: Error Handling Test Workflow
+name: error-handling-test-workflow
+title: Error Handling Test Workflow
 description: A workflow for testing error handling and recovery mechanisms
 category: test
 tags:
   - test
   - error-handling
   - recovery
-variables:
-  fail_at_step: "2"
-  max_retries: "3"
-  enable_fallback: "true"
+arguments:
+  - name: fail_at_step
+    description: Step number where failure should be simulated
+    required: false
+    default: "2"
+    type_hint: string
+  - name: max_retries
+    description: Maximum number of retry attempts for failed steps
+    required: false
+    default: "3"
+    type_hint: string
+  - name: enable_fallback
+    description: Whether to enable fallback recovery paths
+    required: false
+    default: "true"
+    type_hint: string
 ---
 
 # Error Handling Test Workflow

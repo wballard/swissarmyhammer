@@ -1,5 +1,6 @@
 ---
-name: Deployment Pipeline
+name: deployment-pipeline
+title: Deployment Pipeline
 description: Interactive deployment workflow with environment selection and rollback options
 category: workflows
 tags:
@@ -7,10 +8,22 @@ tags:
   - devops
   - interactive
   - example
-variables:
-  app_name: "myapp"
-  build_type: "production"
-  auto_rollback: "true"
+arguments:
+  - name: app_name
+    description: Name of the application to deploy
+    required: false
+    default: "myapp"
+    type_hint: string
+  - name: build_type
+    description: Type of build to create (development, staging, production)
+    required: false
+    default: "production"
+    type_hint: string
+  - name: auto_rollback
+    description: Whether to automatically rollback on health check failure
+    required: false
+    default: "true"
+    type_hint: string
 ---
 
 # Deployment Pipeline Workflow

@@ -1,15 +1,28 @@
 ---
-name: Conditional Test Workflow
+name: conditional-test-workflow
+title: Conditional Test Workflow
 description: A workflow with choice states for testing conditional execution
 category: test
 tags:
   - test
   - conditional
   - choice
-variables:
-  input_value: "50"
-  threshold: "30"
-  operation: "validate"
+arguments:
+  - name: input_value
+    description: Value to be processed and validated
+    required: false
+    default: "50"
+    type_hint: string
+  - name: threshold
+    description: Threshold value for comparison operations
+    required: false
+    default: "30"
+    type_hint: string
+  - name: operation
+    description: Type of operation to perform (validate, process, etc.)
+    required: false
+    default: "validate"
+    type_hint: string
 ---
 
 # Conditional Test Workflow

@@ -1,5 +1,6 @@
 ---
-name: Code Review Workflow
+name: code-review-workflow
+title: Code Review Workflow
 description: Automated code review process with analysis, feedback, and approval steps
 category: workflows
 tags:
@@ -7,10 +8,22 @@ tags:
   - quality
   - automation
   - example
-variables:
-  code_path: "src/"
-  review_depth: "comprehensive"
-  language: "auto-detect"
+arguments:
+  - name: code_path
+    description: Directory or file to review
+    required: false
+    default: "src/"
+    type_hint: string
+  - name: review_depth
+    description: Level of review analysis (basic, comprehensive, security-focused)
+    required: false
+    default: "comprehensive"
+    type_hint: string
+  - name: language
+    description: Programming language for the code being reviewed
+    required: false
+    default: "auto-detect"
+    type_hint: string
 ---
 
 # Code Review Workflow

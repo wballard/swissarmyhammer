@@ -1,14 +1,23 @@
 ---
-name: Simple Test Workflow
+name: simple-test-workflow
+title: Simple Test Workflow
 description: A simple workflow for integration testing
 category: test
 tags:
   - test
   - simple
   - integration
-variables:
-  message: "Hello from test"
-  delay: "1"
+arguments:
+  - name: message
+    description: Test message to process
+    required: false
+    default: "Hello from test"
+    type_hint: string
+  - name: delay
+    description: Delay in seconds for processing
+    required: false
+    default: "1"
+    type_hint: string
 ---
 
 # Simple Test Workflow

@@ -1,5 +1,6 @@
 ---
-name: Multi-Step Refactoring
+name: multi-step-refactoring
+title: Multi-Step Refactoring
 description: Complex refactoring workflow that orchestrates multiple sub-workflows
 category: workflows
 tags:
@@ -7,10 +8,22 @@ tags:
   - nested-workflows
   - orchestration
   - example
-variables:
-  project_path: "src/"
-  refactoring_scope: "full"
-  create_pr: "true"
+arguments:
+  - name: project_path
+    description: Path to the project directory to refactor
+    required: false
+    default: "src/"
+    type_hint: string
+  - name: refactoring_scope
+    description: Scope of the refactoring (full, partial, targeted)
+    required: false
+    default: "full"
+    type_hint: string
+  - name: create_pr
+    description: Whether to create a pull request after refactoring
+    required: false
+    default: "true"
+    type_hint: string
 ---
 
 # Multi-Step Refactoring Workflow

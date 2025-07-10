@@ -75,7 +75,7 @@ fn create_complex_workflow() -> Workflow {
     // Create a workflow with 100 states
     for i in 0..100 {
         workflow.add_state(State {
-            id: StateId::new(&format!("state_{}", i)),
+            id: StateId::new(format!("state_{}", i)),
             description: format!("State {}", i),
             state_type: StateType::Normal,
             is_terminal: i == 99,
@@ -85,8 +85,8 @@ fn create_complex_workflow() -> Workflow {
 
         if i > 0 {
             workflow.add_transition(Transition {
-                from_state: StateId::new(&format!("state_{}", i - 1)),
-                to_state: StateId::new(&format!("state_{}", i)),
+                from_state: StateId::new(format!("state_{}", i - 1)),
+                to_state: StateId::new(format!("state_{}", i)),
                 condition: TransitionCondition {
                     condition_type: ConditionType::Always,
                     expression: None,
@@ -291,7 +291,7 @@ fn benchmark_workflow_scalability(c: &mut Criterion) {
         group.bench_function(format!("workflow_size_{}", size), |b| {
             b.iter(|| {
                 let mut workflow = Workflow::new(
-                    WorkflowName::new(&format!("scale_test_{}", size)),
+                    WorkflowName::new(format!("scale_test_{}", size)),
                     format!("Scalability test with {} states", size),
                     StateId::new("start"),
                 );
@@ -299,7 +299,7 @@ fn benchmark_workflow_scalability(c: &mut Criterion) {
                 // Create states and transitions
                 for i in 0..size {
                     workflow.add_state(State {
-                        id: StateId::new(&format!("state_{}", i)),
+                        id: StateId::new(format!("state_{}", i)),
                         description: format!("State {}", i),
                         state_type: StateType::Normal,
                         is_terminal: i == size - 1,
@@ -309,8 +309,8 @@ fn benchmark_workflow_scalability(c: &mut Criterion) {
 
                     if i > 0 {
                         workflow.add_transition(Transition {
-                            from_state: StateId::new(&format!("state_{}", i - 1)),
-                            to_state: StateId::new(&format!("state_{}", i)),
+                            from_state: StateId::new(format!("state_{}", i - 1)),
+                            to_state: StateId::new(format!("state_{}", i)),
                             condition: TransitionCondition {
                                 condition_type: ConditionType::Always,
                                 expression: None,

@@ -402,7 +402,7 @@ mod tests {
         fs::write(&test_file, "test content").unwrap();
         
         let mut vfs = VirtualFileSystem::new("prompts");
-        vfs.load_directory(&temp_dir.path(), FileSource::Local).unwrap();
+        vfs.load_directory(temp_dir.path(), FileSource::Local).unwrap();
         
         let file = vfs.get("test").unwrap();
         assert_eq!(file.name, "test");

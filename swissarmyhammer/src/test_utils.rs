@@ -40,7 +40,7 @@
 /// The module uses a global mutex to ensure thread-safe modification of the HOME
 /// environment variable. This means tests using TestHomeGuard will serialize access
 /// to HOME, which may impact parallel test execution performance.
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
 /// Global test home path, initialized once
@@ -77,7 +77,7 @@ fn get_test_home_path() -> &'static PathBuf {
 }
 
 /// Validate that a path doesn't escape the project directory
-fn validate_path_safety(path: &PathBuf, project_root: &PathBuf) {
+fn validate_path_safety(path: &Path, project_root: &Path) {
     // Canonicalize paths to resolve any .. or symlinks
     match (path.canonicalize(), project_root.canonicalize()) {
         (Ok(canonical_path), Ok(canonical_root)) => {

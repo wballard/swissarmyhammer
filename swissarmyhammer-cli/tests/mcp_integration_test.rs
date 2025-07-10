@@ -4,12 +4,21 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use tokio::time::timeout;
 
+/// Helper to ensure process cleanup
+struct ProcessGuard(std::process::Child);
+impl Drop for ProcessGuard {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
 /// Simple MCP integration test that verifies the server works correctly
 #[tokio::test]
 async fn test_mcp_server_basic_functionality() {
     // Start the MCP server process
-    let mut child = Command::new("cargo")
-        .args(&["run", "--", "serve"])
+    let child = Command::new("cargo")
+        .args(["run", "--", "serve"])
         .current_dir("..") // Run from project root
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -17,21 +26,21 @@ async fn test_mcp_server_basic_functionality() {
         .spawn()
         .expect("Failed to start MCP server");
 
+    let mut child = ProcessGuard(child);
+
     // Give the server time to start
     std::thread::sleep(Duration::from_millis(1000));
 
-    let mut stdin = child.stdin.take().expect("Failed to get stdin");
-    let stdout = child.stdout.take().expect("Failed to get stdout");
-    let stderr = child.stderr.take().expect("Failed to get stderr");
+    let mut stdin = child.0.stdin.take().expect("Failed to get stdin");
+    let stdout = child.0.stdout.take().expect("Failed to get stdout");
+    let stderr = child.0.stderr.take().expect("Failed to get stderr");
     let mut reader = BufReader::new(stdout);
 
     // Spawn stderr reader for debugging
     std::thread::spawn(move || {
         let stderr_reader = BufReader::new(stderr);
-        for line in stderr_reader.lines() {
-            if let Ok(line) = line {
-                eprintln!("SERVER: {}", line);
-            }
+        for line in stderr_reader.lines().map_while(Result::ok) {
+            eprintln!("SERVER: {}", line);
         }
     });
 
@@ -49,7 +58,7 @@ async fn test_mcp_server_basic_functionality() {
         if line.trim().is_empty() {
             return Err("Empty response".into());
         }
-        Ok(serde_json::from_str(&line.trim())?)
+        Ok(serde_json::from_str(line.trim())?)
     };
 
     // Step 1: Initialize
@@ -107,9 +116,7 @@ async fn test_mcp_server_basic_functionality() {
     assert_eq!(response["id"], 2);
     assert!(response["result"]["prompts"].is_array());
 
-    // Clean up
-    child.kill().expect("Failed to kill server");
-    child.wait().expect("Failed to wait for server");
+    // Clean up (handled by ProcessGuard drop)
 
     println!("✅ Basic MCP server test passed!");
 }
@@ -140,8 +147,8 @@ async fn test_mcp_server_prompt_loading() {
     eprintln!("Test prompt exists: {}", test_prompt.exists());
 
     // Start MCP server with HOME set to temp dir
-    let mut child = Command::new("cargo")
-        .args(&["run", "--", "serve"])
+    let child = Command::new("cargo")
+        .args(["run", "--", "serve"])
         .current_dir("..")
         .env("HOME", temp_dir.path())
         .env("RUST_LOG", "debug")
@@ -151,21 +158,21 @@ async fn test_mcp_server_prompt_loading() {
         .spawn()
         .expect("Failed to start MCP server");
 
+    let mut child = ProcessGuard(child);
+
     // Spawn stderr reader for debugging
-    let stderr = child.stderr.take().expect("Failed to get stderr");
+    let stderr = child.0.stderr.take().expect("Failed to get stderr");
     std::thread::spawn(move || {
         let stderr_reader = BufReader::new(stderr);
-        for line in stderr_reader.lines() {
-            if let Ok(line) = line {
-                eprintln!("SERVER: {}", line);
-            }
+        for line in stderr_reader.lines().map_while(Result::ok) {
+            eprintln!("SERVER: {}", line);
         }
     });
 
     std::thread::sleep(Duration::from_millis(1000));
 
-    let mut stdin = child.stdin.take().expect("Failed to get stdin");
-    let stdout = child.stdout.take().expect("Failed to get stdout");
+    let mut stdin = child.0.stdin.take().expect("Failed to get stdin");
+    let stdout = child.0.stdout.take().expect("Failed to get stdout");
     let mut reader = BufReader::new(stdout);
 
     // Initialize
@@ -236,14 +243,12 @@ async fn test_mcp_server_prompt_loading() {
     // For now, just verify that the server loads built-in prompts
     // The environment variable inheritance issue with subprocess needs investigation
     assert!(
-        prompts.len() > 0,
+        !prompts.is_empty(),
         "MCP server should load at least built-in prompts. Loaded {} prompts instead",
         prompts.len()
     );
 
-    // Clean up
-    child.kill().expect("Failed to kill server");
-    child.wait().expect("Failed to wait for server");
+    // Clean up (handled by ProcessGuard drop)
 
     println!("✅ MCP prompt loading test passed!");
 }
@@ -252,8 +257,8 @@ async fn test_mcp_server_prompt_loading() {
 #[tokio::test]
 async fn test_mcp_server_builtin_prompts() {
     // Start MCP server
-    let mut child = Command::new("cargo")
-        .args(&["run", "--", "serve"])
+    let child = Command::new("cargo")
+        .args(["run", "--", "serve"])
         .current_dir("..")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -261,10 +266,12 @@ async fn test_mcp_server_builtin_prompts() {
         .spawn()
         .expect("Failed to start MCP server");
 
+    let mut child = ProcessGuard(child);
+
     std::thread::sleep(Duration::from_millis(1000));
 
-    let mut stdin = child.stdin.take().expect("Failed to get stdin");
-    let stdout = child.stdout.take().expect("Failed to get stdout");
+    let mut stdin = child.0.stdin.take().expect("Failed to get stdin");
+    let stdout = child.0.stdout.take().expect("Failed to get stdout");
     let mut reader = BufReader::new(stdout);
 
     // Initialize
@@ -325,9 +332,7 @@ async fn test_mcp_server_builtin_prompts() {
         prompts.len()
     );
 
-    // Clean up
-    child.kill().expect("Failed to kill server");
-    child.wait().expect("Failed to wait for server");
+    // Clean up (handled by ProcessGuard drop)
 
     println!("✅ MCP built-in prompts test passed!");
 }

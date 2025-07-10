@@ -1526,7 +1526,7 @@ mod tests {
         let safe_dirs = vec!["workflows".to_string()];
 
         let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(&current_dir).unwrap();
+        std::env::set_current_dir(current_dir).unwrap();
 
         let validation_result = validator.validate_all_workflows(&mut result, &safe_dirs);
 
@@ -1548,7 +1548,7 @@ mod tests {
         let mut result = ValidationResult::new();
         let dangerous_dirs = vec!["../../../etc".to_string()];
 
-        std::env::set_current_dir(&current_dir).unwrap();
+        std::env::set_current_dir(current_dir).unwrap();
 
         let validation_result = validator.validate_all_workflows(&mut result, &dangerous_dirs);
 

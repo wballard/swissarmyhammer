@@ -333,8 +333,8 @@ mod tests {
         let mut resolver = PromptResolver::new();
         let mut library = swissarmyhammer::PromptLibrary::new();
 
-        // Load builtin prompts
-        resolver.load_builtin_prompts(&mut library).unwrap();
+        // Load all prompts (including builtin)
+        resolver.load_all_prompts(&mut library).unwrap();
 
         // Note: Builtin prompts may not exist in test environment
         // The test passes if no error occurs - builtin prompt loading is optional

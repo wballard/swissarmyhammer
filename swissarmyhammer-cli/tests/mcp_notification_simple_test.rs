@@ -5,6 +5,15 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use tempfile::TempDir;
 
+// Helper to ensure process cleanup
+struct ProcessGuard(std::process::Child);
+impl Drop for ProcessGuard {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
 #[test]
 fn test_mcp_notification_simple() -> Result<()> {
     // Create a temporary directory for test prompts
@@ -20,7 +29,7 @@ fn test_mcp_notification_simple() -> Result<()> {
     )?;
 
     // Start the MCP server with HOME set to temp dir
-    let mut server_process = Command::new("cargo")
+    let server_process = Command::new("cargo")
         .args(["run", "--bin", "swissarmyhammer", "--", "serve"])
         .env("HOME", temp_dir.path())
         .env("RUST_LOG", "debug")
@@ -30,17 +39,19 @@ fn test_mcp_notification_simple() -> Result<()> {
         .spawn()
         .expect("Failed to start MCP server");
 
+    let mut server_process = ProcessGuard(server_process);
+
     // Give server time to start
     std::thread::sleep(Duration::from_secs(2));
 
-    let mut stdin = server_process.stdin.take().expect("Failed to get stdin");
-    let stdout = server_process.stdout.take().expect("Failed to get stdout");
-    let stderr = server_process.stderr.take().expect("Failed to get stderr");
+    let mut stdin = server_process.0.stdin.take().expect("Failed to get stdin");
+    let stdout = server_process.0.stdout.take().expect("Failed to get stdout");
+    let stderr = server_process.0.stderr.take().expect("Failed to get stderr");
 
     // Spawn thread to read stderr
     std::thread::spawn(move || {
         let reader = BufReader::new(stderr);
-        for line in reader.lines().flatten() {
+        for line in reader.lines().map_while(Result::ok) {
             eprintln!("STDERR: {}", line);
         }
     });
@@ -120,8 +131,7 @@ fn test_mcp_notification_simple() -> Result<()> {
     std::thread::sleep(Duration::from_secs(5));
 
     // Check if we got the notification
-    server_process.kill()?;
-    server_process.wait()?; // Wait for process to fully terminate
+    server_process.0.kill()?;
     let notification_found = reader_thread.join().unwrap();
 
     assert!(

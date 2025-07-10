@@ -4,11 +4,20 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use tokio::time::timeout;
 
+/// Helper to ensure process cleanup
+struct ProcessGuard(std::process::Child);
+impl Drop for ProcessGuard {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
 /// End-to-end test for MCP server handling prompts with partials (issue #58)
 #[tokio::test]
 async fn test_mcp_server_partial_rendering() {
     // Start the MCP server process
-    let mut child = Command::new("cargo")
+    let child = Command::new("cargo")
         .args(["run", "--", "serve"])
         .current_dir("..") // Run from project root
         .stdin(Stdio::piped())
@@ -17,18 +26,20 @@ async fn test_mcp_server_partial_rendering() {
         .spawn()
         .expect("Failed to start MCP server");
 
+    let mut child = ProcessGuard(child);
+
     // Give the server time to start
     std::thread::sleep(Duration::from_millis(1000));
 
-    let mut stdin = child.stdin.take().expect("Failed to get stdin");
-    let stdout = child.stdout.take().expect("Failed to get stdout");
-    let stderr = child.stderr.take().expect("Failed to get stderr");
+    let mut stdin = child.0.stdin.take().expect("Failed to get stdin");
+    let stdout = child.0.stdout.take().expect("Failed to get stdout");
+    let stderr = child.0.stderr.take().expect("Failed to get stderr");
     let mut reader = BufReader::new(stdout);
 
     // Spawn stderr reader for debugging
     std::thread::spawn(move || {
         let stderr_reader = BufReader::new(stderr);
-        for line in stderr_reader.lines().flatten() {
+        for line in stderr_reader.lines().map_while(Result::ok) {
             eprintln!("SERVER: {}", line);
         }
     });
@@ -47,7 +58,7 @@ async fn test_mcp_server_partial_rendering() {
         if line.trim().is_empty() {
             return Err("Empty response".into());
         }
-        Ok(serde_json::from_str(&line.trim())?)
+        Ok(serde_json::from_str(line.trim())?)
     };
 
     // Step 1: Initialize
@@ -195,6 +206,5 @@ async fn test_mcp_server_partial_rendering() {
     }
 
     // Cleanup
-    let _ = child.kill();
-    child.wait().expect("Failed to wait for child process");
+    // Clean up (handled by ProcessGuard drop)
 }

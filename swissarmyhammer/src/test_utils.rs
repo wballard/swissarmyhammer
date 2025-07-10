@@ -287,7 +287,7 @@ pub fn create_test_prompts() -> Vec<Prompt> {
 /// Useful for tests that need a single prompt without all the metadata.
 pub fn create_simple_test_prompt(name: &str, template: &str) -> Prompt {
     Prompt::new(name, template)
-        .with_description(&format!("Test prompt: {}", name))
+        .with_description(format!("Test prompt: {}", name))
 }
 
 /// Create a test prompt library with standard test prompts
@@ -330,6 +330,13 @@ pub fn create_temp_prompt_dir() -> (TempDir, PathBuf) {
 #[cfg(test)]
 pub struct TestFileSystem {
     temp_dir: TempDir,
+}
+
+#[cfg(test)]
+impl Default for TestFileSystem {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

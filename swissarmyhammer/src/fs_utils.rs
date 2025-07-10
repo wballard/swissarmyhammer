@@ -233,13 +233,6 @@ mod tests {
             }
         }
         
-        pub fn add_file<P: AsRef<Path>>(&self, path: P, content: &str) {
-            self.files.lock().unwrap().insert(path.as_ref().to_path_buf(), content.to_string());
-        }
-        
-        pub fn add_dir<P: AsRef<Path>>(&self, path: P) {
-            self.dirs.lock().unwrap().insert(path.as_ref().to_path_buf());
-        }
     }
     
     impl FileSystem for MockFileSystem {

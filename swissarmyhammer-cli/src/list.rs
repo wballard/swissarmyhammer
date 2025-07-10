@@ -165,7 +165,7 @@ pub fn run_list_command(
 }
 
 fn display_table_to_writer<W: Write>(
-    prompt_infos: &[PromptInfo], 
+    prompt_infos: &[PromptInfo],
     _verbose: bool,
     writer: &mut W,
     is_tty: bool,
@@ -292,7 +292,7 @@ mod tests {
     #[test]
     fn test_color_coding_when_terminal() {
         use colored::control;
-        
+
         let prompt_infos = vec![
             PromptInfo {
                 name: "test_builtin".to_string(),
@@ -322,43 +322,51 @@ mod tests {
 
         // Force colors on for testing
         control::set_override(true);
-        
+
         // Capture output when TTY is enabled
         let mut output = Vec::new();
         let result = display_table_to_writer(&prompt_infos, false, &mut output, true);
         assert!(result.is_ok());
 
         let output_str = String::from_utf8(output).expect("Output should be valid UTF-8");
-        
+
         // Verify color codes are present - check if any ANSI escape sequences exist
         assert!(output_str.contains("\u{1b}[")); // Any ANSI escape sequence
-        
+
         // Verify specific colors are present (these might have different exact codes)
         // Look for green (builtin), blue (user), yellow (local)
-        let has_green = output_str.contains("\u{1b}[32m") || output_str.contains("\u{1b}[0;32m") || output_str.contains("\u{1b}[38;5;2m");
-        let has_blue = output_str.contains("\u{1b}[34m") || output_str.contains("\u{1b}[0;34m") || output_str.contains("\u{1b}[38;5;4m");
-        let has_yellow = output_str.contains("\u{1b}[33m") || output_str.contains("\u{1b}[0;33m") || output_str.contains("\u{1b}[38;5;3m");
-        
+        let has_green = output_str.contains("\u{1b}[32m")
+            || output_str.contains("\u{1b}[0;32m")
+            || output_str.contains("\u{1b}[38;5;2m");
+        let has_blue = output_str.contains("\u{1b}[34m")
+            || output_str.contains("\u{1b}[0;34m")
+            || output_str.contains("\u{1b}[38;5;4m");
+        let has_yellow = output_str.contains("\u{1b}[33m")
+            || output_str.contains("\u{1b}[0;33m")
+            || output_str.contains("\u{1b}[38;5;3m");
+
         assert!(has_green, "Expected green color codes for builtin");
         assert!(has_blue, "Expected blue color codes for user");
         assert!(has_yellow, "Expected yellow color codes for local");
-        
+
         // Test without TTY (no color codes) - force colors off
         control::set_override(false);
         let mut output_no_tty = Vec::new();
-        let result_no_tty = display_table_to_writer(&prompt_infos, false, &mut output_no_tty, false);
+        let result_no_tty =
+            display_table_to_writer(&prompt_infos, false, &mut output_no_tty, false);
         assert!(result_no_tty.is_ok());
 
-        let output_no_tty_str = String::from_utf8(output_no_tty).expect("Output should be valid UTF-8");
-        
+        let output_no_tty_str =
+            String::from_utf8(output_no_tty).expect("Output should be valid UTF-8");
+
         // Verify no color codes are present when not TTY
         assert!(!output_no_tty_str.contains("\u{1b}["));
-        
+
         // But the content should still be there
         assert!(output_no_tty_str.contains("test_builtin"));
         assert!(output_no_tty_str.contains("test_user"));
         assert!(output_no_tty_str.contains("test_local"));
-        
+
         // Reset colors to automatic detection
         control::unset_override();
     }

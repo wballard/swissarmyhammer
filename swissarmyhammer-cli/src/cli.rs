@@ -107,204 +107,26 @@ Example:
   swissarmyhammer doctor --verbose  # Show detailed diagnostics
 ")]
     Doctor,
-    /// List all available prompts
+    /// Manage and test prompts
     #[command(long_about = "
-Lists all available prompts from all sources (built-in, user, local).
-Shows prompt names, titles, descriptions, and source information.
-
-Output formats:
-  table  - Formatted table (default)
-  json   - JSON output for scripting
-  yaml   - YAML output for scripting
-
-Examples:
-  swissarmyhammer list                        # Show all prompts in table format
-  swissarmyhammer list --format json         # Output as JSON
-  swissarmyhammer list --verbose             # Show full details including arguments
-  swissarmyhammer list --source builtin      # Show only built-in prompts
-  swissarmyhammer list --search debug        # Search for prompts containing 'debug'
-")]
-    List {
-        /// Output format
-        #[arg(long, value_enum, default_value = "table")]
-        format: OutputFormat,
-
-        /// Show verbose output including arguments
-        #[arg(short, long)]
-        verbose: bool,
-
-        /// Filter by source
-        #[arg(long, value_enum)]
-        source: Option<PromptSource>,
-
-        /// Filter by category
-        #[arg(long)]
-        category: Option<String>,
-
-        /// Search prompts by name or description
-        #[arg(long)]
-        search: Option<String>,
-    },
-    /// Validate prompt files for syntax and best practices
-    #[command(long_about = "
-Validates all prompt files for syntax errors and best practices.
-Checks YAML front matter, template variables, and suggests improvements.
-
-Validation checks:
-- YAML front matter syntax (skipped for .liquid files with {% partial %} marker)
-- Required fields (title, description)
-- Template variables match arguments
-- Liquid template syntax
-- Best practice recommendations
-
-Examples:
-  swissarmyhammer validate                 # Validate all prompts
-  swissarmyhammer validate --quiet         # CI/CD mode (exit code only)
-  swissarmyhammer validate --format json   # JSON output for tooling
-")]
-    Validate {
-        /// Only show errors, no warnings or info
-        #[arg(short, long)]
-        quiet: bool,
-
-        /// Output format
-        #[arg(long, value_enum, default_value = "text")]
-        format: ValidateFormat,
-
-        /// Specific workflow directories to validate (can be specified multiple times)
-        #[arg(long = "workflow-dir", value_name = "DIR")]
-        workflow_dirs: Vec<String>,
-    },
-    /// Test prompts interactively with sample arguments
-    #[command(long_about = "
-Test prompts interactively to see how they render with different arguments.
-Helps debug template errors and refine prompt content before using in Claude Code.
-
-Usage modes:
-  swissarmyhammer test prompt-name                    # Test by name (interactive)
-  swissarmyhammer test -f path/to/prompt.md          # Test from file
-  swissarmyhammer test prompt-name --arg key=value   # Non-interactive mode
-
-Interactive features:
-- Prompts for each argument with descriptions
-- Shows default values (press Enter to accept)
-- Validates required arguments
-- Supports multi-line input
-
-Output options:
-  --raw     Show rendered prompt without formatting
-  --copy    Copy rendered prompt to clipboard
-  --save    Save rendered prompt to file
-  --debug   Show template processing details
-
-Examples:
-  swissarmyhammer test code-review                           # Interactive test
-  swissarmyhammer test -f my-prompt.md                       # Test file
-  swissarmyhammer test help --arg topic=git                  # Non-interactive
-  swissarmyhammer test plan --debug --save output.md         # Debug + save
-")]
-    Test {
-        /// Prompt name to test (alternative to --file)
-        prompt_name: Option<String>,
-
-        /// Path to prompt file to test
-        #[arg(short, long)]
-        file: Option<String>,
-
-        /// Non-interactive mode: specify arguments as key=value pairs
-        #[arg(long = "arg", value_name = "KEY=VALUE")]
-        arguments: Vec<String>,
-
-        /// Show raw output without formatting
-        #[arg(long)]
-        raw: bool,
-
-        /// Copy rendered prompt to clipboard
-        #[arg(long)]
-        copy: bool,
-
-        /// Save rendered prompt to file
-        #[arg(long, value_name = "FILE")]
-        save: Option<String>,
-
-        /// Show debug information (template, args, processing steps)
-        #[arg(long)]
-        debug: bool,
-    },
-    /// Search for prompts with advanced filtering and ranking
-    #[command(long_about = "
-Search for prompts using powerful full-text search with fuzzy matching.
-Searches prompt names, titles, descriptions, content, and arguments.
+Manage prompts with support for listing, validating, testing, and searching.
+Prompts are markdown files with YAML front matter that define reusable templates.
 
 Basic usage:
-  swissarmyhammer search \"code review\"        # Basic search
-  swissarmyhammer search \"debug.*error\" -r   # Regex search
-  swissarmyhammer search help --fuzzy          # Fuzzy matching
-
-Search scope:
-  --in name,description,content               # Search specific fields
-  --source builtin                           # Search only builtin prompts
-  --has-arg language                         # Find prompts with 'language' argument
-
-Output options:
-  --full                                     # Show complete prompt details
-  --json                                     # JSON output for tooling
-  --limit 10                                 # Limit number of results
-  --highlight                                # Highlight matching terms
+  swissarmyhammer prompt list                    # List all prompts
+  swissarmyhammer prompt validate                # Validate prompt files
+  swissarmyhammer prompt test <name>             # Test a prompt
+  swissarmyhammer prompt search <query>          # Search prompts
 
 Examples:
-  swissarmyhammer search \"python code\"        # Find Python-related prompts
-  swissarmyhammer search \"review\" --full       # Detailed results for review prompts
-  swissarmyhammer search \".*test.*\" --regex     # Regex pattern matching
-  swissarmyhammer search help --fuzzy --limit 5  # Fuzzy search, max 5 results
+  swissarmyhammer prompt list --source builtin
+  swissarmyhammer prompt validate --quiet
+  swissarmyhammer prompt test code-review --arg file=main.rs
+  swissarmyhammer prompt search \"python code\"
 ")]
-    Search {
-        /// Search query
-        query: String,
-
-        /// Search in specific fields (name, title, description, content, arguments)
-        #[arg(long, value_delimiter = ',')]
-        r#in: Option<Vec<String>>,
-
-        /// Use regular expressions
-        #[arg(short, long)]
-        regex: bool,
-
-        /// Enable fuzzy matching for typo tolerance
-        #[arg(short, long)]
-        fuzzy: bool,
-
-        /// Case-sensitive search
-        #[arg(long)]
-        case_sensitive: bool,
-
-        /// Filter by source
-        #[arg(long, value_enum)]
-        source: Option<PromptSource>,
-
-        /// Find prompts with specific argument name
-        #[arg(long)]
-        has_arg: Option<String>,
-
-        /// Find prompts without any arguments
-        #[arg(long)]
-        no_args: bool,
-
-        /// Show complete prompt details
-        #[arg(long)]
-        full: bool,
-
-        /// Output format
-        #[arg(long, value_enum, default_value = "table")]
-        format: OutputFormat,
-
-        /// Highlight matching terms in output
-        #[arg(long)]
-        highlight: bool,
-
-        /// Maximum number of results to show
-        #[arg(short, long)]
-        limit: Option<usize>,
+    Prompt {
+        #[command(subcommand)]
+        subcommand: PromptSubcommand,
     },
     /// Execute and manage workflows
     #[command(long_about = "
@@ -360,6 +182,209 @@ Examples:
         /// Shell to generate completion for
         #[arg(value_enum)]
         shell: clap_complete::Shell,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum PromptSubcommand {
+    /// List all available prompts
+    #[command(long_about = "
+Lists all available prompts from all sources (built-in, user, local).
+Shows prompt names, titles, descriptions, and source information.
+
+Output formats:
+  table  - Formatted table (default)
+  json   - JSON output for scripting
+  yaml   - YAML output for scripting
+
+Examples:
+  swissarmyhammer prompt list                        # Show all prompts in table format
+  swissarmyhammer prompt list --format json         # Output as JSON
+  swissarmyhammer prompt list --verbose             # Show full details including arguments
+  swissarmyhammer prompt list --source builtin      # Show only built-in prompts
+  swissarmyhammer prompt list --search debug        # Search for prompts containing 'debug'
+")]
+    List {
+        /// Output format
+        #[arg(long, value_enum, default_value = "table")]
+        format: OutputFormat,
+
+        /// Show verbose output including arguments
+        #[arg(short, long)]
+        verbose: bool,
+
+        /// Filter by source
+        #[arg(long, value_enum)]
+        source: Option<PromptSource>,
+
+        /// Filter by category
+        #[arg(long)]
+        category: Option<String>,
+
+        /// Search prompts by name or description
+        #[arg(long)]
+        search: Option<String>,
+    },
+    /// Validate prompt files for syntax and best practices
+    #[command(long_about = "
+Validates all prompt files for syntax errors and best practices.
+Checks YAML front matter, template variables, and suggests improvements.
+
+Validation checks:
+- YAML front matter syntax (skipped for .liquid files with {% partial %} marker)
+- Required fields (title, description)
+- Template variables match arguments
+- Liquid template syntax
+- Best practice recommendations
+
+Examples:
+  swissarmyhammer prompt validate                 # Validate all prompts
+  swissarmyhammer prompt validate --quiet         # CI/CD mode (exit code only)
+  swissarmyhammer prompt validate --format json   # JSON output for tooling
+")]
+    Validate {
+        /// Only show errors, no warnings or info
+        #[arg(short, long)]
+        quiet: bool,
+
+        /// Output format
+        #[arg(long, value_enum, default_value = "text")]
+        format: ValidateFormat,
+
+        /// Specific workflow directories to validate (can be specified multiple times)
+        #[arg(long = "workflow-dir", value_name = "DIR")]
+        workflow_dirs: Vec<String>,
+    },
+    /// Test prompts interactively with sample arguments
+    #[command(long_about = "
+Test prompts interactively to see how they render with different arguments.
+Helps debug template errors and refine prompt content before using in Claude Code.
+
+Usage modes:
+  swissarmyhammer prompt test prompt-name                    # Test by name (interactive)
+  swissarmyhammer prompt test -f path/to/prompt.md          # Test from file
+  swissarmyhammer prompt test prompt-name --arg key=value   # Non-interactive mode
+
+Interactive features:
+- Prompts for each argument with descriptions
+- Shows default values (press Enter to accept)
+- Validates required arguments
+- Supports multi-line input
+
+Output options:
+  --raw     Show rendered prompt without formatting
+  --copy    Copy rendered prompt to clipboard
+  --save    Save rendered prompt to file
+  --debug   Show template processing details
+
+Examples:
+  swissarmyhammer prompt test code-review                           # Interactive test
+  swissarmyhammer prompt test -f my-prompt.md                       # Test file
+  swissarmyhammer prompt test help --arg topic=git                  # Non-interactive
+  swissarmyhammer prompt test plan --debug --save output.md         # Debug + save
+")]
+    Test {
+        /// Prompt name to test (alternative to --file)
+        prompt_name: Option<String>,
+
+        /// Path to prompt file to test
+        #[arg(short, long)]
+        file: Option<String>,
+
+        /// Non-interactive mode: specify arguments as key=value pairs
+        #[arg(long = "arg", value_name = "KEY=VALUE")]
+        arguments: Vec<String>,
+
+        /// Show raw output without formatting
+        #[arg(long)]
+        raw: bool,
+
+        /// Copy rendered prompt to clipboard
+        #[arg(long)]
+        copy: bool,
+
+        /// Save rendered prompt to file
+        #[arg(long, value_name = "FILE")]
+        save: Option<String>,
+
+        /// Show debug information (template, args, processing steps)
+        #[arg(long)]
+        debug: bool,
+    },
+    /// Search for prompts with advanced filtering and ranking
+    #[command(long_about = "
+Search for prompts using powerful full-text search with fuzzy matching.
+Searches prompt names, titles, descriptions, content, and arguments.
+
+Basic usage:
+  swissarmyhammer prompt search \"code review\"        # Basic search
+  swissarmyhammer prompt search \"debug.*error\" -r   # Regex search
+  swissarmyhammer prompt search help --fuzzy          # Fuzzy matching
+
+Search scope:
+  --in name,description,content               # Search specific fields
+  --source builtin                           # Search only builtin prompts
+  --has-arg language                         # Find prompts with 'language' argument
+
+Output options:
+  --full                                     # Show complete prompt details
+  --json                                     # JSON output for tooling
+  --limit 10                                 # Limit number of results
+  --highlight                                # Highlight matching terms
+
+Examples:
+  swissarmyhammer prompt search \"python code\"        # Find Python-related prompts
+  swissarmyhammer prompt search \"review\" --full       # Detailed results for review prompts
+  swissarmyhammer prompt search \".*test.*\" --regex     # Regex pattern matching
+  swissarmyhammer prompt search help --fuzzy --limit 5  # Fuzzy search, max 5 results
+")]
+    Search {
+        /// Search query
+        query: String,
+
+        /// Search in specific fields (name, title, description, content, arguments)
+        #[arg(long, value_delimiter = ',')]
+        r#in: Option<Vec<String>>,
+
+        /// Use regular expressions
+        #[arg(short, long)]
+        regex: bool,
+
+        /// Enable fuzzy matching for typo tolerance
+        #[arg(short, long)]
+        fuzzy: bool,
+
+        /// Case-sensitive search
+        #[arg(long)]
+        case_sensitive: bool,
+
+        /// Filter by source
+        #[arg(long, value_enum)]
+        source: Option<PromptSource>,
+
+        /// Find prompts with specific argument name
+        #[arg(long)]
+        has_arg: Option<String>,
+
+        /// Find prompts without any arguments
+        #[arg(long)]
+        no_args: bool,
+
+        /// Show complete prompt details
+        #[arg(long)]
+        full: bool,
+
+        /// Output format
+        #[arg(long, value_enum, default_value = "table")]
+        format: OutputFormat,
+
+        /// Highlight matching terms in output
+        #[arg(long)]
+        highlight: bool,
+
+        /// Maximum number of results to show
+        #[arg(short, long)]
+        limit: Option<usize>,
     },
 }
 
@@ -606,57 +631,66 @@ mod tests {
 
     #[test]
     fn test_cli_test_subcommand_with_prompt_name() {
-        let result = Cli::try_parse_from_args(["swissarmyhammer", "test", "help"]);
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "prompt", "test", "help"]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Test {
-            prompt_name,
-            file,
-            arguments,
-            raw,
-            copy,
-            save,
-            debug,
-        }) = cli.command
-        {
-            assert_eq!(prompt_name, Some("help".to_string()));
-            assert_eq!(file, None);
-            assert!(arguments.is_empty());
-            assert!(!raw);
-            assert!(!copy);
-            assert_eq!(save, None);
-            assert!(!debug);
+        if let Some(Commands::Prompt { subcommand }) = cli.command {
+            if let PromptSubcommand::Test {
+                prompt_name,
+                file,
+                arguments,
+                raw,
+                copy,
+                save,
+                debug,
+            } = subcommand
+            {
+                assert_eq!(prompt_name, Some("help".to_string()));
+                assert_eq!(file, None);
+                assert!(arguments.is_empty());
+                assert!(!raw);
+                assert!(!copy);
+                assert_eq!(save, None);
+                assert!(!debug);
+            } else {
+                panic!("Expected Test subcommand");
+            }
         } else {
-            panic!("Expected Test command");
+            panic!("Expected Prompt command");
         }
     }
 
     #[test]
     fn test_cli_test_subcommand_with_file() {
-        let result = Cli::try_parse_from_args(["swissarmyhammer", "test", "-f", "test.md"]);
+        let result =
+            Cli::try_parse_from_args(["swissarmyhammer", "prompt", "test", "-f", "test.md"]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Test {
-            prompt_name,
-            file,
-            arguments,
-            raw,
-            copy,
-            save,
-            debug,
-        }) = cli.command
-        {
-            assert_eq!(prompt_name, None);
-            assert_eq!(file, Some("test.md".to_string()));
-            assert!(arguments.is_empty());
-            assert!(!raw);
-            assert!(!copy);
-            assert_eq!(save, None);
-            assert!(!debug);
+        if let Some(Commands::Prompt { subcommand }) = cli.command {
+            if let PromptSubcommand::Test {
+                prompt_name,
+                file,
+                arguments,
+                raw,
+                copy,
+                save,
+                debug,
+            } = subcommand
+            {
+                assert_eq!(prompt_name, None);
+                assert_eq!(file, Some("test.md".to_string()));
+                assert!(arguments.is_empty());
+                assert!(!raw);
+                assert!(!copy);
+                assert_eq!(save, None);
+                assert!(!debug);
+            } else {
+                panic!("Expected Test subcommand");
+            }
         } else {
-            panic!("Expected Test command");
+            panic!("Expected Prompt command");
         }
     }
 
@@ -664,6 +698,7 @@ mod tests {
     fn test_cli_test_subcommand_with_arguments() {
         let result = Cli::try_parse_from_args([
             "swissarmyhammer",
+            "prompt",
             "test",
             "help",
             "--arg",
@@ -674,25 +709,29 @@ mod tests {
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Test {
-            prompt_name,
-            file,
-            arguments,
-            raw,
-            copy,
-            save,
-            debug,
-        }) = cli.command
-        {
-            assert_eq!(prompt_name, Some("help".to_string()));
-            assert_eq!(file, None);
-            assert_eq!(arguments, vec!["topic=git", "format=markdown"]);
-            assert!(!raw);
-            assert!(!copy);
-            assert_eq!(save, None);
-            assert!(!debug);
+        if let Some(Commands::Prompt { subcommand }) = cli.command {
+            if let PromptSubcommand::Test {
+                prompt_name,
+                file,
+                arguments,
+                raw,
+                copy,
+                save,
+                debug,
+            } = subcommand
+            {
+                assert_eq!(prompt_name, Some("help".to_string()));
+                assert_eq!(file, None);
+                assert_eq!(arguments, vec!["topic=git", "format=markdown"]);
+                assert!(!raw);
+                assert!(!copy);
+                assert_eq!(save, None);
+                assert!(!debug);
+            } else {
+                panic!("Expected Test subcommand");
+            }
         } else {
-            panic!("Expected Test command");
+            panic!("Expected Prompt command");
         }
     }
 
@@ -700,6 +739,7 @@ mod tests {
     fn test_cli_test_subcommand_with_all_flags() {
         let result = Cli::try_parse_from_args([
             "swissarmyhammer",
+            "prompt",
             "test",
             "help",
             "--raw",
@@ -711,63 +751,72 @@ mod tests {
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Test {
-            prompt_name,
-            file,
-            arguments,
-            raw,
-            copy,
-            save,
-            debug,
-        }) = cli.command
-        {
-            assert_eq!(prompt_name, Some("help".to_string()));
-            assert_eq!(file, None);
-            assert!(arguments.is_empty());
-            assert!(raw);
-            assert!(copy);
-            assert_eq!(save, Some("output.md".to_string()));
-            assert!(debug);
+        if let Some(Commands::Prompt { subcommand }) = cli.command {
+            if let PromptSubcommand::Test {
+                prompt_name,
+                file,
+                arguments,
+                raw,
+                copy,
+                save,
+                debug,
+            } = subcommand
+            {
+                assert_eq!(prompt_name, Some("help".to_string()));
+                assert_eq!(file, None);
+                assert!(arguments.is_empty());
+                assert!(raw);
+                assert!(copy);
+                assert_eq!(save, Some("output.md".to_string()));
+                assert!(debug);
+            } else {
+                panic!("Expected Test subcommand");
+            }
         } else {
-            panic!("Expected Test command");
+            panic!("Expected Prompt command");
         }
     }
 
     #[test]
     fn test_cli_search_subcommand_basic() {
-        let result = Cli::try_parse_from_args(["swissarmyhammer", "search", "code review"]);
+        let result =
+            Cli::try_parse_from_args(["swissarmyhammer", "prompt", "search", "code review"]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Search {
-            query,
-            r#in,
-            regex,
-            fuzzy,
-            case_sensitive,
-            source,
-            has_arg,
-            no_args,
-            full,
-            format,
-            highlight,
-            limit,
-        }) = cli.command
-        {
-            assert_eq!(query, "code review");
-            assert_eq!(r#in, None);
-            assert!(!regex);
-            assert!(!fuzzy);
-            assert!(!case_sensitive);
-            assert_eq!(source, None);
-            assert_eq!(has_arg, None);
-            assert!(!no_args);
-            assert!(!full);
-            assert!(matches!(format, OutputFormat::Table));
-            assert!(!highlight);
-            assert_eq!(limit, None);
+        if let Some(Commands::Prompt { subcommand }) = cli.command {
+            if let PromptSubcommand::Search {
+                query,
+                r#in,
+                regex,
+                fuzzy,
+                case_sensitive,
+                source,
+                has_arg,
+                no_args,
+                full,
+                format,
+                highlight,
+                limit,
+            } = subcommand
+            {
+                assert_eq!(query, "code review");
+                assert_eq!(r#in, None);
+                assert!(!regex);
+                assert!(!fuzzy);
+                assert!(!case_sensitive);
+                assert_eq!(source, None);
+                assert_eq!(has_arg, None);
+                assert!(!no_args);
+                assert!(!full);
+                assert!(matches!(format, OutputFormat::Table));
+                assert!(!highlight);
+                assert_eq!(limit, None);
+            } else {
+                panic!("Expected Search subcommand");
+            }
         } else {
-            panic!("Expected Search command");
+            panic!("Expected Prompt command");
         }
     }
 
@@ -775,6 +824,7 @@ mod tests {
     fn test_cli_search_subcommand_with_flags() {
         let result = Cli::try_parse_from_args([
             "swissarmyhammer",
+            "prompt",
             "search",
             "debug.*error",
             "--regex",
@@ -794,35 +844,39 @@ mod tests {
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Search {
-            query,
-            r#in,
-            regex,
-            fuzzy,
-            case_sensitive,
-            source,
-            has_arg,
-            no_args,
-            full,
-            format,
-            highlight,
-            limit,
-        }) = cli.command
-        {
-            assert_eq!(query, "debug.*error");
-            assert_eq!(r#in, None);
-            assert!(regex);
-            assert!(fuzzy);
-            assert!(case_sensitive);
-            assert!(matches!(source, Some(PromptSource::Builtin)));
-            assert_eq!(has_arg, Some("language".to_string()));
-            assert!(!no_args);
-            assert!(full);
-            assert!(matches!(format, OutputFormat::Json));
-            assert!(highlight);
-            assert_eq!(limit, Some(5));
+        if let Some(Commands::Prompt { subcommand }) = cli.command {
+            if let PromptSubcommand::Search {
+                query,
+                r#in,
+                regex,
+                fuzzy,
+                case_sensitive,
+                source,
+                has_arg,
+                no_args,
+                full,
+                format,
+                highlight,
+                limit,
+            } = subcommand
+            {
+                assert_eq!(query, "debug.*error");
+                assert_eq!(r#in, None);
+                assert!(regex);
+                assert!(fuzzy);
+                assert!(case_sensitive);
+                assert!(matches!(source, Some(PromptSource::Builtin)));
+                assert_eq!(has_arg, Some("language".to_string()));
+                assert!(!no_args);
+                assert!(full);
+                assert!(matches!(format, OutputFormat::Json));
+                assert!(highlight);
+                assert_eq!(limit, Some(5));
+            } else {
+                panic!("Expected Search subcommand");
+            }
         } else {
-            panic!("Expected Search command");
+            panic!("Expected Prompt command");
         }
     }
 
@@ -830,6 +884,7 @@ mod tests {
     fn test_cli_search_subcommand_with_fields() {
         let result = Cli::try_parse_from_args([
             "swissarmyhammer",
+            "prompt",
             "search",
             "python",
             "--in",
@@ -838,18 +893,74 @@ mod tests {
         assert!(result.is_ok());
 
         let cli = result.unwrap();
-        if let Some(Commands::Search { query, r#in, .. }) = cli.command {
-            assert_eq!(query, "python");
-            assert_eq!(
-                r#in,
-                Some(vec![
-                    "name".to_string(),
-                    "description".to_string(),
-                    "content".to_string()
-                ])
-            );
+        if let Some(Commands::Prompt { subcommand }) = cli.command {
+            if let PromptSubcommand::Search { query, r#in, .. } = subcommand {
+                assert_eq!(query, "python");
+                assert_eq!(
+                    r#in,
+                    Some(vec![
+                        "name".to_string(),
+                        "description".to_string(),
+                        "content".to_string()
+                    ])
+                );
+            } else {
+                panic!("Expected Search subcommand");
+            }
         } else {
-            panic!("Expected Search command");
+            panic!("Expected Prompt command");
+        }
+    }
+
+    #[test]
+    fn test_cli_prompt_list_subcommand() {
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "prompt", "list"]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Prompt { subcommand }) = cli.command {
+            if let PromptSubcommand::List {
+                format,
+                verbose,
+                source,
+                category,
+                search,
+            } = subcommand
+            {
+                assert!(matches!(format, OutputFormat::Table));
+                assert!(!verbose);
+                assert_eq!(source, None);
+                assert_eq!(category, None);
+                assert_eq!(search, None);
+            } else {
+                panic!("Expected List subcommand");
+            }
+        } else {
+            panic!("Expected Prompt command");
+        }
+    }
+
+    #[test]
+    fn test_cli_prompt_validate_subcommand() {
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "prompt", "validate"]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Prompt { subcommand }) = cli.command {
+            if let PromptSubcommand::Validate {
+                quiet,
+                format,
+                workflow_dirs,
+            } = subcommand
+            {
+                assert!(!quiet);
+                assert!(matches!(format, ValidateFormat::Text));
+                assert!(workflow_dirs.is_empty());
+            } else {
+                panic!("Expected Validate subcommand");
+            }
+        } else {
+            panic!("Expected Prompt command");
         }
     }
 }

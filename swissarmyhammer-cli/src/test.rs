@@ -4,7 +4,6 @@ use dialoguer::{theme::ColorfulTheme, Input};
 use std::collections::HashMap;
 use std::fs;
 
-use crate::cli::Commands;
 use swissarmyhammer::PromptResolver;
 use swissarmyhammer::{Prompt, PromptLibrary};
 
@@ -19,52 +18,49 @@ impl TestRunner {
         }
     }
 
-    pub async fn run(&mut self, command: &Commands) -> Result<i32> {
-        if let Commands::Test {
-            prompt_name,
-            file,
-            arguments,
-            raw,
-            copy,
-            save,
-            debug,
-        } = command
-        {
-            // Load all prompts first
-            self.load_prompts()?;
+    #[allow(clippy::too_many_arguments)]
+    pub async fn run(
+        &mut self,
+        prompt_name: &Option<String>,
+        file: &Option<String>,
+        arguments: &[String],
+        raw: bool,
+        copy: bool,
+        save: &Option<String>,
+        debug: bool,
+    ) -> Result<i32> {
+        // Load all prompts first
+        self.load_prompts()?;
 
-            // Get the prompt to test
-            let prompt = self.get_prompt(prompt_name.as_deref(), file.as_deref())?;
+        // Get the prompt to test
+        let prompt = self.get_prompt(prompt_name.as_deref(), file.as_deref())?;
 
-            // Collect arguments
-            let args = if arguments.is_empty() {
-                // Interactive mode - but only if we're in a terminal
-                if atty::is(atty::Stream::Stdin) {
-                    self.collect_arguments_interactive(&prompt)?
-                } else {
-                    // Non-interactive mode when not in terminal (CI/testing)
-                    self.collect_arguments_non_interactive(&prompt)?
-                }
+        // Collect arguments
+        let args = if arguments.is_empty() {
+            // Interactive mode - but only if we're in a terminal
+            if atty::is(atty::Stream::Stdin) {
+                self.collect_arguments_interactive(&prompt)?
             } else {
-                // Non-interactive mode
-                self.parse_arguments(arguments)?
-            };
-
-            // Show debug information if requested
-            if *debug {
-                self.show_debug_info(&prompt, &args)?;
+                // Non-interactive mode when not in terminal (CI/testing)
+                self.collect_arguments_non_interactive(&prompt)?
             }
-
-            // Render the prompt with environment variables support
-            let rendered = self.render_prompt_with_env(&prompt, &args)?;
-
-            // Output the result
-            self.output_result(&rendered, *raw, *copy, save.as_deref())?;
-
-            Ok(0)
         } else {
-            Err(anyhow!("Invalid command type"))
+            // Non-interactive mode
+            self.parse_arguments(arguments)?
+        };
+
+        // Show debug information if requested
+        if debug {
+            self.show_debug_info(&prompt, &args)?;
         }
+
+        // Render the prompt with environment variables support
+        let rendered = self.render_prompt_with_env(&prompt, &args)?;
+
+        // Output the result
+        self.output_result(&rendered, raw, copy, save.as_deref())?;
+
+        Ok(0)
     }
 
     fn load_prompts(&mut self) -> Result<()> {

@@ -245,7 +245,7 @@ pub fn create_test_home_guard() -> TestHomeGuard {
 }
 
 /// Create a temporary directory for testing
-/// 
+///
 /// This is a convenience wrapper around tempfile::TempDir::new() that provides
 /// better error handling and consistent behavior across tests.
 #[cfg(test)]
@@ -254,7 +254,7 @@ pub fn create_temp_dir() -> TempDir {
 }
 
 /// Create a set of standard test prompts for testing
-/// 
+///
 /// Returns a collection of diverse test prompts that can be used across
 /// different test scenarios without duplicating prompt creation logic.
 pub fn create_test_prompts() -> Vec<Prompt> {
@@ -283,15 +283,14 @@ pub fn create_test_prompts() -> Vec<Prompt> {
 }
 
 /// Create a simple test prompt with minimal setup
-/// 
+///
 /// Useful for tests that need a single prompt without all the metadata.
 pub fn create_simple_test_prompt(name: &str, template: &str) -> Prompt {
-    Prompt::new(name, template)
-        .with_description(format!("Test prompt: {}", name))
+    Prompt::new(name, template).with_description(format!("Test prompt: {}", name))
 }
 
 /// Create a test prompt library with standard test prompts
-/// 
+///
 /// Returns a PromptLibrary pre-populated with test prompts for consistent
 /// testing across different components.
 pub fn create_test_prompt_library() -> PromptLibrary {
@@ -303,28 +302,26 @@ pub fn create_test_prompt_library() -> PromptLibrary {
 }
 
 /// Create a temporary directory with test prompt files
-/// 
+///
 /// Creates a temporary directory and populates it with YAML files containing
 /// the standard test prompts. Returns both the TempDir and the path.
 #[cfg(test)]
 pub fn create_temp_prompt_dir() -> (TempDir, PathBuf) {
     let temp_dir = create_temp_dir();
     let temp_path = temp_dir.path().to_path_buf();
-    
+
     // Create prompt files
     for prompt in create_test_prompts() {
         let file_path = temp_path.join(format!("{}.yaml", prompt.name));
-        let content = serde_yaml::to_string(&prompt)
-            .expect("Failed to serialize test prompt");
-        std::fs::write(&file_path, content)
-            .expect("Failed to write test prompt file");
+        let content = serde_yaml::to_string(&prompt).expect("Failed to serialize test prompt");
+        std::fs::write(&file_path, content).expect("Failed to write test prompt file");
     }
-    
+
     (temp_dir, temp_path)
 }
 
 /// Test file system utility for creating mock file structures
-/// 
+///
 /// Provides a convenient way to set up temporary file structures
 /// for testing file-based operations.
 #[cfg(test)]
@@ -347,47 +344,50 @@ impl TestFileSystem {
             temp_dir: create_temp_dir(),
         }
     }
-    
+
     /// Get the root path of the test file system
     pub fn root(&self) -> &Path {
         self.temp_dir.path()
     }
-    
+
     /// Create a file with the given relative path and content
     pub fn create_file<P: AsRef<Path>>(&self, path: P, content: &str) -> PathBuf {
         let full_path = self.temp_dir.path().join(path);
-        
+
         // Ensure parent directory exists
         if let Some(parent) = full_path.parent() {
-            std::fs::create_dir_all(parent)
-                .expect("Failed to create parent directory");
+            std::fs::create_dir_all(parent).expect("Failed to create parent directory");
         }
-        
-        std::fs::write(&full_path, content)
-            .expect("Failed to write test file");
-        
+
+        std::fs::write(&full_path, content).expect("Failed to write test file");
+
         full_path
     }
-    
+
     /// Create a directory with the given relative path
     pub fn create_dir<P: AsRef<Path>>(&self, path: P) -> PathBuf {
         let full_path = self.temp_dir.path().join(path);
-        std::fs::create_dir_all(&full_path)
-            .expect("Failed to create test directory");
+        std::fs::create_dir_all(&full_path).expect("Failed to create test directory");
         full_path
     }
-    
+
     /// Create a YAML file with the given object
-    pub fn create_yaml_file<P: AsRef<Path>, T: serde::Serialize>(&self, path: P, data: &T) -> PathBuf {
-        let content = serde_yaml::to_string(data)
-            .expect("Failed to serialize to YAML");
+    pub fn create_yaml_file<P: AsRef<Path>, T: serde::Serialize>(
+        &self,
+        path: P,
+        data: &T,
+    ) -> PathBuf {
+        let content = serde_yaml::to_string(data).expect("Failed to serialize to YAML");
         self.create_file(path, &content)
     }
-    
+
     /// Create a JSON file with the given object
-    pub fn create_json_file<P: AsRef<Path>, T: serde::Serialize>(&self, path: P, data: &T) -> PathBuf {
-        let content = serde_json::to_string_pretty(data)
-            .expect("Failed to serialize to JSON");
+    pub fn create_json_file<P: AsRef<Path>, T: serde::Serialize>(
+        &self,
+        path: P,
+        data: &T,
+    ) -> PathBuf {
+        let content = serde_json::to_string_pretty(data).expect("Failed to serialize to JSON");
         self.create_file(path, &content)
     }
 }
@@ -442,80 +442,88 @@ mod tests {
             handle.join().expect("Thread panicked");
         }
     }
-    
+
     #[test]
     fn test_create_test_prompts() {
         let prompts = create_test_prompts();
         assert_eq!(prompts.len(), 5);
-        
+
         // Verify each prompt has expected properties
         let code_review = &prompts[0];
         assert_eq!(code_review.name, "code-review");
-        assert!(code_review.description.as_ref().unwrap().contains("reviewing code"));
+        assert!(code_review
+            .description
+            .as_ref()
+            .unwrap()
+            .contains("reviewing code"));
         assert_eq!(code_review.category.as_ref().unwrap(), "development");
         assert!(code_review.tags.contains(&"code".to_string()));
     }
-    
+
     #[test]
     fn test_create_simple_test_prompt() {
         let prompt = create_simple_test_prompt("test-name", "Test template: {{ var }}");
         assert_eq!(prompt.name, "test-name");
         assert_eq!(prompt.template, "Test template: {{ var }}");
-        assert!(prompt.description.as_ref().unwrap().contains("Test prompt: test-name"));
+        assert!(prompt
+            .description
+            .as_ref()
+            .unwrap()
+            .contains("Test prompt: test-name"));
     }
-    
+
     #[test]
     fn test_create_test_prompt_library() {
         let library = create_test_prompt_library();
-        
+
         // Verify the library contains all test prompts
         assert!(library.get("code-review").is_ok());
         assert!(library.get("bug-fix").is_ok());
         assert!(library.get("test-generation").is_ok());
         assert!(library.get("documentation").is_ok());
         assert!(library.get("refactor").is_ok());
-        
+
         // Verify non-existent prompt returns error
         assert!(library.get("non-existent").is_err());
     }
-    
+
     #[test]
     fn test_create_temp_prompt_dir() {
         let (_temp_dir, temp_path) = create_temp_prompt_dir();
-        
+
         // Verify directory exists
         assert!(temp_path.exists());
         assert!(temp_path.is_dir());
-        
+
         // Verify prompt files were created
         let code_review_file = temp_path.join("code-review.yaml");
         assert!(code_review_file.exists());
-        
+
         // Verify file content is valid YAML
         let content = std::fs::read_to_string(&code_review_file).unwrap();
         let prompt: Prompt = serde_yaml::from_str(&content).unwrap();
         assert_eq!(prompt.name, "code-review");
     }
-    
+
     #[test]
     fn test_test_file_system() {
         let fs = TestFileSystem::new();
-        
+
         // Test creating a file
         let file_path = fs.create_file("test.txt", "Hello, world!");
         assert!(file_path.exists());
         let content = std::fs::read_to_string(&file_path).unwrap();
         assert_eq!(content, "Hello, world!");
-        
+
         // Test creating a directory
         let dir_path = fs.create_dir("subdir");
         assert!(dir_path.exists());
         assert!(dir_path.is_dir());
-        
+
         // Test creating a file in a subdirectory
         let nested_file = fs.create_file("subdir/nested.txt", "Nested content");
         assert!(nested_file.exists());
-        
+
         // Test creating YAML file
         let test_data = serde_json::json!({
             "name": "test",
@@ -523,7 +531,7 @@ mod tests {
         });
         let yaml_file = fs.create_yaml_file("data.yaml", &test_data);
         assert!(yaml_file.exists());
-        
+
         // Verify YAML content
         let yaml_content = std::fs::read_to_string(&yaml_file).unwrap();
         let parsed: serde_json::Value = serde_yaml::from_str(&yaml_content).unwrap();

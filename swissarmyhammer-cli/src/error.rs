@@ -27,26 +27,6 @@ impl CliError {
         }
     }
 
-    /// Create a CLI error from another error with a specific exit code
-    pub fn from_error<E: Error + Send + Sync + 'static>(error: E, exit_code: i32) -> Self {
-        let message = error.to_string();
-        Self {
-            message,
-            exit_code,
-            source: Some(Box::new(error)),
-        }
-    }
-
-    /// Create a CLI error with exit code 1 (general error)
-    pub fn general<E: Error + Send + Sync + 'static>(error: E) -> Self {
-        Self::from_error(error, 1)
-    }
-
-    /// Create a CLI error with exit code 2 (validation error)
-    pub fn validation<E: Error + Send + Sync + 'static>(error: E) -> Self {
-        Self::from_error(error, 2)
-    }
-
     /// Get the full error chain as a formatted string
     pub fn full_chain(&self) -> String {
         let mut result = self.message.clone();
@@ -72,27 +52,6 @@ impl Error for CliError {
         self.source
             .as_ref()
             .map(|e| e.as_ref() as &(dyn Error + 'static))
-    }
-}
-
-/// Extension trait for converting results to CLI results
-pub trait IntoCliResult<T> {
-    fn cli_error(self, exit_code: i32) -> CliResult<T>;
-    fn cli_general_error(self) -> CliResult<T>;
-    fn cli_validation_error(self) -> CliResult<T>;
-}
-
-impl<T, E: Error + Send + Sync + 'static> IntoCliResult<T> for Result<T, E> {
-    fn cli_error(self, exit_code: i32) -> CliResult<T> {
-        self.map_err(|e| CliError::from_error(e, exit_code))
-    }
-
-    fn cli_general_error(self) -> CliResult<T> {
-        self.map_err(|e| CliError::general(e))
-    }
-
-    fn cli_validation_error(self) -> CliResult<T> {
-        self.map_err(|e| CliError::validation(e))
     }
 }
 

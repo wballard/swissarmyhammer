@@ -19,48 +19,6 @@ pub struct TestConfig {
     pub debug: bool,
 }
 
-impl TestConfig {
-    /// Create a new TestConfig builder
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn prompt_name(mut self, name: impl Into<String>) -> Self {
-        self.prompt_name = Some(name.into());
-        self
-    }
-
-    pub fn file(mut self, path: impl Into<String>) -> Self {
-        self.file = Some(path.into());
-        self
-    }
-
-    pub fn arguments(mut self, args: Vec<String>) -> Self {
-        self.arguments = args;
-        self
-    }
-
-    pub fn raw(mut self, value: bool) -> Self {
-        self.raw = value;
-        self
-    }
-
-    pub fn copy(mut self, value: bool) -> Self {
-        self.copy = value;
-        self
-    }
-
-    pub fn save(mut self, path: impl Into<String>) -> Self {
-        self.save = Some(path.into());
-        self
-    }
-
-    pub fn debug(mut self, value: bool) -> Self {
-        self.debug = value;
-        self
-    }
-}
-
 pub struct TestRunner {
     library: PromptLibrary,
 }
@@ -105,30 +63,6 @@ impl TestRunner {
         self.output_result(&rendered, config.raw, config.copy, config.save.as_deref())?;
 
         Ok(0)
-    }
-
-    /// Compatibility method for the old API signature
-    #[deprecated(note = "Use run with TestConfig instead")]
-    pub async fn run_legacy(
-        &mut self,
-        prompt_name: &Option<String>,
-        file: &Option<String>,
-        arguments: &[String],
-        raw: bool,
-        copy: bool,
-        save: &Option<String>,
-        debug: bool,
-    ) -> Result<i32> {
-        let config = TestConfig {
-            prompt_name: prompt_name.clone(),
-            file: file.clone(),
-            arguments: arguments.to_vec(),
-            raw,
-            copy,
-            save: save.clone(),
-            debug,
-        };
-        self.run(config).await
     }
 
     fn load_prompts(&mut self) -> Result<()> {

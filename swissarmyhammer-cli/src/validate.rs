@@ -3,7 +3,9 @@ use colored::*;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use swissarmyhammer::security::{validate_path_security, validate_workflow_complexity, MAX_DIRECTORY_DEPTH};
+use swissarmyhammer::security::{
+    validate_path_security, validate_workflow_complexity, MAX_DIRECTORY_DEPTH,
+};
 use swissarmyhammer::workflow::{MermaidParser, Workflow, WorkflowGraphAnalyzer};
 use walkdir::WalkDir;
 
@@ -320,7 +322,11 @@ impl Validator {
             // Validate the search directory is safe - use relative path for validation if possible
             let path_for_validation = if search_dir.starts_with(&current_dir) {
                 // If the path is already within current_dir, make it relative for validation
-                search_dir.strip_prefix(&current_dir).ok().map(|p| p.to_path_buf()).unwrap_or(search_dir.clone())
+                search_dir
+                    .strip_prefix(&current_dir)
+                    .ok()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or(search_dir.clone())
             } else if search_dir.is_absolute() {
                 // For absolute paths, check if they're within the current directory
                 if !search_dir.starts_with(&current_dir) {
@@ -330,8 +336,11 @@ impl Validator {
                         prompt_title: None,
                         line: None,
                         column: None,
-                        message: "Security validation failed: Path is outside project directory".to_string(),
-                        suggestion: Some("Ensure the path is within the project directory".to_string()),
+                        message: "Security validation failed: Path is outside project directory"
+                            .to_string(),
+                        suggestion: Some(
+                            "Ensure the path is within the project directory".to_string(),
+                        ),
                     });
                     continue;
                 }
@@ -370,7 +379,6 @@ impl Validator {
                 });
                 continue;
             }
-
 
             for entry in WalkDir::new(&validated_dir)
                 .max_depth(MAX_DIRECTORY_DEPTH)
@@ -1516,12 +1524,12 @@ mod tests {
         // Test 1: Safe relative directory path
         let mut result = ValidationResult::new();
         let safe_dirs = vec!["workflows".to_string()];
-        
+
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(&current_dir).unwrap();
-        
+
         let validation_result = validator.validate_all_workflows(&mut result, &safe_dirs);
-        
+
         std::env::set_current_dir(original_dir.clone()).unwrap();
 
         assert!(validation_result.is_ok());
@@ -1531,39 +1539,51 @@ mod tests {
                 eprintln!("Validation issue: {}", issue.message);
             }
         }
-        assert!(!result.has_errors(), "Safe directory should not produce security errors");
+        assert!(
+            !result.has_errors(),
+            "Safe directory should not produce security errors"
+        );
 
         // Test 2: Path traversal attempt
         let mut result = ValidationResult::new();
         let dangerous_dirs = vec!["../../../etc".to_string()];
-        
+
         std::env::set_current_dir(&current_dir).unwrap();
-        
+
         let validation_result = validator.validate_all_workflows(&mut result, &dangerous_dirs);
-        
+
         std::env::set_current_dir(original_dir).unwrap();
 
         assert!(validation_result.is_ok()); // Function should complete without panicking
-        
+
         // Print debug info if test fails
         if !result.has_errors() {
             eprintln!("Expected errors but got none. Issues found:");
             for issue in &result.issues {
-                eprintln!("  - {}: {}", 
+                eprintln!(
+                    "  - {}: {}",
                     match issue.level {
                         ValidationLevel::Error => "ERROR",
                         ValidationLevel::Warning => "WARNING",
                         ValidationLevel::Info => "INFO",
                     },
-                    issue.message);
+                    issue.message
+                );
             }
         }
-        
-        assert!(result.has_errors(), "Path traversal should produce security errors");
-        assert!(result.issues.iter().any(|issue| 
-            issue.message.contains("Security validation failed") || 
-            issue.message.contains("parent directory")
-        ), "Should have security validation error");
+
+        assert!(
+            result.has_errors(),
+            "Path traversal should produce security errors"
+        );
+        assert!(
+            result
+                .issues
+                .iter()
+                .any(|issue| issue.message.contains("Security validation failed")
+                    || issue.message.contains("parent directory")),
+            "Should have security validation error"
+        );
     }
 
     #[test]

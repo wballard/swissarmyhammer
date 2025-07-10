@@ -1,7 +1,6 @@
 use swissarmyhammer::prompts::PromptLoader;
 
-mod test_helpers;
-use test_helpers::create_test_home_guard;
+use swissarmyhammer::test_utils::create_test_home_guard;
 
 #[test]
 fn test_comprehensive_prompt_library() {

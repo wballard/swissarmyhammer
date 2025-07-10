@@ -646,8 +646,7 @@ impl WorkflowExecutor {
             ErrorContext::new(action_error.to_string(), run.current_state.clone())
         };
 
-        let error_context_json =
-            serde_json::to_value(&error_context).unwrap_or(Value::Null);
+        let error_context_json = serde_json::to_value(&error_context).unwrap_or(Value::Null);
         run.context
             .insert(ErrorContext::CONTEXT_KEY.to_string(), error_context_json);
     }

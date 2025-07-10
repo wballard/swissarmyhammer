@@ -172,25 +172,20 @@ pub struct Check {
 impl Check {
     // Builder pattern methods are currently unused but kept for potential future use
     #[allow(dead_code)]
-    /// Create a new Check with builder pattern
+    /// Create a new Check builder
     ///
     /// # Example
     ///
     /// ```
     /// use swissarmyhammer_cli::doctor::{Check, CheckStatus};
     ///
-    /// let check = Check::new("Test Check", CheckStatus::Ok)
+    /// let check = Check::builder("Test Check", CheckStatus::Ok)
     ///     .with_message("Everything is working")
     ///     .with_fix("No fix needed")
     ///     .build();
     /// ```
-    pub fn new(name: impl Into<String>, status: CheckStatus) -> CheckBuilder {
-        CheckBuilder {
-            name: name.into(),
-            status,
-            message: String::new(),
-            fix: None,
-        }
+    pub fn builder(name: impl Into<String>, status: CheckStatus) -> CheckBuilder {
+        CheckBuilder::new(name, status)
     }
 }
 
@@ -205,6 +200,15 @@ pub struct CheckBuilder {
 
 #[allow(dead_code)]
 impl CheckBuilder {
+    /// Create a new CheckBuilder
+    pub fn new(name: impl Into<String>, status: CheckStatus) -> Self {
+        Self {
+            name: name.into(),
+            status,
+            message: String::new(),
+            fix: None,
+        }
+    }
     /// Set the message for this check
     pub fn with_message(mut self, message: impl Into<String>) -> Self {
         self.message = message.into();

@@ -1,7 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::collections::HashMap;
-use std::process::Command;
-use std::time::Instant;
 use swissarmyhammer::workflow::{
     ConditionType, MermaidParser, State, StateId, StateType, Transition, TransitionCondition,
     Workflow, WorkflowCacheManager, WorkflowExecutor, WorkflowName, WorkflowRun, WorkflowStorage,

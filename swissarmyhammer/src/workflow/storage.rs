@@ -181,8 +181,11 @@ impl WorkflowResolver {
                 if let (Some(parent), Some(ref user_dir)) =
                     (parent_swissarmyhammer, &user_home_swissarmyhammer)
                 {
-                    if parent == user_dir {
-                        continue; // Skip user's home .swissarmyhammer/workflows
+                    // Canonicalize paths for accurate comparison
+                    if let (Ok(canonical_parent), Ok(canonical_user)) = (parent.canonicalize(), user_dir.canonicalize()) {
+                        if canonical_parent == canonical_user {
+                            continue; // Skip user's home .swissarmyhammer/workflows
+                        }
                     }
                 }
                 workflow_dirs.push(dir);
@@ -1295,16 +1298,21 @@ mod tests {
         use std::fs;
         use tempfile::TempDir;
 
+        // Create a completely isolated temporary directory for this test
         let temp_dir = TempDir::new().unwrap();
+        let test_home = temp_dir.path();
+        
+        // Set HOME to our temporary directory
+        let original_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", test_home);
 
         // Create user workflow directory
-        let user_workflows_dir = temp_dir.path().join(".swissarmyhammer").join("workflows");
+        let user_workflows_dir = test_home.join(".swissarmyhammer").join("workflows");
         fs::create_dir_all(&user_workflows_dir).unwrap();
 
-        // Create local workflow directory
-        let local_workflows_dir = temp_dir
-            .path()
-            .join("project")
+        // Create local workflow directory in a project subdirectory
+        let project_dir = test_home.join("project");
+        let local_workflows_dir = project_dir
             .join(".swissarmyhammer")
             .join("workflows");
         fs::create_dir_all(&local_workflows_dir).unwrap();
@@ -1335,10 +1343,9 @@ mod tests {
         let mut resolver = WorkflowResolver::new();
         let mut storage = MemoryWorkflowStorage::new();
 
-        // Temporarily change home directory and current directory for test
-        std::env::set_var("HOME", temp_dir.path());
+        // Change to project directory
         let original_dir = std::env::current_dir().ok();
-        std::env::set_current_dir(temp_dir.path().join("project")).unwrap();
+        std::env::set_current_dir(&project_dir).unwrap();
 
         // Load all workflows (user first, then local to test precedence)
         resolver.load_user_workflows(&mut storage).unwrap();
@@ -1347,6 +1354,11 @@ mod tests {
         // Restore original directory if it still exists
         if let Some(dir) = original_dir {
             let _ = std::env::set_current_dir(dir);
+        }
+        
+        // Restore original HOME if it was set
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
         }
 
         let workflows = storage.list_workflows().unwrap();

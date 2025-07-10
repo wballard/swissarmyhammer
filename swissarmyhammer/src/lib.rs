@@ -150,3 +150,7 @@ pub mod prelude {
         WorkflowRunStatus,
     };
 }
+
+/// Test utilities module for testing support
+#[doc(hidden)]
+pub mod test_utils;

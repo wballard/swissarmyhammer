@@ -1,8 +1,7 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 
-mod test_helpers;
-use test_helpers::create_test_home_guard;
+use swissarmyhammer::test_utils::create_test_home_guard;
 
 #[test]
 fn test_help_command() {

@@ -7,6 +7,8 @@ use std::fs;
 use swissarmyhammer::PromptResolver;
 use swissarmyhammer::{Prompt, PromptLibrary};
 
+use crate::exit_codes::EXIT_SUCCESS;
+
 /// Configuration for running a prompt test
 #[derive(Default)]
 pub struct TestConfig {
@@ -62,7 +64,7 @@ impl TestRunner {
         // Output the result
         self.output_result(&rendered, config.raw, config.copy, config.save.as_deref())?;
 
-        Ok(0)
+        Ok(EXIT_SUCCESS)
     }
 
     fn load_prompts(&mut self) -> Result<()> {

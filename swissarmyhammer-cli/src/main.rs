@@ -3,6 +3,7 @@ mod cli;
 mod completions;
 mod doctor;
 mod error;
+mod exit_codes;
 mod flow;
 mod list;
 // prompt_loader module removed - using SDK's PromptResolver directly
@@ -14,6 +15,7 @@ mod validate;
 
 use clap::CommandFactory;
 use cli::{Cli, Commands};
+use exit_codes::{EXIT_SUCCESS, EXIT_WARNING, EXIT_ERROR};
 
 #[tokio::main]
 async fn main() {
@@ -22,7 +24,7 @@ async fn main() {
     // Fast path for help - avoid expensive initialization
     if cli.command.is_none() {
         Cli::command().print_help().expect("Failed to print help");
-        process::exit(0);
+        process::exit(EXIT_SUCCESS);
     }
 
     // Only initialize heavy dependencies when actually needed
@@ -117,7 +119,7 @@ async fn main() {
             workflow_dirs,
         }) => {
             tracing::info!("Running validate command");
-            run_validate(quiet, format, workflow_dirs.clone())
+            run_validate(quiet, format, workflow_dirs)
         }
         None => {
             // This case is handled early above for performance
@@ -140,7 +142,7 @@ async fn run_server() -> i32 {
         Ok(server) => server,
         Err(e) => {
             tracing::error!("Failed to create MCP server: {}", e);
-            return 1;
+            return EXIT_WARNING;
         }
     };
 
@@ -177,11 +179,11 @@ async fn run_server() -> i32 {
             ct.cancelled().await;
 
             tracing::info!("MCP server exited successfully");
-            0
+            EXIT_SUCCESS
         }
         Err(e) => {
             tracing::error!("MCP server error: {}", e);
-            1
+            EXIT_WARNING
         }
     }
 }
@@ -194,7 +196,7 @@ fn run_doctor() -> i32 {
         Ok(exit_code) => exit_code,
         Err(e) => {
             eprintln!("Doctor error: {}", e);
-            2
+            EXIT_ERROR
         }
     }
 }
@@ -210,10 +212,10 @@ fn run_completions(shell: clap_complete::Shell) -> i32 {
     use completions;
 
     match completions::print_completion(shell) {
-        Ok(_) => 0,
+        Ok(_) => EXIT_SUCCESS,
         Err(e) => {
             eprintln!("Completion error: {}", e);
-            1
+            EXIT_WARNING
         }
     }
 }
@@ -222,14 +224,36 @@ async fn run_flow(subcommand: cli::FlowSubcommand) -> i32 {
     use flow;
 
     match flow::run_flow_command(subcommand).await {
-        Ok(_) => 0,
+        Ok(_) => EXIT_SUCCESS,
         Err(e) => {
             eprintln!("Flow error: {}", e);
-            1
+            EXIT_WARNING
         }
     }
 }
 
+/// Runs the validate command to check prompt files and workflows for syntax and best practices.
+///
+/// This function validates:
+/// - All prompt files from builtin, user, and local directories
+/// - YAML front matter syntax (skipped for .liquid files with {% partial %} marker)
+/// - Required fields (title, description)
+/// - Template variables match arguments
+/// - Liquid template syntax
+/// - Workflow structure and connectivity in .mermaid files
+///
+/// # Arguments
+///
+/// * `quiet` - Only show errors, no warnings or info
+/// * `format` - Output format (text or json)
+/// * `workflow_dirs` - Specific workflow directories to validate (empty means search from current dir)
+///
+/// # Returns
+///
+/// Exit code:
+/// - 0: Success (no errors or warnings)
+/// - 1: Warnings found
+/// - 2: Errors found
 fn run_validate(
     quiet: bool,
     format: cli::ValidateFormat,
@@ -241,7 +265,7 @@ fn run_validate(
         Ok(exit_code) => exit_code,
         Err(e) => {
             eprintln!("Validate error: {}", e);
-            2
+            EXIT_ERROR
         }
     }
 }

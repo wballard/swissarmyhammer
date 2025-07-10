@@ -185,8 +185,11 @@ Examples:
     },
     /// Validate prompt files and workflows for syntax and best practices
     #[command(long_about = "
-Validates all prompt files and workflows for syntax errors and best practices.
-Checks YAML front matter, template variables, and suggests improvements.
+Validates BOTH prompt files AND workflows for syntax errors and best practices.
+
+This command comprehensively validates:
+- All prompt files from builtin, user, and local directories
+- All workflow files (.mermaid) in specified or discovered workflow directories
 
 Validation checks:
 - YAML front matter syntax (skipped for .liquid files with {% partial %} marker)

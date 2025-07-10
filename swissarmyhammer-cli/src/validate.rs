@@ -10,6 +10,7 @@ use swissarmyhammer::workflow::{MermaidParser, Workflow, WorkflowGraphAnalyzer};
 use walkdir::WalkDir;
 
 use crate::cli::ValidateFormat;
+use crate::exit_codes::{EXIT_SUCCESS, EXIT_WARNING, EXIT_ERROR};
 
 // Local structs for validation
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -1175,11 +1176,11 @@ pub fn run_validate_command(
 
     // Return appropriate exit code
     if result.has_errors() {
-        Ok(2) // Errors
+        Ok(EXIT_ERROR) // Errors
     } else if result.has_warnings() {
-        Ok(1) // Warnings
+        Ok(EXIT_WARNING) // Warnings
     } else {
-        Ok(0) // Success
+        Ok(EXIT_SUCCESS) // Success
     }
 }
 

@@ -6,6 +6,8 @@
 use std::error::Error;
 use std::fmt;
 
+use crate::exit_codes::EXIT_SUCCESS;
+
 /// CLI-specific result type that preserves error information
 pub type CliResult<T> = Result<T, CliError>;
 
@@ -58,7 +60,7 @@ impl Error for CliError {
 /// Convert a CliResult to an exit code, printing the full error chain if needed
 pub fn handle_cli_result<T>(result: CliResult<T>) -> i32 {
     match result {
-        Ok(_) => 0,
+        Ok(_) => EXIT_SUCCESS,
         Err(e) => {
             eprintln!("Error: {}", e.full_chain());
             e.exit_code

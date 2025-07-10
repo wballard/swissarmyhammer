@@ -74,9 +74,9 @@ pub mod file_loader;
 pub mod directory_utils;
 
 // Re-export core types
+pub use file_loader::FileSource;
 pub use plugins::{CustomLiquidFilter, PluginRegistry, SwissArmyHammerPlugin};
 pub use prompt_resolver::PromptResolver;
-pub use file_loader::FileSource;
 // Re-export FileSource as PromptSource for backward compatibility
 pub use file_loader::FileSource as PromptSource;
 pub use prompts::{ArgumentSpec, Prompt, PromptLibrary, PromptLoader};

@@ -21,17 +21,13 @@ use walkdir::WalkDir;
 /// # Returns
 ///
 /// A vector of paths to `.swissarmyhammer` directories, ordered from root to current
-pub fn find_swissarmyhammer_dirs_upward(
-    start_path: &Path,
-    exclude_home: bool,
-) -> Vec<PathBuf> {
+pub fn find_swissarmyhammer_dirs_upward(start_path: &Path, exclude_home: bool) -> Vec<PathBuf> {
     let mut directories = Vec::new();
     let mut path = start_path;
     let mut depth = 0;
 
     // Get home directory for exclusion check
-    let home_swissarmyhammer = dirs::home_dir()
-        .map(|home| home.join(".swissarmyhammer"));
+    let home_swissarmyhammer = dirs::home_dir().map(|home| home.join(".swissarmyhammer"));
 
     loop {
         if depth >= MAX_DIRECTORY_DEPTH {
@@ -92,48 +88,63 @@ pub fn walk_files_with_extensions<'a>(
     extensions: &'a [&'a str],
 ) -> impl Iterator<Item = PathBuf> + 'a {
     let dir = dir.to_owned();
-    WalkDir::new(dir)
-        .into_iter()
-        .filter_map(move |entry| {
-            entry.ok().and_then(|e| {
-                let path = e.path();
-                if path.is_file() {
+    WalkDir::new(dir).into_iter().filter_map(move |entry| {
+        entry.ok().and_then(|e| {
+            let path = e.path();
+            if path.is_file() {
+                if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
+                    // Check for compound extensions first
+                    let compound_extensions = [".md.liquid", ".markdown.liquid", ".liquid.md"];
+
+                    for compound_ext in &compound_extensions {
+                        if filename.ends_with(compound_ext) {
+                            // Check if any part of the compound extension matches our filter
+                            let parts: Vec<&str> =
+                                compound_ext.trim_start_matches('.').split('.').collect();
+                            if parts.iter().any(|part| extensions.contains(part)) {
+                                return Some(path.to_path_buf());
+                            }
+                        }
+                    }
+
+                    // Fallback to single extension check
                     if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
                         if extensions.contains(&ext) {
                             return Some(path.to_path_buf());
                         }
                     }
                 }
-                None
-            })
+            }
+            None
         })
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_find_swissarmyhammer_dirs_upward() {
         let temp_dir = TempDir::new().unwrap();
         let base = temp_dir.path();
-        
+
         // Create nested structure
         let level1 = base.join("level1");
         let level2 = level1.join("level2");
         let level3 = level2.join("level3");
-        
+
         fs::create_dir_all(&level3).unwrap();
-        
+
         // Create .swissarmyhammer dirs at different levels
         fs::create_dir(base.join(".swissarmyhammer")).unwrap();
         fs::create_dir(level2.join(".swissarmyhammer")).unwrap();
-        
+
         // Search from level3
         let dirs = find_swissarmyhammer_dirs_upward(&level3, false);
-        
+
         assert_eq!(dirs.len(), 2);
         assert_eq!(dirs[0], base.join(".swissarmyhammer"));
         assert_eq!(dirs[1], level2.join(".swissarmyhammer"));
@@ -143,19 +154,19 @@ mod tests {
     fn test_walk_files_with_extensions() {
         let temp_dir = TempDir::new().unwrap();
         let base = temp_dir.path();
-        
+
         // Create some test files
         fs::write(base.join("test.md"), "content").unwrap();
         fs::write(base.join("test.txt"), "content").unwrap();
-        
+
         let subdir = base.join("subdir");
         fs::create_dir(&subdir).unwrap();
         fs::write(subdir.join("nested.md"), "content").unwrap();
         fs::write(subdir.join("nested.mermaid"), "content").unwrap();
-        
+
         // Find markdown and mermaid files
         let files: Vec<_> = walk_files_with_extensions(base, &["md", "mermaid"]).collect();
-        
+
         assert_eq!(files.len(), 3);
         assert!(files.iter().any(|p| p.ends_with("test.md")));
         assert!(files.iter().any(|p| p.ends_with("nested.md")));

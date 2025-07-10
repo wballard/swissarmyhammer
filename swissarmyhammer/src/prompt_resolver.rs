@@ -1,5 +1,5 @@
+use crate::file_loader::{FileSource, VirtualFileSystem};
 use crate::{PromptLibrary, PromptLoader};
-use crate::file_loader::{VirtualFileSystem, FileSource};
 use anyhow::Result;
 use std::collections::HashMap;
 
@@ -45,11 +45,11 @@ impl PromptResolver {
         for file in self.vfs.list() {
             // Load the prompt from content
             let prompt = loader.load_from_string(&file.name, &file.content)?;
-            
+
             // Track the source
             self.prompt_sources
                 .insert(prompt.name.clone(), file.source.clone());
-            
+
             // Add to library
             library.add(prompt)?;
         }
@@ -60,7 +60,7 @@ impl PromptResolver {
     /// Load builtin prompts from embedded binary data
     fn load_builtin_prompts(&mut self) -> Result<()> {
         let builtin_prompts = get_builtin_prompts();
-        
+
         // Add builtin prompts to VFS
         for (name, content) in builtin_prompts {
             self.vfs.add_builtin(name, content);
@@ -68,7 +68,6 @@ impl PromptResolver {
 
         Ok(())
     }
-
 }
 
 impl Default for PromptResolver {

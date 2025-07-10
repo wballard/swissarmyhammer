@@ -24,8 +24,8 @@
 //! All skipped files and errors are logged using the `tracing` framework at
 //! appropriate levels (warn for security issues, debug for missing directories).
 
-use crate::Result;
 use crate::directory_utils::{find_swissarmyhammer_dirs_upward, walk_files_with_extensions};
+use crate::Result;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -71,7 +71,12 @@ pub struct FileEntry {
 
 impl FileEntry {
     /// Create a new FileEntry with explicit name
-    pub fn new(name: impl Into<String>, path: PathBuf, content: String, source: FileSource) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        path: PathBuf,
+        content: String,
+        source: FileSource,
+    ) -> Self {
         Self {
             name: name.into(),
             path,
@@ -85,12 +90,10 @@ impl FileEntry {
         // Extract the name from the path
         // For a path like /path/to/prompts/category/subcategory/test.md
         // We want to extract "category/subcategory/test"
-        
-        // Get the file stem
-        let stem = path.file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or_default();
-        
+
+        // Get the stem by removing compound extensions
+        let stem = Self::remove_compound_extensions(&path);
+
         // Extract name using proper path operations
         let name = Self::extract_name_from_path(&path, stem);
 
@@ -101,12 +104,42 @@ impl FileEntry {
             source,
         }
     }
-    
+
+    /// Remove compound extensions from a filename
+    fn remove_compound_extensions(path: &Path) -> &str {
+        let filename = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default();
+
+        // List of supported compound extensions (sorted by length descending)
+        let extensions = [
+            ".md.liquid",
+            ".markdown.liquid",
+            ".liquid.md",
+            ".md",
+            ".markdown",
+            ".liquid",
+        ];
+
+        // Check for compound extensions first
+        for ext in &extensions {
+            if let Some(stem) = filename.strip_suffix(ext) {
+                return stem;
+            }
+        }
+
+        // Fallback to file_stem behavior
+        path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default()
+    }
+
     /// Extract the name from a path using proper path operations
     fn extract_name_from_path(path: &Path, stem: &str) -> String {
         let mut components: Vec<String> = Vec::new();
         let mut found_subdirectory = false;
-        
+
         // Convert path to components and find prompts/workflows directory
         for component in path.components() {
             if let std::path::Component::Normal(os_str) = component {
@@ -120,7 +153,7 @@ impl FileEntry {
                 }
             }
         }
-        
+
         if found_subdirectory && !components.is_empty() {
             // Remove the last component (filename with extension) and use stem instead
             components.pop();
@@ -208,7 +241,8 @@ impl VirtualFileSystem {
 
     /// Add a file entry
     pub fn add_file(&mut self, entry: FileEntry) {
-        self.file_sources.insert(entry.name.clone(), entry.source.clone());
+        self.file_sources
+            .insert(entry.name.clone(), entry.source.clone());
         self.files.insert(entry.name.clone(), entry);
     }
 
@@ -247,7 +281,7 @@ impl VirtualFileSystem {
                         );
                         continue;
                     }
-                    
+
                     // Validate path is within expected directory
                     if !Self::is_path_safe(&path, &target_dir) {
                         tracing::warn!(
@@ -256,13 +290,10 @@ impl VirtualFileSystem {
                         );
                         continue;
                     }
-                    
+
                     if let Ok(content) = std::fs::read_to_string(&path) {
-                        let file_entry = FileEntry::from_path_and_content(
-                            path,
-                            content,
-                            source.clone(),
-                        );
+                        let file_entry =
+                            FileEntry::from_path_and_content(path, content, source.clone());
                         self.add_file(file_entry);
                     } else {
                         tracing::warn!("Failed to read file '{}'", path.display());
@@ -297,10 +328,10 @@ impl VirtualFileSystem {
     /// Load local files by walking up the directory tree
     fn load_local_files(&mut self) -> Result<()> {
         let current_dir = std::env::current_dir()?;
-        
+
         // Find all .swissarmyhammer directories from current to root, excluding home
         let directories = find_swissarmyhammer_dirs_upward(&current_dir, true);
-        
+
         // Load directories (already in root-to-current order)
         for dir in directories {
             self.load_directory(&dir, FileSource::Local)?;
@@ -324,7 +355,7 @@ impl VirtualFileSystem {
         // Local directories
         let current_dir = std::env::current_dir()?;
         let swissarmyhammer_dirs = find_swissarmyhammer_dirs_upward(&current_dir, true);
-        
+
         // Add subdirectories that exist
         for dir in swissarmyhammer_dirs {
             let subdir = dir.join(&self.subdirectory);
@@ -335,7 +366,7 @@ impl VirtualFileSystem {
 
         Ok(directories)
     }
-    
+
     /// Validate that a path is safe and within the expected directory
     fn is_path_safe(path: &Path, base_dir: &Path) -> bool {
         // Try to canonicalize both paths
@@ -418,7 +449,7 @@ mod tests {
     fn test_virtual_file_system_add_builtin() {
         let mut vfs = VirtualFileSystem::new("prompts");
         vfs.add_builtin("test", "content");
-        
+
         let file = vfs.get("test").unwrap();
         assert_eq!(file.name, "test");
         assert_eq!(file.content, "content");
@@ -427,20 +458,21 @@ mod tests {
 
     #[test]
     fn test_virtual_file_system_load_directory() {
-        use tempfile::TempDir;
         use std::fs;
-        
+        use tempfile::TempDir;
+
         let temp_dir = TempDir::new().unwrap();
         let prompts_dir = temp_dir.path().join("prompts");
         fs::create_dir_all(&prompts_dir).unwrap();
-        
+
         // Create a test file
         let test_file = prompts_dir.join("test.md");
         fs::write(&test_file, "test content").unwrap();
-        
+
         let mut vfs = VirtualFileSystem::new("prompts");
-        vfs.load_directory(temp_dir.path(), FileSource::Local).unwrap();
-        
+        vfs.load_directory(temp_dir.path(), FileSource::Local)
+            .unwrap();
+
         let file = vfs.get("test").unwrap();
         assert_eq!(file.name, "test");
         assert_eq!(file.content, "test content");
@@ -450,10 +482,10 @@ mod tests {
     #[test]
     fn test_virtual_file_system_precedence() {
         let mut vfs = VirtualFileSystem::new("prompts");
-        
+
         // Add builtin first
         vfs.add_builtin("test", "builtin content");
-        
+
         // Add user version (should override)
         let entry = FileEntry::new(
             "test",
@@ -462,7 +494,7 @@ mod tests {
             FileSource::User,
         );
         vfs.add_file(entry);
-        
+
         // The user version should have overridden the builtin
         let file = vfs.get("test").unwrap();
         assert_eq!(file.content, "user content");
@@ -472,13 +504,13 @@ mod tests {
     #[test]
     fn test_virtual_file_system_list() {
         let mut vfs = VirtualFileSystem::new("prompts");
-        
+
         vfs.add_builtin("test1", "content1");
         vfs.add_builtin("test2", "content2");
-        
+
         let files = vfs.list();
         assert_eq!(files.len(), 2);
-        
+
         let names: Vec<&str> = files.iter().map(|f| f.name.as_str()).collect();
         assert!(names.contains(&"test1"));
         assert!(names.contains(&"test2"));
@@ -487,7 +519,7 @@ mod tests {
     #[test]
     fn test_virtual_file_system_get_source() {
         let mut vfs = VirtualFileSystem::new("prompts");
-        
+
         vfs.add_builtin("test", "content");
         assert_eq!(vfs.get_source("test"), Some(&FileSource::Builtin));
         assert_eq!(vfs.get_source("nonexistent"), None);

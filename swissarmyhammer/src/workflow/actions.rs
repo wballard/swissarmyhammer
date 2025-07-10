@@ -78,11 +78,11 @@ pub struct PromptAction {
     /// Timeout for the Claude execution
     pub timeout: Duration,
     /// Whether to suppress stdout output (only log)
-    /// 
+    ///
     /// When set to `true`, the Claude response will only be logged using the tracing
     /// framework and will not be printed to stderr. This is useful for workflows
     /// that need to capture the response programmatically without cluttering the output.
-    /// 
+    ///
     /// The quiet mode can also be controlled via the `_quiet` context variable in workflows.
     pub quiet: bool,
 }
@@ -95,7 +95,7 @@ impl PromptAction {
             arguments: HashMap::new(),
             result_variable: None,
             timeout: Duration::from_secs(300), // 5 minute default
-            quiet: false, // Default to showing output
+            quiet: false,                      // Default to showing output
         }
     }
 
@@ -192,12 +192,14 @@ impl Action for PromptAction {
 
         // Use shared error handling utility
         let stdout = handle_claude_command_error(output)?;
-        
+
         // Check if quiet mode is enabled in the context
-        let quiet = self.quiet || context.get("_quiet")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        
+        let quiet = self.quiet
+            || context
+                .get("_quiet")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+
         // Process and display the JSON stream
         let response = parse_and_display_claude_response(&stdout, quiet)?;
 
@@ -464,7 +466,6 @@ fn substitute_variables_in_string(input: &str, context: &HashMap<String, Value>)
         .unwrap_or_else(|_| input.to_string())
 }
 
-
 /// Parse Claude's streaming JSON response, log it, and optionally display as YAML
 fn parse_and_display_claude_response(output: &str, quiet: bool) -> ActionResult<Value> {
     // Claude outputs streaming JSON, we need to collect all content
@@ -483,7 +484,7 @@ fn parse_and_display_claude_response(output: &str, quiet: bool) -> ActionResult<
         match serde_json::from_str::<Value>(line) {
             Ok(json) => {
                 valid_json_found = true;
-                
+
                 // Convert to YAML and log it unless quiet
                 if !quiet {
                     if let Ok(yaml) = serde_yaml::to_string(&json) {
@@ -492,7 +493,7 @@ fn parse_and_display_claude_response(output: &str, quiet: bool) -> ActionResult<
                         tracing::info!("Claude response:\n{}", yaml_trimmed);
                     }
                 }
-                
+
                 // Extract content
                 if let Some(Value::String(text)) = json.get("content") {
                     content.push_str(text);
@@ -799,30 +800,29 @@ mod tests {
         assert_eq!(action.arguments.get("verbose"), Some(&"true".to_string()));
         assert!(!action.quiet); // Default should be false
     }
-    
+
     #[test]
     fn test_prompt_action_with_quiet() {
-        let action = PromptAction::new("test-prompt".to_string())
-            .with_quiet(true);
-        
+        let action = PromptAction::new("test-prompt".to_string()).with_quiet(true);
+
         assert_eq!(action.prompt_name, "test-prompt");
         assert!(action.quiet);
         assert!(action.arguments.is_empty());
         assert!(action.result_variable.is_none());
     }
-    
+
     #[test]
     fn test_prompt_action_builder_methods() {
         let mut args = HashMap::new();
         args.insert("key".to_string(), "value".to_string());
-        
+
         let mut action = PromptAction::new("test".to_string())
             .with_quiet(true)
             .with_result_variable("result_var".to_string());
-        
+
         // Add arguments manually since there's no with_arguments method
         action.arguments = args.clone();
-        
+
         assert_eq!(action.prompt_name, "test");
         assert!(action.quiet);
         assert_eq!(action.result_variable, Some("result_var".to_string()));
@@ -980,7 +980,7 @@ mod tests {
 
         // Should return the raw output when no valid JSON is found
         let result = parse_and_display_claude_response(invalid_output, true);
-        
+
         // Actually it should return an error for invalid JSON with no valid lines
         assert!(result.is_err());
         if let Err(ActionError::ParseError(msg)) = result {

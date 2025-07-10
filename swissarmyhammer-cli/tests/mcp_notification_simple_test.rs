@@ -39,8 +39,16 @@ fn test_mcp_notification_simple() -> Result<()> {
     std::thread::sleep(Duration::from_secs(2));
 
     let mut stdin = server_process.0.stdin.take().expect("Failed to get stdin");
-    let stdout = server_process.0.stdout.take().expect("Failed to get stdout");
-    let stderr = server_process.0.stderr.take().expect("Failed to get stderr");
+    let stdout = server_process
+        .0
+        .stdout
+        .take()
+        .expect("Failed to get stdout");
+    let stderr = server_process
+        .0
+        .stderr
+        .take()
+        .expect("Failed to get stderr");
 
     // Spawn thread to read stderr
     std::thread::spawn(move || {

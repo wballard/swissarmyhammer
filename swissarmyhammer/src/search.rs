@@ -279,7 +279,7 @@ impl Default for SearchEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::{create_test_prompts, create_temp_dir};
+    use crate::test_utils::{create_temp_dir, create_test_prompts};
 
     #[test]
     fn test_search_engine_creation() {
@@ -476,13 +476,14 @@ mod tests {
 
         let results = engine.search("development", &prompts).unwrap();
         assert!(!results.is_empty());
-        
+
         // Verify that development category prompts are found
-        let development_prompts: Vec<_> = results.iter()
+        let development_prompts: Vec<_> = results
+            .iter()
             .filter(|r| r.prompt.category.as_ref() == Some(&"development".to_string()))
             .collect();
         assert!(!development_prompts.is_empty());
-        
+
         // Verify specific development prompts are included
         let prompt_names: Vec<_> = results.iter().map(|r| &r.prompt.name).collect();
         assert!(prompt_names.contains(&&"code-review".to_string()));

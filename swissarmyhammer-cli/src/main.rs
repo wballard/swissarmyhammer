@@ -2,16 +2,18 @@ use std::process;
 mod cli;
 mod completions;
 mod doctor;
+mod error;
 mod flow;
 mod list;
 // prompt_loader module removed - using SDK's PromptResolver directly
+mod prompt;
 mod search;
 mod signal_handler;
 mod test;
 mod validate;
 
 use clap::CommandFactory;
-use cli::{Cli, Commands, FlowSubcommand, OutputFormat, PromptSource, ValidateFormat};
+use cli::{Cli, Commands};
 
 #[tokio::main]
 async fn main() {
@@ -97,74 +99,9 @@ async fn main() {
             tracing::info!("Running diagnostics");
             run_doctor()
         }
-        Some(Commands::List {
-            format,
-            verbose,
-            source,
-            category,
-            search,
-        }) => {
-            tracing::info!("Listing prompts");
-            run_list(format, verbose, source, category, search)
-        }
-        Some(Commands::Validate {
-            quiet,
-            format,
-            workflow_dirs,
-        }) => {
-            tracing::info!("Validating prompts");
-            run_validate(quiet, format, workflow_dirs)
-        }
-        Some(Commands::Test {
-            prompt_name,
-            file,
-            arguments,
-            raw,
-            copy,
-            save,
-            debug,
-        }) => {
-            tracing::info!("Testing prompt");
-            run_test(&Commands::Test {
-                prompt_name: prompt_name.clone(),
-                file: file.clone(),
-                arguments: arguments.clone(),
-                raw,
-                copy,
-                save: save.clone(),
-                debug,
-            })
-            .await
-        }
-        Some(Commands::Search {
-            query,
-            r#in,
-            regex,
-            fuzzy,
-            case_sensitive,
-            source,
-            has_arg,
-            no_args,
-            full,
-            format,
-            highlight,
-            limit,
-        }) => {
-            tracing::info!("Searching prompts");
-            run_search(
-                query,
-                r#in,
-                regex,
-                fuzzy,
-                case_sensitive,
-                source,
-                has_arg,
-                no_args,
-                full,
-                format,
-                highlight,
-                limit,
-            )
+        Some(Commands::Prompt { subcommand }) => {
+            tracing::info!("Running prompt command");
+            run_prompt(subcommand).await
         }
         Some(Commands::Completion { shell }) => {
             tracing::info!("Generating completion for {:?}", shell);
@@ -254,86 +191,11 @@ fn run_doctor() -> i32 {
     }
 }
 
-fn run_list(
-    format: OutputFormat,
-    verbose: bool,
-    source: Option<PromptSource>,
-    category: Option<String>,
-    search: Option<String>,
-) -> i32 {
-    use list;
+async fn run_prompt(subcommand: cli::PromptSubcommand) -> i32 {
+    use error::handle_cli_result;
+    use prompt;
 
-    match list::run_list_command(format, verbose, source, category, search) {
-        Ok(_) => 0,
-        Err(e) => {
-            eprintln!("List error: {}", e);
-            1
-        }
-    }
-}
-
-fn run_validate(quiet: bool, format: ValidateFormat, workflow_dirs: Vec<String>) -> i32 {
-    use validate;
-
-    match validate::run_validate_command(quiet, format, workflow_dirs) {
-        Ok(exit_code) => exit_code,
-        Err(e) => {
-            eprintln!("Validation error: {}", e);
-            2
-        }
-    }
-}
-
-async fn run_test(command: &Commands) -> i32 {
-    use test::TestRunner;
-
-    let mut runner = TestRunner::new();
-    match runner.run(command).await {
-        Ok(exit_code) => exit_code,
-        Err(e) => {
-            eprintln!("Test error: {}", e);
-            1
-        }
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn run_search(
-    query: String,
-    fields: Option<Vec<String>>,
-    regex: bool,
-    fuzzy: bool,
-    case_sensitive: bool,
-    source: Option<PromptSource>,
-    has_arg: Option<String>,
-    no_args: bool,
-    full: bool,
-    format: OutputFormat,
-    highlight: bool,
-    limit: Option<usize>,
-) -> i32 {
-    use search;
-
-    match search::run_search_command(
-        query,
-        fields,
-        regex,
-        fuzzy,
-        case_sensitive,
-        source,
-        has_arg,
-        no_args,
-        full,
-        format,
-        highlight,
-        limit,
-    ) {
-        Ok(_) => 0,
-        Err(e) => {
-            eprintln!("Search error: {}", e);
-            1
-        }
-    }
+    handle_cli_result(prompt::run_prompt_command(subcommand).await)
 }
 
 fn run_completions(shell: clap_complete::Shell) -> i32 {
@@ -348,7 +210,7 @@ fn run_completions(shell: clap_complete::Shell) -> i32 {
     }
 }
 
-async fn run_flow(subcommand: FlowSubcommand) -> i32 {
+async fn run_flow(subcommand: cli::FlowSubcommand) -> i32 {
     use flow;
 
     match flow::run_flow_command(subcommand).await {

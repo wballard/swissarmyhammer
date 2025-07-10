@@ -5,6 +5,8 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tokio::process::{Child, Command};
 
+mod test_utils;
+
 /// Simulates Claude Desktop MCP client behavior
 struct MockClaudeDesktopClient {
     process: Option<Child>,
@@ -19,7 +21,7 @@ impl MockClaudeDesktopClient {
         let prompts_dir = temp_dir.path().join(".prompts");
         std::fs::create_dir_all(&prompts_dir)?;
 
-        create_test_prompts(&prompts_dir)?;
+        create_test_prompt_files(&prompts_dir)?;
 
         Ok(Self {
             process: None,
@@ -144,40 +146,8 @@ impl Drop for MockClaudeDesktopClient {
     }
 }
 
-fn create_test_prompts(prompts_dir: &std::path::Path) -> Result<()> {
-    let test_prompts = vec![
-        ("simple", "Hello, world!", vec![]),
-        (
-            "with_args",
-            "Hello {{name}}, you are {{age}} years old",
-            vec![("name", "User's name", true), ("age", "User's age", true)],
-        ),
-        ("file_watcher_test", "This prompt will be modified", vec![]),
-    ];
-
-    for (name, template, args) in test_prompts {
-        let prompt_file = prompts_dir.join(format!("{}.prompt", name));
-        let mut yaml_content = String::from("---\n");
-        yaml_content.push_str(&format!("name: {}\n", name));
-        yaml_content.push_str(&format!("description: Test prompt for {}\n", name));
-
-        if !args.is_empty() {
-            yaml_content.push_str("arguments:\n");
-            for (arg_name, desc, required) in args {
-                yaml_content.push_str(&format!("  - name: {}\n", arg_name));
-                yaml_content.push_str(&format!("    description: {}\n", desc));
-                yaml_content.push_str(&format!("    required: {}\n", required));
-            }
-        }
-
-        yaml_content.push_str("---\n");
-        yaml_content.push_str(template);
-
-        std::fs::write(&prompt_file, yaml_content)?;
-    }
-
-    Ok(())
-}
+// Use the shared test utilities for creating test prompts
+use crate::test_utils::create_test_prompt_files;
 
 #[cfg(test)]
 mod tests {

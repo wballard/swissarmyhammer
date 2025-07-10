@@ -155,7 +155,9 @@ impl FileSystemStorage {
             .filter_map(|e| e.ok())
         {
             let path = entry.path();
-            if self.fs_utils.fs().is_file(path) && path.extension().and_then(|s| s.to_str()) == Some("yaml") {
+            if self.fs_utils.fs().is_file(path)
+                && path.extension().and_then(|s| s.to_str()) == Some("yaml")
+            {
                 if let Ok(prompt) = self.fs_utils.read_yaml::<Prompt>(path) {
                     self.cache.insert(prompt.name.clone(), prompt);
                 }

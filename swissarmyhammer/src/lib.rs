@@ -151,8 +151,8 @@ pub use error::{Result, SwissArmyHammerError};
 /// Prelude module for convenient imports
 pub mod prelude {
     pub use crate::{
-        CustomLiquidFilter, FileSystem, FileSystemUtils, PluginRegistry, Prompt, PromptLibrary, 
-        PromptLoader, PromptStorage, Result, StorageBackend, SwissArmyHammerError, 
+        CustomLiquidFilter, FileSystem, FileSystemUtils, PluginRegistry, Prompt, PromptLibrary,
+        PromptLoader, PromptStorage, Result, StorageBackend, SwissArmyHammerError,
         SwissArmyHammerPlugin, Template, TemplateEngine,
     };
 

@@ -4,9 +4,62 @@ use dialoguer::{theme::ColorfulTheme, Input};
 use std::collections::HashMap;
 use std::fs;
 
-use crate::cli::Commands;
 use swissarmyhammer::PromptResolver;
 use swissarmyhammer::{Prompt, PromptLibrary};
+
+/// Configuration for running a prompt test
+#[derive(Default)]
+pub struct TestConfig {
+    pub prompt_name: Option<String>,
+    pub file: Option<String>,
+    pub arguments: Vec<String>,
+    pub raw: bool,
+    pub copy: bool,
+    pub save: Option<String>,
+    pub debug: bool,
+}
+
+impl TestConfig {
+    /// Create a new TestConfig builder
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn prompt_name(mut self, name: impl Into<String>) -> Self {
+        self.prompt_name = Some(name.into());
+        self
+    }
+
+    pub fn file(mut self, path: impl Into<String>) -> Self {
+        self.file = Some(path.into());
+        self
+    }
+
+    pub fn arguments(mut self, args: Vec<String>) -> Self {
+        self.arguments = args;
+        self
+    }
+
+    pub fn raw(mut self, value: bool) -> Self {
+        self.raw = value;
+        self
+    }
+
+    pub fn copy(mut self, value: bool) -> Self {
+        self.copy = value;
+        self
+    }
+
+    pub fn save(mut self, path: impl Into<String>) -> Self {
+        self.save = Some(path.into());
+        self
+    }
+
+    pub fn debug(mut self, value: bool) -> Self {
+        self.debug = value;
+        self
+    }
+}
 
 pub struct TestRunner {
     library: PromptLibrary,
@@ -19,52 +72,63 @@ impl TestRunner {
         }
     }
 
-    pub async fn run(&mut self, command: &Commands) -> Result<i32> {
-        if let Commands::Test {
-            prompt_name,
-            file,
-            arguments,
+    pub async fn run(&mut self, config: TestConfig) -> Result<i32> {
+        // Load all prompts first
+        self.load_prompts()?;
+
+        // Get the prompt to test
+        let prompt = self.get_prompt(config.prompt_name.as_deref(), config.file.as_deref())?;
+
+        // Collect arguments
+        let args = if config.arguments.is_empty() {
+            // Interactive mode - but only if we're in a terminal
+            if atty::is(atty::Stream::Stdin) {
+                self.collect_arguments_interactive(&prompt)?
+            } else {
+                // Non-interactive mode when not in terminal (CI/testing)
+                self.collect_arguments_non_interactive(&prompt)?
+            }
+        } else {
+            // Non-interactive mode
+            self.parse_arguments(&config.arguments)?
+        };
+
+        // Show debug information if requested
+        if config.debug {
+            self.show_debug_info(&prompt, &args)?;
+        }
+
+        // Render the prompt with environment variables support
+        let rendered = self.render_prompt_with_env(&prompt, &args)?;
+
+        // Output the result
+        self.output_result(&rendered, config.raw, config.copy, config.save.as_deref())?;
+
+        Ok(0)
+    }
+
+    /// Compatibility method for the old API signature
+    #[deprecated(note = "Use run with TestConfig instead")]
+    pub async fn run_legacy(
+        &mut self,
+        prompt_name: &Option<String>,
+        file: &Option<String>,
+        arguments: &[String],
+        raw: bool,
+        copy: bool,
+        save: &Option<String>,
+        debug: bool,
+    ) -> Result<i32> {
+        let config = TestConfig {
+            prompt_name: prompt_name.clone(),
+            file: file.clone(),
+            arguments: arguments.to_vec(),
             raw,
             copy,
-            save,
+            save: save.clone(),
             debug,
-        } = command
-        {
-            // Load all prompts first
-            self.load_prompts()?;
-
-            // Get the prompt to test
-            let prompt = self.get_prompt(prompt_name.as_deref(), file.as_deref())?;
-
-            // Collect arguments
-            let args = if arguments.is_empty() {
-                // Interactive mode - but only if we're in a terminal
-                if atty::is(atty::Stream::Stdin) {
-                    self.collect_arguments_interactive(&prompt)?
-                } else {
-                    // Non-interactive mode when not in terminal (CI/testing)
-                    self.collect_arguments_non_interactive(&prompt)?
-                }
-            } else {
-                // Non-interactive mode
-                self.parse_arguments(arguments)?
-            };
-
-            // Show debug information if requested
-            if *debug {
-                self.show_debug_info(&prompt, &args)?;
-            }
-
-            // Render the prompt with environment variables support
-            let rendered = self.render_prompt_with_env(&prompt, &args)?;
-
-            // Output the result
-            self.output_result(&rendered, *raw, *copy, save.as_deref())?;
-
-            Ok(0)
-        } else {
-            Err(anyhow!("Invalid command type"))
-        }
+        };
+        self.run(config).await
     }
 
     fn load_prompts(&mut self) -> Result<()> {

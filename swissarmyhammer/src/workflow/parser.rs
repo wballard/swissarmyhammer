@@ -55,7 +55,7 @@ impl MermaidParser {
     pub fn parse(input: &str, workflow_name: impl Into<WorkflowName>) -> ParseResult<Workflow> {
         // Parse front matter and extract mermaid content
         let mermaid_content = Self::extract_mermaid_from_markdown(input)?;
-        
+
         // Attempt to parse the diagram
         match parse_diagram(&mermaid_content) {
             Ok(diagram) => match diagram {
@@ -74,7 +74,10 @@ impl MermaidParser {
     fn extract_mermaid_from_markdown(input: &str) -> ParseResult<String> {
         // Check if this is raw mermaid content (for backward compatibility with tests)
         let trimmed = input.trim();
-        if trimmed.starts_with("stateDiagram") || trimmed.starts_with("flowchart") || trimmed.starts_with("graph") {
+        if trimmed.starts_with("stateDiagram")
+            || trimmed.starts_with("flowchart")
+            || trimmed.starts_with("graph")
+        {
             return Ok(input.to_string());
         }
 

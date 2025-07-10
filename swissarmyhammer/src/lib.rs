@@ -67,6 +67,9 @@ pub mod security;
 /// File watching functionality for prompt directories
 pub mod file_watcher;
 
+/// Virtual file system for unified file loading
+pub mod file_loader;
+
 // Re-export core types
 pub use plugins::{CustomLiquidFilter, PluginRegistry, SwissArmyHammerPlugin};
 pub use prompt_resolver::{PromptResolver, PromptSource};

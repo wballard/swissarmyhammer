@@ -1,8 +1,8 @@
 //! Storage abstractions and implementations for workflows and workflow runs
 
-use crate::security::MAX_DIRECTORY_DEPTH;
 use crate::workflow::{MermaidParser, Workflow, WorkflowName, WorkflowRun, WorkflowRunId};
 use crate::{Result, SwissArmyHammerError};
+use crate::file_loader::{VirtualFileSystem, FileSource};
 use base64::{engine::general_purpose, Engine as _};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -36,6 +36,8 @@ impl std::fmt::Display for WorkflowSource {
 pub struct WorkflowResolver {
     /// Track the source of each workflow by name
     pub workflow_sources: HashMap<WorkflowName, WorkflowSource>,
+    /// Virtual file system for managing workflows
+    vfs: VirtualFileSystem,
 }
 
 impl WorkflowResolver {
@@ -43,72 +45,14 @@ impl WorkflowResolver {
     pub fn new() -> Self {
         Self {
             workflow_sources: HashMap::new(),
+            vfs: VirtualFileSystem::new("workflows"),
         }
     }
 
     /// Get all directories that workflows are loaded from
     /// Returns paths in the same order as loading precedence
     pub fn get_workflow_directories(&self) -> Result<Vec<PathBuf>> {
-        let mut directories = Vec::new();
-
-        // User workflows directory
-        if let Some(home) = dirs::home_dir() {
-            let user_workflows_dir = home.join(".swissarmyhammer").join("workflows");
-            if user_workflows_dir.exists() {
-                directories.push(user_workflows_dir);
-            }
-        }
-
-        // Local workflows directories (using same logic as prompts)
-        let current_dir = std::env::current_dir()?;
-        let mut workflow_dirs = Vec::new();
-        let mut path = current_dir.as_path();
-        let mut depth = 0;
-
-        loop {
-            // Limit traversal depth for security
-            if depth >= MAX_DIRECTORY_DEPTH {
-                break;
-            }
-
-            let swissarmyhammer_dir = path.join(".swissarmyhammer");
-            if swissarmyhammer_dir.exists() && swissarmyhammer_dir.is_dir() {
-                // Skip the user's home .swissarmyhammer directory to avoid duplicate
-                if let Some(home) = dirs::home_dir() {
-                    let user_swissarmyhammer_dir = home.join(".swissarmyhammer");
-                    if swissarmyhammer_dir == user_swissarmyhammer_dir {
-                        match path.parent() {
-                            Some(parent) => {
-                                path = parent;
-                                depth += 1;
-                            }
-                            None => break,
-                        }
-                        continue;
-                    }
-                }
-
-                let workflows_dir = swissarmyhammer_dir.join("workflows");
-                if workflows_dir.exists() && workflows_dir.is_dir() {
-                    workflow_dirs.push(workflows_dir);
-                }
-            }
-
-            match path.parent() {
-                Some(parent) => {
-                    path = parent;
-                    depth += 1;
-                }
-                None => break,
-            }
-        }
-
-        // Add local directories in reverse order (root to current) to match loading order
-        for workflows_dir in workflow_dirs.into_iter().rev() {
-            directories.push(workflows_dir);
-        }
-
-        Ok(directories)
+        self.vfs.get_directories()
     }
 
     /// Load all workflows following the correct precedence:
@@ -117,124 +61,49 @@ impl WorkflowResolver {
     /// 3. Local workflows from .swissarmyhammer directories (most specific)
     pub fn load_all_workflows(&mut self, storage: &mut dyn WorkflowStorageBackend) -> Result<()> {
         // Load builtin workflows first (least precedence)
-        self.load_builtin_workflows(storage)?;
+        self.load_builtin_workflows()?;
 
-        // Load user workflows from home directory
-        self.load_user_workflows(storage)?;
+        // Load all files from directories using VFS
+        self.vfs.load_all()?;
 
-        // Load local workflows recursively (highest precedence)
-        self.load_local_workflows(storage)?;
+        // Process all loaded files into workflows
+        for file in self.vfs.list() {
+            // Only process .mermaid files for workflows
+            if file.path.extension().and_then(|s| s.to_str()) == Some("mermaid") {
+                if let Ok(workflow) = MermaidParser::parse(&file.content, &*file.name) {
+                    // Convert FileSource to WorkflowSource
+                    let workflow_source = match file.source {
+                        FileSource::Builtin => WorkflowSource::Builtin,
+                        FileSource::User => WorkflowSource::User,
+                        FileSource::Local => WorkflowSource::Local,
+                        FileSource::Dynamic => WorkflowSource::Dynamic,
+                    };
+
+                    // Track the workflow source
+                    self.workflow_sources
+                        .insert(workflow.name.clone(), workflow_source);
+
+                    // Store the workflow
+                    storage.store_workflow(workflow)?;
+                }
+            }
+        }
 
         Ok(())
     }
 
     /// Load builtin workflows from embedded binary data or resource directories
-    pub fn load_builtin_workflows(
-        &mut self,
-        _storage: &mut dyn WorkflowStorageBackend,
-    ) -> Result<()> {
+    fn load_builtin_workflows(&mut self) -> Result<()> {
         // For now, no builtin workflows are embedded
         // In the future, this could load from embedded workflow files
         // similar to how builtin prompts work
+        // Example:
+        // for (name, content) in get_builtin_workflows() {
+        //     self.vfs.add_builtin(name, content);
+        // }
         Ok(())
     }
 
-    /// Find workflow directories in a given base path
-    fn find_workflow_directories(&self, base_path: &Path) -> Vec<PathBuf> {
-        let mut dirs = Vec::new();
-        let swissarmyhammer_dir = base_path.join(".swissarmyhammer");
-        if swissarmyhammer_dir.exists() && swissarmyhammer_dir.is_dir() {
-            let workflows_dir = swissarmyhammer_dir.join("workflows");
-            if workflows_dir.exists() && workflows_dir.is_dir() {
-                dirs.push(workflows_dir);
-            }
-        }
-        dirs
-    }
-
-    /// Load user workflows from ~/.swissarmyhammer/workflows
-    pub fn load_user_workflows(&mut self, storage: &mut dyn WorkflowStorageBackend) -> Result<()> {
-        if let Some(home) = dirs::home_dir() {
-            for workflows_dir in self.find_workflow_directories(&home) {
-                self.load_workflows_from_directory(&workflows_dir, WorkflowSource::User, storage)?;
-            }
-        }
-        Ok(())
-    }
-
-    /// Load local workflows by recursively searching up for .swissarmyhammer directories
-    fn load_local_workflows(&mut self, storage: &mut dyn WorkflowStorageBackend) -> Result<()> {
-        let current_dir = std::env::current_dir()?;
-        let mut workflow_dirs = Vec::new();
-        let mut path = current_dir.as_path();
-
-        // Skip the user's home directory to avoid duplicates
-        let user_home_swissarmyhammer = dirs::home_dir().map(|h| h.join(".swissarmyhammer"));
-
-        loop {
-            // Find workflow directories at this level
-            let found_dirs = self.find_workflow_directories(path);
-
-            // Only add if not the user's home .swissarmyhammer directory
-            for dir in found_dirs {
-                let parent_swissarmyhammer = dir.parent();
-                if let (Some(parent), Some(ref user_dir)) =
-                    (parent_swissarmyhammer, &user_home_swissarmyhammer)
-                {
-                    // Canonicalize paths for accurate comparison
-                    if let (Ok(canonical_parent), Ok(canonical_user)) = (parent.canonicalize(), user_dir.canonicalize()) {
-                        if canonical_parent == canonical_user {
-                            continue; // Skip user's home .swissarmyhammer/workflows
-                        }
-                    }
-                }
-                workflow_dirs.push(dir);
-            }
-
-            match path.parent() {
-                Some(parent) => path = parent,
-                None => break,
-            }
-        }
-
-        // Load in reverse order (root to current) so deeper paths override
-        for workflows_dir in workflow_dirs.into_iter().rev() {
-            self.load_workflows_from_directory(&workflows_dir, WorkflowSource::Local, storage)?;
-        }
-
-        Ok(())
-    }
-
-    /// Load workflows from a specific directory
-    fn load_workflows_from_directory(
-        &mut self,
-        directory: &Path,
-        source: WorkflowSource,
-        storage: &mut dyn WorkflowStorageBackend,
-    ) -> Result<()> {
-        for entry in walkdir::WalkDir::new(directory)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            let path = entry.path();
-            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("mermaid") {
-                if let Ok(content) = std::fs::read_to_string(path) {
-                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        if let Ok(workflow) = MermaidParser::parse(&content, stem) {
-                            // Track the workflow source
-                            self.workflow_sources
-                                .insert(workflow.name.clone(), source.clone());
-
-                            // Store the workflow (this will override any existing workflow with the same name)
-                            storage.store_workflow(workflow)?;
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
 }
 
 impl Default for WorkflowResolver {
@@ -1243,13 +1112,13 @@ mod tests {
         // Temporarily change home directory for test
         std::env::set_var("HOME", temp_dir.path());
 
-        resolver.load_user_workflows(&mut storage).unwrap();
+        resolver.load_all_workflows(&mut storage).unwrap();
 
-        let workflows = storage.list_workflows().unwrap();
-        assert_eq!(workflows.len(), 1);
-        assert_eq!(workflows[0].name.as_str(), "test_workflow");
+        // Check that our test workflow was loaded
+        let workflow = storage.get_workflow(&WorkflowName::new("test_workflow")).unwrap();
+        assert_eq!(workflow.name.as_str(), "test_workflow");
         assert_eq!(
-            resolver.workflow_sources.get(&workflows[0].name),
+            resolver.workflow_sources.get(&workflow.name),
             Some(&WorkflowSource::User)
         );
     }
@@ -1279,16 +1148,23 @@ mod tests {
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(&temp_dir).unwrap();
 
-        resolver.load_local_workflows(&mut storage).unwrap();
+        resolver.load_all_workflows(&mut storage).unwrap();
 
         // Restore original directory
         std::env::set_current_dir(original_dir).unwrap();
 
+        // Check that at least one workflow was loaded
         let workflows = storage.list_workflows().unwrap();
-        assert_eq!(workflows.len(), 1);
-        assert_eq!(workflows[0].name.as_str(), "local_workflow");
+        assert!(!workflows.is_empty(), "No workflows were loaded");
+        
+        // Find the workflow we created
+        let workflow = workflows.iter()
+            .find(|w| w.name.as_str() == "local_workflow")
+            .expect("Could not find local_workflow in loaded workflows");
+        
+        assert_eq!(workflow.name.as_str(), "local_workflow");
         assert_eq!(
-            resolver.workflow_sources.get(&workflows[0].name),
+            resolver.workflow_sources.get(&workflow.name),
             Some(&WorkflowSource::Local)
         );
     }
@@ -1348,8 +1224,7 @@ mod tests {
         std::env::set_current_dir(&project_dir).unwrap();
 
         // Load all workflows (user first, then local to test precedence)
-        resolver.load_user_workflows(&mut storage).unwrap();
-        resolver.load_local_workflows(&mut storage).unwrap();
+        resolver.load_all_workflows(&mut storage).unwrap();
 
         // Restore original directory if it still exists
         if let Some(dir) = original_dir {
@@ -1361,21 +1236,26 @@ mod tests {
             std::env::set_var("HOME", home);
         }
 
+        // Check that at least one workflow was loaded
         let workflows = storage.list_workflows().unwrap();
-        assert_eq!(workflows.len(), 1);
-        assert_eq!(workflows[0].name.as_str(), "same_name");
+        assert!(!workflows.is_empty(), "No workflows were loaded");
+        
+        // Find the workflow we created
+        let workflow = workflows.iter()
+            .find(|w| w.name.as_str() == "same_name")
+            .expect("Could not find same_name in loaded workflows");
 
         // Local should have overridden user
         assert_eq!(
-            resolver.workflow_sources.get(&workflows[0].name),
+            resolver.workflow_sources.get(&workflow.name),
             Some(&WorkflowSource::Local)
         );
 
         // Verify the workflow content is from the local version
-        assert!(workflows[0]
+        assert!(workflow
             .states
             .contains_key(&StateId::new("LocalState")));
-        assert!(!workflows[0].states.contains_key(&StateId::new("UserState")));
+        assert!(!workflow.states.contains_key(&StateId::new("UserState")));
     }
 
     #[test]

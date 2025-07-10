@@ -1,4 +1,5 @@
 use crate::{PromptLibrary, PromptLoader};
+use crate::file_loader::{VirtualFileSystem, FileSource};
 use anyhow::Result;
 use std::collections::HashMap;
 
@@ -33,6 +34,8 @@ impl std::fmt::Display for PromptSource {
 pub struct PromptResolver {
     /// Track the source of each prompt by name
     pub prompt_sources: HashMap<String, PromptSource>,
+    /// Virtual file system for managing prompts
+    vfs: VirtualFileSystem,
 }
 
 impl PromptResolver {
@@ -40,60 +43,14 @@ impl PromptResolver {
     pub fn new() -> Self {
         Self {
             prompt_sources: HashMap::new(),
+            vfs: VirtualFileSystem::new("prompts"),
         }
     }
 
     /// Get all directories that prompts are loaded from
     /// Returns paths in the same order as loading precedence
     pub fn get_prompt_directories(&self) -> Result<Vec<std::path::PathBuf>> {
-        let mut directories = Vec::new();
-
-        // User prompts directory
-        if let Some(home) = dirs::home_dir() {
-            let user_prompts_dir = home.join(".swissarmyhammer").join("prompts");
-            if user_prompts_dir.exists() {
-                directories.push(user_prompts_dir);
-            }
-        }
-
-        // Local prompts directories (using same logic as load_local_prompts)
-        let current_dir = std::env::current_dir()?;
-        let mut prompt_dirs = Vec::new();
-        let mut path = current_dir.as_path();
-
-        loop {
-            let swissarmyhammer_dir = path.join(".swissarmyhammer");
-            if swissarmyhammer_dir.exists() && swissarmyhammer_dir.is_dir() {
-                // Skip the user's home .swissarmyhammer directory to avoid duplicate
-                if let Some(home) = dirs::home_dir() {
-                    let user_swissarmyhammer_dir = home.join(".swissarmyhammer");
-                    if swissarmyhammer_dir == user_swissarmyhammer_dir {
-                        match path.parent() {
-                            Some(parent) => path = parent,
-                            None => break,
-                        }
-                        continue;
-                    }
-                }
-
-                let prompts_dir = swissarmyhammer_dir.join("prompts");
-                if prompts_dir.exists() && prompts_dir.is_dir() {
-                    prompt_dirs.push(prompts_dir);
-                }
-            }
-
-            match path.parent() {
-                Some(parent) => path = parent,
-                None => break,
-            }
-        }
-
-        // Add local directories in reverse order (root to current) to match loading order
-        for prompts_dir in prompt_dirs.into_iter().rev() {
-            directories.push(prompts_dir);
-        }
-
-        Ok(directories)
+        Ok(self.vfs.get_directories()?)
     }
 
     /// Load all prompts following the correct precedence:
@@ -102,110 +59,48 @@ impl PromptResolver {
     /// 3. Local prompts from .swissarmyhammer directories (most specific)
     pub fn load_all_prompts(&mut self, library: &mut PromptLibrary) -> Result<()> {
         // Load builtin prompts first (least precedence)
-        self.load_builtin_prompts(library)?;
+        self.load_builtin_prompts()?;
 
-        // Load user prompts from home directory
-        self.load_user_prompts(library)?;
+        // Load all files from directories using VFS
+        self.vfs.load_all()?;
 
-        // Load local prompts recursively (highest precedence)
-        self.load_local_prompts(library)?;
-
-        Ok(())
-    }
-
-    /// Load builtin prompts from embedded binary data
-    pub fn load_builtin_prompts(&mut self, library: &mut PromptLibrary) -> Result<()> {
-        let builtin_prompts = get_builtin_prompts();
+        // Process all loaded files into prompts
         let loader = PromptLoader::new();
+        for file in self.vfs.list() {
+            // Convert FileSource to PromptSource
+            let prompt_source = match file.source {
+                FileSource::Builtin => PromptSource::Builtin,
+                FileSource::User => PromptSource::User,
+                FileSource::Local => PromptSource::Local,
+                FileSource::Dynamic => PromptSource::Dynamic,
+            };
 
-        // Add each embedded prompt to the library
-        for (name, content) in builtin_prompts {
-            // Always use load_from_string to ensure partial detection happens
-            let prompt = loader.load_from_string(name, content)?;
-
-            // Track the prompt source using the actual prompt name
+            // Load the prompt from content
+            let prompt = loader.load_from_string(&file.name, &file.content)?;
+            
+            // Track the source
             self.prompt_sources
-                .insert(prompt.name.clone(), PromptSource::Builtin);
+                .insert(prompt.name.clone(), prompt_source);
+            
+            // Add to library
             library.add(prompt)?;
         }
 
         Ok(())
     }
 
-    /// Load user prompts from ~/.swissarmyhammer/prompts
-    pub fn load_user_prompts(&mut self, library: &mut PromptLibrary) -> Result<()> {
-        if let Some(home) = dirs::home_dir() {
-            let user_prompts_dir = home.join(".swissarmyhammer").join("prompts");
-            if user_prompts_dir.exists() {
-                // Load user prompts from the directory
-                let loader = crate::prompts::PromptLoader::new();
-                let user_prompts = loader.load_directory(&user_prompts_dir)?;
-
-                // Add each user prompt and track it
-                for prompt in user_prompts {
-                    // User prompts override any existing prompt with the same name
-                    self.prompt_sources
-                        .insert(prompt.name.clone(), PromptSource::User);
-                    library.add(prompt)?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// Load local prompts by recursively searching up for .swissarmyhammer directories
-    fn load_local_prompts(&mut self, library: &mut PromptLibrary) -> Result<()> {
-        let current_dir = std::env::current_dir()?;
-
-        // Find all .swissarmyhammer directories from root to current
-        let mut prompt_dirs = Vec::new();
-        let mut path = current_dir.as_path();
-
-        loop {
-            let swissarmyhammer_dir = path.join(".swissarmyhammer");
-            if swissarmyhammer_dir.exists() && swissarmyhammer_dir.is_dir() {
-                // Skip the user's home .swissarmyhammer directory to avoid duplicate loading
-                // Get the user's home directory dynamically to handle test cases
-                if let Some(home) = dirs::home_dir() {
-                    let user_swissarmyhammer_dir = home.join(".swissarmyhammer");
-                    if swissarmyhammer_dir == user_swissarmyhammer_dir {
-                        match path.parent() {
-                            Some(parent) => path = parent,
-                            None => break,
-                        }
-                        continue;
-                    }
-                }
-
-                let prompts_dir = swissarmyhammer_dir.join("prompts");
-                if prompts_dir.exists() && prompts_dir.is_dir() {
-                    prompt_dirs.push(prompts_dir);
-                }
-            }
-
-            match path.parent() {
-                Some(parent) => path = parent,
-                None => break,
-            }
-        }
-
-        // Load in reverse order (root to current) so deeper paths override
-        for prompts_dir in prompt_dirs.into_iter().rev() {
-            // Load local prompts from the directory
-            let loader = crate::prompts::PromptLoader::new();
-            let local_prompts = loader.load_directory(&prompts_dir)?;
-
-            // Add each local prompt and track it
-            for prompt in local_prompts {
-                // Local prompts override any existing prompt with the same name
-                self.prompt_sources
-                    .insert(prompt.name.clone(), PromptSource::Local);
-                library.add(prompt)?;
-            }
+    /// Load builtin prompts from embedded binary data
+    fn load_builtin_prompts(&mut self) -> Result<()> {
+        let builtin_prompts = get_builtin_prompts();
+        
+        // Add builtin prompts to VFS
+        for (name, content) in builtin_prompts {
+            self.vfs.add_builtin(name, content);
         }
 
         Ok(())
     }
+
 }
 
 impl Default for PromptResolver {
@@ -236,11 +131,11 @@ mod tests {
         // Temporarily change home directory for test
         std::env::set_var("HOME", temp_dir.path());
 
-        resolver.load_user_prompts(&mut library).unwrap();
+        resolver.load_all_prompts(&mut library).unwrap();
 
-        let prompts = library.list().unwrap();
-        assert_eq!(prompts.len(), 1);
-        assert_eq!(prompts[0].name, "test_prompt");
+        // Check that our test prompt was loaded
+        let prompt = library.get("test_prompt").unwrap();
+        assert_eq!(prompt.name, "test_prompt");
         assert_eq!(
             resolver.prompt_sources.get("test_prompt"),
             Some(&PromptSource::User)
@@ -264,14 +159,14 @@ mod tests {
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(&temp_dir).unwrap();
 
-        resolver.load_local_prompts(&mut library).unwrap();
+        resolver.load_all_prompts(&mut library).unwrap();
 
         // Restore original directory
         std::env::set_current_dir(original_dir).unwrap();
 
-        let prompts = library.list().unwrap();
-        assert_eq!(prompts.len(), 1);
-        assert_eq!(prompts[0].name, "local_prompt");
+        // Check that our test prompt was loaded
+        let prompt = library.get("local_prompt").unwrap();
+        assert_eq!(prompt.name, "local_prompt");
         assert_eq!(
             resolver.prompt_sources.get("local_prompt"),
             Some(&PromptSource::Local)
@@ -284,7 +179,7 @@ mod tests {
         let mut library = PromptLibrary::new();
 
         // Load builtin prompts
-        resolver.load_builtin_prompts(&mut library).unwrap();
+        resolver.load_all_prompts(&mut library).unwrap();
 
         // The debug/error prompt should be loaded and tracked as builtin
         // First check that it exists in the library
@@ -363,13 +258,13 @@ This is a user-defined debug/error prompt that should override the builtin one.
         std::env::set_var("HOME", temp_dir.path());
 
         // Load builtin prompts first
-        resolver.load_builtin_prompts(&mut library).unwrap();
+        resolver.load_all_prompts(&mut library).unwrap();
 
         // Check if debug/error exists as builtin (it might not always exist)
         let has_builtin_debug_error = resolver.prompt_sources.contains_key("debug/error");
 
         // Load user prompts (should override the builtin if it exists, or just add it if not)
-        resolver.load_user_prompts(&mut library).unwrap();
+        resolver.load_all_prompts(&mut library).unwrap();
 
         // Now it should be tracked as a user prompt
         assert_eq!(

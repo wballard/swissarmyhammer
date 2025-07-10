@@ -1,0 +1,19 @@
+## Review Format
+
+### Summary
+
+Provide a concise overview of findings.
+
+### Details
+
+- List specific issues found
+- Include code snippets where relevant
+- Suggest improvements
+
+### Priority
+
+Categorize findings by severity:
+- Critical: Must fix immediately
+- High: Fix before release
+- Medium: Fix in next iteration  
+- Low: Nice to have improvements

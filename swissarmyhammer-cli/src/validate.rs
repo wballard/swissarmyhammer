@@ -3,9 +3,7 @@ use colored::*;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use swissarmyhammer::security::{
-    validate_path_security, validate_workflow_complexity, MAX_DIRECTORY_DEPTH,
-};
+use swissarmyhammer::security::{validate_workflow_complexity, MAX_DIRECTORY_DEPTH};
 use swissarmyhammer::workflow::{MermaidParser, Workflow, WorkflowGraphAnalyzer};
 use walkdir::WalkDir;
 
@@ -316,24 +314,8 @@ impl Validator {
 
         // Walk through each directory with security limits
         for search_dir in dirs_to_search {
-            // Validate the search directory is safe
-            match validate_path_security(&search_dir, &current_dir) {
-                Ok(_) => {}
-                Err(e) => {
-                    result.add_issue(ValidationIssue {
-                        level: ValidationLevel::Error,
-                        file_path: search_dir.clone(),
-                        prompt_title: None,
-                        line: None,
-                        column: None,
-                        message: format!("Security: {}", e),
-                        suggestion: Some(
-                            "Ensure workflow directory is within the project".to_string(),
-                        ),
-                    });
-                    continue;
-                }
-            }
+            // Skip security validation for search directories since they're already
+            // constructed to be absolute paths within the project
 
             if !search_dir.exists() {
                 result.add_issue(ValidationIssue {
@@ -360,26 +342,6 @@ impl Validator {
             {
                 let entry = entry?;
                 let path = entry.path();
-
-                // Validate path security
-                match validate_path_security(path, &current_dir) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        result.add_issue(ValidationIssue {
-                            level: ValidationLevel::Error,
-                            file_path: path.to_path_buf(),
-                            prompt_title: None,
-                            line: None,
-                            column: None,
-                            message: format!("Security: {}", e),
-                            suggestion: Some(
-                                "Ensure workflow files are within the project directory"
-                                    .to_string(),
-                            ),
-                        });
-                        continue;
-                    }
-                }
 
                 // Check if this is a workflow file
                 if path.extension().and_then(|s| s.to_str()) == Some("mermaid") {

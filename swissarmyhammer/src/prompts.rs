@@ -901,7 +901,7 @@ impl PromptLoader {
 
         // If this is a partial template (no metadata), set appropriate description
         if prompt.description.is_none()
-            && (has_partial_marker || self.is_likely_partial(&prompt.name, &prompt.template))
+            && (has_partial_marker || self.is_likely_partial(&prompt.name, &content))
         {
             prompt.description = Some("Partial template for reuse in other prompts".to_string());
         }
@@ -1016,7 +1016,7 @@ impl PromptLoader {
 
         // If this is a partial template (no metadata), set appropriate description
         if prompt.description.is_none()
-            && (has_partial_marker || self.is_likely_partial(&prompt.name, &prompt.template))
+            && (has_partial_marker || self.is_likely_partial(&prompt.name, &content))
         {
             prompt.description = Some("Partial template for reuse in other prompts".to_string());
         }

@@ -120,13 +120,8 @@ impl PromptResolver {
 
         // Add each embedded prompt to the library
         for (name, content) in builtin_prompts {
-            let prompt = if content.starts_with("---\n") {
-                // Parse as a prompt file with frontmatter
-                loader.load_from_string(name, content)?
-            } else {
-                // Treat as a simple template
-                crate::prompts::Prompt::new(name, content)
-            };
+            // Always use load_from_string to ensure partial detection happens
+            let prompt = loader.load_from_string(name, content)?;
 
             // Track the prompt source using the actual prompt name
             self.prompt_sources

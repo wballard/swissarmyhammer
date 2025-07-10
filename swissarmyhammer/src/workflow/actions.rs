@@ -77,6 +77,8 @@ pub struct PromptAction {
     pub result_variable: Option<String>,
     /// Timeout for the Claude execution
     pub timeout: Duration,
+    /// Whether to suppress stdout output (only log)
+    pub quiet: bool,
 }
 
 impl PromptAction {
@@ -87,6 +89,7 @@ impl PromptAction {
             arguments: HashMap::new(),
             result_variable: None,
             timeout: Duration::from_secs(300), // 5 minute default
+            quiet: false, // Default to showing output
         }
     }
 
@@ -105,6 +108,12 @@ impl PromptAction {
     /// Set the timeout for execution
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
+        self
+    }
+
+    /// Set whether to suppress stdout output
+    pub fn with_quiet(mut self, quiet: bool) -> Self {
+        self.quiet = quiet;
         self
     }
 
@@ -177,7 +186,14 @@ impl Action for PromptAction {
 
         // Use shared error handling utility
         let stdout = handle_claude_command_error(output)?;
-        let response = parse_claude_response(&stdout)?;
+        
+        // Check if quiet mode is enabled in the context
+        let quiet = self.quiet || context.get("_quiet")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        
+        // Process and display the JSON stream
+        let response = parse_and_display_claude_response(&stdout, quiet)?;
 
         // Store result in context if variable name specified
         if let Some(var_name) = &self.result_variable {
@@ -442,8 +458,9 @@ fn substitute_variables_in_string(input: &str, context: &HashMap<String, Value>)
         .unwrap_or_else(|_| input.to_string())
 }
 
-/// Parse Claude's streaming JSON response
-fn parse_claude_response(output: &str) -> ActionResult<Value> {
+
+/// Parse Claude's streaming JSON response, log it, and optionally display as YAML
+fn parse_and_display_claude_response(output: &str, quiet: bool) -> ActionResult<Value> {
     // Claude outputs streaming JSON, we need to collect all content
     let mut content = String::new();
     let mut parse_errors = Vec::new();
@@ -454,9 +471,23 @@ fn parse_claude_response(output: &str) -> ActionResult<Value> {
             continue;
         }
 
+        // Log the raw JSON stream
+        tracing::debug!("Claude JSON stream: {}", line);
+
         match serde_json::from_str::<Value>(line) {
             Ok(json) => {
                 valid_json_found = true;
+                
+                // Convert to YAML and print to stdout unless quiet
+                if !quiet {
+                    if let Ok(yaml) = serde_yaml::to_string(&json) {
+                        // Print YAML without the "---" document separator for cleaner output
+                        let yaml_trimmed = yaml.trim_start_matches("---\n");
+                        eprint!("{}", yaml_trimmed);
+                    }
+                }
+                
+                // Extract content
                 if let Some(Value::String(text)) = json.get("content") {
                     content.push_str(text);
                 }
@@ -464,6 +495,7 @@ fn parse_claude_response(output: &str) -> ActionResult<Value> {
             Err(e) => {
                 // Collect parse errors for potential debugging
                 parse_errors.push((line_num + 1, e.to_string()));
+                tracing::warn!("Failed to parse JSON on line {}: {}", line_num + 1, e);
             }
         }
     }
@@ -889,5 +921,36 @@ mod tests {
         let substituted = action.substitute_variables(&context);
         assert_eq!(substituted.get("file"), Some(&"test.rs".to_string()));
         assert_eq!(substituted.get("mode"), Some(&"strict".to_string()));
+    }
+
+    #[test]
+    fn test_parse_and_display_claude_response_quiet() {
+        let json_output = r#"{"type":"content_block_start","content":"Hello"}
+{"type":"content_block_delta","content":" world"}
+{"type":"content_block_stop"}"#;
+
+        // Test with quiet = true (should not print to stderr)
+        let result = parse_and_display_claude_response(json_output, true).unwrap();
+        assert_eq!(result, Value::String("Hello world".to_string()));
+
+        // Test with quiet = false (would print to stderr but we can't easily test that)
+        let result = parse_and_display_claude_response(json_output, false).unwrap();
+        assert_eq!(result, Value::String("Hello world".to_string()));
+    }
+
+    #[test]
+    fn test_parse_and_display_claude_response_invalid_json() {
+        let invalid_output = "This is not JSON";
+
+        // Should return the raw output when no valid JSON is found
+        let result = parse_and_display_claude_response(invalid_output, true);
+        
+        // Actually it should return an error for invalid JSON with no valid lines
+        assert!(result.is_err());
+        if let Err(ActionError::ParseError(msg)) = result {
+            assert!(msg.contains("Failed to parse Claude response"));
+        } else {
+            panic!("Expected ParseError");
+        }
     }
 }

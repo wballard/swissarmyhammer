@@ -79,6 +79,21 @@ mod prompt_action_tests {
         assert_eq!(action.timeout, timeout_duration);
     }
 
+    #[test]
+    fn test_prompt_action_with_quiet() {
+        // Test enabling quiet mode
+        let action = PromptAction::new("test-prompt".to_string()).with_quiet(true);
+        assert_eq!(action.quiet, true);
+
+        // Test disabling quiet mode
+        let action = PromptAction::new("test-prompt".to_string()).with_quiet(false);
+        assert_eq!(action.quiet, false);
+
+        // Test default is false
+        let action = PromptAction::new("test-prompt".to_string());
+        assert_eq!(action.quiet, false);
+    }
+
     // Note: Variable substitution is tested through the public execute() method
     // since substitute_variables() is private
 

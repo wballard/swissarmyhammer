@@ -76,7 +76,7 @@ fn test_prompt_resolver_with_test_home() {
 
     // Load user prompts (which should now come from test home)
     resolver
-        .load_user_prompts(&mut library)
+        .load_all_prompts(&mut library)
         .expect("Failed to load user prompts");
 
     let prompts = library.list().expect("Failed to list prompts");

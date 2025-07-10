@@ -53,8 +53,11 @@ pub struct MermaidParser;
 impl MermaidParser {
     /// Parse a Mermaid state diagram into a Workflow
     pub fn parse(input: &str, workflow_name: impl Into<WorkflowName>) -> ParseResult<Workflow> {
+        // Parse front matter and extract mermaid content
+        let mermaid_content = Self::extract_mermaid_from_markdown(input)?;
+        
         // Attempt to parse the diagram
-        match parse_diagram(input) {
+        match parse_diagram(&mermaid_content) {
             Ok(diagram) => match diagram {
                 DiagramType::State(state_diagram) => {
                     Self::convert_state_diagram(state_diagram, workflow_name.into())
@@ -65,6 +68,53 @@ impl MermaidParser {
             },
             Err(e) => Err(ParseError::MermaidError(e.to_string())),
         }
+    }
+
+    /// Extract mermaid diagram content from markdown with YAML front matter or raw mermaid content
+    fn extract_mermaid_from_markdown(input: &str) -> ParseResult<String> {
+        // Check if this is raw mermaid content (for backward compatibility with tests)
+        let trimmed = input.trim();
+        if trimmed.starts_with("stateDiagram") || trimmed.starts_with("flowchart") || trimmed.starts_with("graph") {
+            return Ok(input.to_string());
+        }
+
+        // Parse front matter if present
+        let content = if input.starts_with("---\n") {
+            let parts: Vec<&str> = input.splitn(3, "---\n").collect();
+            if parts.len() >= 3 {
+                parts[2].trim_start()
+            } else {
+                input
+            }
+        } else {
+            input
+        };
+
+        // Extract mermaid code block
+        let lines: Vec<&str> = content.lines().collect();
+        let mut in_mermaid_block = false;
+        let mut mermaid_lines = Vec::new();
+
+        for line in lines {
+            if line.trim() == "```mermaid" {
+                in_mermaid_block = true;
+                continue;
+            }
+            if in_mermaid_block && line.trim() == "```" {
+                break;
+            }
+            if in_mermaid_block {
+                mermaid_lines.push(line);
+            }
+        }
+
+        if mermaid_lines.is_empty() {
+            return Err(ParseError::InvalidStructure {
+                message: "No mermaid code block found in markdown content".to_string(),
+            });
+        }
+
+        Ok(mermaid_lines.join("\n"))
     }
 
     /// Convert a parsed state diagram to our Workflow type

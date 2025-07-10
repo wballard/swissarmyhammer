@@ -44,8 +44,8 @@ impl WorkflowResolver {
 
         // Process all loaded files into workflows
         for file in self.vfs.list() {
-            // Only process .mermaid files for workflows
-            if file.path.extension().and_then(|s| s.to_str()) == Some("mermaid") {
+            // Only process .md files for workflows
+            if file.path.extension().and_then(|s| s.to_str()) == Some("md") {
                 if let Ok(workflow) = MermaidParser::parse(&file.content, &*file.name) {
                     // Track the workflow source
                     self.workflow_sources
@@ -1074,11 +1074,19 @@ mod tests {
         fs::create_dir_all(&local_workflows_dir).unwrap();
 
         // Create a test workflow file
-        let workflow_file = local_workflows_dir.join("local_workflow.mermaid");
-        let workflow_content = r#"
-        stateDiagram-v2
-            [*] --> Processing
-            Processing --> [*]
+        let workflow_file = local_workflows_dir.join("local_workflow.md");
+        let workflow_content = r#"---
+name: Local Test Workflow
+description: A local workflow for testing
+---
+
+# Local Test Workflow
+
+```mermaid
+stateDiagram-v2
+    [*] --> Processing
+    Processing --> [*]
+```
         "#;
         fs::write(&workflow_file, workflow_content).unwrap();
 

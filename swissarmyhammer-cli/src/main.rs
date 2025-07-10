@@ -2,6 +2,7 @@ use std::process;
 mod cli;
 mod completions;
 mod doctor;
+mod error;
 mod flow;
 mod list;
 // prompt_loader module removed - using SDK's PromptResolver directly
@@ -191,15 +192,10 @@ fn run_doctor() -> i32 {
 }
 
 async fn run_prompt(subcommand: cli::PromptSubcommand) -> i32 {
+    use error::handle_cli_result;
     use prompt;
 
-    match prompt::run_prompt_command(subcommand).await {
-        Ok(exit_code) => exit_code,
-        Err(e) => {
-            eprintln!("Prompt error: {}", e);
-            1
-        }
-    }
+    handle_cli_result(prompt::run_prompt_command(subcommand).await)
 }
 
 fn run_completions(shell: clap_complete::Shell) -> i32 {

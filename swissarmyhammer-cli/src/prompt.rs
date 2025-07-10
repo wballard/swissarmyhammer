@@ -1,11 +1,11 @@
 //! Prompt command implementation for managing prompts
 
 use crate::cli::PromptSubcommand;
+use crate::error::{CliError, CliResult};
 use crate::{list, search, test, validate};
-use swissarmyhammer::Result;
 
 /// Main entry point for prompt command
-pub async fn run_prompt_command(subcommand: PromptSubcommand) -> Result<i32> {
+pub async fn run_prompt_command(subcommand: PromptSubcommand) -> CliResult<()> {
     match subcommand {
         PromptSubcommand::List {
             format,
@@ -13,24 +13,21 @@ pub async fn run_prompt_command(subcommand: PromptSubcommand) -> Result<i32> {
             source,
             category,
             search,
-        } => Ok(
-            list::run_list_command(format, verbose, source, category, search)
-                .map(|_| 0)
-                .unwrap_or_else(|e| {
-                    eprintln!("List error: {}", e);
-                    1
-                }),
-        ),
+        } => list::run_list_command(format, verbose, source, category, search)
+            .map(|_| ())
+            .map_err(|e| CliError::new(e.to_string(), 1)),
         PromptSubcommand::Validate {
             quiet,
             format,
             workflow_dirs,
-        } => Ok(
-            validate::run_validate_command(quiet, format, workflow_dirs).unwrap_or_else(|e| {
-                eprintln!("Validation error: {}", e);
-                2
-            }),
-        ),
+        } => {
+            let exit_code = validate::run_validate_command(quiet, format, workflow_dirs)
+                .map_err(|e| CliError::new(e.to_string(), 2))?;
+            if exit_code != 0 {
+                return Err(CliError::new("Validation failed", exit_code));
+            }
+            Ok(())
+        }
         PromptSubcommand::Test {
             prompt_name,
             file,
@@ -41,13 +38,16 @@ pub async fn run_prompt_command(subcommand: PromptSubcommand) -> Result<i32> {
             debug,
         } => {
             let mut runner = test::TestRunner::new();
-            Ok(runner
-                .run(&prompt_name, &file, &arguments, raw, copy, &save, debug)
-                .await
-                .unwrap_or_else(|e| {
-                    eprintln!("Test error: {}", e);
-                    1
-                }))
+            let config = test::TestConfig {
+                prompt_name,
+                file,
+                arguments,
+                raw,
+                copy,
+                save,
+                debug,
+            };
+            runner.run(config).await.map(|_| ()).map_err(|e| CliError::new(e.to_string(), 1))
         }
         PromptSubcommand::Search {
             query,
@@ -62,7 +62,7 @@ pub async fn run_prompt_command(subcommand: PromptSubcommand) -> Result<i32> {
             format,
             highlight,
             limit,
-        } => Ok(search::run_search_command(
+        } => search::run_search_command(
             query,
             r#in,
             regex,
@@ -76,10 +76,90 @@ pub async fn run_prompt_command(subcommand: PromptSubcommand) -> Result<i32> {
             highlight,
             limit,
         )
-        .map(|_| 0)
-        .unwrap_or_else(|e| {
-            eprintln!("Search error: {}", e);
-            1
-        })),
+        .map(|_| ())
+        .map_err(|e| CliError::new(e.to_string(), 1)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::PromptSubcommand;
+
+    #[tokio::test]
+    async fn test_run_prompt_command_list() {
+        // Create a List subcommand with minimal arguments
+        let subcommand = PromptSubcommand::List {
+            format: crate::cli::OutputFormat::Table,
+            verbose: false,
+            source: None,
+            category: None,
+            search: None,
+        };
+
+        // Run the command - we expect it to succeed
+        let result = run_prompt_command(subcommand).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_prompt_command_validate() {
+        // Create a Validate subcommand
+        let subcommand = PromptSubcommand::Validate {
+            quiet: false,
+            format: crate::cli::ValidateFormat::Text,
+            workflow_dirs: vec![],
+        };
+
+        // Run the command - validation might fail with errors, but the command itself should execute
+        let _result = run_prompt_command(subcommand).await;
+        // The command might return an error if validation fails, but that's expected
+        // We're just testing that the command runs without panicking
+    }
+
+    #[tokio::test]
+    async fn test_run_prompt_command_search() {
+        // Create a Search subcommand with a simple query
+        let subcommand = PromptSubcommand::Search {
+            query: "test".to_string(),
+            r#in: None,
+            regex: false,
+            fuzzy: false,
+            case_sensitive: false,
+            source: None,
+            has_arg: None,
+            no_args: false,
+            full: false,
+            format: crate::cli::OutputFormat::Table,
+            highlight: true,
+            limit: None,
+        };
+
+        // Run the command
+        let result = run_prompt_command(subcommand).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_prompt_command_test_with_invalid_prompt() {
+        // Create a Test subcommand with a non-existent prompt
+        let subcommand = PromptSubcommand::Test {
+            prompt_name: Some("non_existent_prompt_12345".to_string()),
+            file: None,
+            arguments: vec![],
+            raw: false,
+            copy: false,
+            save: None,
+            debug: false,
+        };
+
+        // Run the command - should return an error
+        let result = run_prompt_command(subcommand).await;
+        assert!(result.is_err());
+
+        // Verify the error has the expected exit code
+        if let Err(e) = result {
+            assert_eq!(e.exit_code, 1);
+        }
     }
 }

@@ -526,11 +526,8 @@ mod sub_workflow_action_tests {
 
         // It will fail with execution error (process not found), but not circular dependency
         assert!(result.is_err());
-        match result.unwrap_err() {
-            ActionError::ExecutionError(msg) => {
-                assert!(!msg.contains("Circular dependency"));
-            }
-            _ => {}
+        if let ActionError::ExecutionError(msg) = result.unwrap_err() {
+            assert!(!msg.contains("Circular dependency"));
         }
     }
 }

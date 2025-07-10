@@ -40,10 +40,8 @@ pub mod check_names {
 
 /// Format strings used throughout the module
 pub mod format_strings {
-    pub const WORKFLOW_DIR_PERMISSIONS: &str = "Workflow directory permissions: {:?}";
+    #[cfg(not(unix))]
     pub const WORKFLOW_DIR_ACCESS: &str = "Workflow directory access: {:?}";
-    pub const WORKFLOW_PARSING_ERROR: &str = "Workflow parsing: {:?}";
-    pub const YAML_PARSING_ERROR: &str = "YAML parsing: {:?}";
 }
 
 /// Check installation method and binary integrity

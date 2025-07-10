@@ -1337,15 +1337,17 @@ mod tests {
 
         // Temporarily change home directory and current directory for test
         std::env::set_var("HOME", temp_dir.path());
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir = std::env::current_dir().ok();
         std::env::set_current_dir(temp_dir.path().join("project")).unwrap();
 
         // Load all workflows (user first, then local to test precedence)
         resolver.load_user_workflows(&mut storage).unwrap();
         resolver.load_local_workflows(&mut storage).unwrap();
 
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        // Restore original directory if it still exists
+        if let Some(dir) = original_dir {
+            let _ = std::env::set_current_dir(dir);
+        }
 
         let workflows = storage.list_workflows().unwrap();
         assert_eq!(workflows.len(), 1);

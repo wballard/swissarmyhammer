@@ -170,6 +170,8 @@ pub struct Check {
 }
 
 impl Check {
+    // Builder pattern methods are currently unused but kept for potential future use
+    #[allow(dead_code)]
     /// Create a new Check with builder pattern
     ///
     /// # Example
@@ -192,6 +194,7 @@ impl Check {
     }
 }
 
+#[allow(dead_code)]
 /// Builder for creating Check instances
 pub struct CheckBuilder {
     name: String,
@@ -200,6 +203,7 @@ pub struct CheckBuilder {
     fix: Option<String>,
 }
 
+#[allow(dead_code)]
 impl CheckBuilder {
     /// Set the message for this check
     pub fn with_message(mut self, message: impl Into<String>) -> Self {

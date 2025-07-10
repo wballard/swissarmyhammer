@@ -251,7 +251,7 @@ mod tests {
 
         let cycles = analyzer.detect_all_cycles();
 
-        assert!(cycles.len() >= 1);
+        assert!(!cycles.is_empty());
         // Should find the self-loop cycle
         assert!(cycles
             .iter()
@@ -564,7 +564,7 @@ mod tests {
         // Should still find paths even with cycles due to visited tracking
         let paths = analyzer.find_paths(&StateId::new("start"), &StateId::new("end"));
 
-        assert!(paths.len() >= 1);
+        assert!(!paths.is_empty());
         // Should find path: start -> loop -> end
         assert!(paths.iter().any(|path| path.len() == 3
             && path[0] == StateId::new("start")

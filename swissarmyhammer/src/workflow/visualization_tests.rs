@@ -8,10 +8,10 @@ use crate::workflow::visualization::{
     MAX_EXECUTION_STEPS, MAX_PATH_LENGTH_FULL, MAX_PATH_LENGTH_MINIMAL,
 };
 use crate::workflow::{
-    test_helpers::*, visualization::*, ConditionType, MemoryMetrics, RunMetrics, State, StateId,
+    test_helpers::*, visualization::*, ConditionType, MemoryMetrics, RunMetrics, StateId,
     WorkflowName, WorkflowRun, WorkflowRunId, WorkflowRunStatus,
 };
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -260,13 +260,13 @@ mod tests {
     #[test]
     fn test_generate_html_dos_protection() {
         let visualizer = ExecutionVisualizer::new();
-        let mut run = create_sample_workflow_run();
+        let run = create_sample_workflow_run();
 
         // Create a trace with too many execution steps
         let mut execution_path = Vec::new();
         for i in 0..MAX_EXECUTION_STEPS + 1 {
             execution_path.push(ExecutionStep {
-                state_id: StateId::new(&format!("state_{}", i)),
+                state_id: StateId::new(format!("state_{}", i)),
                 state_description: format!("State {}", i),
                 duration: Some(Duration::from_millis(100)),
                 timestamp: Utc::now(),
@@ -474,11 +474,11 @@ mod tests {
 
     #[test]
     fn test_constants_are_reasonable() {
-        // Test that constants have reasonable values
-        assert!(MAX_PATH_LENGTH_FULL > MAX_PATH_LENGTH_MINIMAL);
-        assert!(MAX_PATH_LENGTH_FULL >= 100);
-        assert!(MAX_PATH_LENGTH_MINIMAL >= 10);
-        assert!(MAX_EXECUTION_STEPS >= 100);
+        // Verify constants are properly exposed and have expected values
+        // These assertions document the expected values of public constants
+        assert_eq!(MAX_PATH_LENGTH_FULL, 1000);
+        assert_eq!(MAX_PATH_LENGTH_MINIMAL, 100);
+        assert_eq!(MAX_EXECUTION_STEPS, 500);
     }
 
     #[test]

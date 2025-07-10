@@ -233,7 +233,7 @@ impl McpServer {
                     last_error = Some(e);
 
                     if attempt < MAX_RETRIES
-                        && Self::is_retryable_fs_error(&last_error.as_ref().unwrap())
+                        && Self::is_retryable_fs_error(last_error.as_ref().unwrap())
                     {
                         tracing::warn!(
                             "⚠️ File watcher initialization attempt {} failed, retrying in {}ms: {}",
@@ -321,7 +321,7 @@ impl McpServer {
 
                     // Check if this is a retryable error
                     if attempt < MAX_RETRIES
-                        && Self::is_retryable_fs_error(&last_error.as_ref().unwrap())
+                        && Self::is_retryable_fs_error(last_error.as_ref().unwrap())
                     {
                         tracing::warn!(
                             "⚠️ Reload attempt {} failed, retrying in {}ms: {}",

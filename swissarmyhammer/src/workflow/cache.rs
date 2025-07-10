@@ -14,26 +14,27 @@ pub const DEFAULT_TRANSITION_CACHE_SIZE: usize = 1000;
 pub const DEFAULT_CEL_CACHE_SIZE: usize = 500;
 
 /// Cache statistics for monitoring performance
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CacheStats {
+    /// Number of successful cache lookups
     pub hits: u64,
+    /// Number of failed cache lookups
     pub misses: u64,
+    /// Number of items evicted from cache
     pub evictions: u64,
+    /// Current number of items in cache
     pub size: usize,
+    /// Maximum capacity of the cache
     pub capacity: usize,
 }
 
 impl CacheStats {
+    /// Create new cache statistics
     pub fn new() -> Self {
-        Self {
-            hits: 0,
-            misses: 0,
-            evictions: 0,
-            size: 0,
-            capacity: 0,
-        }
+        Self::default()
     }
 
+    /// Calculate cache hit rate as a percentage (0.0 to 1.0)
     pub fn hit_rate(&self) -> f64 {
         if self.hits + self.misses == 0 {
             0.0
@@ -50,6 +51,7 @@ pub struct WorkflowCache {
 }
 
 impl WorkflowCache {
+    /// Create a new workflow cache with specified capacity
     pub fn new(capacity: usize) -> Self {
         let capacity = NonZeroUsize::new(capacity)
             .unwrap_or(NonZeroUsize::new(DEFAULT_WORKFLOW_CACHE_SIZE).unwrap());
@@ -59,6 +61,7 @@ impl WorkflowCache {
         }
     }
 
+    /// Get a workflow from the cache by name
     pub fn get(&self, name: &WorkflowName) -> Option<Arc<Workflow>> {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
@@ -75,6 +78,7 @@ impl WorkflowCache {
         }
     }
 
+    /// Store a workflow in the cache
     pub fn put(&self, name: WorkflowName, workflow: Arc<Workflow>) {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
@@ -87,10 +91,12 @@ impl WorkflowCache {
         stats.capacity = cache.cap().get();
     }
 
+    /// Check if a workflow exists in the cache
     pub fn contains(&self, name: &WorkflowName) -> bool {
         self.cache.lock().unwrap().contains(name)
     }
 
+    /// Clear all entries from the cache
     pub fn clear(&self) {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
@@ -100,6 +106,7 @@ impl WorkflowCache {
         stats.evictions += stats.size as u64;
     }
 
+    /// Get current cache statistics
     pub fn stats(&self) -> CacheStats {
         self.stats.lock().unwrap().clone()
     }
@@ -108,13 +115,18 @@ impl WorkflowCache {
 /// Cached transition path for optimized state transitions
 #[derive(Debug, Clone)]
 pub struct TransitionPath {
+    /// Starting state of the transition
     pub from_state: StateId,
+    /// Target state of the transition
     pub to_state: StateId,
+    /// Conditions that must be met for this transition
     pub conditions: Vec<String>,
+    /// Timestamp when this path was cached
     pub cached_at: Instant,
 }
 
 impl TransitionPath {
+    /// Create a new transition path
     pub fn new(from_state: StateId, to_state: StateId, conditions: Vec<String>) -> Self {
         Self {
             from_state,
@@ -124,6 +136,7 @@ impl TransitionPath {
         }
     }
 
+    /// Check if this cached path has expired based on time-to-live
     pub fn is_expired(&self, ttl: Duration) -> bool {
         self.cached_at.elapsed() > ttl
     }
@@ -137,6 +150,7 @@ pub struct TransitionCache {
 }
 
 impl TransitionCache {
+    /// Create a new transition cache with specified capacity and time-to-live
     pub fn new(capacity: usize, ttl: Duration) -> Self {
         let capacity = NonZeroUsize::new(capacity)
             .unwrap_or(NonZeroUsize::new(DEFAULT_TRANSITION_CACHE_SIZE).unwrap());
@@ -147,6 +161,7 @@ impl TransitionCache {
         }
     }
 
+    /// Get a transition path from the cache
     pub fn get(&self, key: &TransitionKey) -> Option<TransitionPath> {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
@@ -170,6 +185,7 @@ impl TransitionCache {
         }
     }
 
+    /// Store a transition path in the cache
     pub fn put(&self, key: TransitionKey, path: TransitionPath) {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
@@ -182,6 +198,7 @@ impl TransitionCache {
         stats.capacity = cache.cap().get();
     }
 
+    /// Remove a specific transition from the cache
     pub fn invalidate(&self, key: &TransitionKey) {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
@@ -192,6 +209,7 @@ impl TransitionCache {
         }
     }
 
+    /// Clear all entries from the cache
     pub fn clear(&self) {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
@@ -202,6 +220,7 @@ impl TransitionCache {
         stats.evictions += size as u64;
     }
 
+    /// Get current cache statistics
     pub fn stats(&self) -> CacheStats {
         self.stats.lock().unwrap().clone()
     }
@@ -215,6 +234,7 @@ pub struct CelProgramCache {
 }
 
 impl CelProgramCache {
+    /// Create a new CEL program cache with specified capacity
     pub fn new(capacity: usize) -> Self {
         let capacity = NonZeroUsize::new(capacity)
             .unwrap_or(NonZeroUsize::new(DEFAULT_CEL_CACHE_SIZE).unwrap());
@@ -225,6 +245,7 @@ impl CelProgramCache {
         }
     }
 
+    /// Get a compiled CEL program from the cache
     pub fn get(&self, expression: &str) -> Option<Arc<Program>> {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
@@ -241,6 +262,7 @@ impl CelProgramCache {
         }
     }
 
+    /// Store a compiled CEL program in the cache
     pub fn put(&self, expression: String, program: Program, compilation_time: Duration) {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
@@ -255,6 +277,7 @@ impl CelProgramCache {
         stats.capacity = cache.cap().get();
     }
 
+    /// Get a compiled CEL program from cache or compile it if not present
     pub fn get_or_compile(
         &self,
         expression: &str,
@@ -273,6 +296,7 @@ impl CelProgramCache {
         Ok(self.get(expression).unwrap())
     }
 
+    /// Clear all entries from the cache
     pub fn clear(&self) {
         let mut cache = self.cache.lock().unwrap();
         let mut stats = self.stats.lock().unwrap();
@@ -285,10 +309,12 @@ impl CelProgramCache {
         stats.evictions += size as u64;
     }
 
+    /// Get current cache statistics
     pub fn stats(&self) -> CacheStats {
         self.stats.lock().unwrap().clone()
     }
 
+    /// Calculate average CEL compilation time
     pub fn average_compilation_time(&self) -> Option<Duration> {
         let times = self.compilation_times.lock().unwrap();
         if times.is_empty() {
@@ -302,12 +328,16 @@ impl CelProgramCache {
 
 /// Combined cache manager for all workflow-related caches
 pub struct WorkflowCacheManager {
+    /// Cache for parsed workflow definitions
     pub workflow_cache: WorkflowCache,
+    /// Cache for state transition paths
     pub transition_cache: TransitionCache,
+    /// Cache for compiled CEL expressions
     pub cel_cache: CelProgramCache,
 }
 
 impl WorkflowCacheManager {
+    /// Create a new cache manager with default capacities
     pub fn new() -> Self {
         Self {
             workflow_cache: WorkflowCache::new(DEFAULT_WORKFLOW_CACHE_SIZE),
@@ -319,6 +349,7 @@ impl WorkflowCacheManager {
         }
     }
 
+    /// Create a new cache manager with custom capacities
     pub fn with_capacities(workflow_cap: usize, transition_cap: usize, cel_cap: usize) -> Self {
         Self {
             workflow_cache: WorkflowCache::new(workflow_cap),
@@ -327,12 +358,14 @@ impl WorkflowCacheManager {
         }
     }
 
+    /// Clear all caches
     pub fn clear_all(&self) {
         self.workflow_cache.clear();
         self.transition_cache.clear();
         self.cel_cache.clear();
     }
 
+    /// Get statistics from all caches
     pub fn get_combined_stats(&self) -> HashMap<String, CacheStats> {
         let mut stats = HashMap::new();
         stats.insert("workflow".to_string(), self.workflow_cache.stats());
@@ -341,12 +374,14 @@ impl WorkflowCacheManager {
         stats
     }
 
+    /// Get total number of items across all caches
     pub fn total_cache_size(&self) -> usize {
         self.workflow_cache.stats().size
             + self.transition_cache.stats().size
             + self.cel_cache.stats().size
     }
 
+    /// Calculate overall hit rate across all caches
     pub fn overall_hit_rate(&self) -> f64 {
         let stats = self.get_combined_stats();
         let total_hits: u64 = stats.values().map(|s| s.hits).sum();
@@ -511,7 +546,7 @@ mod tests {
         // Programs should be functionally equivalent (both are Arc<Program>)
         // Note: Program doesn't implement Debug/Display, so we can't compare them directly
         // The fact that we got programs back is sufficient for the cache test
-        assert!(program1.as_ref() as *const _ == program2.as_ref() as *const _);
+        assert!(std::ptr::eq(program1.as_ref(), program2.as_ref()));
     }
 
     #[test]

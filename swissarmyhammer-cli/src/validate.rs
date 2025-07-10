@@ -3,7 +3,7 @@ use colored::*;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use swissarmyhammer::security::{validate_workflow_complexity, MAX_DIRECTORY_DEPTH};
+use swissarmyhammer::security::{validate_path_security, validate_workflow_complexity, MAX_DIRECTORY_DEPTH};
 use swissarmyhammer::workflow::{MermaidParser, Workflow, WorkflowGraphAnalyzer};
 use walkdir::WalkDir;
 
@@ -128,6 +128,8 @@ pub struct Validator {
     quiet: bool,
     /// Cache of parsed workflows to avoid re-parsing
     workflow_cache: HashMap<PathBuf, Workflow>,
+    /// Maximum number of workflows to cache
+    max_cache_size: usize,
 }
 
 impl Validator {
@@ -135,6 +137,7 @@ impl Validator {
         Self {
             quiet,
             workflow_cache: HashMap::new(),
+            max_cache_size: 100, // Limit cache to 100 workflows
         }
     }
 
@@ -314,10 +317,48 @@ impl Validator {
 
         // Walk through each directory with security limits
         for search_dir in dirs_to_search {
-            // Skip security validation for search directories since they're already
-            // constructed to be absolute paths within the project
+            // Validate the search directory is safe - use relative path for validation if possible
+            let path_for_validation = if search_dir.starts_with(&current_dir) {
+                // If the path is already within current_dir, make it relative for validation
+                search_dir.strip_prefix(&current_dir).ok().map(|p| p.to_path_buf()).unwrap_or(search_dir.clone())
+            } else if search_dir.is_absolute() {
+                // For absolute paths, check if they're within the current directory
+                if !search_dir.starts_with(&current_dir) {
+                    result.add_issue(ValidationIssue {
+                        level: ValidationLevel::Error,
+                        file_path: search_dir.clone(),
+                        prompt_title: None,
+                        line: None,
+                        column: None,
+                        message: "Security validation failed: Path is outside project directory".to_string(),
+                        suggestion: Some("Ensure the path is within the project directory".to_string()),
+                    });
+                    continue;
+                }
+                search_dir.clone()
+            } else {
+                search_dir.clone()
+            };
 
-            if !search_dir.exists() {
+            // Now validate the path security
+            let validated_dir = match validate_path_security(&path_for_validation, &current_dir) {
+                Ok(path) => path,
+                Err(e) => {
+                    result.add_issue(ValidationIssue {
+                        level: ValidationLevel::Error,
+                        file_path: search_dir.clone(),
+                        prompt_title: None,
+                        line: None,
+                        column: None,
+                        message: format!("Security validation failed: {}", e),
+                        suggestion: Some("Ensure the path is within the project directory and doesn't contain dangerous patterns".to_string()),
+                    });
+                    continue;
+                }
+            };
+
+            // Check if directory exists after security validation
+            if !validated_dir.exists() {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Warning,
                     file_path: search_dir.clone(),
@@ -330,7 +371,8 @@ impl Validator {
                 continue;
             }
 
-            for entry in WalkDir::new(&search_dir)
+
+            for entry in WalkDir::new(&validated_dir)
                 .max_depth(MAX_DIRECTORY_DEPTH)
                 .follow_links(false) // Don't follow symlinks for security
                 .into_iter()
@@ -427,7 +469,13 @@ impl Validator {
                 }
             };
 
-            // Cache the successfully parsed workflow
+            // Cache the successfully parsed workflow with size limit
+            if self.workflow_cache.len() >= self.max_cache_size {
+                // Remove oldest entry (simple FIFO eviction)
+                if let Some(first_key) = self.workflow_cache.keys().next().cloned() {
+                    self.workflow_cache.remove(&first_key);
+                }
+            }
             self.workflow_cache.insert(canonical_path, workflow.clone());
             workflow
         };
@@ -1453,6 +1501,69 @@ mod tests {
 
         // Note: This test would need to be run as an integration test
         // since run_validate_command uses the current directory
+    }
+
+    #[test]
+    fn test_validate_all_workflows_path_security() {
+        let mut validator = Validator::new(false);
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let current_dir = temp_dir.path();
+
+        // Create a safe workflow directory
+        let safe_dir = current_dir.join("workflows");
+        std::fs::create_dir_all(&safe_dir).unwrap();
+
+        // Test 1: Safe relative directory path
+        let mut result = ValidationResult::new();
+        let safe_dirs = vec!["workflows".to_string()];
+        
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&current_dir).unwrap();
+        
+        let validation_result = validator.validate_all_workflows(&mut result, &safe_dirs);
+        
+        std::env::set_current_dir(original_dir.clone()).unwrap();
+
+        assert!(validation_result.is_ok());
+        // Print debug info if test fails
+        if result.has_errors() {
+            for issue in &result.issues {
+                eprintln!("Validation issue: {}", issue.message);
+            }
+        }
+        assert!(!result.has_errors(), "Safe directory should not produce security errors");
+
+        // Test 2: Path traversal attempt
+        let mut result = ValidationResult::new();
+        let dangerous_dirs = vec!["../../../etc".to_string()];
+        
+        std::env::set_current_dir(&current_dir).unwrap();
+        
+        let validation_result = validator.validate_all_workflows(&mut result, &dangerous_dirs);
+        
+        std::env::set_current_dir(original_dir).unwrap();
+
+        assert!(validation_result.is_ok()); // Function should complete without panicking
+        
+        // Print debug info if test fails
+        if !result.has_errors() {
+            eprintln!("Expected errors but got none. Issues found:");
+            for issue in &result.issues {
+                eprintln!("  - {}: {}", 
+                    match issue.level {
+                        ValidationLevel::Error => "ERROR",
+                        ValidationLevel::Warning => "WARNING",
+                        ValidationLevel::Info => "INFO",
+                    },
+                    issue.message);
+            }
+        }
+        
+        assert!(result.has_errors(), "Path traversal should produce security errors");
+        assert!(result.issues.iter().any(|issue| 
+            issue.message.contains("Security validation failed") || 
+            issue.message.contains("parent directory")
+        ), "Should have security validation error");
     }
 
     #[test]

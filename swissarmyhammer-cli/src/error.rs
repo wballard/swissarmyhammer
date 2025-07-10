@@ -96,7 +96,6 @@ impl<T, E: Error + Send + Sync + 'static> IntoCliResult<T> for Result<T, E> {
     }
 }
 
-
 /// Convert a CliResult to an exit code, printing the full error chain if needed
 pub fn handle_cli_result<T>(result: CliResult<T>) -> i32 {
     match result {

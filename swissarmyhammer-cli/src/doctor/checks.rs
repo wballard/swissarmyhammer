@@ -191,6 +191,48 @@ pub fn check_in_path(checks: &mut Vec<Check>) -> Result<()> {
 pub fn check_claude_config(checks: &mut Vec<Check>) -> Result<()> {
     use std::process::Command;
 
+    // First, manually check if claude is in PATH
+    let path_var = env::var("PATH").unwrap_or_default();
+    let paths: Vec<std::path::PathBuf> = env::split_paths(&path_var).collect();
+
+    let mut claude_found_in_path = false;
+    let mut claude_path = None;
+
+    // Check for both 'claude' and 'claude.exe' (for Windows)
+    let executables = if cfg!(windows) {
+        vec!["claude.exe", "claude.cmd", "claude.bat"]
+    } else {
+        vec!["claude"]
+    };
+
+    for path in paths {
+        for exe_name in &executables {
+            let exe_path = path.join(exe_name);
+            if exe_path.exists() {
+                claude_found_in_path = true;
+                claude_path = Some(exe_path);
+                break;
+            }
+        }
+        if claude_found_in_path {
+            break;
+        }
+    }
+
+    // If claude is not found in PATH, provide detailed error
+    if !claude_found_in_path {
+        checks.push(Check {
+            name: check_names::CLAUDE_CONFIG.to_string(),
+            status: CheckStatus::Error,
+            message: "Claude Code command not found in PATH".to_string(),
+            fix: Some(format!(
+                "Install Claude Code from https://claude.ai/code or ensure the 'claude' command is in your PATH\nCurrent PATH: {}",
+                env::split_paths(&path_var).take(3).map(|p| p.display().to_string()).collect::<Vec<_>>().join(if cfg!(windows) { ";" } else { ":" }) + "..."
+            )),
+        });
+        return Ok(());
+    }
+
     // Run `claude mcp list` to check if swissarmyhammer is configured
     match Command::new("claude").arg("mcp").arg("list").output() {
         Ok(output) => {
@@ -202,7 +244,10 @@ pub fn check_claude_config(checks: &mut Vec<Check>) -> Result<()> {
                     checks.push(Check {
                         name: check_names::CLAUDE_CONFIG.to_string(),
                         status: CheckStatus::Ok,
-                        message: "swissarmyhammer is configured in Claude Code".to_string(),
+                        message: format!(
+                            "swissarmyhammer is configured in Claude Code (found claude at: {:?})",
+                            claude_path.unwrap_or_else(|| PathBuf::from("claude"))
+                        ),
                         fix: None,
                     });
                 } else {
@@ -227,21 +272,19 @@ pub fn check_claude_config(checks: &mut Vec<Check>) -> Result<()> {
             }
         }
         Err(e) => {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                checks.push(Check {
-                    name: check_names::CLAUDE_CONFIG.to_string(),
-                    status: CheckStatus::Error,
-                    message: "Claude Code command not found".to_string(),
-                    fix: Some("Install Claude Code from https://claude.ai/code or ensure the 'claude' command is in your PATH".to_string()),
-                });
-            } else {
-                checks.push(Check {
-                    name: check_names::CLAUDE_CONFIG.to_string(),
-                    status: CheckStatus::Error,
-                    message: format!("Failed to run 'claude mcp list': {}", e),
-                    fix: Some("Check that Claude Code is properly installed".to_string()),
-                });
-            }
+            // We already checked PATH above, so this error is something else
+            checks.push(Check {
+                name: check_names::CLAUDE_CONFIG.to_string(),
+                status: CheckStatus::Error,
+                message: format!(
+                    "Found claude at {:?} but failed to execute it: {}",
+                    claude_path.unwrap_or_else(|| PathBuf::from("claude")),
+                    e
+                ),
+                fix: Some(
+                    "Check that Claude Code is properly installed and executable".to_string(),
+                ),
+            });
         }
     }
 
@@ -811,4 +854,96 @@ fn check_circular_dependencies(checks: &mut Vec<Check>) {
         message: "Circular dependency checking requires workflow execution".to_string(),
         fix: None,
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_claude_path_detection() {
+        // Create a temporary directory to simulate PATH entries
+        let temp_dir = TempDir::new().unwrap();
+        let fake_bin_dir = temp_dir.path().join("bin");
+        fs::create_dir(&fake_bin_dir).unwrap();
+
+        // Create a fake claude executable
+        let claude_path = fake_bin_dir.join("claude");
+        fs::write(&claude_path, "#!/bin/sh\necho fake claude").unwrap();
+
+        // Make it executable on Unix
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&claude_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&claude_path, perms).unwrap();
+        }
+
+        // Set up PATH environment variable
+        let original_path = env::var("PATH").unwrap_or_default();
+        let path_separator = if cfg!(windows) { ";" } else { ":" };
+        let new_path = format!(
+            "{}{}{}",
+            fake_bin_dir.display(),
+            path_separator,
+            original_path
+        );
+        env::set_var("PATH", &new_path);
+
+        // Run the check
+        let mut checks = Vec::new();
+        let result = check_claude_config(&mut checks);
+
+        // Restore original PATH
+        env::set_var("PATH", original_path);
+
+        // Verify the result
+        assert!(result.is_ok());
+        assert!(!checks.is_empty());
+
+        // The check should find claude in PATH
+        let claude_check = checks
+            .iter()
+            .find(|c| c.name == check_names::CLAUDE_CONFIG)
+            .unwrap();
+
+        // It might fail to execute or find swissarmyhammer, but it should not say "command not found in PATH"
+        assert!(!claude_check
+            .message
+            .contains("Claude Code command not found in PATH"));
+    }
+
+    #[test]
+    fn test_claude_not_in_path() {
+        // Save original PATH
+        let original_path = env::var("PATH").unwrap_or_default();
+
+        // Set PATH to a directory that definitely doesn't contain claude
+        let temp_dir = TempDir::new().unwrap();
+        env::set_var("PATH", temp_dir.path().display().to_string());
+
+        // Run the check
+        let mut checks = Vec::new();
+        let result = check_claude_config(&mut checks);
+
+        // Restore original PATH
+        env::set_var("PATH", original_path);
+
+        // Verify the result
+        assert!(result.is_ok());
+        assert!(!checks.is_empty());
+
+        // The check should report claude not found in PATH
+        let claude_check = checks
+            .iter()
+            .find(|c| c.name == check_names::CLAUDE_CONFIG)
+            .unwrap();
+        assert_eq!(claude_check.status, CheckStatus::Error);
+        assert!(claude_check
+            .message
+            .contains("Claude Code command not found in PATH"));
+    }
 }

@@ -2,11 +2,35 @@
 //!
 //! This module provides a unified way to load files from the hierarchical
 //! .swissarmyhammer directory structure, handling precedence and overrides.
+//!
+//! # Error Handling
+//!
+//! The module follows these error handling principles:
+//!
+//! - **File loading errors**: Individual file loading failures are logged but don't
+//!   stop the loading process. This ensures that one corrupt file doesn't prevent
+//!   loading other valid files.
+//!
+//! - **Directory access errors**: If a directory doesn't exist or can't be accessed,
+//!   the error is silently ignored and loading continues with other directories.
+//!
+//! - **Security violations**: Files that fail security checks (path traversal,
+//!   file size limits) are logged and skipped, but don't cause the overall
+//!   operation to fail.
+//!
+//! - **Critical errors**: Only errors that prevent the entire operation from
+//!   functioning (like current directory access) are propagated up.
+//!
+//! All skipped files and errors are logged using the `tracing` framework at
+//! appropriate levels (warn for security issues, debug for missing directories).
 
 use crate::Result;
-use crate::security::MAX_DIRECTORY_DEPTH;
+use crate::directory_utils::{find_swissarmyhammer_dirs_upward, walk_files_with_extensions};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+
+/// Maximum file size to load (10MB)
+const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
 
 /// Source of a file (builtin, user, local, or dynamic)
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -67,28 +91,8 @@ impl FileEntry {
             .and_then(|s| s.to_str())
             .unwrap_or_default();
         
-        // Check if we have prompts or workflows in the path
-        let path_str = path.to_string_lossy();
-        let name = if path_str.contains("/prompts/") || path_str.contains("/workflows/") {
-            // Find the relative path after prompts/workflows
-            let split_on = if path_str.contains("/prompts/") {
-                "/prompts/"
-            } else {
-                "/workflows/"
-            };
-            
-            if let Some(after_split) = path_str.split(split_on).nth(1) {
-                // Remove the file extension
-                after_split.trim_end_matches(".md")
-                    .trim_end_matches(".mermaid")
-                    .to_string()
-            } else {
-                stem.to_string()
-            }
-        } else {
-            // No prompts/workflows directory in path, just use the stem
-            stem.to_string()
-        };
+        // Extract name using proper path operations
+        let name = Self::extract_name_from_path(&path, stem);
 
         Self {
             name,
@@ -97,9 +101,80 @@ impl FileEntry {
             source,
         }
     }
+    
+    /// Extract the name from a path using proper path operations
+    fn extract_name_from_path(path: &Path, stem: &str) -> String {
+        let mut components: Vec<String> = Vec::new();
+        let mut found_subdirectory = false;
+        
+        // Convert path to components and find prompts/workflows directory
+        for component in path.components() {
+            if let std::path::Component::Normal(os_str) = component {
+                if let Some(s) = os_str.to_str() {
+                    if found_subdirectory {
+                        // Collect all components after prompts/workflows
+                        components.push(s.to_string());
+                    } else if s == "prompts" || s == "workflows" {
+                        found_subdirectory = true;
+                    }
+                }
+            }
+        }
+        
+        if found_subdirectory && !components.is_empty() {
+            // Remove the last component (filename with extension) and use stem instead
+            components.pop();
+            if !components.is_empty() {
+                components.push(stem.to_string());
+                components.join("/")
+            } else {
+                stem.to_string()
+            }
+        } else {
+            stem.to_string()
+        }
+    }
 }
 
 /// Virtual file system that manages files from multiple sources
+///
+/// The VirtualFileSystem provides a unified interface for loading and managing
+/// files from different sources (builtin, user, local, dynamic) with proper
+/// precedence handling. Files are loaded from the hierarchical .swissarmyhammer
+/// directory structure.
+///
+/// # Example
+///
+/// ```no_run
+/// use swissarmyhammer::file_loader::{VirtualFileSystem, FileSource};
+///
+/// let mut vfs = VirtualFileSystem::new("prompts");
+///
+/// // Add a builtin file
+/// vfs.add_builtin("example", "This is a builtin prompt");
+///
+/// // Load all files following standard precedence
+/// vfs.load_all().unwrap();
+///
+/// // Get a file by name
+/// if let Some(file) = vfs.get("example") {
+///     println!("Content: {}", file.content);
+///     println!("Source: {:?}", file.source);
+/// }
+///
+/// // List all loaded files
+/// for file in vfs.list() {
+///     println!("File: {} from {:?}", file.name, file.source);
+/// }
+/// ```
+///
+/// # Precedence
+///
+/// Files are loaded with the following precedence (later sources override earlier):
+/// 1. Builtin files (embedded in the binary)
+/// 2. User files (from ~/.swissarmyhammer)
+/// 3. Local files (from .swissarmyhammer directories in parent paths)
+/// 4. Dynamic files (programmatically added)
 pub struct VirtualFileSystem {
     /// The subdirectory to look for (e.g., "prompts" or "workflows")
     pub subdirectory: String,
@@ -159,24 +234,42 @@ impl VirtualFileSystem {
             return Ok(());
         }
 
-        for entry in walkdir::WalkDir::new(&target_dir)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            let path = entry.path();
-            if path.is_file() {
-                // Check for supported extensions
-                if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
-                    if ext == "md" || ext == "mermaid" {
-                        if let Ok(content) = std::fs::read_to_string(path) {
-                            let file_entry = FileEntry::from_path_and_content(
-                                path.to_path_buf(),
-                                content,
-                                source.clone(),
-                            );
-                            self.add_file(file_entry);
-                        }
+        for path in walk_files_with_extensions(&target_dir, &["md", "mermaid"]) {
+            // Check file size before loading
+            match std::fs::metadata(&path) {
+                Ok(metadata) => {
+                    if metadata.len() > MAX_FILE_SIZE {
+                        tracing::warn!(
+                            "Skipping file '{}' - size {} bytes exceeds limit of {} bytes",
+                            path.display(),
+                            metadata.len(),
+                            MAX_FILE_SIZE
+                        );
+                        continue;
                     }
+                    
+                    // Validate path is within expected directory
+                    if !Self::is_path_safe(&path, &target_dir) {
+                        tracing::warn!(
+                            "Skipping file '{}' - path validation failed",
+                            path.display()
+                        );
+                        continue;
+                    }
+                    
+                    if let Ok(content) = std::fs::read_to_string(&path) {
+                        let file_entry = FileEntry::from_path_and_content(
+                            path,
+                            content,
+                            source.clone(),
+                        );
+                        self.add_file(file_entry);
+                    } else {
+                        tracing::warn!("Failed to read file '{}'", path.display());
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to get metadata for '{}': {}", path.display(), e);
                 }
             }
         }
@@ -204,48 +297,12 @@ impl VirtualFileSystem {
     /// Load local files by walking up the directory tree
     fn load_local_files(&mut self) -> Result<()> {
         let current_dir = std::env::current_dir()?;
-        let mut path = current_dir.as_path();
-        let mut depth = 0;
-
-        // Collect directories from current to root
-        let mut directories = Vec::new();
-
-        loop {
-            if depth >= MAX_DIRECTORY_DEPTH {
-                break;
-            }
-
-            let swissarmyhammer_dir = path.join(".swissarmyhammer");
-            if swissarmyhammer_dir.exists() && swissarmyhammer_dir.is_dir() {
-                // Skip the user's home .swissarmyhammer directory
-                if let Some(home) = dirs::home_dir() {
-                    let user_swissarmyhammer_dir = home.join(".swissarmyhammer");
-                    if swissarmyhammer_dir == user_swissarmyhammer_dir {
-                        match path.parent() {
-                            Some(parent) => {
-                                path = parent;
-                                depth += 1;
-                            }
-                            None => break,
-                        }
-                        continue;
-                    }
-                }
-
-                directories.push(swissarmyhammer_dir);
-            }
-
-            match path.parent() {
-                Some(parent) => {
-                    path = parent;
-                    depth += 1;
-                }
-                None => break,
-            }
-        }
-
-        // Load in reverse order (root to current) so deeper paths override
-        for dir in directories.into_iter().rev() {
+        
+        // Find all .swissarmyhammer directories from current to root, excluding home
+        let directories = find_swissarmyhammer_dirs_upward(&current_dir, true);
+        
+        // Load directories (already in root-to-current order)
+        for dir in directories {
             self.load_directory(&dir, FileSource::Local)?;
         }
 
@@ -266,53 +323,33 @@ impl VirtualFileSystem {
 
         // Local directories
         let current_dir = std::env::current_dir()?;
-        let mut path = current_dir.as_path();
-        let mut local_dirs = Vec::new();
-        let mut depth = 0;
-
-        loop {
-            if depth >= MAX_DIRECTORY_DEPTH {
-                break;
+        let swissarmyhammer_dirs = find_swissarmyhammer_dirs_upward(&current_dir, true);
+        
+        // Add subdirectories that exist
+        for dir in swissarmyhammer_dirs {
+            let subdir = dir.join(&self.subdirectory);
+            if subdir.exists() && subdir.is_dir() {
+                directories.push(subdir);
             }
-
-            let swissarmyhammer_dir = path.join(".swissarmyhammer");
-            if swissarmyhammer_dir.exists() && swissarmyhammer_dir.is_dir() {
-                // Skip user's home directory
-                if let Some(home) = dirs::home_dir() {
-                    let user_swissarmyhammer_dir = home.join(".swissarmyhammer");
-                    if swissarmyhammer_dir == user_swissarmyhammer_dir {
-                        match path.parent() {
-                            Some(parent) => {
-                                path = parent;
-                                depth += 1;
-                            }
-                            None => break,
-                        }
-                        continue;
-                    }
-                }
-
-                let subdir = swissarmyhammer_dir.join(&self.subdirectory);
-                if subdir.exists() && subdir.is_dir() {
-                    local_dirs.push(subdir);
-                }
-            }
-
-            match path.parent() {
-                Some(parent) => {
-                    path = parent;
-                    depth += 1;
-                }
-                None => break,
-            }
-        }
-
-        // Add local directories in reverse order
-        for dir in local_dirs.into_iter().rev() {
-            directories.push(dir);
         }
 
         Ok(directories)
+    }
+    
+    /// Validate that a path is safe and within the expected directory
+    fn is_path_safe(path: &Path, base_dir: &Path) -> bool {
+        // Try to canonicalize both paths
+        match (path.canonicalize(), base_dir.canonicalize()) {
+            (Ok(canonical_path), Ok(canonical_base)) => {
+                // Ensure the path is within the base directory
+                canonical_path.starts_with(&canonical_base)
+            }
+            _ => {
+                // If we can't canonicalize, at least check for suspicious patterns
+                let path_str = path.to_string_lossy();
+                !path_str.contains("..") && !path_str.contains("~")
+            }
+        }
     }
 }
 

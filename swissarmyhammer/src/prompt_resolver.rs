@@ -6,34 +6,10 @@ use std::collections::HashMap;
 // Include the generated builtin prompts
 include!(concat!(env!("OUT_DIR"), "/builtin_prompts.rs"));
 
-/// Source of a prompt (builtin, user, local, or dynamic)
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
-pub enum PromptSource {
-    /// Builtin prompts embedded in the binary
-    Builtin,
-    /// User prompts from ~/.swissarmyhammer/prompts
-    User,
-    /// Local prompts from .swissarmyhammer/prompts directories
-    Local,
-    /// Dynamically generated prompts
-    Dynamic,
-}
-
-impl std::fmt::Display for PromptSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PromptSource::Builtin => write!(f, "builtin"),
-            PromptSource::User => write!(f, "user"),
-            PromptSource::Local => write!(f, "local"),
-            PromptSource::Dynamic => write!(f, "dynamic"),
-        }
-    }
-}
-
 /// Handles loading prompts from various sources with proper precedence
 pub struct PromptResolver {
     /// Track the source of each prompt by name
-    pub prompt_sources: HashMap<String, PromptSource>,
+    pub prompt_sources: HashMap<String, FileSource>,
     /// Virtual file system for managing prompts
     vfs: VirtualFileSystem,
 }
@@ -67,20 +43,12 @@ impl PromptResolver {
         // Process all loaded files into prompts
         let loader = PromptLoader::new();
         for file in self.vfs.list() {
-            // Convert FileSource to PromptSource
-            let prompt_source = match file.source {
-                FileSource::Builtin => PromptSource::Builtin,
-                FileSource::User => PromptSource::User,
-                FileSource::Local => PromptSource::Local,
-                FileSource::Dynamic => PromptSource::Dynamic,
-            };
-
             // Load the prompt from content
             let prompt = loader.load_from_string(&file.name, &file.content)?;
             
             // Track the source
             self.prompt_sources
-                .insert(prompt.name.clone(), prompt_source);
+                .insert(prompt.name.clone(), file.source.clone());
             
             // Add to library
             library.add(prompt)?;
@@ -138,7 +106,7 @@ mod tests {
         assert_eq!(prompt.name, "test_prompt");
         assert_eq!(
             resolver.prompt_sources.get("test_prompt"),
-            Some(&PromptSource::User)
+            Some(&FileSource::User)
         );
     }
 
@@ -169,7 +137,7 @@ mod tests {
         assert_eq!(prompt.name, "local_prompt");
         assert_eq!(
             resolver.prompt_sources.get("local_prompt"),
-            Some(&PromptSource::Local)
+            Some(&FileSource::Local)
         );
     }
 
@@ -190,7 +158,7 @@ mod tests {
             // Check that it's tracked as a builtin
             assert_eq!(
                 resolver.prompt_sources.get("debug/error"),
-                Some(&PromptSource::Builtin),
+                Some(&FileSource::Builtin),
                 "debug/error prompt should be tracked as Builtin, but was tracked as: {:?}",
                 resolver.prompt_sources.get("debug/error")
             );
@@ -269,7 +237,7 @@ This is a user-defined debug/error prompt that should override the builtin one.
         // Now it should be tracked as a user prompt
         assert_eq!(
             resolver.prompt_sources.get("debug/error"),
-            Some(&PromptSource::User),
+            Some(&FileSource::User),
             "debug/error should be tracked as User prompt after loading user prompts"
         );
 
@@ -290,7 +258,7 @@ This is a user-defined debug/error prompt that should override the builtin one.
         if has_builtin_debug_error {
             assert_eq!(
                 resolver.prompt_sources.get("debug/error"),
-                Some(&PromptSource::User),
+                Some(&FileSource::User),
                 "Builtin debug/error should have been overridden by user prompt"
             );
         }

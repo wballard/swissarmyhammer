@@ -78,6 +78,12 @@ pub struct PromptAction {
     /// Timeout for the Claude execution
     pub timeout: Duration,
     /// Whether to suppress stdout output (only log)
+    /// 
+    /// When set to `true`, the Claude response will only be logged using the tracing
+    /// framework and will not be printed to stderr. This is useful for workflows
+    /// that need to capture the response programmatically without cluttering the output.
+    /// 
+    /// The quiet mode can also be controlled via the `_quiet` context variable in workflows.
     pub quiet: bool,
 }
 
@@ -478,12 +484,12 @@ fn parse_and_display_claude_response(output: &str, quiet: bool) -> ActionResult<
             Ok(json) => {
                 valid_json_found = true;
                 
-                // Convert to YAML and print to stdout unless quiet
+                // Convert to YAML and log it unless quiet
                 if !quiet {
                     if let Ok(yaml) = serde_yaml::to_string(&json) {
-                        // Print YAML without the "---" document separator for cleaner output
+                        // Log YAML without the "---" document separator for cleaner output
                         let yaml_trimmed = yaml.trim_start_matches("---\n");
-                        eprint!("{}", yaml_trimmed);
+                        tracing::info!("Claude response:\n{}", yaml_trimmed);
                     }
                 }
                 
@@ -791,6 +797,36 @@ mod tests {
         assert_eq!(action.prompt_name, "analyze-code");
         assert_eq!(action.arguments.get("file"), Some(&"test.rs".to_string()));
         assert_eq!(action.arguments.get("verbose"), Some(&"true".to_string()));
+        assert!(!action.quiet); // Default should be false
+    }
+    
+    #[test]
+    fn test_prompt_action_with_quiet() {
+        let action = PromptAction::new("test-prompt".to_string())
+            .with_quiet(true);
+        
+        assert_eq!(action.prompt_name, "test-prompt");
+        assert!(action.quiet);
+        assert!(action.arguments.is_empty());
+        assert!(action.result_variable.is_none());
+    }
+    
+    #[test]
+    fn test_prompt_action_builder_methods() {
+        let mut args = HashMap::new();
+        args.insert("key".to_string(), "value".to_string());
+        
+        let mut action = PromptAction::new("test".to_string())
+            .with_quiet(true)
+            .with_result_variable("result_var".to_string());
+        
+        // Add arguments manually since there's no with_arguments method
+        action.arguments = args.clone();
+        
+        assert_eq!(action.prompt_name, "test");
+        assert!(action.quiet);
+        assert_eq!(action.result_variable, Some("result_var".to_string()));
+        assert_eq!(action.arguments, args);
     }
 
     #[test]

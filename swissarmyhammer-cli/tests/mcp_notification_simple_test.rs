@@ -5,14 +5,8 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use tempfile::TempDir;
 
-// Helper to ensure process cleanup
-struct ProcessGuard(std::process::Child);
-impl Drop for ProcessGuard {
-    fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
-    }
-}
+mod test_utils;
+use test_utils::ProcessGuard;
 
 #[test]
 fn test_mcp_notification_simple() -> Result<()> {

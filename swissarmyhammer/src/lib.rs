@@ -70,9 +70,15 @@ pub mod file_watcher;
 /// Virtual file system for unified file loading
 pub mod file_loader;
 
+/// Directory traversal utilities
+pub mod directory_utils;
+
 // Re-export core types
 pub use plugins::{CustomLiquidFilter, PluginRegistry, SwissArmyHammerPlugin};
-pub use prompt_resolver::{PromptResolver, PromptSource};
+pub use prompt_resolver::PromptResolver;
+pub use file_loader::FileSource;
+// Re-export FileSource as PromptSource for backward compatibility
+pub use file_loader::FileSource as PromptSource;
 pub use prompts::{ArgumentSpec, Prompt, PromptLibrary, PromptLoader};
 pub use storage::{PromptStorage, StorageBackend};
 pub use template::{Template, TemplateEngine};

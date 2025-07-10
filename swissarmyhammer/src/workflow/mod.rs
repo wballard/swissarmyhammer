@@ -56,7 +56,7 @@ pub use state::{
 pub use storage::{
     CompressedWorkflowStorage, FileSystemWorkflowRunStorage, FileSystemWorkflowStorage,
     MemoryWorkflowRunStorage, MemoryWorkflowStorage, WorkflowResolver, WorkflowRunStorageBackend,
-    WorkflowSource, WorkflowStorage, WorkflowStorageBackend,
+    WorkflowStorage, WorkflowStorageBackend,
 };
 pub use transition::{ConditionType, Transition, TransitionCondition};
 pub use transition_key::TransitionKey;

@@ -4,14 +4,8 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use tokio::time::timeout;
 
-/// Helper to ensure process cleanup
-struct ProcessGuard(std::process::Child);
-impl Drop for ProcessGuard {
-    fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
-    }
-}
+mod test_utils;
+use test_utils::ProcessGuard;
 
 /// End-to-end test for MCP server handling prompts with partials (issue #58)
 #[tokio::test]

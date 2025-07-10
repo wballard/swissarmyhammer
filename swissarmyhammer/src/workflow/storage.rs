@@ -8,34 +8,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// Source of a workflow (builtin, user, local, or dynamic)
-#[derive(Debug, Clone, PartialEq, serde::Serialize)]
-pub enum WorkflowSource {
-    /// Builtin workflows embedded in the binary or in resource directories
-    Builtin,
-    /// User workflows from ~/.swissarmyhammer/workflows
-    User,
-    /// Local workflows from .swissarmyhammer/workflows directories
-    Local,
-    /// Dynamically generated workflows
-    Dynamic,
-}
-
-impl std::fmt::Display for WorkflowSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            WorkflowSource::Builtin => write!(f, "builtin"),
-            WorkflowSource::User => write!(f, "user"),
-            WorkflowSource::Local => write!(f, "local"),
-            WorkflowSource::Dynamic => write!(f, "dynamic"),
-        }
-    }
-}
-
 /// Handles loading workflows from various sources with proper precedence
 pub struct WorkflowResolver {
     /// Track the source of each workflow by name
-    pub workflow_sources: HashMap<WorkflowName, WorkflowSource>,
+    pub workflow_sources: HashMap<WorkflowName, FileSource>,
     /// Virtual file system for managing workflows
     vfs: VirtualFileSystem,
 }
@@ -71,17 +47,9 @@ impl WorkflowResolver {
             // Only process .mermaid files for workflows
             if file.path.extension().and_then(|s| s.to_str()) == Some("mermaid") {
                 if let Ok(workflow) = MermaidParser::parse(&file.content, &*file.name) {
-                    // Convert FileSource to WorkflowSource
-                    let workflow_source = match file.source {
-                        FileSource::Builtin => WorkflowSource::Builtin,
-                        FileSource::User => WorkflowSource::User,
-                        FileSource::Local => WorkflowSource::Local,
-                        FileSource::Dynamic => WorkflowSource::Dynamic,
-                    };
-
                     // Track the workflow source
                     self.workflow_sources
-                        .insert(workflow.name.clone(), workflow_source);
+                        .insert(workflow.name.clone(), file.source.clone());
 
                     // Store the workflow
                     storage.store_workflow(workflow)?;
@@ -384,7 +352,7 @@ impl FileSystemWorkflowStorage {
     }
 
     /// Get the source of a workflow
-    pub fn get_workflow_source(&self, name: &WorkflowName) -> Option<&WorkflowSource> {
+    pub fn get_workflow_source(&self, name: &WorkflowName) -> Option<&FileSource> {
         self.resolver.workflow_sources.get(name)
     }
 
@@ -438,9 +406,9 @@ impl WorkflowStorageBackend for FileSystemWorkflowStorage {
                 .unwrap_or_default()
                 .join(".swissarmyhammer"),
         ) {
-            WorkflowSource::User
+            FileSource::User
         } else {
-            WorkflowSource::Local
+            FileSource::Local
         };
         self.resolver.workflow_sources.insert(workflow.name, source);
 
@@ -1119,7 +1087,7 @@ mod tests {
         assert_eq!(workflow.name.as_str(), "test_workflow");
         assert_eq!(
             resolver.workflow_sources.get(&workflow.name),
-            Some(&WorkflowSource::User)
+            Some(&FileSource::User)
         );
     }
 
@@ -1165,7 +1133,7 @@ mod tests {
         assert_eq!(workflow.name.as_str(), "local_workflow");
         assert_eq!(
             resolver.workflow_sources.get(&workflow.name),
-            Some(&WorkflowSource::Local)
+            Some(&FileSource::Local)
         );
     }
 
@@ -1248,7 +1216,7 @@ mod tests {
         // Local should have overridden user
         assert_eq!(
             resolver.workflow_sources.get(&workflow.name),
-            Some(&WorkflowSource::Local)
+            Some(&FileSource::Local)
         );
 
         // Verify the workflow content is from the local version

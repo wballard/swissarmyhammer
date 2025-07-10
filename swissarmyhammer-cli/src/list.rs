@@ -1,7 +1,7 @@
 use anyhow::Result;
 use colored::*;
 use is_terminal::IsTerminal;
-use std::io;
+use std::io::{self, Write};
 // Tabled import removed - using custom 2-line format instead
 
 use crate::cli::{OutputFormat, PromptSource};
@@ -164,13 +164,16 @@ pub fn run_list_command(
     Ok(())
 }
 
-fn display_table(prompt_infos: &[PromptInfo], _verbose: bool) -> Result<()> {
+fn display_table_to_writer<W: Write>(
+    prompt_infos: &[PromptInfo], 
+    _verbose: bool,
+    writer: &mut W,
+    is_tty: bool,
+) -> Result<()> {
     if prompt_infos.is_empty() {
-        println!("No prompts found matching the criteria.");
+        writeln!(writer, "No prompts found matching the criteria.")?;
         return Ok(());
     }
-
-    let is_tty = io::stdout().is_terminal();
 
     // Create a custom 2-line format instead of using Tabled
     for info in prompt_infos {
@@ -209,26 +212,34 @@ fn display_table(prompt_infos: &[PromptInfo], _verbose: bool) -> Result<()> {
             "  (no description)".to_string()
         };
 
-        println!("{}", first_line);
-        println!("{}", second_line);
-        println!(); // Empty line between entries
+        writeln!(writer, "{}", first_line)?;
+        writeln!(writer, "{}", second_line)?;
+        writeln!(writer)?; // Empty line between entries
     }
 
     if is_tty && !prompt_infos.is_empty() {
-        println!("{}", "Legend:".bright_white());
-        println!("  {} Built-in prompts", "●".green());
-        println!(
+        writeln!(writer, "{}", "Legend:".bright_white())?;
+        writeln!(writer, "  {} Built-in prompts", "●".green())?;
+        writeln!(
+            writer,
             "  {} User prompts (~/.swissarmyhammer/prompts/)",
             "●".blue()
-        );
-        println!(
+        )?;
+        writeln!(
+            writer,
             "  {} Local prompts (./.swissarmyhammer/prompts/)",
             "●".yellow()
-        );
-        println!("  {} Dynamic prompts", "●".magenta());
+        )?;
+        writeln!(writer, "  {} Dynamic prompts", "●".magenta())?;
     }
 
     Ok(())
+}
+
+fn display_table(prompt_infos: &[PromptInfo], verbose: bool) -> Result<()> {
+    let mut stdout = io::stdout();
+    let is_tty = stdout.is_terminal();
+    display_table_to_writer(prompt_infos, verbose, &mut stdout, is_tty)
 }
 
 #[cfg(test)]
@@ -280,6 +291,8 @@ mod tests {
 
     #[test]
     fn test_color_coding_when_terminal() {
+        use colored::control;
+        
         let prompt_infos = vec![
             PromptInfo {
                 name: "test_builtin".to_string(),
@@ -307,11 +320,47 @@ mod tests {
             },
         ];
 
-        // This test currently fails because display_table checks stderr instead of stdout
-        let result = display_table(&prompt_infos, false);
+        // Force colors on for testing
+        control::set_override(true);
+        
+        // Capture output when TTY is enabled
+        let mut output = Vec::new();
+        let result = display_table_to_writer(&prompt_infos, false, &mut output, true);
         assert!(result.is_ok());
 
-        // TODO: Once fixed, we should capture stdout and verify color codes are present
+        let output_str = String::from_utf8(output).expect("Output should be valid UTF-8");
+        
+        // Verify color codes are present - check if any ANSI escape sequences exist
+        assert!(output_str.contains("\u{1b}[")); // Any ANSI escape sequence
+        
+        // Verify specific colors are present (these might have different exact codes)
+        // Look for green (builtin), blue (user), yellow (local)
+        let has_green = output_str.contains("\u{1b}[32m") || output_str.contains("\u{1b}[0;32m") || output_str.contains("\u{1b}[38;5;2m");
+        let has_blue = output_str.contains("\u{1b}[34m") || output_str.contains("\u{1b}[0;34m") || output_str.contains("\u{1b}[38;5;4m");
+        let has_yellow = output_str.contains("\u{1b}[33m") || output_str.contains("\u{1b}[0;33m") || output_str.contains("\u{1b}[38;5;3m");
+        
+        assert!(has_green, "Expected green color codes for builtin");
+        assert!(has_blue, "Expected blue color codes for user");
+        assert!(has_yellow, "Expected yellow color codes for local");
+        
+        // Test without TTY (no color codes) - force colors off
+        control::set_override(false);
+        let mut output_no_tty = Vec::new();
+        let result_no_tty = display_table_to_writer(&prompt_infos, false, &mut output_no_tty, false);
+        assert!(result_no_tty.is_ok());
+
+        let output_no_tty_str = String::from_utf8(output_no_tty).expect("Output should be valid UTF-8");
+        
+        // Verify no color codes are present when not TTY
+        assert!(!output_no_tty_str.contains("\u{1b}["));
+        
+        // But the content should still be there
+        assert!(output_no_tty_str.contains("test_builtin"));
+        assert!(output_no_tty_str.contains("test_user"));
+        assert!(output_no_tty_str.contains("test_local"));
+        
+        // Reset colors to automatic detection
+        control::unset_override();
     }
 
     #[test]

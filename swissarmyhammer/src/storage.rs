@@ -1,5 +1,6 @@
 //! Storage abstractions and implementations
 
+use crate::fs_utils::FileSystemUtils;
 use crate::{Prompt, Result, SwissArmyHammerError};
 use std::collections::HashMap;
 use std::path::Path;
@@ -120,20 +121,23 @@ impl StorageBackend for MemoryStorage {
 pub struct FileSystemStorage {
     base_path: std::path::PathBuf,
     cache: dashmap::DashMap<String, Prompt>,
+    fs_utils: FileSystemUtils,
 }
 
 impl FileSystemStorage {
     /// Create a new file system storage
     pub fn new(base_path: impl AsRef<Path>) -> Result<Self> {
         let base_path = base_path.as_ref().to_path_buf();
+        let fs_utils = FileSystemUtils::new();
 
-        if !base_path.exists() {
-            std::fs::create_dir_all(&base_path)?;
+        if !fs_utils.fs().exists(&base_path) {
+            fs_utils.fs().create_dir_all(&base_path)?;
         }
 
         let storage = Self {
             base_path,
             cache: dashmap::DashMap::new(),
+            fs_utils,
         };
 
         // Load existing prompts into cache
@@ -151,11 +155,9 @@ impl FileSystemStorage {
             .filter_map(|e| e.ok())
         {
             let path = entry.path();
-            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("yaml") {
-                if let Ok(content) = std::fs::read_to_string(path) {
-                    if let Ok(prompt) = serde_yaml::from_str::<Prompt>(&content) {
-                        self.cache.insert(prompt.name.clone(), prompt);
-                    }
+            if self.fs_utils.fs().is_file(path) && path.extension().and_then(|s| s.to_str()) == Some("yaml") {
+                if let Ok(prompt) = self.fs_utils.read_yaml::<Prompt>(path) {
+                    self.cache.insert(prompt.name.clone(), prompt);
                 }
             }
         }
@@ -171,8 +173,7 @@ impl FileSystemStorage {
 impl StorageBackend for FileSystemStorage {
     fn store(&mut self, prompt: Prompt) -> Result<()> {
         let path = self.prompt_path(&prompt.name);
-        let content = serde_yaml::to_string(&prompt)?;
-        std::fs::write(&path, content)?;
+        self.fs_utils.write_yaml(&path, &prompt)?;
         self.cache.insert(prompt.name.clone(), prompt);
         Ok(())
     }
@@ -183,12 +184,11 @@ impl StorageBackend for FileSystemStorage {
         }
 
         let path = self.prompt_path(name);
-        if !path.exists() {
+        if !self.fs_utils.fs().exists(&path) {
             return Err(SwissArmyHammerError::PromptNotFound(name.to_string()));
         }
 
-        let content = std::fs::read_to_string(&path)?;
-        let prompt: Prompt = serde_yaml::from_str(&content)?;
+        let prompt: Prompt = self.fs_utils.read_yaml(&path)?;
         self.cache.insert(name.to_string(), prompt.clone());
 
         Ok(prompt)
@@ -204,11 +204,11 @@ impl StorageBackend for FileSystemStorage {
 
     fn remove(&mut self, name: &str) -> Result<()> {
         let path = self.prompt_path(name);
-        if !path.exists() {
+        if !self.fs_utils.fs().exists(&path) {
             return Err(SwissArmyHammerError::PromptNotFound(name.to_string()));
         }
 
-        std::fs::remove_file(path)?;
+        self.fs_utils.fs().remove_file(&path)?;
         self.cache.remove(name);
         Ok(())
     }
@@ -244,6 +244,7 @@ impl StorageBackend for FileSystemStorage {
         Box::new(FileSystemStorage {
             base_path: self.base_path.clone(),
             cache: self.cache.clone(),
+            fs_utils: FileSystemUtils::new(),
         })
     }
 }

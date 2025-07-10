@@ -73,8 +73,12 @@ pub mod file_loader;
 /// Directory traversal utilities
 pub mod directory_utils;
 
+/// Unified file system utilities for better error handling and testing
+pub mod fs_utils;
+
 // Re-export core types
 pub use file_loader::FileSource;
+pub use fs_utils::{FileSystem, FileSystemUtils};
 pub use plugins::{CustomLiquidFilter, PluginRegistry, SwissArmyHammerPlugin};
 pub use prompt_resolver::PromptResolver;
 // Re-export FileSource as PromptSource for backward compatibility
@@ -147,9 +151,9 @@ pub use error::{Result, SwissArmyHammerError};
 /// Prelude module for convenient imports
 pub mod prelude {
     pub use crate::{
-        CustomLiquidFilter, PluginRegistry, Prompt, PromptLibrary, PromptLoader, PromptStorage,
-        Result, StorageBackend, SwissArmyHammerError, SwissArmyHammerPlugin, Template,
-        TemplateEngine,
+        CustomLiquidFilter, FileSystem, FileSystemUtils, PluginRegistry, Prompt, PromptLibrary, 
+        PromptLoader, PromptStorage, Result, StorageBackend, SwissArmyHammerError, 
+        SwissArmyHammerPlugin, Template, TemplateEngine,
     };
 
     pub use crate::mcp::McpServer;
@@ -161,5 +165,4 @@ pub mod prelude {
 }
 
 /// Test utilities module for testing support
-#[doc(hidden)]
 pub mod test_utils;

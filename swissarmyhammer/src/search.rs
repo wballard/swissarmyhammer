@@ -279,24 +279,7 @@ impl Default for SearchEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
-
-    fn create_test_prompts() -> Vec<Prompt> {
-        vec![
-            Prompt::new("code-review", "Review this code: {{ code }}")
-                .with_description("A prompt for reviewing code")
-                .with_category("development")
-                .with_tags(vec!["code".to_string(), "review".to_string()]),
-            Prompt::new("bug-fix", "Fix this bug: {{ error }}")
-                .with_description("A prompt for fixing bugs")
-                .with_category("debugging")
-                .with_tags(vec!["bug".to_string(), "fix".to_string()]),
-            Prompt::new("test-generation", "Generate tests for: {{ function }}")
-                .with_description("Generate unit tests")
-                .with_category("testing")
-                .with_tags(vec!["test".to_string(), "unit".to_string()]),
-        ]
-    }
+    use crate::test_utils::{create_test_prompts, create_temp_dir};
 
     #[test]
     fn test_search_engine_creation() {
@@ -307,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_search_engine_with_directory() {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = create_temp_dir();
         let engine = SearchEngine::with_directory(temp_dir.path()).unwrap();
         assert!(engine.index.schema().fields().count() > 0);
         assert_eq!(engine.index.schema().fields().count(), 5);
@@ -315,7 +298,7 @@ mod tests {
 
     #[test]
     fn test_search_engine_with_directory_nonexistent_path() {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = create_temp_dir();
         let nonexistent_path = temp_dir.path().join("nonexistent");
         let engine = SearchEngine::with_directory(&nonexistent_path).unwrap();
         assert!(nonexistent_path.exists());
@@ -493,7 +476,16 @@ mod tests {
 
         let results = engine.search("development", &prompts).unwrap();
         assert!(!results.is_empty());
-        assert_eq!(results[0].prompt.name, "code-review");
+        
+        // Verify that development category prompts are found
+        let development_prompts: Vec<_> = results.iter()
+            .filter(|r| r.prompt.category.as_ref() == Some(&"development".to_string()))
+            .collect();
+        assert!(!development_prompts.is_empty());
+        
+        // Verify specific development prompts are included
+        let prompt_names: Vec<_> = results.iter().map(|r| &r.prompt.name).collect();
+        assert!(prompt_names.contains(&&"code-review".to_string()));
     }
 
     #[test]

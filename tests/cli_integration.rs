@@ -1,6 +1,9 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 
+mod test_helpers;
+use test_helpers::create_test_home_guard;
+
 #[test]
 fn test_help_command() {
     let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
@@ -25,6 +28,8 @@ fn test_version_command() {
 
 #[test]
 fn test_doctor_command() {
+    let _guard = create_test_home_guard();
+    
     let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
     cmd.arg("doctor")
         .assert()
@@ -54,6 +59,8 @@ fn test_invalid_command() {
 
 #[test]
 fn test_quiet_flag() {
+    let _guard = create_test_home_guard();
+    
     let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
     cmd.arg("--quiet")
         .arg("doctor")
@@ -64,6 +71,8 @@ fn test_quiet_flag() {
 
 #[test]
 fn test_verbose_flag() {
+    let _guard = create_test_home_guard();
+    
     let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
     cmd.arg("--verbose")
         .arg("doctor")

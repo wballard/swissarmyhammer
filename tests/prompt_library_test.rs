@@ -1,7 +1,12 @@
 use swissarmyhammer::prompts::PromptLoader;
 
+mod test_helpers;
+use test_helpers::create_test_home_guard;
+
 #[test]
 fn test_comprehensive_prompt_library() {
+    let _guard = create_test_home_guard();
+    
     let mut loader = PromptLoader::new();
     let result = loader.load_all();
     assert!(result.is_ok());

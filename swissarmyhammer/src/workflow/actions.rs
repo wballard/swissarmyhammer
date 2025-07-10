@@ -95,6 +95,13 @@ pub struct PromptAction {
     pub quiet: bool,
     /// Maximum number of retries for rate limit errors
     pub max_retries: u32,
+    // TODO: Future enhancement - Add configurable retry strategy
+    // pub retry_strategy: RetryStrategy,
+    // where RetryStrategy could be:
+    // - WaitUntilNextHour (current behavior)
+    // - ExponentialBackoff { base: Duration, max: Duration }
+    // - FixedDelay(Duration)
+    // - Custom(Box<dyn Fn(u32) -> Duration>)
 }
 
 impl PromptAction {
@@ -134,6 +141,12 @@ impl PromptAction {
         self
     }
 
+    /// Set the maximum number of retries for rate limit errors
+    pub fn with_max_retries(mut self, max_retries: u32) -> Self {
+        self.max_retries = max_retries;
+        self
+    }
+
     /// Substitute variables in arguments using the context
     fn substitute_variables(&self, context: &HashMap<String, Value>) -> HashMap<String, String> {
         let mut substituted = HashMap::new();
@@ -163,15 +176,17 @@ impl Action for PromptAction {
                     }
 
                     retries += 1;
-                    eprintln!(
-                        "[WARNING] Rate limit reached (attempt {}/{}). Waiting {:?} until next hour...",
-                        retries, self.max_retries + 1, wait_time
+                    tracing::warn!(
+                        "Rate limit reached (attempt {}/{}). Waiting {:?} until next hour...",
+                        retries,
+                        self.max_retries + 1,
+                        wait_time
                     );
 
                     // Wait until the next hour
                     tokio::time::sleep(wait_time).await;
 
-                    eprintln!("[INFO] Retrying after rate limit wait...");
+                    tracing::info!("Retrying after rate limit wait...");
                     // Continue to retry
                 }
                 Err(e) => return Err(e), // Other errors are not retried
@@ -192,7 +207,17 @@ impl Action for PromptAction {
 }
 
 impl PromptAction {
-    /// Execute the command once (without retry logic)
+    /// Execute the command once without retry logic
+    ///
+    /// This method performs a single execution attempt of the Claude command.
+    /// Rate limit errors are propagated to the caller for retry handling.
+    ///
+    /// # Arguments
+    /// * `context` - The workflow execution context
+    ///
+    /// # Returns
+    /// * `Ok(Value)` - The command response on success
+    /// * `Err(ActionError)` - Various errors including rate limits
     async fn execute_once(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
         // Substitute variables in arguments
         let args = self.substitute_variables(context);
@@ -1047,5 +1072,23 @@ mod tests {
         assert!(!action.quiet);
         assert!(action.arguments.is_empty());
         assert!(action.result_variable.is_none());
+    }
+
+    #[test]
+    fn test_prompt_action_with_max_retries_builder() {
+        let action = PromptAction::new("test-prompt".to_string()).with_max_retries(5);
+
+        assert_eq!(action.max_retries, 5);
+        assert_eq!(action.prompt_name, "test-prompt");
+
+        // Test chaining with other builders
+        let action2 = PromptAction::new("test-prompt2".to_string())
+            .with_quiet(true)
+            .with_max_retries(0)
+            .with_timeout(Duration::from_secs(60));
+
+        assert_eq!(action2.max_retries, 0);
+        assert!(action2.quiet);
+        assert_eq!(action2.timeout, Duration::from_secs(60));
     }
 }

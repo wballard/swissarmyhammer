@@ -82,6 +82,7 @@ pub fn create_test_prompt_files(prompts_dir: &Path) -> Result<()> {
 /// Create a temporary test environment with prompts
 ///
 /// Returns a TempDir and the path to the prompts directory
+#[allow(dead_code)]
 pub fn create_test_environment() -> Result<(TempDir, PathBuf)> {
     let temp_dir = create_temp_dir()?;
     let swissarmyhammer_dir = temp_dir.path().join(".swissarmyhammer");

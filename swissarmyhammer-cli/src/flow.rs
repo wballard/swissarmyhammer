@@ -1,12 +1,16 @@
 //! Flow command implementation for executing workflows
 
 use crate::cli::{FlowSubcommand, OutputFormat, PromptSource, VisualizationFormat};
+use colored::*;
+use is_terminal::IsTerminal;
 use std::collections::{HashMap, HashSet};
 use std::future;
+use std::io::{self, Write};
 use std::time::Duration;
 use swissarmyhammer::workflow::{
-    ExecutionVisualizer, StateId, TransitionKey, Workflow, WorkflowExecutor, WorkflowName,
-    WorkflowRunId, WorkflowRunStatus, WorkflowStorage,
+    ExecutionVisualizer, MemoryWorkflowStorage, StateId, TransitionKey, Workflow,
+    WorkflowExecutor, WorkflowName, WorkflowResolver, WorkflowRunId, WorkflowRunStatus,
+    WorkflowStorage, WorkflowStorageBackend,
 };
 use swissarmyhammer::{Result, SwissArmyHammerError};
 use tokio::signal;
@@ -450,55 +454,138 @@ async fn resume_workflow_command(
 async fn list_workflows_command(
     format: OutputFormat,
     verbose: bool,
-    _source: Option<PromptSource>,
+    source_filter: Option<PromptSource>,
 ) -> Result<()> {
-    let storage = WorkflowStorage::file_system()?;
-    let workflows = storage.list_workflows()?;
+    // Load all workflows from all sources using resolver (same pattern as prompts)
+    let mut storage = MemoryWorkflowStorage::new();
+    let mut resolver = WorkflowResolver::new();
+    resolver.load_all_workflows(&mut storage)?;
+    
+    // Get all workflows
+    let all_workflows = storage.list_workflows()?;
+    
+    // Collect workflow information
+    let mut workflow_infos = Vec::new();
+    
+    for workflow in all_workflows {
+        // Get the source from the resolver
+        let workflow_source = match resolver.workflow_sources.get(&workflow.name) {
+            Some(swissarmyhammer::FileSource::Builtin) => PromptSource::Builtin,
+            Some(swissarmyhammer::FileSource::User) => PromptSource::User,
+            Some(swissarmyhammer::FileSource::Local) => PromptSource::Local,
+            Some(swissarmyhammer::FileSource::Dynamic) => PromptSource::Dynamic,
+            None => PromptSource::Dynamic,
+        };
+        
+        // Apply source filter
+        if let Some(ref filter) = source_filter {
+            if filter != &workflow_source && filter != &PromptSource::Dynamic {
+                continue;
+            }
+        }
+        
+        workflow_infos.push((workflow, workflow_source));
+    }
+    
+    // Sort by name for consistent output
+    workflow_infos.sort_by(|a, b| a.0.name.as_str().cmp(b.0.name.as_str()));
 
     match format {
         OutputFormat::Table => {
-            if workflows.is_empty() {
-                println!("No workflows found.");
-                return Ok(());
-            }
-
-            if verbose {
-                println!(
-                    "{:<20} {:<30} {:<10} {:<8} {:<12}",
-                    "NAME", "DESCRIPTION", "STATES", "TERMINAL", "TRANSITIONS"
-                );
-                println!("{}", "-".repeat(90));
-                for workflow in workflows {
-                    let terminal_count = workflow.states.values().filter(|s| s.is_terminal).count();
-                    println!(
-                        "{:<20} {:<30} {:<10} {:<8} {:<12}",
-                        workflow.name.as_str(),
-                        workflow.description.chars().take(30).collect::<String>(),
-                        workflow.states.len(),
-                        terminal_count,
-                        workflow.transitions.len()
-                    );
-                }
-            } else {
-                println!("{:<20} {:<50}", "NAME", "DESCRIPTION");
-                println!("{}", "-".repeat(70));
-                for workflow in workflows {
-                    println!(
-                        "{:<20} {:<50}",
-                        workflow.name.as_str(),
-                        workflow.description.chars().take(50).collect::<String>()
-                    );
-                }
-            }
+            display_workflows_table(&workflow_infos, verbose)?;
         }
         OutputFormat::Json => {
+            let workflows: Vec<_> = workflow_infos.into_iter().map(|(w, _)| w).collect();
             let json_output = serde_json::to_string_pretty(&workflows)?;
             println!("{}", json_output);
         }
         OutputFormat::Yaml => {
+            let workflows: Vec<_> = workflow_infos.into_iter().map(|(w, _)| w).collect();
             let yaml_output = serde_yaml::to_string(&workflows)?;
             println!("{}", yaml_output);
         }
+    }
+
+    Ok(())
+}
+
+/// Display workflows in table format with color coding
+fn display_workflows_table(workflow_infos: &[(Workflow, PromptSource)], verbose: bool) -> Result<()> {
+    let mut stdout = io::stdout();
+    let is_tty = stdout.is_terminal();
+    display_workflows_to_writer(workflow_infos, verbose, &mut stdout, is_tty)
+}
+
+fn display_workflows_to_writer<W: Write>(
+    workflow_infos: &[(Workflow, PromptSource)],
+    verbose: bool,
+    writer: &mut W,
+    is_tty: bool,
+) -> Result<()> {
+    if workflow_infos.is_empty() {
+        writeln!(writer, "No workflows found matching the criteria.")?;
+        return Ok(());
+    }
+
+    // Use 2-line format similar to prompt list with color coding
+    for (workflow, source) in workflow_infos {
+        let name = workflow.name.as_str();
+        let description = &workflow.description;
+        
+        // Color code based on source, matching prompt list
+        let first_line = if is_tty {
+            let (name_colored, description_colored) = match source {
+                PromptSource::Builtin => (
+                    name.green().bold().to_string(),
+                    description.green().to_string(),
+                ),
+                PromptSource::User => (
+                    name.blue().bold().to_string(),
+                    description.blue().to_string(),
+                ),
+                PromptSource::Local => (
+                    name.yellow().bold().to_string(),
+                    description.yellow().to_string(),
+                ),
+                PromptSource::Dynamic => (
+                    name.magenta().bold().to_string(),
+                    description.magenta().to_string(),
+                ),
+            };
+            format!("{} | {}", name_colored, description_colored)
+        } else {
+            format!("{} | {}", name, description)
+        };
+        
+        writeln!(writer, "{}", first_line)?;
+        
+        // Second line: Full description (indented)
+        if !description.is_empty() {
+            writeln!(writer, "  {}", description)?;
+        } else {
+            writeln!(writer, "  (no description)")?;
+        }
+        
+        // Add verbose information if requested
+        if verbose {
+            let terminal_count = workflow.states.values().filter(|s| s.is_terminal).count();
+            writeln!(writer, "  States: {}, Terminal: {}, Transitions: {}", 
+                workflow.states.len(), 
+                terminal_count, 
+                workflow.transitions.len()
+            )?;
+        }
+        
+        writeln!(writer)?; // Empty line between entries
+    }
+
+    // Add legend similar to prompt list
+    if is_tty && !workflow_infos.is_empty() {
+        writeln!(writer, "{}", "Legend:".bright_white())?;
+        writeln!(writer, "  {} Built-in workflows", "●".green())?;
+        writeln!(writer, "  {} User workflows (~/.swissarmyhammer/workflows/)", "●".blue())?;
+        writeln!(writer, "  {} Local workflows (./.swissarmyhammer/workflows/)", "●".yellow())?;
+        writeln!(writer, "  {} Dynamic workflows", "●".magenta())?;
     }
 
     Ok(())

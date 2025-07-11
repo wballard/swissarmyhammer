@@ -11,6 +11,10 @@ arguments:
     description: Specific user needs to consider
     required: false
     default: "all users"
+  - name: component_type
+    description: Type of component being reviewed (form, navigation, interactive, general)
+    required: false
+    default: "general"
 ---
 
 ## Code Under Review

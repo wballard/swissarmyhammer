@@ -207,7 +207,7 @@ bail!("Error");
 
 ### Built-in Prompt Guidelines
 
-1. **Location**: `src/prompts/builtin/`
+1. **Location**: `builtin/prompts/`
 2. **Categories**: Place in appropriate subdirectory
 3. **Quality**: Must be generally useful
 4. **Testing**: Include test cases
@@ -250,7 +250,7 @@ Organize the prompt logically...
 
 ### Testing Prompts
 
-Add test file `src/prompts/builtin/tests/your-prompt.test.md`:
+Add test file `builtin/prompts/tests/your-prompt.test.md`:
 
 ```yaml
 name: test-your-prompt

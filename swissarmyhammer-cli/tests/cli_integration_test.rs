@@ -288,7 +288,7 @@ fn test_root_validate_quiet() -> Result<()> {
     // In quiet mode, should only show errors
     let stdout = String::from_utf8_lossy(&output.stdout);
     let _stderr = String::from_utf8_lossy(&output.stderr);
-    
+
     // Should have minimal output in quiet mode
     if output.status.success() {
         assert!(
@@ -296,7 +296,7 @@ fn test_root_validate_quiet() -> Result<()> {
             "quiet mode should produce minimal output on success"
         );
     }
-    
+
     Ok(())
 }
 
@@ -317,17 +317,26 @@ fn test_root_validate_json_format() -> Result<()> {
     if !stdout.is_empty() {
         // Try to parse as JSON
         let result: Result<serde_json::Value, _> = serde_json::from_str(&stdout);
-        assert!(
-            result.is_ok(),
-            "JSON format output should be valid JSON"
-        );
-        
+        assert!(result.is_ok(), "JSON format output should be valid JSON");
+
         if let Ok(json) = result {
             // Verify expected fields exist
-            assert!(json.get("files_checked").is_some(), "JSON should have files_checked field");
-            assert!(json.get("errors").is_some(), "JSON should have errors field");
-            assert!(json.get("warnings").is_some(), "JSON should have warnings field");
-            assert!(json.get("issues").is_some(), "JSON should have issues field");
+            assert!(
+                json.get("files_checked").is_some(),
+                "JSON should have files_checked field"
+            );
+            assert!(
+                json.get("errors").is_some(),
+                "JSON should have errors field"
+            );
+            assert!(
+                json.get("warnings").is_some(),
+                "JSON should have warnings field"
+            );
+            assert!(
+                json.get("issues").is_some(),
+                "JSON should have issues field"
+            );
         }
     }
 
@@ -340,7 +349,7 @@ fn test_root_validate_with_workflow_dirs() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let workflow_dir = temp_dir.path().join("workflows");
     std::fs::create_dir_all(&workflow_dir)?;
-    
+
     // Create a simple valid workflow
     std::fs::write(
         workflow_dir.join("test.mermaid"),
@@ -365,7 +374,7 @@ fn test_root_validate_with_workflow_dirs() -> Result<()> {
         output.status.code().is_some(),
         "root validate with workflow-dir should complete"
     );
-    
+
     Ok(())
 }
 
@@ -377,7 +386,7 @@ fn test_root_validate_with_multiple_workflow_dirs() -> Result<()> {
     let workflow_dir2 = temp_dir.path().join("workflows2");
     std::fs::create_dir_all(&workflow_dir1)?;
     std::fs::create_dir_all(&workflow_dir2)?;
-    
+
     // Create workflows in both directories
     std::fs::write(
         workflow_dir1.join("flow1.mermaid"),
@@ -386,7 +395,7 @@ fn test_root_validate_with_multiple_workflow_dirs() -> Result<()> {
     A --> [*]
 "#,
     )?;
-    
+
     std::fs::write(
         workflow_dir2.join("flow2.mermaid"),
         r#"stateDiagram-v2
@@ -411,7 +420,7 @@ fn test_root_validate_with_multiple_workflow_dirs() -> Result<()> {
         output.status.code().is_some(),
         "root validate with multiple workflow-dirs should complete"
     );
-    
+
     Ok(())
 }
 
@@ -421,7 +430,7 @@ fn test_root_validate_error_exit_codes() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let workflow_dir = temp_dir.path().join("workflows");
     std::fs::create_dir_all(&workflow_dir)?;
-    
+
     // Create an invalid workflow (missing terminal state)
     std::fs::write(
         workflow_dir.join("invalid.mermaid"),
@@ -449,7 +458,7 @@ fn test_root_validate_error_exit_codes() -> Result<()> {
         Some(2),
         "root validate should return exit code 2 for validation errors"
     );
-    
+
     Ok(())
 }
 
@@ -471,7 +480,7 @@ fn test_root_help_includes_validate() -> Result<()> {
         stdout.contains("Validate prompt files and workflows"),
         "help should describe what validate does"
     );
-    
+
     Ok(())
 }
 
@@ -497,7 +506,7 @@ fn test_root_validate_help() -> Result<()> {
         stdout.contains("--workflow-dir"),
         "validate help should mention --workflow-dir option"
     );
-    
+
     Ok(())
 }
 
@@ -507,7 +516,7 @@ fn test_root_validate_invalid_yaml() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
     std::fs::create_dir_all(&prompts_dir)?;
-    
+
     // Create a prompt with invalid YAML
     std::fs::write(
         prompts_dir.join("invalid.md"),
@@ -524,12 +533,7 @@ Test content"#,
     )?;
 
     let output = Command::new("cargo")
-        .args([
-            "run",
-            "--",
-            "validate",
-            "--quiet",
-        ])
+        .args(["run", "--", "validate", "--quiet"])
         .env("HOME", temp_dir.path())
         .output()?;
 
@@ -539,7 +543,7 @@ Test content"#,
         Some(0),
         "validation with invalid YAML should fail"
     );
-    
+
     Ok(())
 }
 
@@ -549,7 +553,7 @@ fn test_root_validate_missing_fields() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
     std::fs::create_dir_all(&prompts_dir)?;
-    
+
     // Create a prompt missing required fields
     std::fs::write(
         prompts_dir.join("incomplete.md"),
@@ -564,13 +568,7 @@ Test content"#,
     )?;
 
     let output = Command::new("cargo")
-        .args([
-            "run",
-            "--",
-            "validate",
-            "--format",
-            "json",
-        ])
+        .args(["run", "--", "validate", "--format", "json"])
         .env("HOME", temp_dir.path())
         .output()?;
 
@@ -580,14 +578,14 @@ Test content"#,
         Some(2),
         "validation with missing fields should return exit code 2"
     );
-    
+
     // Check JSON output contains error info
     let stdout = String::from_utf8_lossy(&output.stdout);
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
         let errors = json.get("errors").and_then(|v| v.as_u64()).unwrap_or(0);
         assert!(errors > 0, "should have reported errors in JSON");
     }
-    
+
     Ok(())
 }
 
@@ -597,7 +595,7 @@ fn test_root_validate_undefined_variables() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
     std::fs::create_dir_all(&prompts_dir)?;
-    
+
     // Create a prompt using undefined variables
     std::fs::write(
         prompts_dir.join("undefined_vars.md"),
@@ -615,11 +613,7 @@ And this uses {{ another_undefined }} too."#,
     )?;
 
     let output = Command::new("cargo")
-        .args([
-            "run",
-            "--",
-            "validate",
-        ])
+        .args(["run", "--", "validate"])
         .env("HOME", temp_dir.path())
         .output()?;
 
@@ -629,7 +623,7 @@ And this uses {{ another_undefined }} too."#,
         Some(2),
         "validation with undefined variables should return exit code 2"
     );
-    
+
     Ok(())
 }
 
@@ -639,7 +633,7 @@ fn test_root_validate_malformed_workflow() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let workflow_dir = temp_dir.path().join("workflows");
     std::fs::create_dir_all(&workflow_dir)?;
-    
+
     // Create various malformed workflows
     std::fs::write(
         workflow_dir.join("syntax_error.mermaid"),
@@ -674,7 +668,7 @@ fn test_root_validate_malformed_workflow() -> Result<()> {
         Some(2),
         "validation with malformed workflows should return exit code 2"
     );
-    
+
     Ok(())
 }
 
@@ -701,14 +695,17 @@ fn test_root_validate_nonexistent_workflow_dir() -> Result<()> {
         output.status.code().is_some(),
         "validation should complete even with non-existent directory"
     );
-    
+
     // Check JSON output for warnings
     let stdout = String::from_utf8_lossy(&output.stdout);
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
         let warnings = json.get("warnings").and_then(|v| v.as_u64()).unwrap_or(0);
-        assert!(warnings > 0, "should have warnings about non-existent directory");
+        assert!(
+            warnings > 0,
+            "should have warnings about non-existent directory"
+        );
     }
-    
+
     Ok(())
 }
 
@@ -724,13 +721,13 @@ fn test_root_validate_invalid_format() -> Result<()> {
         !output.status.success(),
         "validation with invalid format should fail"
     );
-    
+
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("error:") || stderr.contains("invalid value"),
         "should show error about invalid format"
     );
-    
+
     Ok(())
 }
 
@@ -747,7 +744,7 @@ fn test_root_validate_empty_workflow_dirs() -> Result<()> {
         output.status.code().is_some(),
         "validation with empty workflow_dirs should complete"
     );
-    
+
     Ok(())
 }
 
@@ -757,7 +754,7 @@ fn test_root_validate_mixed_valid_invalid_prompts() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
     std::fs::create_dir_all(&prompts_dir)?;
-    
+
     // Create a valid prompt
     std::fs::write(
         prompts_dir.join("valid.md"),
@@ -772,7 +769,7 @@ arguments:
 
 This uses {{ test }} correctly."#,
     )?;
-    
+
     // Create an invalid prompt (missing title)
     std::fs::write(
         prompts_dir.join("invalid.md"),
@@ -782,7 +779,7 @@ description: Missing title field
 
 Content here."#,
     )?;
-    
+
     // Create another invalid prompt (undefined variable)
     std::fs::write(
         prompts_dir.join("bad_vars.md"),
@@ -795,13 +792,7 @@ This uses {{ undefined }} variable."#,
     )?;
 
     let output = Command::new("cargo")
-        .args([
-            "run",
-            "--",
-            "validate",
-            "--format",
-            "json",
-        ])
+        .args(["run", "--", "validate", "--format", "json"])
         .env("HOME", temp_dir.path())
         .output()?;
 
@@ -811,17 +802,20 @@ This uses {{ undefined }} variable."#,
         Some(2),
         "validation with mixed valid/invalid prompts should return exit code 2"
     );
-    
+
     // Check JSON output
     let stdout = String::from_utf8_lossy(&output.stdout);
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
-        let files_checked = json.get("files_checked").and_then(|v| v.as_u64()).unwrap_or(0);
+        let files_checked = json
+            .get("files_checked")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         assert!(files_checked >= 3, "should have checked at least 3 files");
-        
+
         let errors = json.get("errors").and_then(|v| v.as_u64()).unwrap_or(0);
         assert!(errors >= 2, "should have at least 2 errors");
     }
-    
+
     Ok(())
 }
 
@@ -831,7 +825,7 @@ fn test_root_validate_mixed_valid_invalid_workflows() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let workflow_dir = temp_dir.path().join("workflows");
     std::fs::create_dir_all(&workflow_dir)?;
-    
+
     // Create a valid workflow
     std::fs::write(
         workflow_dir.join("valid.mermaid"),
@@ -841,7 +835,7 @@ fn test_root_validate_mixed_valid_invalid_workflows() -> Result<()> {
     Complete --> [*]
 "#,
     )?;
-    
+
     // Create an invalid workflow (no terminal state)
     std::fs::write(
         workflow_dir.join("no_terminal.mermaid"),
@@ -851,7 +845,7 @@ fn test_root_validate_mixed_valid_invalid_workflows() -> Result<()> {
     Loop --> Start
 "#,
     )?;
-    
+
     // Create another invalid workflow (unreachable state)
     std::fs::write(
         workflow_dir.join("unreachable.mermaid"),
@@ -878,7 +872,7 @@ fn test_root_validate_mixed_valid_invalid_workflows() -> Result<()> {
         Some(2),
         "validation with mixed valid/invalid workflows should return exit code 2"
     );
-    
+
     Ok(())
 }
 
@@ -888,7 +882,7 @@ fn test_root_validate_absolute_relative_paths() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let abs_workflow_dir = temp_dir.path().join("abs_workflows");
     std::fs::create_dir_all(&abs_workflow_dir)?;
-    
+
     // Create a workflow in absolute path
     std::fs::write(
         abs_workflow_dir.join("test.mermaid"),
@@ -897,7 +891,7 @@ fn test_root_validate_absolute_relative_paths() -> Result<()> {
     Test --> [*]
 "#,
     )?;
-    
+
     // Test with absolute path
     let output = Command::new("cargo")
         .args([
@@ -913,7 +907,7 @@ fn test_root_validate_absolute_relative_paths() -> Result<()> {
         output.status.code().is_some(),
         "validation with absolute path should complete"
     );
-    
+
     // Test with relative path (from temp dir)
     std::fs::create_dir_all(temp_dir.path().join("rel_workflows"))?;
     std::fs::write(
@@ -923,15 +917,9 @@ fn test_root_validate_absolute_relative_paths() -> Result<()> {
     Test --> [*]
 "#,
     )?;
-    
+
     let output = Command::new("cargo")
-        .args([
-            "run",
-            "--",
-            "validate",
-            "--workflow-dir",
-            "rel_workflows",
-        ])
+        .args(["run", "--", "validate", "--workflow-dir", "rel_workflows"])
         .current_dir(temp_dir.path())
         .output()?;
 
@@ -939,7 +927,7 @@ fn test_root_validate_absolute_relative_paths() -> Result<()> {
         output.status.code().is_some(),
         "validation with relative path should complete"
     );
-    
+
     Ok(())
 }
 
@@ -950,15 +938,18 @@ fn test_root_validate_stress_many_files() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let workflow_dir = temp_dir.path().join("workflows");
     std::fs::create_dir_all(&workflow_dir)?;
-    
+
     // Create 100 workflow files
     for i in 0..100 {
         std::fs::write(
             workflow_dir.join(format!("workflow_{}.mermaid", i)),
-            format!(r#"stateDiagram-v2
+            format!(
+                r#"stateDiagram-v2
     [*] --> State{}
     State{} --> [*]
-"#, i, i),
+"#,
+                i, i
+            ),
         )?;
     }
 
@@ -979,13 +970,13 @@ fn test_root_validate_stress_many_files() -> Result<()> {
         output.status.code().is_some(),
         "validation of many files should complete"
     );
-    
+
     // Should complete in reasonable time (less than 10 seconds for 100 files)
     assert!(
         duration.as_secs() < 10,
         "validation of 100 files should complete within 10 seconds"
     );
-    
+
     Ok(())
 }
 
@@ -995,7 +986,7 @@ fn test_root_validate_special_chars_in_paths() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let workflow_dir = temp_dir.path().join("work flows with spaces");
     std::fs::create_dir_all(&workflow_dir)?;
-    
+
     // Create workflow with special chars in name
     std::fs::write(
         workflow_dir.join("test-workflow_v1.0.mermaid"),
@@ -1019,6 +1010,6 @@ fn test_root_validate_special_chars_in_paths() -> Result<()> {
         output.status.code().is_some(),
         "validation with special chars in paths should complete"
     );
-    
+
     Ok(())
 }

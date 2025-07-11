@@ -6,8 +6,9 @@ use super::{
 };
 use crate::workflow::{
     metrics::{MemoryMetrics, WorkflowMetrics},
-    parse_action_from_description_with_context, ActionError, CompensationKey, ErrorContext, StateId,
-    TransitionKey, TransitionPath, Workflow, WorkflowCacheManager, WorkflowRun, WorkflowRunStatus,
+    parse_action_from_description_with_context, ActionError, CompensationKey, ErrorContext,
+    StateId, TransitionKey, TransitionPath, Workflow, WorkflowCacheManager, WorkflowRun,
+    WorkflowRunStatus,
 };
 use cel_interpreter::Program;
 use serde_json::Value;
@@ -70,7 +71,8 @@ impl WorkflowExecutor {
         let run = WorkflowRun::new(workflow);
 
         // Start metrics tracking for this run
-        self.metrics.start_run(run.id.clone(), run.workflow.name.clone());
+        self.metrics
+            .start_run(run.id.clone(), run.workflow.name.clone());
 
         self.log_event(
             ExecutionEventType::Started,
@@ -79,9 +81,12 @@ impl WorkflowExecutor {
 
         Ok(run)
     }
-    
+
     /// Start and execute a new workflow run
-    pub async fn start_and_execute_workflow(&mut self, workflow: Workflow) -> ExecutorResult<WorkflowRun> {
+    pub async fn start_and_execute_workflow(
+        &mut self,
+        workflow: Workflow,
+    ) -> ExecutorResult<WorkflowRun> {
         let mut run = self.start_workflow(workflow)?;
 
         // Execute the initial state with transition limit
@@ -219,7 +224,10 @@ impl WorkflowExecutor {
         let mut current_remaining = remaining_transitions;
 
         loop {
-            tracing::debug!("Workflow execution loop - current state: {}", run.current_state);
+            tracing::debug!(
+                "Workflow execution loop - current state: {}",
+                run.current_state
+            );
             let transition_performed = self.execute_single_cycle(run).await?;
 
             if !transition_performed {
@@ -282,7 +290,11 @@ impl WorkflowExecutor {
         let state_description = current_state.description.clone();
         let is_terminal = current_state.is_terminal;
 
-        tracing::trace!("Executing state: {} - {}", current_state.id, current_state.description);
+        tracing::trace!(
+            "Executing state: {} - {}",
+            current_state.id,
+            current_state.description
+        );
         self.log_event(
             ExecutionEventType::StateExecution,
             format!(
@@ -295,7 +307,11 @@ impl WorkflowExecutor {
         let state_start_time = Instant::now();
 
         // Execute state action if one can be parsed from the description
-        tracing::debug!("About to execute action for state {} with description: {}", current_state_id, state_description);
+        tracing::debug!(
+            "About to execute action for state {} with description: {}",
+            current_state_id,
+            state_description
+        );
         let action_executed = self.execute_state_action(run, &state_description).await?;
 
         // Record state execution duration
@@ -555,9 +571,10 @@ impl WorkflowExecutor {
         run: &mut WorkflowRun,
         state_description: &str,
     ) -> ExecutorResult<bool> {
-        
         // Parse action from state description with liquid template rendering
-        if let Some(action) = parse_action_from_description_with_context(state_description, &run.context)? {
+        if let Some(action) =
+            parse_action_from_description_with_context(state_description, &run.context)?
+        {
             self.log_event(
                 ExecutionEventType::StateExecution,
                 format!("Executing action: {}", action.description()),

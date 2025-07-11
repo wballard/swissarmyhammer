@@ -10,7 +10,7 @@ use swissarmyhammer::workflow::{MermaidParser, Workflow, WorkflowGraphAnalyzer};
 use walkdir::WalkDir;
 
 use crate::cli::ValidateFormat;
-use crate::exit_codes::{EXIT_SUCCESS, EXIT_WARNING, EXIT_ERROR};
+use crate::exit_codes::{EXIT_ERROR, EXIT_SUCCESS, EXIT_WARNING};
 
 // Local structs for validation
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -281,7 +281,7 @@ impl Validator {
 
     /// Validates all workflow files found in the project
     ///
-    /// Walks through directories looking for .mermaid files in workflows/ directories
+    /// Walks through directories looking for .md files in workflows/ directories
     /// and validates each one, collecting all errors in the ValidationResult.
     ///
     /// Security measures:
@@ -395,15 +395,19 @@ impl Validator {
                 let path = entry.path();
 
                 // Check if this is a workflow file
-                if path.extension().and_then(|s| s.to_str()) == Some("mermaid") {
-                    // Check if it's in a workflows directory
-                    if path
-                        .parent()
-                        .and_then(|p| p.file_name())
-                        .and_then(|n| n.to_str())
-                        == Some("workflows")
-                    {
-                        self.validate_workflow(path, result)?;
+                if path.extension().and_then(|s| s.to_str()) == Some("md") {
+                    // Check if it's in a workflows directory, but exclude prompts/workflows
+                    if let Some(parent) = path.parent() {
+                        if parent.file_name().and_then(|n| n.to_str()) == Some("workflows") {
+                            // Check if this is NOT under a prompts directory
+                            let is_under_prompts = parent.ancestors().any(|ancestor| {
+                                ancestor.file_name().and_then(|n| n.to_str()) == Some("prompts")
+                            });
+
+                            if !is_under_prompts {
+                                self.validate_workflow(path, result)?;
+                            }
+                        }
                     }
                 }
             }

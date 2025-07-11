@@ -55,16 +55,18 @@ impl MermaidParser {
     pub fn parse(input: &str, workflow_name: impl Into<WorkflowName>) -> ParseResult<Workflow> {
         // Parse front matter and extract mermaid content
         let mermaid_content = Self::extract_mermaid_from_markdown(input)?;
-        
+
         // Extract actions from the markdown content
         let actions = Self::extract_actions_from_markdown(input);
 
         // Attempt to parse the diagram
         match parse_diagram(&mermaid_content) {
             Ok(diagram) => match diagram {
-                DiagramType::State(state_diagram) => {
-                    Self::convert_state_diagram_with_actions(state_diagram, workflow_name.into(), actions)
-                }
+                DiagramType::State(state_diagram) => Self::convert_state_diagram_with_actions(
+                    state_diagram,
+                    workflow_name.into(),
+                    actions,
+                ),
                 _ => Err(ParseError::WrongDiagramType {
                     diagram_type: format!("{:?}", diagram),
                 }),
@@ -123,24 +125,25 @@ impl MermaidParser {
         Ok(mermaid_lines.join("\n"))
     }
 
-    
     /// Extract actions from markdown content
     fn extract_actions_from_markdown(input: &str) -> HashMap<String, String> {
         let mut actions = HashMap::new();
         let mut in_actions_section = false;
-        
+
         for line in input.lines() {
             let trimmed = line.trim();
-            if trimmed.eq_ignore_ascii_case("## Actions") || trimmed.eq_ignore_ascii_case("### Actions") {
+            if trimmed.eq_ignore_ascii_case("## Actions")
+                || trimmed.eq_ignore_ascii_case("### Actions")
+            {
                 in_actions_section = true;
                 continue;
             }
-            
+
             if in_actions_section && line.trim().starts_with("##") {
                 // We've reached another section
                 break;
             }
-            
+
             if in_actions_section && line.trim().starts_with("-") {
                 // Parse action line: - StateName: Action description
                 let content = line.trim_start_matches('-').trim();
@@ -151,10 +154,10 @@ impl MermaidParser {
                 }
             }
         }
-        
+
         actions
     }
-    
+
     /// Convert a parsed state diagram to our Workflow type with actions
     fn convert_state_diagram_with_actions(
         state_diagram: StateDiagram,
@@ -177,14 +180,14 @@ impl MermaidParser {
             if state_id == "[*]" {
                 continue;
             }
-            
+
             let is_terminal = Self::is_terminal_state(&state_id, &state_diagram.transitions);
-            
+
             // Get the action for this state from the actions map
-            let description = actions.get(&state_id)
+            let description = actions
+                .get(&state_id)
                 .cloned()
                 .unwrap_or_else(|| state_id.clone());
-            
 
             let mut metadata = HashMap::new();
             metadata.insert(
@@ -276,7 +279,6 @@ impl MermaidParser {
             .iter()
             .any(|t| t.from == state_id && t.to == "[*]")
     }
-
 
     /// Parse transition condition from mermaid transition
     fn parse_transition_condition(transition: &StateTransition) -> TransitionCondition {
@@ -525,7 +527,6 @@ mod tests {
         assert!(result.is_ok());
     }
 
-
     #[test]
     fn test_parse_transition_condition() {
         use mermaid_parser::common::ast::StateTransition;
@@ -622,9 +623,18 @@ stateDiagram-v2
 
         let actions = MermaidParser::extract_actions_from_markdown(input);
         assert_eq!(actions.len(), 3);
-        assert_eq!(actions.get("Start"), Some(&"Log \"Starting workflow\"".to_string()));
-        assert_eq!(actions.get("Process"), Some(&"Execute prompt \"test-prompt\" with result=\"output\"".to_string()));
-        assert_eq!(actions.get("Complete"), Some(&"Log \"Workflow completed with result: ${output}\"".to_string()));
+        assert_eq!(
+            actions.get("Start"),
+            Some(&"Log \"Starting workflow\"".to_string())
+        );
+        assert_eq!(
+            actions.get("Process"),
+            Some(&"Execute prompt \"test-prompt\" with result=\"output\"".to_string())
+        );
+        assert_eq!(
+            actions.get("Complete"),
+            Some(&"Log \"Workflow completed with result: ${output}\"".to_string())
+        );
     }
 
     #[test]

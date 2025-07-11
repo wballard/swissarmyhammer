@@ -94,7 +94,6 @@ mod tests {
         assert!(result.is_ok());
     }
 
-
     #[tokio::test]
     async fn test_run_prompt_command_search() {
         // Create a Search subcommand with a simple query

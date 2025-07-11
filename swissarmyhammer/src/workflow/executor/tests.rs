@@ -1505,14 +1505,14 @@ async fn test_dead_letter_state() {
 #[tokio::test]
 async fn test_say_hello_workflow() {
     let mut executor = WorkflowExecutor::new();
-    
+
     // Create a simple workflow that outputs the hello message
     let mut workflow = Workflow::new(
         WorkflowName::new("Say Hello Test"),
         "Test that outputs hello message".to_string(),
         StateId::new("start"),
     );
-    
+
     // Add states
     workflow.add_state(create_state("start", "Start state", false));
     workflow.add_state(create_state(
@@ -1521,21 +1521,25 @@ async fn test_say_hello_workflow() {
         false,
     ));
     workflow.add_state(create_state("end", "End state", true));
-    
+
     // Add transitions
-    workflow.add_transition(create_transition("start", "say_hello", ConditionType::Always));
+    workflow.add_transition(create_transition(
+        "start",
+        "say_hello",
+        ConditionType::Always,
+    ));
     workflow.add_transition(create_transition("say_hello", "end", ConditionType::Always));
-    
+
     // Execute the workflow
     let run = executor.start_and_execute_workflow(workflow).await.unwrap();
-    
+
     // Verify the workflow completed successfully
     assert_eq!(run.status, WorkflowRunStatus::Completed);
     assert_eq!(run.current_state, StateId::new("end"));
-    
+
     // Check that the hello message was logged in the execution history
     let history = executor.get_history();
-    assert!(history.iter().any(|e| 
-        e.details.contains("Hello from Swiss Army Hammer! The workflow system is working correctly.")
-    ));
+    assert!(history.iter().any(|e| e
+        .details
+        .contains("Hello from Swiss Army Hammer! The workflow system is working correctly.")));
 }

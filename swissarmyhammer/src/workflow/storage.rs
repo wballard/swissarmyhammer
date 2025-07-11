@@ -50,10 +50,8 @@ impl WorkflowResolver {
             // Only process .md files for workflows
             if file.path.extension().and_then(|s| s.to_str()) == Some("md") {
                 // Extract the workflow name without extension
-                let workflow_name = file.name
-                    .strip_suffix(".md")
-                    .unwrap_or(&file.name);
-                
+                let workflow_name = file.name.strip_suffix(".md").unwrap_or(&file.name);
+
                 if let Ok(workflow) = MermaidParser::parse(&file.content, workflow_name) {
                     // Track the workflow source
                     self.workflow_sources
@@ -1241,14 +1239,22 @@ stateDiagram-v2
         let workflows = storage.list_workflows().unwrap();
 
         // Should have at least one workflow (our hello-world builtin)
-        assert!(!workflows.is_empty(), "No workflows were loaded, expected at least hello-world builtin");
+        assert!(
+            !workflows.is_empty(),
+            "No workflows were loaded, expected at least hello-world builtin"
+        );
 
         // Find hello-world workflow
         let hello_world = workflows.iter().find(|w| w.name.as_str() == "hello-world");
-        assert!(hello_world.is_some(), "hello-world builtin workflow not found");
+        assert!(
+            hello_world.is_some(),
+            "hello-world builtin workflow not found"
+        );
 
         // Verify it's marked as builtin
-        let source = resolver.workflow_sources.get(&WorkflowName::new("hello-world"));
+        let source = resolver
+            .workflow_sources
+            .get(&WorkflowName::new("hello-world"));
         assert_eq!(source, Some(&FileSource::Builtin));
     }
 

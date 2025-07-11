@@ -5,8 +5,8 @@ This guide showcases practical workflow examples demonstrating various features 
 ## Example Workflows
 
 Example workflows are located in both:
-- `workflows/builtin/` - Basic example workflows
-- `prompts/builtin/workflows/` - Advanced workflow patterns
+- `builtin/workflows/` - Basic example workflows
+- `builtin/prompts/workflows/` - Advanced workflow patterns
 
 All workflows can be run directly or used as templates for your own workflows.
 
@@ -14,7 +14,7 @@ All workflows can be run directly or used as templates for your own workflows.
 
 #### Hello World Workflow
 
-**File**: `workflows/builtin/hello-world.md`  
+**File**: `builtin/workflows/hello-world.md`  
 **Type**: Simple linear workflow
 
 The simplest possible workflow demonstrating basic functionality:
@@ -30,7 +30,7 @@ swissarmyhammer flow run hello-world
 
 #### Example Actions Workflow
 
-**File**: `workflows/builtin/example-actions.md`  
+**File**: `builtin/workflows/example-actions.md`  
 **Type**: Action reference workflow
 
 Demonstrates all available workflow actions:

@@ -80,7 +80,7 @@ pub trait Action: Send + Sync {
 
     /// Get the action type name
     fn action_type(&self) -> &'static str;
-    
+
     /// For testing: allow downcasting
     #[doc(hidden)]
     fn as_any(&self) -> &dyn std::any::Any;
@@ -124,8 +124,8 @@ impl PromptAction {
             arguments: HashMap::new(),
             result_variable: None,
             timeout: Duration::from_secs(300), // 5 minute default
-            quiet: false,                            // Default to showing output
-            max_retries: 2,                          // Default to 2 retries for rate limits
+            quiet: false,                      // Default to showing output
+            max_retries: 2,                    // Default to 2 retries for rate limits
         }
     }
 
@@ -216,20 +216,23 @@ impl Action for PromptAction {
     fn action_type(&self) -> &'static str {
         "prompt"
     }
-    
+
     impl_as_any!();
 }
 
 impl PromptAction {
     /// Render the prompt using swissarmyhammer prompt test
-    async fn render_prompt_with_swissarmyhammer(&self, context: &HashMap<String, Value>) -> ActionResult<String> {
+    async fn render_prompt_with_swissarmyhammer(
+        &self,
+        context: &HashMap<String, Value>,
+    ) -> ActionResult<String> {
         // Substitute variables in arguments
         let args = self.substitute_variables(context);
-        
+
         // Build the command to render the prompt
         // Use the current executable path to ensure we call the right binary
-        let current_exe = std::env::current_exe()
-            .unwrap_or_else(|_| std::path::PathBuf::from("swissarmyhammer"));
+        let current_exe =
+            std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("swissarmyhammer"));
         let mut cmd = Command::new(&current_exe);
         cmd.arg("prompt")
             .arg("test")
@@ -254,7 +257,10 @@ impl PromptAction {
 
         // Execute the command
         let output = cmd.output().await.map_err(|e| {
-            ActionError::ClaudeError(format!("Failed to render prompt with swissarmyhammer: {}", e))
+            ActionError::ClaudeError(format!(
+                "Failed to render prompt with swissarmyhammer: {}",
+                e
+            ))
         })?;
 
         // Check for errors
@@ -270,7 +276,7 @@ impl PromptAction {
         let stdout = String::from_utf8_lossy(&output.stdout);
         Ok(stdout.to_string())
     }
-    
+
     /// Execute the command once without retry logic
     ///
     /// This method performs a single execution attempt of the Claude command.
@@ -285,10 +291,10 @@ impl PromptAction {
     async fn execute_once(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
         // First, render the prompt using swissarmyhammer
         let rendered_prompt = self.render_prompt_with_swissarmyhammer(context).await?;
-        
+
         // Log the actual prompt being sent to Claude
         tracing::debug!("Piping prompt to Claude:\n{}", rendered_prompt);
-        
+
         // Check if quiet mode is enabled in the context
         let quiet = self.quiet
             || context
@@ -307,13 +313,13 @@ impl PromptAction {
                     "/usr/local/bin/claude".to_string(),
                     "/opt/claude/claude".to_string(),
                 ];
-                
+
                 for path in possible_paths {
                     if std::path::Path::new(&path).exists() {
                         return Ok(std::path::PathBuf::from(path));
                     }
                 }
-                
+
                 Err(which::Error::CannotFindBinaryPath)
             })
             .map_err(|e| {
@@ -323,22 +329,25 @@ impl PromptAction {
                 ))
             })?;
         let mut cmd = Command::new(&claude_path);
-        
+
         // Claude CLI arguments
         cmd.arg("--dangerously-skip-permissions")
             .arg("--print")
-            .arg("--output-format").arg("stream-json")
+            .arg("--output-format")
+            .arg("stream-json")
             .arg("--verbose");
-        
-        
+
         // Set up the command to pipe prompt via stdin
         cmd.stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
-
         if !quiet {
-            tracing::info!("Executing prompt '{}' with Claude at: {}", self.prompt_name, claude_path.display());
+            tracing::info!(
+                "Executing prompt '{}' with Claude at: {}",
+                self.prompt_name,
+                claude_path.display()
+            );
         }
 
         // Spawn the Claude process
@@ -349,40 +358,46 @@ impl PromptAction {
         // Write the prompt to Claude's stdin
         if let Some(mut stdin) = child.stdin.take() {
             use tokio::io::AsyncWriteExt;
-            stdin.write_all(rendered_prompt.as_bytes()).await
-                .map_err(|e| ActionError::ClaudeError(format!("Failed to write prompt to Claude: {}", e)))?;
-            stdin.shutdown().await
-                .map_err(|e| ActionError::ClaudeError(format!("Failed to close Claude stdin: {}", e)))?;
+            stdin
+                .write_all(rendered_prompt.as_bytes())
+                .await
+                .map_err(|e| {
+                    ActionError::ClaudeError(format!("Failed to write prompt to Claude: {}", e))
+                })?;
+            stdin.shutdown().await.map_err(|e| {
+                ActionError::ClaudeError(format!("Failed to close Claude stdin: {}", e))
+            })?;
         }
 
         // Get stdout for streaming
-        let stdout = child.stdout.take()
-            .ok_or_else(|| ActionError::ClaudeError("Failed to capture Claude stdout".to_string()))?;
-        
+        let stdout = child.stdout.take().ok_or_else(|| {
+            ActionError::ClaudeError("Failed to capture Claude stdout".to_string())
+        })?;
+
         // Read stdout line by line for streaming JSON
         use tokio::io::{AsyncBufReadExt, BufReader};
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
-        
+
         let mut response_text = String::new();
         let mut _got_result = false;
-        
+
         // Get timeout from context or use default
         // Use 30 seconds per line as a reasonable default for streaming
         let line_timeout = Duration::from_secs(30);
-        
+
         tracing::debug!("Using line timeout: {:?}", line_timeout);
-        
+
         // Read lines with timeout
         loop {
             match timeout(line_timeout, lines.next_line()).await {
                 Ok(Ok(Some(line))) => {
                     tracing::debug!("Claude output line: {}", line);
-                    
+
                     if line.trim().is_empty() {
                         continue;
                     }
-                    
+
                     if let Ok(json) = serde_json::from_str::<Value>(&line) {
                         // Look for the final result
                         if let Some(result) = json.get("result").and_then(|r| r.as_str()) {
@@ -393,9 +408,13 @@ impl PromptAction {
                         // Also check for assistant messages with text content
                         if json.get("type").and_then(|t| t.as_str()) == Some("assistant") {
                             if let Some(message) = json.get("message").and_then(|m| m.as_object()) {
-                                if let Some(content_array) = message.get("content").and_then(|c| c.as_array()) {
+                                if let Some(content_array) =
+                                    message.get("content").and_then(|c| c.as_array())
+                                {
                                     for content_item in content_array {
-                                        if let Some(text) = content_item.get("text").and_then(|t| t.as_str()) {
+                                        if let Some(text) =
+                                            content_item.get("text").and_then(|t| t.as_str())
+                                        {
                                             response_text.push_str(text);
                                         }
                                     }
@@ -421,35 +440,47 @@ impl PromptAction {
                     if !response_text.is_empty() {
                         break;
                     }
-                    return Err(ActionError::Timeout { timeout: line_timeout });
+                    return Err(ActionError::Timeout {
+                        timeout: line_timeout,
+                    });
                 }
             }
         }
-        
+
         // Wait for process to complete with a short timeout
         let wait_result = timeout(Duration::from_secs(5), child.wait()).await;
         let status = match wait_result {
             Ok(Ok(status)) => status,
-            Ok(Err(e)) => return Err(ActionError::ClaudeError(format!("Failed to wait for Claude: {}", e))),
+            Ok(Err(e)) => {
+                return Err(ActionError::ClaudeError(format!(
+                    "Failed to wait for Claude: {}",
+                    e
+                )))
+            }
             Err(_) => {
                 // Process didn't exit cleanly, kill it
                 let _ = child.kill().await;
-                return Err(ActionError::ClaudeError("Claude process failed to exit cleanly".to_string()));
+                return Err(ActionError::ClaudeError(
+                    "Claude process failed to exit cleanly".to_string(),
+                ));
             }
         };
-        
+
         if !status.success() {
             return Err(ActionError::ClaudeError(
-                "Claude execution failed".to_string()
+                "Claude execution failed".to_string(),
             ));
         }
-        
+
         let response_text = response_text.trim();
-        
+
         if response_text.is_empty() {
             tracing::warn!("No response received from Claude");
         } else {
-            tracing::debug!("Claude response received: {} characters", response_text.len());
+            tracing::debug!(
+                "Claude response received: {} characters",
+                response_text.len()
+            );
         }
 
         // Display the output as YAML
@@ -463,7 +494,7 @@ impl PromptAction {
                 yaml_output.push_str(&format!("  {}\n", line));
             }
             yaml_output.push_str("---");
-            
+
             // Log YAML output
             tracing::info!("{}", yaml_output);
         }
@@ -573,7 +604,7 @@ impl Action for WaitAction {
     fn action_type(&self) -> &'static str {
         "wait"
     }
-    
+
     impl_as_any!();
 }
 
@@ -644,7 +675,7 @@ impl Action for LogAction {
     fn action_type(&self) -> &'static str {
         "log"
     }
-    
+
     impl_as_any!();
 }
 
@@ -708,7 +739,7 @@ impl Action for SetVariableAction {
     fn action_type(&self) -> &'static str {
         "set_variable"
     }
-    
+
     impl_as_any!();
 }
 
@@ -728,7 +759,6 @@ fn substitute_variables_in_string(input: &str, context: &HashMap<String, Value>)
         .substitute_variables_safe(input, context)
         .unwrap_or_else(|_| input.to_string())
 }
-
 
 impl SubWorkflowAction {
     /// Create a new sub-workflow action
@@ -893,7 +923,7 @@ impl Action for SubWorkflowAction {
     fn action_type(&self) -> &'static str {
         "sub_workflow"
     }
-    
+
     impl_as_any!();
 }
 
@@ -949,8 +979,8 @@ fn parse_workflow_output(output: &str) -> ActionResult<Value> {
 
 /// Parse action from state description text with liquid template rendering
 pub fn parse_action_from_description_with_context(
-    description: &str, 
-    context: &HashMap<String, Value>
+    description: &str,
+    context: &HashMap<String, Value>,
 ) -> ActionResult<Option<Box<dyn Action>>> {
     let rendered_description = if let Some(template_vars) = context.get("_template_vars") {
         // Extract template variables from context
@@ -958,25 +988,32 @@ pub fn parse_action_from_description_with_context(
             // Convert to liquid Object
             let mut liquid_vars = liquid::Object::new();
             for (key, value) in vars_map {
-                liquid_vars.insert(key.clone().into(), liquid::model::to_value(value).unwrap_or(liquid::model::Value::Nil));
+                liquid_vars.insert(
+                    key.clone().into(),
+                    liquid::model::to_value(value).unwrap_or(liquid::model::Value::Nil),
+                );
             }
-            
+
             // Parse and render the template
             match liquid::ParserBuilder::with_stdlib()
                 .build()
                 .and_then(|parser| parser.parse(description))
             {
-                Ok(template) => {
-                    match template.render(&liquid_vars) {
-                        Ok(rendered) => rendered,
-                        Err(e) => {
-                            tracing::warn!("Failed to render liquid template: {}. Using original text.", e);
-                            description.to_string()
-                        }
+                Ok(template) => match template.render(&liquid_vars) {
+                    Ok(rendered) => rendered,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to render liquid template: {}. Using original text.",
+                            e
+                        );
+                        description.to_string()
                     }
-                }
+                },
                 Err(e) => {
-                    tracing::warn!("Failed to parse liquid template: {}. Using original text.", e);
+                    tracing::warn!(
+                        "Failed to parse liquid template: {}. Using original text.",
+                        e
+                    );
                     description.to_string()
                 }
             }
@@ -986,7 +1023,7 @@ pub fn parse_action_from_description_with_context(
     } else {
         description.to_string()
     };
-    
+
     parse_action_from_description(&rendered_description)
 }
 
@@ -1204,7 +1241,6 @@ mod tests {
         assert_eq!(substituted.get("file"), Some(&"test.rs".to_string()));
         assert_eq!(substituted.get("mode"), Some(&"strict".to_string()));
     }
-
 
     #[tokio::test]
     async fn test_prompt_action_with_rate_limit_retry() {

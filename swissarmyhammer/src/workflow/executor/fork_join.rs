@@ -2,7 +2,9 @@
 
 use super::core::WorkflowExecutor;
 use super::{ExecutionEventType, ExecutorError, ExecutorResult, LAST_ACTION_RESULT_KEY};
-use crate::workflow::{parse_action_from_description_with_context, StateId, StateType, Workflow, WorkflowRun};
+use crate::workflow::{
+    parse_action_from_description_with_context, StateId, StateType, Workflow, WorkflowRun,
+};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -338,7 +340,10 @@ impl WorkflowExecutor {
                 .ok_or_else(|| ExecutorError::StateNotFound(branch.current_state.clone()))?;
 
             // Execute state action if one can be parsed from the description with liquid template rendering
-            if let Some(action) = parse_action_from_description_with_context(&current_state.description, &branch.context)? {
+            if let Some(action) = parse_action_from_description_with_context(
+                &current_state.description,
+                &branch.context,
+            )? {
                 self.log_event(
                     ExecutionEventType::StateExecution,
                     format!("Branch executing action: {}", action.description()),

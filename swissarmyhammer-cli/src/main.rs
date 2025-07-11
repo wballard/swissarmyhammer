@@ -15,7 +15,7 @@ mod validate;
 
 use clap::CommandFactory;
 use cli::{Cli, Commands};
-use exit_codes::{EXIT_SUCCESS, EXIT_WARNING, EXIT_ERROR};
+use exit_codes::{EXIT_ERROR, EXIT_SUCCESS, EXIT_WARNING};
 
 #[tokio::main]
 async fn main() {
@@ -256,11 +256,7 @@ async fn run_flow(subcommand: cli::FlowSubcommand) -> i32 {
 /// - 0: Success (no errors or warnings)
 /// - 1: Warnings found
 /// - 2: Errors found
-fn run_validate(
-    quiet: bool,
-    format: cli::ValidateFormat,
-    workflow_dirs: Vec<String>,
-) -> i32 {
+fn run_validate(quiet: bool, format: cli::ValidateFormat, workflow_dirs: Vec<String>) -> i32 {
     use validate;
 
     match validate::run_validate_command(quiet, format, workflow_dirs) {

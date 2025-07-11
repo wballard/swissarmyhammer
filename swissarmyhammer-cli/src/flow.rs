@@ -208,7 +208,6 @@ async fn run_workflow_command(
     // Create workflow run
     let mut run = executor
         .start_workflow(workflow)
-        .await
         .map_err(|e| SwissArmyHammerError::Other(format!("Failed to start workflow: {}", e)))?;
 
     // Set initial variables

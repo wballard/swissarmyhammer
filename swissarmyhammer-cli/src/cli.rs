@@ -64,6 +64,10 @@ pub struct Cli {
     #[arg(short, long)]
     pub verbose: bool,
 
+    /// Enable debug logging
+    #[arg(short, long)]
+    pub debug: bool,
+
     /// Suppress all output except errors
     #[arg(short, long)]
     pub quiet: bool,

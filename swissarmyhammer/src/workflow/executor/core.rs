@@ -60,22 +60,29 @@ impl WorkflowExecutor {
         }
     }
 
-    /// Start a new workflow run
-    pub async fn start_workflow(&mut self, workflow: Workflow) -> ExecutorResult<WorkflowRun> {
+    /// Start a new workflow run (initializes but doesn't execute)
+    pub fn start_workflow(&mut self, workflow: Workflow) -> ExecutorResult<WorkflowRun> {
         // Validate workflow before starting
         workflow
             .validate()
             .map_err(|errors| ExecutorError::ValidationFailed(errors.join("; ")))?;
 
-        let mut run = WorkflowRun::new(workflow);
+        let run = WorkflowRun::new(workflow);
 
         // Start metrics tracking for this run
-        self.metrics.start_run(run.id, run.workflow.name.clone());
+        self.metrics.start_run(run.id.clone(), run.workflow.name.clone());
 
         self.log_event(
             ExecutionEventType::Started,
             format!("Started workflow: {}", run.workflow.name),
         );
+
+        Ok(run)
+    }
+    
+    /// Start and execute a new workflow run
+    pub async fn start_and_execute_workflow(&mut self, workflow: Workflow) -> ExecutorResult<WorkflowRun> {
+        let mut run = self.start_workflow(workflow)?;
 
         // Execute the initial state with transition limit
         let result = self
@@ -245,10 +252,7 @@ impl WorkflowExecutor {
         if current_state_id.as_str() == "[*]" {
             tracing::debug!("Reached terminal state [*]");
             run.complete();
-            self.log_event(
-                ExecutionEventType::Completed,
-                "Workflow completed".to_string(),
-            );
+            // Don't log completion here - it's already been logged by the terminal state
             return Ok(());
         }
 

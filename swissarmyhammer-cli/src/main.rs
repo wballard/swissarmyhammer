@@ -39,8 +39,10 @@ async fn main() {
         Level::DEBUG // More verbose for MCP mode to help with debugging
     } else if cli.quiet {
         Level::ERROR
-    } else if cli.verbose {
+    } else if cli.debug {
         Level::DEBUG
+    } else if cli.verbose {
+        Level::TRACE
     } else {
         Level::INFO
     };

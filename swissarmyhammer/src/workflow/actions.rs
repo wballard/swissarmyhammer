@@ -353,46 +353,75 @@ impl PromptAction {
         let mut _got_result = false;
         
         // Get timeout from context or use default
-        let line_timeout = context.get("_timeout_secs")
-            .and_then(|v| v.as_u64())
-            .map(Duration::from_secs)
-            .unwrap_or(Duration::from_secs(120));  // Default 2 minutes per line if not specified
+        // Use 30 seconds per line as a reasonable default for streaming
+        let line_timeout = Duration::from_secs(30);
         
         tracing::debug!("Using line timeout: {:?}", line_timeout);
         
         // Read lines with timeout
-        while let Ok(Ok(Some(line))) = timeout(line_timeout, lines.next_line()).await {
-            tracing::trace!("Claude output line: {}", line);
-            
-            if line.trim().is_empty() {
-                continue;
-            }
-            
-            if let Ok(json) = serde_json::from_str::<Value>(&line) {
-                // Look for the final result
-                if let Some(result) = json.get("result").and_then(|r| r.as_str()) {
-                    response_text = result.to_string();
-                    _got_result = true;
-                    break;
-                }
-                // Also check for assistant messages with text content
-                if json.get("type").and_then(|t| t.as_str()) == Some("assistant") {
-                    if let Some(message) = json.get("message").and_then(|m| m.as_object()) {
-                        if let Some(content_array) = message.get("content").and_then(|c| c.as_array()) {
-                            for content_item in content_array {
-                                if let Some(text) = content_item.get("text").and_then(|t| t.as_str()) {
-                                    response_text.push_str(text);
+        loop {
+            match timeout(line_timeout, lines.next_line()).await {
+                Ok(Ok(Some(line))) => {
+                    tracing::debug!("Claude output line: {}", line);
+                    
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    
+                    if let Ok(json) = serde_json::from_str::<Value>(&line) {
+                        // Look for the final result
+                        if let Some(result) = json.get("result").and_then(|r| r.as_str()) {
+                            response_text = result.to_string();
+                            _got_result = true;
+                            break;
+                        }
+                        // Also check for assistant messages with text content
+                        if json.get("type").and_then(|t| t.as_str()) == Some("assistant") {
+                            if let Some(message) = json.get("message").and_then(|m| m.as_object()) {
+                                if let Some(content_array) = message.get("content").and_then(|c| c.as_array()) {
+                                    for content_item in content_array {
+                                        if let Some(text) = content_item.get("text").and_then(|t| t.as_str()) {
+                                            response_text.push_str(text);
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
+                Ok(Ok(None)) => {
+                    // End of stream
+                    break;
+                }
+                Ok(Err(e)) => {
+                    tracing::error!("Error reading Claude output: {}", e);
+                    break;
+                }
+                Err(_) => {
+                    // Timeout - kill the process and return error
+                    tracing::error!("Timeout reading Claude output after {:?}", line_timeout);
+                    tracing::error!("Response so far: {} characters", response_text.len());
+                    let _ = child.kill().await;
+                    // If we have some response, use it rather than erroring
+                    if !response_text.is_empty() {
+                        break;
+                    }
+                    return Err(ActionError::Timeout { timeout: line_timeout });
+                }
             }
         }
         
-        // Wait for process to complete
-        let status = child.wait().await
-            .map_err(|e| ActionError::ClaudeError(format!("Failed to wait for Claude: {}", e)))?;
+        // Wait for process to complete with a short timeout
+        let wait_result = timeout(Duration::from_secs(5), child.wait()).await;
+        let status = match wait_result {
+            Ok(Ok(status)) => status,
+            Ok(Err(e)) => return Err(ActionError::ClaudeError(format!("Failed to wait for Claude: {}", e))),
+            Err(_) => {
+                // Process didn't exit cleanly, kill it
+                let _ = child.kill().await;
+                return Err(ActionError::ClaudeError("Claude process failed to exit cleanly".to_string()));
+            }
+        };
         
         if !status.success() {
             return Err(ActionError::ClaudeError(
@@ -401,9 +430,15 @@ impl PromptAction {
         }
         
         let response_text = response_text.trim();
+        
+        if response_text.is_empty() {
+            tracing::warn!("No response received from Claude");
+        } else {
+            tracing::debug!("Claude response received: {} characters", response_text.len());
+        }
 
         // Display the output as YAML
-        if !quiet {
+        if !quiet && !response_text.is_empty() {
             // Build the YAML output as a single string
             let mut yaml_output = String::new();
             yaml_output.push_str("\n---\n");

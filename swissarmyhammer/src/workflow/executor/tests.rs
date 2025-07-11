@@ -40,7 +40,7 @@ async fn test_start_workflow() {
     let mut executor = WorkflowExecutor::new();
     let workflow = create_test_workflow();
 
-    let run = executor.start_workflow(workflow).await.unwrap();
+    let run = executor.start_and_execute_workflow(workflow).await.unwrap();
 
     assert_eq!(run.workflow.name.as_str(), "Test Workflow");
     // The workflow executes through to completion immediately
@@ -54,7 +54,7 @@ async fn test_workflow_execution_to_completion() {
     let mut executor = WorkflowExecutor::new();
     let workflow = create_test_workflow();
 
-    let run = executor.start_workflow(workflow).await.unwrap();
+    let run = executor.start_and_execute_workflow(workflow).await.unwrap();
 
     // The workflow should have executed through to completion
     assert_eq!(run.status, WorkflowRunStatus::Completed);
@@ -135,7 +135,7 @@ async fn test_max_transition_limit() {
         metadata: HashMap::new(),
     });
 
-    let result = executor.start_workflow(workflow).await;
+    let result = executor.start_and_execute_workflow(workflow).await;
     assert!(
         matches!(result, Err(ExecutorError::TransitionLimitExceeded { limit }) if limit == MAX_TRANSITIONS)
     );
@@ -284,7 +284,7 @@ async fn test_fork_join_parallel_execution() {
         metadata: HashMap::new(),
     });
 
-    let run = executor.start_workflow(workflow).await.unwrap();
+    let run = executor.start_and_execute_workflow(workflow).await.unwrap();
 
     // After execution, workflow should be completed
     assert_eq!(run.status, WorkflowRunStatus::Completed);
@@ -402,7 +402,7 @@ async fn test_fork_join_context_merging() {
         metadata: HashMap::new(),
     });
 
-    let run = executor.start_workflow(workflow).await.unwrap();
+    let run = executor.start_and_execute_workflow(workflow).await.unwrap();
 
     // After execution, both branch variables should be in the final context
     assert!(run.context.contains_key("branch1_result"));
@@ -748,7 +748,7 @@ async fn test_choice_state_execution() {
         metadata: HashMap::new(),
     });
 
-    let run = executor.start_workflow(workflow).await.unwrap();
+    let run = executor.start_and_execute_workflow(workflow).await.unwrap();
 
     // Should go to success state since OnSuccess defaults to true
     assert_eq!(run.status, WorkflowRunStatus::Completed);
@@ -813,7 +813,7 @@ async fn test_choice_state_with_cel_conditions() {
         metadata: HashMap::new(),
     });
 
-    let run = executor.start_workflow(workflow).await.unwrap();
+    let run = executor.start_and_execute_workflow(workflow).await.unwrap();
 
     // Should go to success state since start state sets result="ok"
     assert_eq!(run.status, WorkflowRunStatus::Completed);
@@ -865,7 +865,7 @@ async fn test_choice_state_no_matching_conditions() {
         metadata: HashMap::new(),
     });
 
-    let result = executor.start_workflow(workflow).await;
+    let result = executor.start_and_execute_workflow(workflow).await;
     assert!(matches!(result, Err(ExecutorError::ExecutionFailed(_))));
 }
 
@@ -902,7 +902,7 @@ async fn test_choice_state_no_transitions() {
         metadata: HashMap::new(),
     });
 
-    let result = executor.start_workflow(workflow).await;
+    let result = executor.start_and_execute_workflow(workflow).await;
     assert!(matches!(result, Err(ExecutorError::ExecutionFailed(_))));
 }
 
@@ -1107,7 +1107,7 @@ async fn test_retry_with_exponential_backoff() {
         ConditionType::OnSuccess,
     ));
 
-    let result = executor.start_workflow(workflow).await;
+    let result = executor.start_and_execute_workflow(workflow).await;
 
     // Should fail after retries
     assert!(result.is_err());
@@ -1162,7 +1162,7 @@ async fn test_fallback_state_on_error() {
     ));
     workflow.add_transition(create_transition("fallback", "end", ConditionType::Always));
 
-    let run = executor.start_workflow(workflow).await.unwrap();
+    let run = executor.start_and_execute_workflow(workflow).await.unwrap();
 
     // Should have executed through fallback path
     assert_eq!(run.status, WorkflowRunStatus::Completed);
@@ -1212,7 +1212,7 @@ async fn test_error_handler_state() {
         ConditionType::Always,
     ));
 
-    let run = executor.start_workflow(workflow).await.unwrap();
+    let run = executor.start_and_execute_workflow(workflow).await.unwrap();
 
     assert_eq!(run.status, WorkflowRunStatus::Completed);
 
@@ -1278,7 +1278,7 @@ async fn test_compensation_rollback() {
         ConditionType::Always,
     ));
 
-    let _run = executor.start_workflow(workflow).await.unwrap();
+    let _run = executor.start_and_execute_workflow(workflow).await.unwrap();
 
     // Verify compensation was executed
     let history = executor.get_history();
@@ -1326,7 +1326,7 @@ async fn test_error_context_capture() {
         ConditionType::Always,
     ));
 
-    let run = executor.start_workflow(workflow).await.unwrap();
+    let run = executor.start_and_execute_workflow(workflow).await.unwrap();
 
     // Check error context was captured
     assert!(run.context.contains_key(ErrorContext::CONTEXT_KEY));
@@ -1379,7 +1379,7 @@ async fn test_manual_intervention_recovery() {
         ConditionType::Always,
     ));
 
-    let mut run = executor.start_workflow(workflow).await.unwrap();
+    let mut run = executor.start_and_execute_workflow(workflow).await.unwrap();
 
     // Should pause at manual intervention
     assert_eq!(run.status, WorkflowRunStatus::Running);
@@ -1438,7 +1438,7 @@ async fn test_skip_failed_state() {
     ));
     workflow.add_transition(create_transition("continue", "end", ConditionType::Always));
 
-    let run = executor.start_workflow(workflow).await.unwrap();
+    let run = executor.start_and_execute_workflow(workflow).await.unwrap();
 
     // Should complete despite failure in optional step
     assert_eq!(run.status, WorkflowRunStatus::Completed);
@@ -1488,7 +1488,7 @@ async fn test_dead_letter_state() {
         metadata,
     });
 
-    let mut run = executor.start_workflow(workflow).await.unwrap();
+    let mut run = executor.start_and_execute_workflow(workflow).await.unwrap();
 
     // Should have transitioned to dead letter state
     assert_eq!(run.current_state, StateId::new("dead_letter"));
@@ -1500,4 +1500,42 @@ async fn test_dead_letter_state() {
     // Resume to complete the dead letter state execution
     run = executor.resume_workflow(run).await.unwrap();
     assert_eq!(run.status, WorkflowRunStatus::Completed);
+}
+
+#[tokio::test]
+async fn test_say_hello_workflow() {
+    let mut executor = WorkflowExecutor::new();
+    
+    // Create a simple workflow that outputs the hello message
+    let mut workflow = Workflow::new(
+        WorkflowName::new("Say Hello Test"),
+        "Test that outputs hello message".to_string(),
+        StateId::new("start"),
+    );
+    
+    // Add states
+    workflow.add_state(create_state("start", "Start state", false));
+    workflow.add_state(create_state(
+        "say_hello",
+        "Log \"Hello from Swiss Army Hammer! The workflow system is working correctly.\"",
+        false,
+    ));
+    workflow.add_state(create_state("end", "End state", true));
+    
+    // Add transitions
+    workflow.add_transition(create_transition("start", "say_hello", ConditionType::Always));
+    workflow.add_transition(create_transition("say_hello", "end", ConditionType::Always));
+    
+    // Execute the workflow
+    let run = executor.start_and_execute_workflow(workflow).await.unwrap();
+    
+    // Verify the workflow completed successfully
+    assert_eq!(run.status, WorkflowRunStatus::Completed);
+    assert_eq!(run.current_state, StateId::new("end"));
+    
+    // Check that the hello message was logged in the execution history
+    let history = executor.get_history();
+    assert!(history.iter().any(|e| 
+        e.details.contains("Hello from Swiss Army Hammer! The workflow system is working correctly.")
+    ));
 }

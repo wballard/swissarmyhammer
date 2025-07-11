@@ -532,29 +532,49 @@ fn display_workflows_to_writer<W: Write>(
         let name = workflow.name.as_str();
         let description = &workflow.description;
         
+        // Extract title from metadata, or use a formatted version of the name
+        let title = workflow.metadata.get("title")
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                // Fallback: convert workflow name to a readable title
+                name.replace(['-', '_'], " ")
+                    .split_whitespace()
+                    .map(|word| {
+                        let mut chars = word.chars();
+                        match chars.next() {
+                            None => String::new(),
+                            Some(first) => {
+                                first.to_uppercase().collect::<String>() + chars.as_str()
+                            }
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            });
+        
         // Color code based on source, matching prompt list
         let first_line = if is_tty {
-            let (name_colored, description_colored) = match source {
+            let (name_colored, title_colored) = match source {
                 PromptSource::Builtin => (
                     name.green().bold().to_string(),
-                    description.green().to_string(),
+                    title.green().to_string(),
                 ),
                 PromptSource::User => (
                     name.blue().bold().to_string(),
-                    description.blue().to_string(),
+                    title.blue().to_string(),
                 ),
                 PromptSource::Local => (
                     name.yellow().bold().to_string(),
-                    description.yellow().to_string(),
+                    title.yellow().to_string(),
                 ),
                 PromptSource::Dynamic => (
                     name.magenta().bold().to_string(),
-                    description.magenta().to_string(),
+                    title.magenta().to_string(),
                 ),
             };
-            format!("{} | {}", name_colored, description_colored)
+            format!("{} | {}", name_colored, title_colored)
         } else {
-            format!("{} | {}", name, description)
+            format!("{} | {}", name, title)
         };
         
         writeln!(writer, "{}", first_line)?;

@@ -75,6 +75,39 @@ impl MermaidParser {
         }
     }
 
+    /// Parse a Mermaid state diagram into a Workflow with metadata
+    pub fn parse_with_metadata(
+        input: &str,
+        workflow_name: impl Into<WorkflowName>,
+        title: Option<String>,
+        description: Option<String>,
+    ) -> ParseResult<Workflow> {
+        // Parse front matter and extract mermaid content
+        let mermaid_content = Self::extract_mermaid_from_markdown(input)?;
+
+        // Extract actions from the markdown content
+        let actions = Self::extract_actions_from_markdown(input);
+
+        // Attempt to parse the diagram
+        match parse_diagram(&mermaid_content) {
+            Ok(diagram) => match diagram {
+                DiagramType::State(state_diagram) => {
+                    Self::convert_state_diagram_with_actions_and_metadata(
+                        state_diagram,
+                        workflow_name.into(),
+                        actions,
+                        title,
+                        description,
+                    )
+                }
+                _ => Err(ParseError::WrongDiagramType {
+                    diagram_type: format!("{:?}", diagram),
+                }),
+            },
+            Err(e) => Err(ParseError::MermaidError(e.to_string())),
+        }
+    }
+
     /// Extract mermaid diagram content from markdown with YAML front matter or raw mermaid content
     fn extract_mermaid_from_markdown(input: &str) -> ParseResult<String> {
         // Check if this is raw mermaid content (for backward compatibility with tests)
@@ -256,6 +289,119 @@ impl MermaidParser {
             "version".to_string(),
             format!("{:?}", state_diagram.version),
         );
+
+        // Perform workflow-specific validation
+        Self::validate_workflow_structure(&workflow)?;
+
+        Ok(workflow)
+    }
+
+    /// Convert a parsed state diagram to our Workflow type with actions and metadata
+    fn convert_state_diagram_with_actions_and_metadata(
+        state_diagram: StateDiagram,
+        workflow_name: WorkflowName,
+        actions: HashMap<String, String>,
+        title: Option<String>,
+        description: Option<String>,
+    ) -> ParseResult<Workflow> {
+        // Use provided description or title, or fall back to default
+        let workflow_description = description
+            .or(title.clone())
+            .or(state_diagram.title)
+            .unwrap_or_else(|| "Workflow from Mermaid state diagram".to_string());
+
+        // Find initial state - look for [*] as source in transitions
+        let initial_state_id = Self::find_initial_state(&state_diagram.transitions)?;
+
+        let mut workflow = Workflow::new(workflow_name, workflow_description, initial_state_id.clone());
+
+        // Convert all states from mermaid to our format
+        for (state_id, mermaid_state) in state_diagram.states {
+            // Skip the special [*] state as it's not a real state in our model
+            if state_id == "[*]" {
+                continue;
+            }
+
+            let is_terminal = Self::is_terminal_state(&state_id, &state_diagram.transitions);
+
+            // Get the action for this state from the actions map
+            let description = actions
+                .get(&state_id)
+                .cloned()
+                .unwrap_or_else(|| state_id.clone());
+
+            let mut metadata = HashMap::new();
+            metadata.insert(
+                "mermaid_type".to_string(),
+                format!("{:?}", mermaid_state.state_type),
+            );
+
+            // Check if this is a fork or join state based on state type
+            let state_type = match mermaid_state.state_type {
+                mermaid_parser::common::ast::StateType::Fork => StateType::Fork,
+                mermaid_parser::common::ast::StateType::Join => StateType::Join,
+                _ => StateType::Normal,
+            };
+
+            // Check if this state has substates or concurrent regions to enable parallel execution
+            // Also enable parallel execution for fork and join states
+            let allows_parallel = !mermaid_state.substates.is_empty()
+                || !mermaid_state.concurrent_regions.is_empty()
+                || matches!(state_type, StateType::Fork | StateType::Join);
+
+            workflow.add_state(State {
+                id: StateId::new(state_id),
+                description,
+                state_type,
+                is_terminal,
+                allows_parallel,
+                metadata,
+            });
+        }
+
+        // Convert all transitions
+        for transition in state_diagram.transitions {
+            // Skip transitions to/from [*] that don't involve real states
+            if transition.from == "[*]" && transition.to == "[*]" {
+                continue;
+            }
+
+            // Handle initial transitions from [*]
+            if transition.from == "[*]" {
+                // This is already handled by setting initial_state, skip the transition
+                continue;
+            }
+
+            // Handle terminal transitions to [*]
+            if transition.to == "[*]" {
+                // Mark the source state as terminal (already handled above)
+                continue;
+            }
+
+            let condition = Self::parse_transition_condition(&transition);
+
+            workflow.add_transition(Transition {
+                from_state: StateId::new(transition.from),
+                to_state: StateId::new(transition.to),
+                condition,
+                action: transition.action,
+                metadata: HashMap::new(),
+            });
+        }
+
+        // Add metadata about the source
+        workflow
+            .metadata
+            .insert("source".to_string(), "mermaid".to_string());
+        workflow.metadata.insert(
+            "version".to_string(),
+            format!("{:?}", state_diagram.version),
+        );
+        
+        // Store the title in metadata if provided
+        if let Some(title) = title {
+            workflow.metadata.insert("title".to_string(), title);
+        }
 
         // Perform workflow-specific validation
         Self::validate_workflow_structure(&workflow)?;

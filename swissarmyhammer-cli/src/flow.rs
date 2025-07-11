@@ -21,12 +21,13 @@ pub async fn run_flow_command(subcommand: FlowSubcommand) -> Result<()> {
         FlowSubcommand::Run {
             workflow,
             vars,
+            set,
             interactive,
             dry_run,
             test,
             timeout: timeout_str,
             quiet,
-        } => run_workflow_command(workflow, vars, interactive, dry_run, test, timeout_str, quiet).await,
+        } => run_workflow_command(workflow, vars, set, interactive, dry_run, test, timeout_str, quiet).await,
         FlowSubcommand::Resume {
             run_id,
             interactive,
@@ -70,6 +71,7 @@ pub async fn run_flow_command(subcommand: FlowSubcommand) -> Result<()> {
 async fn run_workflow_command(
     workflow_name: String,
     vars: Vec<String>,
+    set: Vec<String>,
     interactive: bool,
     dry_run: bool,
     test_mode: bool,
@@ -95,6 +97,23 @@ async fn run_workflow_command(
             return Err(SwissArmyHammerError::Other(format!(
                 "Invalid variable format: '{}'. Use key=value format.",
                 var
+            )));
+        }
+    }
+
+    // Parse set variables for liquid template rendering
+    let mut set_variables = HashMap::new();
+    for set_var in set {
+        let parts: Vec<&str> = set_var.splitn(2, '=').collect();
+        if parts.len() == 2 {
+            set_variables.insert(
+                parts[0].to_string(),
+                serde_json::Value::String(parts[1].to_string()),
+            );
+        } else {
+            return Err(SwissArmyHammerError::Other(format!(
+                "Invalid set variable format: '{}'. Use key=value format.",
+                set_var
             )));
         }
     }
@@ -141,7 +160,7 @@ async fn run_workflow_command(
         }
 
         // Execute in test mode with coverage tracking
-        let coverage = execute_workflow_test_mode(workflow, variables, timeout_duration).await?;
+        let coverage = execute_workflow_test_mode(workflow, variables, set_variables, timeout_duration).await?;
 
         // Generate coverage report
         println!("\n📊 Coverage Report:");
@@ -212,6 +231,11 @@ async fn run_workflow_command(
 
     // Set initial variables
     run.context.extend(variables);
+    
+    // Store set variables in context for liquid template rendering
+    if !set_variables.is_empty() {
+        run.context.insert("_template_vars".to_string(), serde_json::to_value(set_variables)?);
+    }
     
     // Set quiet mode in context for actions to use
     if quiet {
@@ -993,6 +1017,7 @@ struct WorkflowCoverage {
 async fn execute_workflow_test_mode(
     workflow: Workflow,
     initial_variables: HashMap<String, serde_json::Value>,
+    set_variables: HashMap<String, serde_json::Value>,
     timeout_duration: Option<Duration>,
 ) -> Result<WorkflowCoverage> {
     use swissarmyhammer::workflow::{ConditionType, WorkflowRun};
@@ -1009,6 +1034,11 @@ async fn execute_workflow_test_mode(
     // Create a mock workflow run
     let mut run = WorkflowRun::new(workflow.clone());
     run.context.extend(initial_variables);
+    
+    // Store set variables in context for liquid template rendering
+    if !set_variables.is_empty() {
+        run.context.insert("_template_vars".to_string(), serde_json::to_value(set_variables)?);
+    }
 
     // Track visited states and transitions
     let mut current_state = workflow.initial_state.clone();
@@ -1191,7 +1221,8 @@ mod tests {
         });
 
         let variables = HashMap::new();
-        let coverage = execute_workflow_test_mode(workflow, variables, None)
+        let set_variables = HashMap::new();
+        let coverage = execute_workflow_test_mode(workflow, variables, set_variables, None)
             .await
             .unwrap();
 
@@ -1269,7 +1300,8 @@ mod tests {
         });
 
         let variables = HashMap::new();
-        let coverage = execute_workflow_test_mode(workflow, variables, None)
+        let set_variables = HashMap::new();
+        let coverage = execute_workflow_test_mode(workflow, variables, set_variables, None)
             .await
             .unwrap();
 
@@ -1339,9 +1371,10 @@ mod tests {
         });
 
         let variables = HashMap::new();
+        let set_variables = HashMap::new();
         // Use a very short timeout
         let timeout = Some(Duration::from_millis(100));
-        let coverage = execute_workflow_test_mode(workflow, variables, timeout)
+        let coverage = execute_workflow_test_mode(workflow, variables, set_variables, timeout)
             .await
             .unwrap();
 
@@ -1371,7 +1404,8 @@ mod tests {
         });
 
         let variables = HashMap::new();
-        let coverage = execute_workflow_test_mode(workflow, variables, None)
+        let set_variables = HashMap::new();
+        let coverage = execute_workflow_test_mode(workflow, variables, set_variables, None)
             .await
             .unwrap();
 
@@ -1425,8 +1459,9 @@ mod tests {
 
         let mut variables = HashMap::new();
         variables.insert("input".to_string(), serde_json::json!("test"));
+        let set_variables = HashMap::new();
 
-        let coverage = execute_workflow_test_mode(workflow, variables, None)
+        let coverage = execute_workflow_test_mode(workflow, variables, set_variables, None)
             .await
             .unwrap();
 
@@ -1449,7 +1484,8 @@ mod tests {
         );
 
         let variables = HashMap::new();
-        let coverage = execute_workflow_test_mode(workflow, variables, None)
+        let set_variables = HashMap::new();
+        let coverage = execute_workflow_test_mode(workflow, variables, set_variables, None)
             .await
             .unwrap();
 
@@ -1458,5 +1494,49 @@ mod tests {
         assert_eq!(coverage.visited_transitions.len(), 0);
         assert_eq!(coverage.total_states, 0);
         assert_eq!(coverage.total_transitions, 0);
+    }
+
+    #[test]
+    fn test_parse_set_variables() {
+        let set_vars = vec![
+            "name=John".to_string(),
+            "count=5".to_string(),
+            "message=Hello World".to_string(),
+        ];
+
+        let mut set_variables = HashMap::new();
+        for set_var in set_vars {
+            let parts: Vec<&str> = set_var.splitn(2, '=').collect();
+            if parts.len() == 2 {
+                set_variables.insert(
+                    parts[0].to_string(),
+                    serde_json::Value::String(parts[1].to_string()),
+                );
+            }
+        }
+
+        assert_eq!(set_variables.len(), 3);
+        assert_eq!(set_variables.get("name").unwrap(), &serde_json::json!("John"));
+        assert_eq!(set_variables.get("count").unwrap(), &serde_json::json!("5"));
+        assert_eq!(set_variables.get("message").unwrap(), &serde_json::json!("Hello World"));
+    }
+
+    #[test]
+    fn test_set_variables_in_context() {
+        let mut context = HashMap::new();
+        let mut set_variables = HashMap::new();
+        
+        set_variables.insert("greeting".to_string(), serde_json::json!("Bonjour"));
+        set_variables.insert("name".to_string(), serde_json::json!("Alice"));
+        
+        context.insert("_template_vars".to_string(), serde_json::to_value(set_variables).unwrap());
+        
+        // Verify the template vars are stored correctly
+        let template_vars = context.get("_template_vars").unwrap();
+        assert!(template_vars.is_object());
+        
+        let vars_map = template_vars.as_object().unwrap();
+        assert_eq!(vars_map.get("greeting").unwrap(), &serde_json::json!("Bonjour"));
+        assert_eq!(vars_map.get("name").unwrap(), &serde_json::json!("Alice"));
     }
 }

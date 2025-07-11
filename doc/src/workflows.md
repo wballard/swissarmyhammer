@@ -219,6 +219,7 @@ Execute command "npm test"
 Workflows have access to:
 
 - Input variables passed via `--var`
+- Template variables passed via `--set` (for liquid template rendering)
 - Variables set in previous states
 - Output from executed prompts (`${output}`)
 - Error messages (`${error}`)
@@ -226,12 +227,87 @@ Workflows have access to:
 
 ### Variable Interpolation
 
-Use `${variable_name}` syntax to reference variables:
+Use `${variable_name}` syntax to reference workflow variables:
 
 ```
 Execute prompt "analyze" with file="${input_file}"
 Set result="Analysis of ${input_file}: ${output}"
 ```
+
+### Liquid Template Support
+
+Workflows support Liquid template rendering in action strings when using the `--set` parameter. This allows dynamic parameterization of workflows at runtime:
+
+```markdown
+## Actions
+
+- start: Log "Starting workflow for {{ user_name | default: 'Guest' }}"
+- greet: Execute prompt "say-hello" with name="{{ name }}" language="{{ language | default: 'English' }}"
+- process: Set message="{{ greeting_type }} for {{ user_name }}!"
+- farewell: Log "Goodbye, {{ name }}!"
+```
+
+Run the workflow with template variables:
+
+```bash
+# Pass template variables with --set
+swissarmyhammer flow run greeting --set name=Alice --set language=French
+
+# Template variables with default values
+swissarmyhammer flow run greeting --set name=Bob
+# The language will default to 'English'
+
+# Complex template variables
+swissarmyhammer flow run data-processor --set user.name=Alice --set user.role=admin
+```
+
+#### Template Features in Workflows
+
+You can use all Liquid template features in workflow action strings:
+
+**Filters:**
+```markdown
+- log_user: Log "Processing user: {{ username | upcase }}"
+- set_path: Set output_file="/tmp/{{ filename | slugify }}.json"
+```
+
+**Conditionals:**
+```markdown
+- notify: Log "{% if priority == 'high' %}🚨 URGENT: {% endif %}{{ message }}"
+```
+
+**Default Values:**
+```markdown
+- configure: Set timeout="{{ timeout | default: '30' }}"
+- log_mode: Log "Running in {{ mode | default: 'development' }} mode"
+```
+
+**Complex Objects:**
+```markdown
+- process_user: Execute prompt "user-handler" with name="{{ user.name }}" role="{{ user.role }}"
+```
+
+#### Combining --var and --set
+
+You can use both `--var` (for workflow variables) and `--set` (for template variables) together:
+
+```bash
+swissarmyhammer flow run my-workflow \
+  --var input_file=data.json \
+  --var output_dir=/tmp \
+  --set user_name=Alice \
+  --set environment=production
+```
+
+- `--var` variables are available as `${variable}` in the workflow
+- `--set` variables are available as `{{ variable }}` in liquid templates
+
+#### Template Rendering Behavior
+
+- Templates are rendered before action parsing
+- If a template variable is not provided, the original template syntax is preserved
+- Template rendering errors are logged as warnings but don't stop workflow execution
+- Use the `default` filter to provide fallback values for optional variables
 
 ## Error Handling
 
@@ -340,7 +416,7 @@ stateDiagram-v2
 
 ## Complete Example
 
-Here's a complete workflow file showing all components:
+Here's a complete workflow file showing all components including liquid template support:
 
 ```markdown
 ---
@@ -376,14 +452,35 @@ stateDiagram-v2
 
 ## Actions
 
-- Initialize: Log "Starting data processing for file: ${input_file}"
-- ValidateFormat: Execute prompt "validate-json-schema" with file="${input_file}" schema="${schema_file}"
-- Transform: Execute prompt "transform-data" with input="${output}" format="${target_format}"
-- StoreData: Execute prompt "store-to-database" with data="${output}" table="${table_name}"
-- RetryTransform: Wait 5 seconds
-- NotifyComplete: Log "Successfully processed ${input_file}"
+- Initialize: Log "Starting {{ environment | default: 'development' }} data processing for file: ${input_file}"
+- ValidateFormat: Execute prompt "validate-json-schema" with file="${input_file}" schema="{{ schema | default: 'default-schema.json' }}"
+- Transform: Execute prompt "transform-data" with input="${output}" format="{{ format | default: 'json' }}"
+- StoreData: Execute prompt "store-to-database" with data="${output}" table="{{ db_table | default: 'processed_data' }}"
+- RetryTransform: Wait {{ retry_delay | default: '5' }} seconds
+- NotifyComplete: Log "Successfully processed ${input_file} in {{ environment }} environment"
 - LogError: Log error "Validation failed for ${input_file}: ${error}"
-- NotifyError: Execute prompt "send-notification" with message="Processing failed: ${error}" channel="alerts"
+- NotifyError: Execute prompt "send-notification" with message="Processing failed: ${error}" channel="{{ alert_channel | default: 'errors' }}"
+```
+
+### Running the Example
+
+```bash
+# Basic run with defaults
+swissarmyhammer flow run data-processor --var input_file=data.json
+
+# Production run with custom settings
+swissarmyhammer flow run data-processor \
+  --var input_file=data.json \
+  --set environment=production \
+  --set schema=production-schema.json \
+  --set db_table=prod_data \
+  --set alert_channel=prod-alerts
+
+# Development run with custom retry
+swissarmyhammer flow run data-processor \
+  --var input_file=test.json \
+  --set environment=development \
+  --set retry_delay=10
 ```
 
 ## Running Workflows

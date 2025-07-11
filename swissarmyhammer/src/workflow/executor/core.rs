@@ -6,7 +6,7 @@ use super::{
 };
 use crate::workflow::{
     metrics::{MemoryMetrics, WorkflowMetrics},
-    parse_action_from_description, ActionError, CompensationKey, ErrorContext, StateId,
+    parse_action_from_description_with_context, ActionError, CompensationKey, ErrorContext, StateId,
     TransitionKey, TransitionPath, Workflow, WorkflowCacheManager, WorkflowRun, WorkflowRunStatus,
 };
 use cel_interpreter::Program;
@@ -556,8 +556,8 @@ impl WorkflowExecutor {
         state_description: &str,
     ) -> ExecutorResult<bool> {
         
-        // Parse action from state description
-        if let Some(action) = parse_action_from_description(state_description)? {
+        // Parse action from state description with liquid template rendering
+        if let Some(action) = parse_action_from_description_with_context(state_description, &run.context)? {
             self.log_event(
                 ExecutionEventType::StateExecution,
                 format!("Executing action: {}", action.description()),

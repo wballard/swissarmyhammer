@@ -407,6 +407,10 @@ pub enum FlowSubcommand {
         #[arg(long = "var", value_name = "KEY=VALUE")]
         vars: Vec<String>,
 
+        /// Set template variables for liquid rendering in action strings as key=value pairs
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        set: Vec<String>,
+
         /// Interactive mode - prompt at each state
         #[arg(short, long)]
         interactive: bool,

@@ -287,7 +287,7 @@ fn test_root_validate_quiet() -> Result<()> {
 
     // In quiet mode, should only show errors
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let _stderr = String::from_utf8_lossy(&output.stderr);
     
     // Should have minimal output in quiet mode
     if output.status.success() {

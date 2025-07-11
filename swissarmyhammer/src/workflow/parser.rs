@@ -291,7 +291,7 @@ impl MermaidParser {
                     ConditionType::OnFailure
                 } else if event.contains("valid") || event.contains("success") {
                     ConditionType::OnSuccess
-                } else if event == "always" || event.is_empty() {
+                } else if event.to_lowercase() == "always" || event.is_empty() {
                     ConditionType::Always
                 } else {
                     ConditionType::Custom

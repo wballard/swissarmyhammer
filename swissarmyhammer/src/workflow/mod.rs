@@ -21,6 +21,8 @@ mod state;
 mod storage;
 #[cfg(test)]
 mod test_helpers;
+#[cfg(test)]
+mod test_liquid_rendering;
 mod transition;
 mod transition_key;
 mod visualization;
@@ -28,7 +30,8 @@ mod visualization;
 mod visualization_tests;
 
 pub use actions::{
-    parse_action_from_description, Action, ActionError, ActionResult, LogAction, LogLevel,
+    parse_action_from_description, parse_action_from_description_with_context, 
+    Action, ActionError, ActionResult, LogAction, LogLevel,
     PromptAction, SetVariableAction, SubWorkflowAction, WaitAction,
 };
 pub use cache::{

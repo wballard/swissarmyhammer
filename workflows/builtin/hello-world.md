@@ -24,13 +24,14 @@ stateDiagram-v2
 
 ## Actions
 
-- **Start**: Initialize workflow
-- **Greeting**: Execute prompt "say-hello" with result="greeting_output"
-- **Complete**: Log "Workflow completed! Greeting result: ${greeting_output}"
+- Start: Initialize workflow
+- Greeting: Execute prompt "say-hello" with result="greeting_output"
+- Complete: Log "Workflow completed! Greeting result: ${greeting_output}"
 
 ## Description
 
 This workflow demonstrates:
+
 - Basic state transitions
 - Simple logging actions
 - A complete workflow lifecycle from start to finish
@@ -38,6 +39,7 @@ This workflow demonstrates:
 ## Usage
 
 To run this workflow:
+
 ```bash
 swissarmyhammer flow run hello-world
 ```

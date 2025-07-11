@@ -21,7 +21,7 @@ fn test_builtin_prompts_validate_directly() -> Result<()> {
             // Skip the workflows subdirectory
             !e.file_name()
                 .to_str()
-                .map_or(false, |s| s == "workflows" && e.file_type().is_dir())
+                .is_some_and(|s| s == "workflows" && e.file_type().is_dir())
         })
         .filter_map(|e| e.ok())
     {

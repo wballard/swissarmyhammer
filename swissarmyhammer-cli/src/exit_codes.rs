@@ -1,9 +1,9 @@
-/// Exit code constants for CLI commands
-///
-/// These constants define the standard exit codes used throughout the application:
-/// - 0: Success
-/// - 1: General error or warnings
-/// - 2: Validation errors or critical failures
+//! Exit code constants for CLI commands
+//!
+//! These constants define the standard exit codes used throughout the application:
+//! - 0: Success
+//! - 1: General error or warnings
+//! - 2: Validation errors or critical failures
 
 /// Successful execution
 pub const EXIT_SUCCESS: i32 = 0;

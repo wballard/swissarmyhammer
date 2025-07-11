@@ -168,7 +168,6 @@ fn benchmark_workflow_execution(c: &mut Criterion) {
             rt.block_on(async {
                 executor
                     .start_workflow(black_box(simple_workflow.clone()))
-                    .await
             })
         });
     });
@@ -180,7 +179,6 @@ fn benchmark_workflow_execution(c: &mut Criterion) {
             rt.block_on(async {
                 executor
                     .start_workflow(black_box(complex_workflow.clone()))
-                    .await
             })
         });
     });

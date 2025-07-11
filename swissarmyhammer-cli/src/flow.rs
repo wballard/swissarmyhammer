@@ -28,16 +28,16 @@ pub async fn run_flow_command(subcommand: FlowSubcommand) -> Result<()> {
             timeout: timeout_str,
             quiet,
         } => {
-            run_workflow_command(
-                workflow,
+            run_workflow_command(WorkflowCommandConfig {
+                workflow_name: workflow,
                 vars,
                 set,
                 interactive,
                 dry_run,
-                test,
+                test_mode: test,
                 timeout_str,
                 quiet,
-            )
+            })
             .await
         }
         FlowSubcommand::Resume {
@@ -79,8 +79,8 @@ pub async fn run_flow_command(subcommand: FlowSubcommand) -> Result<()> {
     }
 }
 
-/// Execute a workflow
-async fn run_workflow_command(
+/// Configuration for running a workflow command
+struct WorkflowCommandConfig {
     workflow_name: String,
     vars: Vec<String>,
     set: Vec<String>,
@@ -89,16 +89,19 @@ async fn run_workflow_command(
     test_mode: bool,
     timeout_str: Option<String>,
     quiet: bool,
-) -> Result<()> {
+}
+
+/// Execute a workflow
+async fn run_workflow_command(config: WorkflowCommandConfig) -> Result<()> {
     let mut storage = WorkflowStorage::file_system()?;
-    let workflow_name_typed = WorkflowName::new(&workflow_name);
+    let workflow_name_typed = WorkflowName::new(&config.workflow_name);
 
     // Get the workflow
     let workflow = storage.get_workflow(&workflow_name_typed)?;
 
     // Parse variables
     let mut variables = HashMap::new();
-    for var in vars {
+    for var in config.vars {
         let parts: Vec<&str> = var.splitn(2, '=').collect();
         if parts.len() == 2 {
             variables.insert(
@@ -115,7 +118,7 @@ async fn run_workflow_command(
 
     // Parse set variables for liquid template rendering
     let mut set_variables = HashMap::new();
-    for set_var in set {
+    for set_var in config.set {
         let parts: Vec<&str> = set_var.splitn(2, '=').collect();
         if parts.len() == 2 {
             set_variables.insert(
@@ -131,13 +134,13 @@ async fn run_workflow_command(
     }
 
     // Parse timeout
-    let timeout_duration = if let Some(timeout_str) = timeout_str {
+    let timeout_duration = if let Some(timeout_str) = config.timeout_str {
         Some(parse_duration(&timeout_str)?)
     } else {
         None
     };
 
-    if dry_run {
+    if config.dry_run {
         println!("🔍 Dry run mode - showing execution plan:");
         println!("📋 Workflow: {}", workflow.name);
         println!("🏁 Initial state: {}", workflow.initial_state);
@@ -162,7 +165,7 @@ async fn run_workflow_command(
         return Ok(());
     }
 
-    if test_mode {
+    if config.test_mode {
         println!("🧪 Test mode - executing workflow with mocked actions:");
         println!("📋 Workflow: {}", workflow.name);
         println!("🏁 Initial state: {}", workflow.initial_state);
@@ -255,7 +258,7 @@ async fn run_workflow_command(
     }
 
     // Set quiet mode in context for actions to use
-    if quiet {
+    if config.quiet {
         run.context
             .insert("_quiet".to_string(), serde_json::Value::Bool(true));
     }
@@ -280,7 +283,7 @@ async fn run_workflow_command(
     // Execute workflow with timeout and signal handling
     let execution_result = if let Some(timeout_duration) = timeout_duration {
         tokio::select! {
-            result = execute_workflow_with_progress(&mut executor, &mut run, interactive) => result,
+            result = execute_workflow_with_progress(&mut executor, &mut run, config.interactive) => result,
             _ = timeout(timeout_duration, future::pending::<()>()) => {
                 println!("⏰ Workflow execution timed out");
                 run.status = WorkflowRunStatus::Cancelled;
@@ -294,7 +297,7 @@ async fn run_workflow_command(
         }
     } else {
         tokio::select! {
-            result = execute_workflow_with_progress(&mut executor, &mut run, interactive) => result,
+            result = execute_workflow_with_progress(&mut executor, &mut run, config.interactive) => result,
             _ = shutdown_rx.recv() => {
                 println!("\n🛑 Workflow execution interrupted");
                 run.status = WorkflowRunStatus::Cancelled;

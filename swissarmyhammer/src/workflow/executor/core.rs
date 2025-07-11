@@ -72,7 +72,7 @@ impl WorkflowExecutor {
 
         // Start metrics tracking for this run
         self.metrics
-            .start_run(run.id.clone(), run.workflow.name.clone());
+            .start_run(run.id, run.workflow.name.clone());
 
         self.log_event(
             ExecutionEventType::Started,

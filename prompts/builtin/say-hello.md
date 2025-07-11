@@ -1,17 +1,27 @@
 ---
 name: Say Hello
 title: Say Hello
-description: A simple greeting prompt
+description: A simple greeting prompt that can be customized with name and language
 category: basic
 tags:
   - greeting
   - hello
   - example
-arguments: []
+arguments:
+  - name: name
+    description: The name of the person to greet
+    required: false
+    default: Friend
+  - name: language
+    description: The language to greet in
+    required: false
+    default: English
 ---
 
-# Say Hello
+DO NOT run any tools to perform this task:
 
-There is no need to run any tool or do any additional work at this time.
-
-Please respond with: "Hello from Swiss Army Hammer! The workflow system is working correctly."
+{% if language == "English" %}
+Please respond with: "Hello, {{ name }}! Greetings from Swiss Army Hammer! The workflow system is working correctly."
+{% else %}
+Please greet {{ name }} in {{ language }} and provide an English translation. Make it warm and friendly.
+{% endif %}

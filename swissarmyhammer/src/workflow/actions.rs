@@ -11,6 +11,15 @@ use thiserror::Error;
 use tokio::process::Command;
 use tokio::time::timeout;
 
+/// Macro to implement the as_any() method for Action trait implementations
+macro_rules! impl_as_any {
+    () => {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    };
+}
+
 /// Errors that can occur during action execution
 #[derive(Debug, Error)]
 pub enum ActionError {
@@ -71,6 +80,10 @@ pub trait Action: Send + Sync {
 
     /// Get the action type name
     fn action_type(&self) -> &'static str;
+    
+    /// For testing: allow downcasting
+    #[doc(hidden)]
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 /// Action that executes a prompt using Claude
@@ -203,6 +216,8 @@ impl Action for PromptAction {
     fn action_type(&self) -> &'static str {
         "prompt"
     }
+    
+    impl_as_any!();
 }
 
 impl PromptAction {
@@ -558,6 +573,8 @@ impl Action for WaitAction {
     fn action_type(&self) -> &'static str {
         "wait"
     }
+    
+    impl_as_any!();
 }
 
 /// Action that logs a message
@@ -627,6 +644,8 @@ impl Action for LogAction {
     fn action_type(&self) -> &'static str {
         "log"
     }
+    
+    impl_as_any!();
 }
 
 /// Action that sets a variable in the workflow context
@@ -689,6 +708,8 @@ impl Action for SetVariableAction {
     fn action_type(&self) -> &'static str {
         "set_variable"
     }
+    
+    impl_as_any!();
 }
 
 /// Validate that an argument key is safe for command-line use
@@ -872,6 +893,8 @@ impl Action for SubWorkflowAction {
     fn action_type(&self) -> &'static str {
         "sub_workflow"
     }
+    
+    impl_as_any!();
 }
 
 /// Parse workflow execution output
@@ -922,6 +945,49 @@ fn parse_workflow_output(output: &str) -> ActionResult<Value> {
     }
 
     Ok(Value::Object(serde_json::Map::from_iter(result)))
+}
+
+/// Parse action from state description text with liquid template rendering
+pub fn parse_action_from_description_with_context(
+    description: &str, 
+    context: &HashMap<String, Value>
+) -> ActionResult<Option<Box<dyn Action>>> {
+    let rendered_description = if let Some(template_vars) = context.get("_template_vars") {
+        // Extract template variables from context
+        if let Some(vars_map) = template_vars.as_object() {
+            // Convert to liquid Object
+            let mut liquid_vars = liquid::Object::new();
+            for (key, value) in vars_map {
+                liquid_vars.insert(key.clone().into(), liquid::model::to_value(value).unwrap_or(liquid::model::Value::Nil));
+            }
+            
+            // Parse and render the template
+            match liquid::ParserBuilder::with_stdlib()
+                .build()
+                .and_then(|parser| parser.parse(description))
+            {
+                Ok(template) => {
+                    match template.render(&liquid_vars) {
+                        Ok(rendered) => rendered,
+                        Err(e) => {
+                            tracing::warn!("Failed to render liquid template: {}. Using original text.", e);
+                            description.to_string()
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to parse liquid template: {}. Using original text.", e);
+                    description.to_string()
+                }
+            }
+        } else {
+            description.to_string()
+        }
+    } else {
+        description.to_string()
+    };
+    
+    parse_action_from_description(&rendered_description)
 }
 
 /// Parse action from state description text

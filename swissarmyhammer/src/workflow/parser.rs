@@ -141,12 +141,12 @@ impl MermaidParser {
                 break;
             }
             
-            if in_actions_section && line.trim().starts_with("- **") {
-                // Parse action line: - **StateName**: Action description
-                if let Some(end_bold) = line.find("**:") {
-                    let start = line.find("**").unwrap() + 2;
-                    let state_name = &line[start..end_bold];
-                    let action = line[end_bold + 3..].trim();
+            if in_actions_section && line.trim().starts_with("-") {
+                // Parse action line: - StateName: Action description
+                let content = line.trim_start_matches('-').trim();
+                if let Some(colon_pos) = content.find(':') {
+                    let state_name = content[..colon_pos].trim();
+                    let action = content[colon_pos + 1..].trim();
                     actions.insert(state_name.to_string(), action.to_string());
                 }
             }
@@ -595,6 +595,36 @@ mod tests {
         // Check that parallel execution is enabled for these states
         assert!(fork_state.allows_parallel);
         assert!(join_state.allows_parallel);
+    }
+
+    #[test]
+    fn test_extract_actions_without_bold_markers() {
+        let input = r#"---
+name: test-workflow
+---
+
+# Test Workflow
+
+```mermaid
+stateDiagram-v2
+    [*] --> Start
+    Start --> Process
+    Process --> Complete
+    Complete --> [*]
+```
+
+## Actions
+
+- Start: Log "Starting workflow"
+- Process: Execute prompt "test-prompt" with result="output"
+- Complete: Log "Workflow completed with result: ${output}"
+"#;
+
+        let actions = MermaidParser::extract_actions_from_markdown(input);
+        assert_eq!(actions.len(), 3);
+        assert_eq!(actions.get("Start"), Some(&"Log \"Starting workflow\"".to_string()));
+        assert_eq!(actions.get("Process"), Some(&"Execute prompt \"test-prompt\" with result=\"output\"".to_string()));
+        assert_eq!(actions.get("Complete"), Some(&"Log \"Workflow completed with result: ${output}\"".to_string()));
     }
 
     #[test]

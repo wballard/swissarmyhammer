@@ -14,34 +14,85 @@ Workflows in SwissArmyHammer are defined using Mermaid state diagrams in markdow
 
 ## Creating Workflows
 
-Workflows are stored in `.swissarmyhammer/workflows/` directories and use the `.md` file extension. Here's a basic workflow structure:
+Workflows are stored in `.swissarmyhammer/workflows/` directories and use the `.md` file extension. Each workflow file consists of:
+
+1. **YAML Front Matter** - Metadata about the workflow
+2. **Mermaid State Diagram** - The workflow structure
+3. **Actions Section** - Mappings of states to their actions
+
+Here's a basic workflow structure:
+
+```markdown
+---
+name: my-workflow
+title: My Example Workflow
+description: A workflow that demonstrates basic functionality
+category: user
+tags:
+  - example
+  - automation
+---
+
+# My Example Workflow
+
+This workflow processes data through multiple stages.
 
 ```mermaid
 stateDiagram-v2
     [*] --> Start
-    Start --> Process: Always
+    Start --> Process
     Process --> Success: OnSuccess
     Process --> Failure: OnFailure
     Success --> [*]
     Failure --> [*]
-    
-    Start: Execute prompt "setup" with input="${data}"
-    Process: Execute prompt "main-task"
-    Success: Log "Task completed successfully"
-    Failure: Log error "Task failed: ${error}"
+```
+
+## Actions
+
+- Start: Execute prompt "setup" with input="${data}"
+- Process: Execute prompt "main-task"
+- Success: Log "Task completed successfully"
+- Failure: Log error "Task failed: ${error}"
 ```
 
 ## Workflow Components
 
+### Front Matter
+
+The YAML front matter contains workflow metadata:
+
+```yaml
+---
+name: workflow-id           # Unique identifier for the workflow
+title: Workflow Title       # Human-readable title
+description: Description    # What the workflow does
+category: builtin          # Category (builtin, user, etc.)
+tags:                      # Tags for organization
+  - automation
+  - data-processing
+---
+```
+
 ### States
 
-States represent actions in your workflow. Each state can:
+States represent steps in your workflow. They are defined in the Mermaid diagram and their actions are specified in the Actions section:
 
 - **Execute a prompt**: `Execute prompt "prompt-name" with var="value"`
 - **Run another workflow**: `Run workflow "workflow-name" with data="${input}"`
 - **Set variables**: `Set result="${output}"`
 - **Log messages**: `Log "Processing complete"`
 - **Wait**: `Wait 5 seconds`
+
+### Actions Section
+
+The Actions section maps state names to their actions using the format:
+
+```markdown
+## Actions
+
+- StateName: Action description
+- AnotherState: Execute prompt "example" with param="value"
+```
 
 ### Transitions
 
@@ -59,15 +110,24 @@ Transitions control flow between states:
 
 ## Mermaid Syntax Guide
 
-SwissArmyHammer uses standard Mermaid state diagram syntax with custom action descriptions:
+SwissArmyHammer uses standard Mermaid state diagram syntax. The diagram defines the workflow structure, while actions are defined separately in the Actions section:
 
 ### Basic Flow
 
 ```mermaid
 stateDiagram-v2
     [*] --> StateA
-    StateA --> StateB: Always
+    StateA --> StateB
     StateB --> [*]
+```
+
+With corresponding actions:
+
+```markdown
+## Actions
+
+- StateA: Log "Starting process"
+- StateB: Execute prompt "process-data"
 ```
 
 ### Conditional Branching
@@ -184,13 +244,18 @@ stateDiagram-v2
     [*] --> Try
     Try --> Success: OnSuccess
     Try --> Catch: OnFailure
-    Catch --> Recovery: Always
+    Catch --> Recovery
     Success --> [*]
     Recovery --> [*]
-    
-    Try: Execute prompt "risky-operation"
-    Catch: Log error "Operation failed: ${error}"
-    Recovery: Execute prompt "cleanup"
+```
+
+```markdown
+## Actions
+
+- Try: Execute prompt "risky-operation"
+- Catch: Log error "Operation failed: ${error}"
+- Recovery: Execute prompt "cleanup"
+- Success: Log "Operation completed successfully"
 ```
 
 ### Retry Pattern
@@ -200,11 +265,16 @@ stateDiagram-v2
     [*] --> Attempt
     Attempt --> Success: OnSuccess
     Attempt --> Wait: OnFailure
-    Wait --> Attempt: Always
+    Wait --> Attempt
     Success --> [*]
-    
-    Attempt: Execute prompt "network-call"
-    Wait: Wait 5 seconds
+```
+
+```markdown
+## Actions
+
+- Attempt: Execute prompt "network-call"
+- Wait: Wait 5 seconds
+- Success: Log "Network call succeeded"
 ```
 
 ## Best Practices
@@ -268,6 +338,54 @@ stateDiagram-v2
     Validate --> Transform: OnSuccess
 ```
 
+## Complete Example
+
+Here's a complete workflow file showing all components:
+
+```markdown
+---
+name: data-processor
+title: Data Processing Workflow
+description: Validates and processes incoming data files
+category: user
+tags:
+  - data-processing
+  - validation
+  - automation
+---
+
+# Data Processing Workflow
+
+This workflow validates incoming data files, transforms them to the required format,
+and stores the results. It includes error handling and retry logic.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Initialize
+    Initialize --> ValidateFormat
+    ValidateFormat --> Transform: OnSuccess
+    ValidateFormat --> LogError: OnFailure
+    Transform --> StoreData: OnSuccess
+    Transform --> RetryTransform: OnFailure
+    RetryTransform --> Transform
+    StoreData --> NotifyComplete
+    LogError --> NotifyError
+    NotifyComplete --> [*]
+    NotifyError --> [*]
+```
+
+## Actions
+
+- Initialize: Log "Starting data processing for file: ${input_file}"
+- ValidateFormat: Execute prompt "validate-json-schema" with file="${input_file}" schema="${schema_file}"
+- Transform: Execute prompt "transform-data" with input="${output}" format="${target_format}"
+- StoreData: Execute prompt "store-to-database" with data="${output}" table="${table_name}"
+- RetryTransform: Wait 5 seconds
+- NotifyComplete: Log "Successfully processed ${input_file}"
+- LogError: Log error "Validation failed for ${input_file}: ${error}"
+- NotifyError: Execute prompt "send-notification" with message="Processing failed: ${error}" channel="alerts"
+```
+
 ## Running Workflows
 
 Execute workflows using the `flow` command:
@@ -326,12 +444,17 @@ Workflows can call other workflows, enabling modular design:
 ```mermaid
 stateDiagram-v2
     [*] --> Initialize
-    Initialize --> RunSubWorkflow: Always
+    Initialize --> RunSubWorkflow
     RunSubWorkflow --> ProcessResults: OnSuccess
     ProcessResults --> [*]
-    
-    RunSubWorkflow: Run workflow "data-processor" with input="${raw_data}"
-    ProcessResults: Log "Processed ${output}"
+```
+
+```markdown
+## Actions
+
+- Initialize: Log "Starting main workflow"
+- RunSubWorkflow: Run workflow "data-processor" with input="${raw_data}"
+- ProcessResults: Log "Processed ${output}"
 ```
 
 ### Dynamic Workflow Selection
@@ -343,9 +466,16 @@ stateDiagram-v2
     [*] --> DetermineType
     DetermineType --> RunTypeA: "type:A"
     DetermineType --> RunTypeB: "type:B"
-    
-    RunTypeA: Run workflow "process-type-a" with data="${input}"
-    RunTypeB: Run workflow "process-type-b" with data="${input}"
+    RunTypeA --> [*]
+    RunTypeB --> [*]
+```
+
+```markdown
+## Actions
+
+- DetermineType: Execute prompt "detect-type" with data="${input}"
+- RunTypeA: Run workflow "process-type-a" with data="${input}"
+- RunTypeB: Run workflow "process-type-b" with data="${input}"
 ```
 
 ### Parallel Processing

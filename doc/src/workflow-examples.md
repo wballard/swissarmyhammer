@@ -4,17 +4,56 @@ This guide showcases practical workflow examples demonstrating various features 
 
 ## Example Workflows
 
-All example workflows are located in `prompts/builtin/workflows/` and can be run directly or used as templates for your own workflows.
+Example workflows are located in both:
+- `workflows/builtin/` - Basic example workflows
+- `prompts/builtin/workflows/` - Advanced workflow patterns
+
+All workflows can be run directly or used as templates for your own workflows.
+
+### Basic Examples
+
+#### Hello World Workflow
+
+**File**: `workflows/builtin/hello-world.md`  
+**Type**: Simple linear workflow
+
+The simplest possible workflow demonstrating basic functionality:
+
+```bash
+swissarmyhammer flow run hello-world
+```
+
+**Features demonstrated**:
+- Basic state transitions
+- Prompt execution with result capture
+- Using variables in log messages
+
+#### Example Actions Workflow
+
+**File**: `workflows/builtin/example-actions.md`  
+**Type**: Action reference workflow
+
+Demonstrates all available workflow actions:
+
+```bash
+swissarmyhammer flow run example-actions
+```
+
+**Features demonstrated**:
+- All action types (Log, Execute prompt, Set variable, Wait)
+- Different log levels (info, warning, error)
+- Variable substitution
+- Sub-workflow execution
 
 ### 1. Code Review Workflow
 
-**File**: `prompts/builtin/workflows/code-review.yaml`  
+**File**: `prompts/builtin/workflows/code-review.md`  
 **Type**: Linear workflow
 
 A straightforward sequential workflow for automated code review:
 
 ```bash
-swissarmyhammer workflow run code-review --set code_path=src/main
+swissarmyhammer flow run code-review --var code_path=src/main
 ```
 
 **Features demonstrated**:
@@ -30,13 +69,13 @@ swissarmyhammer workflow run code-review --set code_path=src/main
 
 ### 2. Deployment Pipeline
 
-**File**: `prompts/builtin/workflows/deployment-pipeline.yaml`  
+**File**: `prompts/builtin/workflows/deployment-pipeline.md`  
 **Type**: Interactive workflow with choices
 
 An interactive deployment workflow with environment selection and rollback options:
 
 ```bash
-swissarmyhammer workflow run deployment-pipeline --set app_name=myservice
+swissarmyhammer flow run deployment-pipeline --var app_name=myservice
 ```
 
 **Features demonstrated**:
@@ -53,14 +92,14 @@ swissarmyhammer workflow run deployment-pipeline --set app_name=myservice
 
 ### 3. Data Processing Pipeline
 
-**File**: `prompts/builtin/workflows/data-processing-pipeline.yaml`  
+**File**: `prompts/builtin/workflows/data-processing-pipeline.md`  
 **Type**: Parallel execution workflow
 
 A high-performance data processing workflow that handles multiple data sources concurrently:
 
 ```bash
-swissarmyhammer workflow run data-processing-pipeline \
-  --set data_sources=logs,metrics,events
+swissarmyhammer flow run data-processing-pipeline \
+  --var data_sources=logs,metrics,events
 ```
 
 **Features demonstrated**:
@@ -78,13 +117,13 @@ swissarmyhammer workflow run data-processing-pipeline \
 
 ### 4. Database Migration
 
-**File**: `prompts/builtin/workflows/database-migration.yaml`  
+**File**: `prompts/builtin/workflows/database-migration.md`  
 **Type**: Error handling workflow
 
 A robust database migration workflow with comprehensive error handling:
 
 ```bash
-swissarmyhammer workflow run database-migration --set target_version=v2.0
+swissarmyhammer flow run database-migration --var target_version=v2.0
 ```
 
 **Features demonstrated**:
@@ -103,15 +142,15 @@ swissarmyhammer workflow run database-migration --set target_version=v2.0
 
 ### 5. Multi-Step Refactoring
 
-**File**: `prompts/builtin/workflows/multi-step-refactoring.yaml`  
+**File**: `prompts/builtin/workflows/multi-step-refactoring.md`  
 **Type**: Nested workflow orchestration
 
 A complex refactoring workflow that coordinates multiple sub-workflows:
 
 ```bash
-swissarmyhammer workflow run multi-step-refactoring \
-  --set project_path=src/core \
-  --set refactoring_scope=full
+swissarmyhammer flow run multi-step-refactoring \
+  --var project_path=src/core \
+  --var refactoring_scope=full
 ```
 
 **Features demonstrated**:
@@ -135,7 +174,7 @@ swissarmyhammer workflow run multi-step-refactoring \
 Run any example workflow:
 
 ```bash
-swissarmyhammer workflow run <workflow-name>
+swissarmyhammer flow run <workflow-name>
 ```
 
 ### With Custom Variables
@@ -143,26 +182,25 @@ swissarmyhammer workflow run <workflow-name>
 Override default variables:
 
 ```bash
-swissarmyhammer workflow run code-review \
-  --set code_path=lib/ \
-  --set review_depth=security-focused
+swissarmyhammer flow run code-review \
+  --var code_path=lib/ \
+  --var review_depth=security-focused
 ```
 
-### Interactive Mode
+### Resume from Failure
 
-For workflows with user choices:
+If a workflow fails, you can resume from where it left off:
 
 ```bash
-swissarmyhammer workflow run deployment-pipeline --interactive
+swissarmyhammer flow run database-migration --resume <run_id>
 ```
 
-### Dry Run Mode
+### List Available Workflows
 
-Test workflow logic without executing actions:
+See all available workflows:
 
 ```bash
-swissarmyhammer workflow run database-migration \
-  --set dry_run=true
+swissarmyhammer flow list
 ```
 
 ## Learning from Examples
@@ -188,33 +226,57 @@ To create your own workflow based on an example:
 ### Common Modifications
 
 **Adding error handling** to the code review workflow:
-```yaml
-AnalyzeCode: Analyze Code
-AnalyzeCode: action: execute_prompt
-AnalyzeCode: prompt: code/analyze-codebase
-AnalyzeCode: error_handler: continue_and_log
-AnalyzeCode: retry:
-AnalyzeCode:   attempts: 3
-AnalyzeCode:   delay: 30
+
+```markdown
+## Actions
+
+- AnalyzeCode: Execute prompt "analyze-codebase" with path="${code_path}"
+- HandleError: Log error "Code analysis failed: ${error}"
+- Continue: Log "Continuing with partial results"
+```
+
+And add retry logic in the Mermaid diagram:
+
+```mermaid
+AnalyzeCode --> HandleError: OnFailure
+HandleError --> RetryWait
+RetryWait --> AnalyzeCode
 ```
 
 **Making deployment pipeline fully automated**:
-```yaml
-variables:
-  auto_deploy: "true"
-  target_env: "staging"
-  skip_confirmations: "true"
+
+Pass variables when running the workflow:
+
+```bash
+swissarmyhammer flow run deployment-pipeline \
+  --var auto_deploy=true \
+  --var target_env=staging \
+  --var skip_confirmations=true
 ```
 
 **Adding notifications** to data processing:
-```yaml
-PublishResults: action: parallel_execute
-PublishResults: tasks:
-PublishResults:   - action: execute_prompt
-PublishResults:     prompt: notifications/slack
-PublishResults:     variables:
-PublishResults:       channel: "#data-team"
-PublishResults:       message: "Pipeline completed"
+
+```markdown
+## Actions
+
+- PublishResults: Execute prompt "send-notification" with channel="#data-team" message="Pipeline completed: ${result_count} records processed"
+```
+
+Or for multiple notifications:
+
+```mermaid
+stateDiagram-v2
+    ProcessData --> NotifyStart
+    
+    state NotifyStart <<fork>>
+    NotifyStart --> NotifySlack
+    NotifyStart --> NotifyEmail
+    NotifyStart --> LogMetrics
+    
+    state NotifyEnd <<join>>
+    NotifySlack --> NotifyEnd
+    NotifyEmail --> NotifyEnd
+    LogMetrics --> NotifyEnd
 ```
 
 ## Best Practices from Examples
@@ -244,18 +306,67 @@ PublishResults:       message: "Pipeline completed"
 - Set appropriate timeouts
 - Design for idempotency
 
+## Complete Workflow Example
+
+Here's a complete workflow file showing all the components:
+
+```markdown
+---
+name: automated-testing
+title: Automated Testing Workflow
+description: Runs tests, analyzes results, and generates reports
+category: user
+tags:
+  - testing
+  - ci
+  - automation
+---
+
+# Automated Testing Workflow
+
+This workflow runs the test suite, analyzes failures, and generates comprehensive reports.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Initialize
+    Initialize --> RunTests
+    RunTests --> AnalyzeResults: OnSuccess
+    RunTests --> HandleFailure: OnFailure
+    AnalyzeResults --> GenerateReport
+    HandleFailure --> RetryTests: "flaky"
+    HandleFailure --> GenerateFailureReport: "real_failure"
+    RetryTests --> RunTests
+    GenerateReport --> NotifySuccess
+    GenerateFailureReport --> NotifyFailure
+    NotifySuccess --> [*]
+    NotifyFailure --> [*]
+```
+
+## Actions
+
+- Initialize: Log "Starting test run for ${branch_name}"
+- RunTests: Execute prompt "run-test-suite" with suite="${test_suite}" parallel="${parallel_tests}"
+- AnalyzeResults: Execute prompt "analyze-test-results" with results="${output}"
+- HandleFailure: Execute prompt "categorize-failures" with failures="${error}"
+- RetryTests: Wait 30 seconds
+- GenerateReport: Execute prompt "generate-test-report" with data="${output}" format="html"
+- GenerateFailureReport: Execute prompt "generate-failure-report" with failures="${output}"
+- NotifySuccess: Execute prompt "send-notification" with status="success" message="All tests passed!"
+- NotifyFailure: Execute prompt "send-notification" with status="failure" message="Tests failed: ${error}"
+```
+
 ## Troubleshooting Examples
 
 ### Common Issues
 
 1. **Workflow not found**:
    ```bash
-   swissarmyhammer workflow list  # Check available workflows
+   swissarmyhammer flow list  # Check available workflows
    ```
 
 2. **Variable errors**:
    ```bash
-   swissarmyhammer workflow show code-review  # View required variables
+   swissarmyhammer flow show code-review  # View workflow details
    ```
 
 3. **State transition failures**:

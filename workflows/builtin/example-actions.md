@@ -26,14 +26,14 @@ stateDiagram-v2
 
 ## Actions
 
-The Actions section maps state names to their actions. Format: `- **StateName**: Action description`
+The Actions section maps state names to their actions. Format: `- StateName: Action description`
 
-- **Start**: Log "Starting example workflow"
-- **LogExample**: Log warning "This is a warning message"
-- **PromptExample**: Execute prompt "say-hello" with result="greeting"
-- **SetVariable**: Set example_var="Hello from workflow"
-- **WaitExample**: Wait 2 seconds
-- **Complete**: Log "Workflow complete! Greeting was: ${greeting}"
+- Start: Log "Starting example workflow"
+- LogExample: Log warning "This is a warning message"
+- PromptExample: Execute prompt "say-hello" with result="greeting"
+- SetVariable: Set example_var="Hello from workflow"
+- WaitExample: Wait 2 seconds
+- Complete: Log "Workflow complete! Greeting was: ${greeting}"
 
 ## Action Reference
 

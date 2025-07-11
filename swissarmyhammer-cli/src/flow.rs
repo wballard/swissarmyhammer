@@ -25,12 +25,14 @@ pub async fn run_flow_command(subcommand: FlowSubcommand) -> Result<()> {
             dry_run,
             test,
             timeout: timeout_str,
-        } => run_workflow_command(workflow, vars, interactive, dry_run, test, timeout_str).await,
+            quiet,
+        } => run_workflow_command(workflow, vars, interactive, dry_run, test, timeout_str, quiet).await,
         FlowSubcommand::Resume {
             run_id,
             interactive,
             timeout: timeout_str,
-        } => resume_workflow_command(run_id, interactive, timeout_str).await,
+            quiet,
+        } => resume_workflow_command(run_id, interactive, timeout_str, quiet).await,
         FlowSubcommand::List {
             format,
             verbose,
@@ -72,6 +74,7 @@ async fn run_workflow_command(
     dry_run: bool,
     test_mode: bool,
     timeout_str: Option<String>,
+    quiet: bool,
 ) -> Result<()> {
     let mut storage = WorkflowStorage::file_system()?;
     let workflow_name_typed = WorkflowName::new(&workflow_name);
@@ -197,7 +200,7 @@ async fn run_workflow_command(
         return Ok(());
     }
 
-    println!("🚀 Starting workflow: {}", workflow.name);
+    tracing::info!("🚀 Starting workflow: {}", workflow.name);
 
     // Create executor
     let mut executor = WorkflowExecutor::new();
@@ -210,6 +213,18 @@ async fn run_workflow_command(
 
     // Set initial variables
     run.context.extend(variables);
+    
+    // Set quiet mode in context for actions to use
+    if quiet {
+        run.context.insert("_quiet".to_string(), serde_json::Value::Bool(true));
+    }
+    
+    // Set timeout in context for actions to use
+    if let Some(timeout_duration) = timeout_duration {
+        run.context.insert("_timeout_secs".to_string(), serde_json::Value::Number(
+            serde_json::Number::from(timeout_duration.as_secs())
+        ));
+    }
 
     // Setup signal handling for graceful shutdown
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::mpsc::channel(1);
@@ -252,24 +267,24 @@ async fn run_workflow_command(
     match execution_result {
         Ok(_) => match run.status {
             WorkflowRunStatus::Completed => {
-                println!("✅ Workflow completed successfully");
-                println!("🆔 Run ID: {}", workflow_run_id_to_string(&run.id));
+                tracing::info!("✅ Workflow completed successfully");
+                tracing::info!("🆔 Run ID: {}", workflow_run_id_to_string(&run.id));
             }
             WorkflowRunStatus::Failed => {
-                println!("❌ Workflow failed");
-                println!("🆔 Run ID: {}", workflow_run_id_to_string(&run.id));
+                tracing::error!("❌ Workflow failed");
+                tracing::info!("🆔 Run ID: {}", workflow_run_id_to_string(&run.id));
             }
             WorkflowRunStatus::Cancelled => {
-                println!("🚫 Workflow cancelled");
-                println!("🆔 Run ID: {}", workflow_run_id_to_string(&run.id));
+                tracing::warn!("🚫 Workflow cancelled");
+                tracing::info!("🆔 Run ID: {}", workflow_run_id_to_string(&run.id));
             }
             _ => {
-                println!("⏸️  Workflow paused");
-                println!("🆔 Run ID: {}", workflow_run_id_to_string(&run.id));
+                tracing::info!("⏸️  Workflow paused");
+                tracing::info!("🆔 Run ID: {}", workflow_run_id_to_string(&run.id));
             }
         },
         Err(e) => {
-            println!("❌ Workflow execution failed: {}", e);
+            tracing::error!("❌ Workflow execution failed: {}", e);
             run.fail();
             storage.store_run(&run)?;
         }
@@ -283,6 +298,7 @@ async fn resume_workflow_command(
     run_id: String,
     interactive: bool,
     timeout_str: Option<String>,
+    quiet: bool,
 ) -> Result<()> {
     let mut storage = WorkflowStorage::file_system()?;
 
@@ -312,6 +328,11 @@ async fn resume_workflow_command(
 
     println!("🔄 Resuming workflow: {}", run.workflow.name);
     println!("🔄 From state: {}", run.current_state);
+    
+    // Set quiet mode in context for actions to use
+    if quiet {
+        run.context.insert("_quiet".to_string(), serde_json::Value::Bool(true));
+    }
 
     // Create executor
     let mut executor = WorkflowExecutor::new();

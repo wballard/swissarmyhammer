@@ -75,14 +75,19 @@ impl ActionParser {
                         let key = key.as_str().to_string();
                         let value = value.as_str().to_string();
 
-                        // Validate key format
-                        if !self.is_valid_argument_key(&key) {
-                            return Err(ActionError::ParseError(
-                                format!("Invalid argument key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
-                            ));
-                        }
+                        // Handle special "result" argument
+                        if key == "result" {
+                            action = action.with_result_variable(value);
+                        } else {
+                            // Validate key format
+                            if !self.is_valid_argument_key(&key) {
+                                return Err(ActionError::ParseError(
+                                    format!("Invalid argument key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
+                                ));
+                            }
 
-                        action.arguments.insert(key, value);
+                            action.arguments.insert(key, value);
+                        }
                     }
                 }
             }
@@ -200,14 +205,19 @@ impl ActionParser {
                             let key = key.as_str().to_string();
                             let value = value.as_str().to_string();
 
-                            // Validate key format
-                            if !self.is_valid_argument_key(&key) {
-                                return Err(ActionError::ParseError(
-                                    format!("Invalid input variable key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
-                                ));
-                            }
+                            // Handle special "result" argument
+                            if key == "result" {
+                                action = action.with_result_variable(value);
+                            } else {
+                                // Validate key format
+                                if !self.is_valid_argument_key(&key) {
+                                    return Err(ActionError::ParseError(
+                                        format!("Invalid input variable key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
+                                    ));
+                                }
 
-                            action.input_variables.insert(key, value);
+                                action.input_variables.insert(key, value);
+                            }
                         }
                     }
                 }

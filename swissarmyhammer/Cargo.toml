@@ -63,6 +63,7 @@ zstd = "0.13"
 memmap2 = "0.9"
 rayon = "1.8"
 base64 = "0.22"
+which = "8.0.0"
 
 
 [dev-dependencies]

@@ -8,6 +8,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+// Include the generated builtin workflows
+include!(concat!(env!("OUT_DIR"), "/builtin_workflows.rs"));
+
 /// Handles loading workflows from various sources with proper precedence
 pub struct WorkflowResolver {
     /// Track the source of each workflow by name
@@ -46,7 +49,12 @@ impl WorkflowResolver {
         for file in self.vfs.list() {
             // Only process .md files for workflows
             if file.path.extension().and_then(|s| s.to_str()) == Some("md") {
-                if let Ok(workflow) = MermaidParser::parse(&file.content, &*file.name) {
+                // Extract the workflow name without extension
+                let workflow_name = file.name
+                    .strip_suffix(".md")
+                    .unwrap_or(&file.name);
+                
+                if let Ok(workflow) = MermaidParser::parse(&file.content, workflow_name) {
                     // Track the workflow source
                     self.workflow_sources
                         .insert(workflow.name.clone(), file.source.clone());
@@ -62,13 +70,13 @@ impl WorkflowResolver {
 
     /// Load builtin workflows from embedded binary data or resource directories
     fn load_builtin_workflows(&mut self) -> Result<()> {
-        // For now, no builtin workflows are embedded
-        // In the future, this could load from embedded workflow files
-        // similar to how builtin prompts work
-        // Example:
-        // for (name, content) in get_builtin_workflows() {
-        //     self.vfs.add_builtin(name, content);
-        // }
+        let builtin_workflows = get_builtin_workflows();
+
+        // Add builtin workflows to VFS with .md extension so they get processed
+        for (name, content) in builtin_workflows {
+            self.vfs.add_builtin(format!("{}.md", name), content);
+        }
+
         Ok(())
     }
 }
@@ -1217,6 +1225,94 @@ stateDiagram-v2
             assert!(dir.is_absolute());
             assert!(dir.exists());
             assert!(dir.is_dir());
+        }
+    }
+
+    #[test]
+    fn test_builtin_workflows_loaded() {
+        // Test that builtin workflows are properly loaded
+        let mut resolver = WorkflowResolver::new();
+        let mut storage = MemoryWorkflowStorage::new();
+
+        // Load all workflows including builtins
+        resolver.load_all_workflows(&mut storage).unwrap();
+
+        // Get all workflows
+        let workflows = storage.list_workflows().unwrap();
+
+        // Should have at least one workflow (our hello-world builtin)
+        assert!(!workflows.is_empty(), "No workflows were loaded, expected at least hello-world builtin");
+
+        // Find hello-world workflow
+        let hello_world = workflows.iter().find(|w| w.name.as_str() == "hello-world");
+        assert!(hello_world.is_some(), "hello-world builtin workflow not found");
+
+        // Verify it's marked as builtin
+        let source = resolver.workflow_sources.get(&WorkflowName::new("hello-world"));
+        assert_eq!(source, Some(&FileSource::Builtin));
+    }
+
+    #[test]
+    fn test_parse_hello_world_workflow() {
+        // Test parsing the hello-world workflow directly
+        let hello_world_content = r#"---
+name: hello-world
+title: Hello World Workflow
+description: A simple workflow that demonstrates basic workflow functionality
+category: builtin
+tags:
+  - example
+  - basic
+  - hello-world
+---
+
+# Hello World Workflow
+
+This is a simple workflow that demonstrates basic workflow functionality.
+It starts, greets the user, and then completes.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Start: Begin workflow
+    Start --> Greeting: Initialize
+    Greeting --> Complete: Greet user
+    Complete --> [*]: Done
+    
+    Start: Start Workflow
+    Start: Initializes the workflow
+    
+    Greeting: Say Hello
+    Greeting: action: log "Hello, World! Welcome to Swiss Army Hammer workflows!"
+    
+    Complete: Complete Workflow
+    Complete: action: log "Workflow completed successfully!"
+```
+
+## Description
+
+This workflow demonstrates:
+- Basic state transitions
+- Simple logging actions
+- A complete workflow lifecycle from start to finish
+
+## Usage
+
+To run this workflow:
+```bash
+swissarmyhammer flow run hello-world
+```"#;
+
+        // Try to parse it
+        match MermaidParser::parse(hello_world_content, "hello-world") {
+            Ok(workflow) => {
+                assert_eq!(workflow.name.as_str(), "hello-world");
+                assert!(workflow.states.contains_key(&StateId::new("Start")));
+                assert!(workflow.states.contains_key(&StateId::new("Greeting")));
+                assert!(workflow.states.contains_key(&StateId::new("Complete")));
+            }
+            Err(e) => {
+                panic!("Failed to parse hello-world workflow: {:?}", e);
+            }
         }
     }
 }

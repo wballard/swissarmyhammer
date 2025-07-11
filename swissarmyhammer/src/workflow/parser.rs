@@ -55,12 +55,15 @@ impl MermaidParser {
     pub fn parse(input: &str, workflow_name: impl Into<WorkflowName>) -> ParseResult<Workflow> {
         // Parse front matter and extract mermaid content
         let mermaid_content = Self::extract_mermaid_from_markdown(input)?;
+        
+        // Extract actions from the markdown content
+        let actions = Self::extract_actions_from_markdown(input);
 
         // Attempt to parse the diagram
         match parse_diagram(&mermaid_content) {
             Ok(diagram) => match diagram {
                 DiagramType::State(state_diagram) => {
-                    Self::convert_state_diagram(state_diagram, workflow_name.into())
+                    Self::convert_state_diagram_with_actions(state_diagram, workflow_name.into(), actions)
                 }
                 _ => Err(ParseError::WrongDiagramType {
                     diagram_type: format!("{:?}", diagram),
@@ -120,10 +123,43 @@ impl MermaidParser {
         Ok(mermaid_lines.join("\n"))
     }
 
-    /// Convert a parsed state diagram to our Workflow type
-    fn convert_state_diagram(
+    
+    /// Extract actions from markdown content
+    fn extract_actions_from_markdown(input: &str) -> HashMap<String, String> {
+        let mut actions = HashMap::new();
+        let mut in_actions_section = false;
+        
+        for line in input.lines() {
+            let trimmed = line.trim();
+            if trimmed.eq_ignore_ascii_case("## Actions") || trimmed.eq_ignore_ascii_case("### Actions") {
+                in_actions_section = true;
+                continue;
+            }
+            
+            if in_actions_section && line.trim().starts_with("##") {
+                // We've reached another section
+                break;
+            }
+            
+            if in_actions_section && line.trim().starts_with("- **") {
+                // Parse action line: - **StateName**: Action description
+                if let Some(end_bold) = line.find("**:") {
+                    let start = line.find("**").unwrap() + 2;
+                    let state_name = &line[start..end_bold];
+                    let action = line[end_bold + 3..].trim();
+                    actions.insert(state_name.to_string(), action.to_string());
+                }
+            }
+        }
+        
+        actions
+    }
+    
+    /// Convert a parsed state diagram to our Workflow type with actions
+    fn convert_state_diagram_with_actions(
         state_diagram: StateDiagram,
         workflow_name: WorkflowName,
+        actions: HashMap<String, String>,
     ) -> ParseResult<Workflow> {
         // Extract description from title or create default
         let description = state_diagram
@@ -141,13 +177,14 @@ impl MermaidParser {
             if state_id == "[*]" {
                 continue;
             }
-
+            
             let is_terminal = Self::is_terminal_state(&state_id, &state_diagram.transitions);
-            let (parsed_description, actions) = Self::parse_state_description(
-                &mermaid_state
-                    .display_name
-                    .unwrap_or_else(|| state_id.clone()),
-            );
+            
+            // Get the action for this state from the actions map
+            let description = actions.get(&state_id)
+                .cloned()
+                .unwrap_or_else(|| state_id.clone());
+            
 
             let mut metadata = HashMap::new();
             metadata.insert(
@@ -162,11 +199,6 @@ impl MermaidParser {
                 _ => StateType::Normal,
             };
 
-            // Add any extracted actions as metadata
-            if !actions.is_empty() {
-                metadata.insert("actions".to_string(), actions.join(";"));
-            }
-
             // Check if this state has substates or concurrent regions to enable parallel execution
             // Also enable parallel execution for fork and join states
             let allows_parallel = !mermaid_state.substates.is_empty()
@@ -175,7 +207,7 @@ impl MermaidParser {
 
             workflow.add_state(State {
                 id: StateId::new(state_id),
-                description: parsed_description,
+                description,
                 state_type,
                 is_terminal,
                 allows_parallel,
@@ -245,35 +277,6 @@ impl MermaidParser {
             .any(|t| t.from == state_id && t.to == "[*]")
     }
 
-    /// Parse state description to extract actions and clean description
-    fn parse_state_description(description: &str) -> (String, Vec<String>) {
-        let mut actions = Vec::new();
-
-        // Look for action patterns in the description
-        // Format: "State: Execute prompt \"name\"" or "State: Set variable=\"value\""
-        let parts: Vec<&str> = description.split(':').collect();
-
-        let cleaned_description = if parts.len() == 2 {
-            let state_name = parts[0].trim();
-            let action_part = parts[1].trim();
-
-            // Check for known action patterns
-            if action_part.starts_with("Execute prompt")
-                || action_part.starts_with("Set variable")
-                || action_part.starts_with("Run workflow")
-            {
-                actions.push(action_part.to_string());
-                state_name.to_string()
-            } else {
-                // Not a recognized action pattern, keep as description
-                description.to_string()
-            }
-        } else {
-            description.to_string()
-        };
-
-        (cleaned_description, actions)
-    }
 
     /// Parse transition condition from mermaid transition
     fn parse_transition_condition(transition: &StateTransition) -> TransitionCondition {
@@ -522,22 +525,6 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_parse_state_description() {
-        let (desc, actions) =
-            MermaidParser::parse_state_description("ProcessData: Execute prompt \"process\"");
-        assert_eq!(desc, "ProcessData");
-        assert_eq!(actions, vec!["Execute prompt \"process\""]);
-
-        let (desc, actions) =
-            MermaidParser::parse_state_description("SetVariable: Set variable=\"test\"");
-        assert_eq!(desc, "SetVariable");
-        assert_eq!(actions, vec!["Set variable=\"test\""]);
-
-        let (desc, actions) = MermaidParser::parse_state_description("Simple state description");
-        assert_eq!(desc, "Simple state description");
-        assert!(actions.is_empty());
-    }
 
     #[test]
     fn test_parse_transition_condition() {

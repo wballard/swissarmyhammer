@@ -139,6 +139,7 @@ impl WorkflowExecutor {
 
     /// Execute a single execution cycle: state execution and potential transition
     pub async fn execute_single_cycle(&mut self, run: &mut WorkflowRun) -> ExecutorResult<bool> {
+        tracing::debug!("Execute single cycle for state: {}", run.current_state);
         // Execute the state and capture any errors
         let state_error = self.execute_state_and_capture_errors(run).await?;
 
@@ -211,10 +212,12 @@ impl WorkflowExecutor {
         let mut current_remaining = remaining_transitions;
 
         loop {
+            tracing::debug!("Workflow execution loop - current state: {}", run.current_state);
             let transition_performed = self.execute_single_cycle(run).await?;
 
             if !transition_performed {
                 // Either workflow finished or no transitions available
+                tracing::debug!("No transition performed, exiting loop");
                 break;
             }
 
@@ -237,6 +240,17 @@ impl WorkflowExecutor {
     /// Execute a single state without transitioning
     pub async fn execute_single_state(&mut self, run: &mut WorkflowRun) -> ExecutorResult<()> {
         let current_state_id = run.current_state.clone();
+
+        // Skip execution for terminal states (they have no actions)
+        if current_state_id.as_str() == "[*]" {
+            tracing::debug!("Reached terminal state [*]");
+            run.complete();
+            self.log_event(
+                ExecutionEventType::Completed,
+                "Workflow completed".to_string(),
+            );
+            return Ok(());
+        }
 
         // Check if this is a fork state
         if self.is_fork_state(run, &current_state_id) {
@@ -264,6 +278,7 @@ impl WorkflowExecutor {
         let state_description = current_state.description.clone();
         let is_terminal = current_state.is_terminal;
 
+        tracing::trace!("Executing state: {} - {}", current_state.id, current_state.description);
         self.log_event(
             ExecutionEventType::StateExecution,
             format!(
@@ -276,7 +291,8 @@ impl WorkflowExecutor {
         let state_start_time = Instant::now();
 
         // Execute state action if one can be parsed from the description
-        self.execute_state_action(run, &state_description).await?;
+        tracing::debug!("About to execute action for state {} with description: {}", current_state_id, state_description);
+        let action_executed = self.execute_state_action(run, &state_description).await?;
 
         // Record state execution duration
         let state_duration = state_start_time.elapsed();
@@ -309,10 +325,14 @@ impl WorkflowExecutor {
         // Check if this is a terminal state
         if is_terminal {
             run.complete();
-            self.log_event(
-                ExecutionEventType::Completed,
-                "Workflow completed".to_string(),
-            );
+            tracing::debug!("Terminal state reached: {}", current_state_id);
+            // Only log generic completion if no action was executed
+            if !action_executed {
+                self.log_event(
+                    ExecutionEventType::Completed,
+                    "Workflow completed".to_string(),
+                );
+            }
             return Ok(());
         }
 
@@ -345,6 +365,7 @@ impl WorkflowExecutor {
             }
         }
 
+        tracing::debug!("Transitioning from {} to {}", run.current_state, next_state);
         self.log_event(
             ExecutionEventType::StateTransition,
             format!("Transitioning from {} to {}", run.current_state, next_state),
@@ -529,7 +550,8 @@ impl WorkflowExecutor {
         &mut self,
         run: &mut WorkflowRun,
         state_description: &str,
-    ) -> ExecutorResult<()> {
+    ) -> ExecutorResult<bool> {
+        
         // Parse action from state description
         if let Some(action) = parse_action_from_description(state_description)? {
             self.log_event(
@@ -539,9 +561,10 @@ impl WorkflowExecutor {
 
             // Execute the action and handle result
             let result = self.execute_action_with_config(run, action).await;
-            self.handle_action_result(run, result).await
+            self.handle_action_result(run, result).await?;
+            Ok(true)
         } else {
-            Ok(())
+            Ok(false)
         }
     }
 

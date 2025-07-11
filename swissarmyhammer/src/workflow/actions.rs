@@ -4,7 +4,6 @@
 //! including Claude integration, variable operations, and control flow actions.
 
 use crate::workflow::action_parser::ActionParser;
-use crate::workflow::error_utils::handle_claude_command_error;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -112,8 +111,8 @@ impl PromptAction {
             arguments: HashMap::new(),
             result_variable: None,
             timeout: Duration::from_secs(300), // 5 minute default
-            quiet: false,                      // Default to showing output
-            max_retries: 2,                    // Default to 2 retries for rate limits
+            quiet: false,                            // Default to showing output
+            max_retries: 2,                          // Default to 2 retries for rate limits
         }
     }
 
@@ -207,6 +206,56 @@ impl Action for PromptAction {
 }
 
 impl PromptAction {
+    /// Render the prompt using swissarmyhammer prompt test
+    async fn render_prompt_with_swissarmyhammer(&self, context: &HashMap<String, Value>) -> ActionResult<String> {
+        // Substitute variables in arguments
+        let args = self.substitute_variables(context);
+        
+        // Build the command to render the prompt
+        // Use the current executable path to ensure we call the right binary
+        let current_exe = std::env::current_exe()
+            .unwrap_or_else(|_| std::path::PathBuf::from("swissarmyhammer"));
+        let mut cmd = Command::new(&current_exe);
+        cmd.arg("prompt")
+            .arg("test")
+            .arg(&self.prompt_name)
+            .arg("--raw"); // Get raw output without formatting
+
+        // Add arguments
+        for (key, value) in &args {
+            if !is_valid_argument_key(key) {
+                return Err(ActionError::ParseError(
+                    format!("Invalid argument key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
+                ));
+            }
+            cmd.arg("--arg");
+            cmd.arg(format!("{}={}", key, value));
+        }
+
+        // Set up process pipes
+        cmd.stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .stdin(std::process::Stdio::null());
+
+        // Execute the command
+        let output = cmd.output().await.map_err(|e| {
+            ActionError::ClaudeError(format!("Failed to render prompt with swissarmyhammer: {}", e))
+        })?;
+
+        // Check for errors
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(ActionError::ClaudeError(format!(
+                "Failed to render prompt '{}': {}",
+                self.prompt_name, stderr
+            )));
+        }
+
+        // Get the rendered prompt
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Ok(stdout.to_string())
+    }
+    
     /// Execute the command once without retry logic
     ///
     /// This method performs a single execution attempt of the Claude command.
@@ -219,60 +268,12 @@ impl PromptAction {
     /// * `Ok(Value)` - The command response on success
     /// * `Err(ActionError)` - Various errors including rate limits
     async fn execute_once(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
-        // Substitute variables in arguments
-        let args = self.substitute_variables(context);
-
-        // Build Claude command
-        let mut cmd = Command::new("claude");
-        cmd.arg("--dangerously-skip-permissions")
-            .arg("--print")
-            .arg("--output-format")
-            .arg("stream-json")
-            .arg(&self.prompt_name);
-
-        // Add arguments with validation
-        for (key, value) in args {
-            // Validate key to prevent injection
-            if !is_valid_argument_key(&key) {
-                return Err(ActionError::ParseError(
-                    format!("Invalid argument key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
-                ));
-            }
-            cmd.arg(format!("--{}", key));
-            cmd.arg(value);
-        }
-
-        // Spawn process with proper cleanup on timeout
-        cmd.stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .stdin(std::process::Stdio::null());
-
-        let child = cmd.spawn().map_err(|e| {
-            ActionError::ClaudeError(format!("Failed to spawn claude command: {}", e))
-        })?;
-
-        // Execute with timeout
-        let output = match timeout(self.timeout, child.wait_with_output()).await {
-            Ok(Ok(output)) => output,
-            Ok(Err(e)) => {
-                return Err(ActionError::ClaudeError(format!(
-                    "Failed to execute claude command: {}",
-                    e
-                )))
-            }
-            Err(_) => {
-                // Timeout occurred
-                // Note: The child process should be automatically killed when dropped
-                // tokio::process::Child implements Drop that kills the process
-                return Err(ActionError::Timeout {
-                    timeout: self.timeout,
-                });
-            }
-        };
-
-        // Use shared error handling utility
-        let stdout = handle_claude_command_error(output)?;
-
+        // First, render the prompt using swissarmyhammer
+        let rendered_prompt = self.render_prompt_with_swissarmyhammer(context).await?;
+        
+        // Log the actual prompt being sent to Claude
+        tracing::debug!("Piping prompt to Claude:\n{}", rendered_prompt);
+        
         // Check if quiet mode is enabled in the context
         let quiet = self.quiet
             || context
@@ -280,8 +281,145 @@ impl PromptAction {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
-        // Process and display the JSON stream
-        let response = parse_and_display_claude_response(&stdout, quiet)?;
+        // Execute the rendered prompt with Claude
+        // Find claude in PATH or use common locations
+        let claude_path = which::which("claude")
+            .or_else(|_| {
+                // Check common installation paths
+                let home = std::env::var("HOME").unwrap_or_default();
+                let possible_paths = vec![
+                    format!("{}/.claude/local/claude", home),
+                    "/usr/local/bin/claude".to_string(),
+                    "/opt/claude/claude".to_string(),
+                ];
+                
+                for path in possible_paths {
+                    if std::path::Path::new(&path).exists() {
+                        return Ok(std::path::PathBuf::from(path));
+                    }
+                }
+                
+                Err(which::Error::CannotFindBinaryPath)
+            })
+            .map_err(|e| {
+                ActionError::ClaudeError(format!(
+                    "Claude CLI not found. Make sure 'claude' is installed and available in your PATH. Error: {}",
+                    e
+                ))
+            })?;
+        let mut cmd = Command::new(&claude_path);
+        
+        // Claude CLI arguments
+        cmd.arg("--dangerously-skip-permissions")
+            .arg("--print")
+            .arg("--output-format").arg("stream-json")
+            .arg("--verbose");
+        
+        
+        // Set up the command to pipe prompt via stdin
+        cmd.stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+
+
+        if !quiet {
+            tracing::info!("Executing prompt '{}' with Claude at: {}", self.prompt_name, claude_path.display());
+        }
+
+        // Spawn the Claude process
+        let mut child = cmd.spawn().map_err(|e| {
+            ActionError::ClaudeError(format!("Failed to spawn Claude command: {}", e))
+        })?;
+
+        // Write the prompt to Claude's stdin
+        if let Some(mut stdin) = child.stdin.take() {
+            use tokio::io::AsyncWriteExt;
+            stdin.write_all(rendered_prompt.as_bytes()).await
+                .map_err(|e| ActionError::ClaudeError(format!("Failed to write prompt to Claude: {}", e)))?;
+            stdin.shutdown().await
+                .map_err(|e| ActionError::ClaudeError(format!("Failed to close Claude stdin: {}", e)))?;
+        }
+
+        // Get stdout for streaming
+        let stdout = child.stdout.take()
+            .ok_or_else(|| ActionError::ClaudeError("Failed to capture Claude stdout".to_string()))?;
+        
+        // Read stdout line by line for streaming JSON
+        use tokio::io::{AsyncBufReadExt, BufReader};
+        let reader = BufReader::new(stdout);
+        let mut lines = reader.lines();
+        
+        let mut response_text = String::new();
+        let mut _got_result = false;
+        
+        // Get timeout from context or use default
+        let line_timeout = context.get("_timeout_secs")
+            .and_then(|v| v.as_u64())
+            .map(Duration::from_secs)
+            .unwrap_or(Duration::from_secs(120));  // Default 2 minutes per line if not specified
+        
+        tracing::debug!("Using line timeout: {:?}", line_timeout);
+        
+        // Read lines with timeout
+        while let Ok(Ok(Some(line))) = timeout(line_timeout, lines.next_line()).await {
+            tracing::trace!("Claude output line: {}", line);
+            
+            if line.trim().is_empty() {
+                continue;
+            }
+            
+            if let Ok(json) = serde_json::from_str::<Value>(&line) {
+                // Look for the final result
+                if let Some(result) = json.get("result").and_then(|r| r.as_str()) {
+                    response_text = result.to_string();
+                    _got_result = true;
+                    break;
+                }
+                // Also check for assistant messages with text content
+                if json.get("type").and_then(|t| t.as_str()) == Some("assistant") {
+                    if let Some(message) = json.get("message").and_then(|m| m.as_object()) {
+                        if let Some(content_array) = message.get("content").and_then(|c| c.as_array()) {
+                            for content_item in content_array {
+                                if let Some(text) = content_item.get("text").and_then(|t| t.as_str()) {
+                                    response_text.push_str(text);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Wait for process to complete
+        let status = child.wait().await
+            .map_err(|e| ActionError::ClaudeError(format!("Failed to wait for Claude: {}", e)))?;
+        
+        if !status.success() {
+            return Err(ActionError::ClaudeError(
+                "Claude execution failed".to_string()
+            ));
+        }
+        
+        let response_text = response_text.trim();
+
+        // Display the output as YAML
+        if !quiet {
+            // Build the YAML output as a single string
+            let mut yaml_output = String::new();
+            yaml_output.push_str("\n---\n");
+            yaml_output.push_str(&format!("prompt: {}\n", self.prompt_name));
+            yaml_output.push_str("claude_response: |\n");
+            for line in response_text.lines() {
+                yaml_output.push_str(&format!("  {}\n", line));
+            }
+            yaml_output.push_str("---");
+            
+            // Log YAML output
+            tracing::info!("{}", yaml_output);
+        }
+
+        // Create a response value
+        let response = Value::String(response_text.to_string());
 
         // Store result in context if variable name specified
         if let Some(var_name) = &self.result_variable {
@@ -335,7 +473,7 @@ impl Action for WaitAction {
         match self.duration {
             Some(duration) => {
                 if let Some(message) = &self.message {
-                    eprintln!("Waiting: {}", message);
+                    tracing::info!("Waiting: {}", message);
                 }
                 tokio::time::sleep(duration).await;
             }
@@ -344,7 +482,7 @@ impl Action for WaitAction {
                     .message
                     .as_deref()
                     .unwrap_or("Press Enter to continue...");
-                eprintln!("{}", message);
+                tracing::info!("{}", message);
 
                 // Read from stdin with a reasonable timeout
                 use tokio::io::{stdin, AsyncBufReadExt, BufReader};
@@ -436,9 +574,9 @@ impl Action for LogAction {
         let message = substitute_variables_in_string(&self.message, context);
 
         match self.level {
-            LogLevel::Info => eprintln!("[INFO] {}", message),
-            LogLevel::Warning => eprintln!("[WARNING] {}", message),
-            LogLevel::Error => eprintln!("[ERROR] {}", message),
+            LogLevel::Info => tracing::info!("{}", message),
+            LogLevel::Warning => tracing::warn!("{}", message),
+            LogLevel::Error => tracing::error!("{}", message),
         }
 
         // Mark action as successful
@@ -535,68 +673,6 @@ fn substitute_variables_in_string(input: &str, context: &HashMap<String, Value>)
         .unwrap_or_else(|_| input.to_string())
 }
 
-/// Parse Claude's streaming JSON response, log it, and optionally display as YAML
-fn parse_and_display_claude_response(output: &str, quiet: bool) -> ActionResult<Value> {
-    // Claude outputs streaming JSON, we need to collect all content
-    let mut content = String::new();
-    let mut parse_errors = Vec::new();
-    let mut valid_json_found = false;
-
-    for (line_num, line) in output.lines().enumerate() {
-        if line.trim().is_empty() {
-            continue;
-        }
-
-        // Log the raw JSON stream
-        tracing::debug!("Claude JSON stream: {}", line);
-
-        match serde_json::from_str::<Value>(line) {
-            Ok(json) => {
-                valid_json_found = true;
-
-                // Convert to YAML and log it unless quiet
-                if !quiet {
-                    if let Ok(yaml) = serde_yaml::to_string(&json) {
-                        // Log YAML without the "---" document separator for cleaner output
-                        let yaml_trimmed = yaml.trim_start_matches("---\n");
-                        tracing::info!("Claude response:\n{}", yaml_trimmed);
-                    }
-                }
-
-                // Extract content
-                if let Some(Value::String(text)) = json.get("content") {
-                    content.push_str(text);
-                }
-            }
-            Err(e) => {
-                // Collect parse errors for potential debugging
-                parse_errors.push((line_num + 1, e.to_string()));
-                tracing::warn!("Failed to parse JSON on line {}: {}", line_num + 1, e);
-            }
-        }
-    }
-
-    if content.is_empty() {
-        if valid_json_found {
-            // Valid JSON was found but no content field
-            Ok(Value::String(String::new()))
-        } else if !parse_errors.is_empty() {
-            // No valid JSON found and we have parse errors
-            Err(ActionError::ParseError(
-                format!("Failed to parse Claude response. Found {} parse errors. First error at line {}: {}",
-                    parse_errors.len(),
-                    parse_errors[0].0,
-                    parse_errors[0].1
-                )
-            ))
-        } else {
-            // No JSON lines found at all, return raw output
-            Ok(Value::String(output.to_string()))
-        }
-    } else {
-        Ok(Value::String(content))
-    }
-}
 
 impl SubWorkflowAction {
     /// Create a new sub-workflow action
@@ -1028,36 +1104,6 @@ mod tests {
         assert_eq!(substituted.get("mode"), Some(&"strict".to_string()));
     }
 
-    #[test]
-    fn test_parse_and_display_claude_response_quiet() {
-        let json_output = r#"{"type":"content_block_start","content":"Hello"}
-{"type":"content_block_delta","content":" world"}
-{"type":"content_block_stop"}"#;
-
-        // Test with quiet = true (should not print to stderr)
-        let result = parse_and_display_claude_response(json_output, true).unwrap();
-        assert_eq!(result, Value::String("Hello world".to_string()));
-
-        // Test with quiet = false (would print to stderr but we can't easily test that)
-        let result = parse_and_display_claude_response(json_output, false).unwrap();
-        assert_eq!(result, Value::String("Hello world".to_string()));
-    }
-
-    #[test]
-    fn test_parse_and_display_claude_response_invalid_json() {
-        let invalid_output = "This is not JSON";
-
-        // Should return the raw output when no valid JSON is found
-        let result = parse_and_display_claude_response(invalid_output, true);
-
-        // Actually it should return an error for invalid JSON with no valid lines
-        assert!(result.is_err());
-        if let Err(ActionError::ParseError(msg)) = result {
-            assert!(msg.contains("Failed to parse Claude response"));
-        } else {
-            panic!("Expected ParseError");
-        }
-    }
 
     #[tokio::test]
     async fn test_prompt_action_with_rate_limit_retry() {

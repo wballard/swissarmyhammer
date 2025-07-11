@@ -418,6 +418,10 @@ pub enum FlowSubcommand {
         /// Execution timeout (e.g., 30s, 5m, 1h)
         #[arg(long)]
         timeout: Option<String>,
+
+        /// Quiet mode - only show errors
+        #[arg(short, long)]
+        quiet: bool,
     },
     /// Resume a paused workflow run
     Resume {
@@ -431,6 +435,10 @@ pub enum FlowSubcommand {
         /// Execution timeout (e.g., 30s, 5m, 1h)
         #[arg(long)]
         timeout: Option<String>,
+
+        /// Quiet mode - only show errors
+        #[arg(short, long)]
+        quiet: bool,
     },
     /// List available workflows
     List {

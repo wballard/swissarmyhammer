@@ -101,7 +101,6 @@ swissarmyhammer/
 │   └── fixtures/         # Test data
 ├── doc/
 │   └── src/              # Documentation source
-├── examples/             # Example code
 ├── benches/              # Benchmarks
 └── Cargo.toml           # Project manifest
 ```

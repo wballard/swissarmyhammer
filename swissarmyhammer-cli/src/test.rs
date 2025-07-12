@@ -15,6 +15,7 @@ pub struct TestConfig {
     pub prompt_name: Option<String>,
     pub file: Option<String>,
     pub arguments: Vec<String>,
+    pub set: Vec<String>,
     pub raw: bool,
     pub copy: bool,
     pub save: Option<String>,
@@ -40,7 +41,7 @@ impl TestRunner {
         let prompt = self.get_prompt(config.prompt_name.as_deref(), config.file.as_deref())?;
 
         // Collect arguments
-        let args = if config.arguments.is_empty() {
+        let mut args = if config.arguments.is_empty() {
             // Interactive mode - but only if we're in a terminal
             if atty::is(atty::Stream::Stdin) {
                 self.collect_arguments_interactive(&prompt)?
@@ -52,6 +53,13 @@ impl TestRunner {
             // Non-interactive mode
             self.parse_arguments(&config.arguments)?
         };
+
+        // Parse and add set variables for liquid template rendering
+        let set_variables = self.parse_arguments(&config.set)?;
+        if !set_variables.is_empty() {
+            // Add set variables to the args map for liquid rendering
+            args.extend(set_variables);
+        }
 
         // Show debug information if requested
         if config.debug {
@@ -405,5 +413,24 @@ mod tests {
 
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("Argument 'unused' is defined but not used"));
+    }
+
+    #[test]
+    fn test_parse_arguments_with_set_variables() {
+        let runner = TestRunner::new();
+
+        // Test parsing regular arguments
+        let args = vec!["name=John".to_string(), "age=30".to_string()];
+        let parsed = runner.parse_arguments(&args).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed.get("name").unwrap(), "John");
+        assert_eq!(parsed.get("age").unwrap(), "30");
+
+        // Test parsing set variables (same format)
+        let set_vars = vec!["author=Jane".to_string(), "version=1.0".to_string()];
+        let parsed_set = runner.parse_arguments(&set_vars).unwrap();
+        assert_eq!(parsed_set.len(), 2);
+        assert_eq!(parsed_set.get("author").unwrap(), "Jane");
+        assert_eq!(parsed_set.get("version").unwrap(), "1.0");
     }
 }

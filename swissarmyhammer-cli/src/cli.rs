@@ -303,6 +303,10 @@ Examples:
         #[arg(long = "arg", value_name = "KEY=VALUE")]
         arguments: Vec<String>,
 
+        /// Set template variables for liquid rendering as key=value pairs
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        set: Vec<String>,
+
         /// Show raw output without formatting
         #[arg(long)]
         raw: bool,
@@ -534,6 +538,50 @@ pub enum FlowSubcommand {
         #[arg(long)]
         path_only: bool,
     },
+    /// Test a workflow without executing actions (simulates dry run)
+    #[command(long_about = "
+Test workflows in simulation mode without actually executing actions.
+This command provides a safe way to validate workflow logic and see what
+actions would be executed without actually running them.
+
+Features:
+- Simulates all actions instead of executing them
+- Claude prompts are echoed instead of sent to the API
+- Generates coverage reports showing visited states and transitions
+- Useful for testing workflow logic and debugging
+
+Usage:
+  swissarmyhammer flow test my-workflow
+  swissarmyhammer flow test my-workflow --var key=value
+  swissarmyhammer flow test my-workflow --set template_var=value
+
+This is equivalent to 'flow run --test' but provided as a separate command
+for better discoverability and clearer intent.
+")]
+    Test {
+        /// Workflow name to test
+        workflow: String,
+
+        /// Initial variables as key=value pairs
+        #[arg(long = "var", value_name = "KEY=VALUE")]
+        vars: Vec<String>,
+
+        /// Set template variables for liquid rendering in action strings as key=value pairs
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        set: Vec<String>,
+
+        /// Interactive mode - prompt at each state
+        #[arg(short, long)]
+        interactive: bool,
+
+        /// Execution timeout (e.g., 30s, 5m, 1h)
+        #[arg(long)]
+        timeout: Option<String>,
+
+        /// Quiet mode - only show errors
+        #[arg(short, long)]
+        quiet: bool,
+    },
 }
 
 impl Cli {
@@ -660,6 +708,7 @@ mod tests {
                 prompt_name,
                 file,
                 arguments,
+                set,
                 raw,
                 copy,
                 save,
@@ -669,6 +718,7 @@ mod tests {
                 assert_eq!(prompt_name, Some("help".to_string()));
                 assert_eq!(file, None);
                 assert!(arguments.is_empty());
+                assert!(set.is_empty());
                 assert!(!raw);
                 assert!(!copy);
                 assert_eq!(save, None);
@@ -693,6 +743,7 @@ mod tests {
                 prompt_name,
                 file,
                 arguments,
+                set,
                 raw,
                 copy,
                 save,
@@ -702,6 +753,7 @@ mod tests {
                 assert_eq!(prompt_name, None);
                 assert_eq!(file, Some("test.md".to_string()));
                 assert!(arguments.is_empty());
+                assert!(set.is_empty());
                 assert!(!raw);
                 assert!(!copy);
                 assert_eq!(save, None);
@@ -734,6 +786,7 @@ mod tests {
                 prompt_name,
                 file,
                 arguments,
+                set,
                 raw,
                 copy,
                 save,
@@ -743,6 +796,7 @@ mod tests {
                 assert_eq!(prompt_name, Some("help".to_string()));
                 assert_eq!(file, None);
                 assert_eq!(arguments, vec!["topic=git", "format=markdown"]);
+                assert!(set.is_empty());
                 assert!(!raw);
                 assert!(!copy);
                 assert_eq!(save, None);
@@ -776,6 +830,7 @@ mod tests {
                 prompt_name,
                 file,
                 arguments,
+                set,
                 raw,
                 copy,
                 save,
@@ -785,10 +840,56 @@ mod tests {
                 assert_eq!(prompt_name, Some("help".to_string()));
                 assert_eq!(file, None);
                 assert!(arguments.is_empty());
+                assert!(set.is_empty());
                 assert!(raw);
                 assert!(copy);
                 assert_eq!(save, Some("output.md".to_string()));
                 assert!(debug);
+            } else {
+                panic!("Expected Test subcommand");
+            }
+        } else {
+            panic!("Expected Prompt command");
+        }
+    }
+
+    #[test]
+    fn test_cli_test_subcommand_with_set_variables() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer",
+            "prompt",
+            "test",
+            "help",
+            "--arg",
+            "topic=git",
+            "--set",
+            "author=John",
+            "--set",
+            "version=1.0",
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Prompt { subcommand }) = cli.command {
+            if let PromptSubcommand::Test {
+                prompt_name,
+                file,
+                arguments,
+                set,
+                raw,
+                copy,
+                save,
+                debug,
+            } = subcommand
+            {
+                assert_eq!(prompt_name, Some("help".to_string()));
+                assert_eq!(file, None);
+                assert_eq!(arguments, vec!["topic=git"]);
+                assert_eq!(set, vec!["author=John", "version=1.0"]);
+                assert!(!raw);
+                assert!(!copy);
+                assert_eq!(save, None);
+                assert!(!debug);
             } else {
                 panic!("Expected Test subcommand");
             }
@@ -1005,6 +1106,81 @@ mod tests {
             assert_eq!(workflow_dirs, vec!["./workflows"]);
         } else {
             panic!("Expected Validate command");
+        }
+    }
+
+    #[test]
+    fn test_cli_flow_test_subcommand() {
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "flow", "test", "my-workflow"]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Flow { subcommand }) = cli.command {
+            if let FlowSubcommand::Test {
+                workflow,
+                vars,
+                set,
+                interactive,
+                timeout,
+                quiet,
+            } = subcommand
+            {
+                assert_eq!(workflow, "my-workflow");
+                assert!(vars.is_empty());
+                assert!(set.is_empty());
+                assert!(!interactive);
+                assert_eq!(timeout, None);
+                assert!(!quiet);
+            } else {
+                panic!("Expected Test subcommand");
+            }
+        } else {
+            panic!("Expected Flow command");
+        }
+    }
+
+    #[test]
+    fn test_cli_flow_test_subcommand_with_options() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer",
+            "flow",
+            "test",
+            "my-workflow",
+            "--var",
+            "input=test",
+            "--set",
+            "author=Jane",
+            "--set",
+            "version=2.0",
+            "--interactive",
+            "--timeout",
+            "30s",
+            "--quiet",
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Flow { subcommand }) = cli.command {
+            if let FlowSubcommand::Test {
+                workflow,
+                vars,
+                set,
+                interactive,
+                timeout,
+                quiet,
+            } = subcommand
+            {
+                assert_eq!(workflow, "my-workflow");
+                assert_eq!(vars, vec!["input=test"]);
+                assert_eq!(set, vec!["author=Jane", "version=2.0"]);
+                assert!(interactive);
+                assert_eq!(timeout, Some("30s".to_string()));
+                assert!(quiet);
+            } else {
+                panic!("Expected Test subcommand");
+            }
+        } else {
+            panic!("Expected Flow command");
         }
     }
 }

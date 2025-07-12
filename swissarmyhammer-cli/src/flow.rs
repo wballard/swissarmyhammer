@@ -80,6 +80,27 @@ pub async fn run_flow_command(subcommand: FlowSubcommand) -> Result<()> {
             counts,
             path_only,
         } => visualize_workflow_command(run_id, format, output, timing, counts, path_only).await,
+        FlowSubcommand::Test {
+            workflow,
+            vars,
+            set,
+            interactive,
+            timeout: timeout_str,
+            quiet,
+        } => {
+            // Run workflow in test mode - same as flow run --test
+            run_workflow_command(WorkflowCommandConfig {
+                workflow_name: workflow,
+                vars,
+                set,
+                interactive,
+                dry_run: false,
+                test_mode: true,
+                timeout_str,
+                quiet,
+            })
+            .await
+        }
     }
 }
 

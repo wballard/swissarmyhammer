@@ -392,7 +392,15 @@ impl PromptAction {
         loop {
             match timeout(line_timeout, lines.next_line()).await {
                 Ok(Ok(Some(line))) => {
-                    tracing::debug!("Claude output line: {}", line);
+                    // Format JSON as YAML for better readability
+                    let formatted_output = format_claude_output_as_yaml(&line);
+                    if formatted_output != line {
+                        // If it was formatted as YAML, log it with proper structure
+                        tracing::debug!("Claude output line:\n{}", formatted_output);
+                    } else {
+                        // If not JSON, log as is
+                        tracing::debug!("Claude output line: {}", line);
+                    }
 
                     if line.trim().is_empty() {
                         continue;
@@ -975,6 +983,27 @@ fn parse_workflow_output(output: &str) -> ActionResult<Value> {
     }
 
     Ok(Value::Object(serde_json::Map::from_iter(result)))
+}
+
+/// Format Claude output JSON line as YAML for better readability
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) fn format_claude_output_as_yaml(line: &str) -> String {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    // Try to parse as JSON
+    match serde_json::from_str::<Value>(trimmed) {
+        Ok(json_value) => {
+            // Convert to YAML
+            match serde_yaml::to_string(&json_value) {
+                Ok(yaml) => yaml,
+                Err(_) => trimmed.to_string(), // Fall back to original if YAML conversion fails
+            }
+        }
+        Err(_) => trimmed.to_string(), // Return original if not valid JSON
+    }
 }
 
 /// Parse action from state description text with liquid template rendering

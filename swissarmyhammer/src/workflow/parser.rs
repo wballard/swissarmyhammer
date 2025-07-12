@@ -290,6 +290,9 @@ impl MermaidParser {
             format!("{:?}", state_diagram.version),
         );
 
+        // Detect and update choice states based on their transition patterns
+        Self::detect_and_update_choice_states(&mut workflow);
+
         // Perform workflow-specific validation
         Self::validate_workflow_structure(&workflow)?;
 
@@ -407,6 +410,9 @@ impl MermaidParser {
             workflow.metadata.insert("title".to_string(), title);
         }
 
+        // Detect and update choice states based on their transition patterns
+        Self::detect_and_update_choice_states(&mut workflow);
+
         // Perform workflow-specific validation
         Self::validate_workflow_structure(&workflow)?;
 
@@ -435,16 +441,30 @@ impl MermaidParser {
         match &transition.event {
             Some(event) => {
                 // Analyze the event text to determine condition type
-                // Check negative conditions first to avoid substring issues
-                let condition_type = if event.contains("invalid")
-                    || event.contains("error")
-                    || event.contains("fail")
-                {
-                    ConditionType::OnFailure
-                } else if event.contains("valid") || event.contains("success") {
-                    ConditionType::OnSuccess
-                } else if event.to_lowercase() == "always" || event.is_empty() {
+                // Check for CEL expressions first (contains operators or function calls)
+                let event_lower = event.to_lowercase();
+                let is_cel_expression = event.contains("==")
+                    || event.contains("!=")
+                    || event.contains("&&")
+                    || event.contains("||")
+                    || event.contains(".")
+                    || event.contains("(")
+                    || event.contains("<")
+                    || event.contains(">");
+
+                let condition_type = if is_cel_expression {
+                    ConditionType::Custom
+                } else if event_lower == "always" || event.is_empty() {
                     ConditionType::Always
+                } else if event_lower.split_whitespace().any(|word| {
+                    word == "fail" || word == "failure" || word == "error" || word == "invalid"
+                }) {
+                    ConditionType::OnFailure
+                } else if event_lower
+                    .split_whitespace()
+                    .any(|word| word == "valid" || word == "success")
+                {
+                    ConditionType::OnSuccess
                 } else {
                     ConditionType::Custom
                 };
@@ -534,6 +554,79 @@ impl MermaidParser {
         }
 
         reachable
+    }
+
+    /// Detect states that should be choice states based on their transition patterns
+    /// and update their state_type accordingly.
+    ///
+    /// A state is considered a choice state if it has multiple outgoing transitions
+    /// with different condition types (not all Always transitions).
+    fn detect_and_update_choice_states(workflow: &mut Workflow) {
+        // Group transitions by their from_state
+        let mut state_transitions: std::collections::HashMap<StateId, Vec<&Transition>> =
+            std::collections::HashMap::new();
+
+        for transition in &workflow.transitions {
+            state_transitions
+                .entry(transition.from_state.clone())
+                .or_default()
+                .push(transition);
+        }
+
+        // Check each state to see if it should be a choice state
+        for (state_id, transitions) in state_transitions {
+            // Skip if already a special state type (Fork/Join)
+            if let Some(state) = workflow.states.get(&state_id) {
+                if matches!(state.state_type, StateType::Fork | StateType::Join) {
+                    continue;
+                }
+            }
+
+            // Analyze transition patterns
+            if Self::should_be_choice_state(&transitions) {
+                // Update the state to be a choice state
+                if let Some(state) = workflow.states.get_mut(&state_id) {
+                    tracing::debug!(
+                        "Detected choice state: {} with {} transitions",
+                        state_id,
+                        transitions.len()
+                    );
+                    state.state_type = StateType::Choice;
+                }
+            }
+        }
+    }
+
+    /// Determine if a state should be classified as a choice state based on its transitions
+    fn should_be_choice_state(transitions: &[&Transition]) -> bool {
+        // Must have multiple outgoing transitions
+        if transitions.len() < 2 {
+            return false;
+        }
+
+        // Count different condition types
+        let mut has_custom_conditions = false;
+        let mut has_success_condition = false;
+        let mut has_failure_condition = false;
+        let mut always_count = 0;
+
+        for transition in transitions {
+            match &transition.condition.condition_type {
+                ConditionType::Custom => has_custom_conditions = true,
+                ConditionType::OnSuccess => has_success_condition = true,
+                ConditionType::OnFailure => has_failure_condition = true,
+                ConditionType::Always => always_count += 1,
+                ConditionType::Never => {} // Ignore Never conditions
+            }
+        }
+
+        // It's a choice state if it has:
+        // 1. At least one custom condition, OR
+        // 2. Both success and failure conditions, OR
+        // 3. Multiple different condition types (not just all Always)
+        has_custom_conditions
+            || (has_success_condition && has_failure_condition)
+            || (transitions.len() > always_count && always_count < transitions.len())
     }
 }
 

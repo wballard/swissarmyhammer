@@ -233,7 +233,43 @@ impl PromptAction {
         // Use the current executable path to ensure we call the right binary
         let current_exe =
             std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("swissarmyhammer"));
-        let mut cmd = Command::new(&current_exe);
+
+        // In test environment, current_exe might point to test binary, so try to find the actual swissarmyhammer binary
+        let cmd_binary = if current_exe.to_string_lossy().contains("test")
+            || current_exe.to_string_lossy().contains("deps")
+        {
+            // We're in a test, try to find the actual binary
+            if let Ok(cargo_target) = std::env::var("CARGO_TARGET_DIR") {
+                let debug_binary = std::path::PathBuf::from(cargo_target)
+                    .join("debug")
+                    .join("swissarmyhammer");
+                if debug_binary.exists() {
+                    debug_binary
+                } else {
+                    std::path::PathBuf::from("swissarmyhammer")
+                }
+            } else {
+                // Fallback to target/debug/swissarmyhammer relative to workspace
+                let workspace_dir =
+                    std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+                let workspace_root = std::path::Path::new(&workspace_dir)
+                    .parent()
+                    .unwrap_or(std::path::Path::new("."));
+                let debug_binary = workspace_root
+                    .join("target")
+                    .join("debug")
+                    .join("swissarmyhammer");
+                if debug_binary.exists() {
+                    debug_binary
+                } else {
+                    std::path::PathBuf::from("swissarmyhammer")
+                }
+            }
+        } else {
+            current_exe
+        };
+
+        let mut cmd = Command::new(&cmd_binary);
         cmd.arg("prompt")
             .arg("test")
             .arg(&self.prompt_name)

@@ -151,6 +151,7 @@ impl WorkflowExecutor {
     /// Execute a single execution cycle: state execution and potential transition
     pub async fn execute_single_cycle(&mut self, run: &mut WorkflowRun) -> ExecutorResult<bool> {
         tracing::debug!("Execute single cycle for state: {}", run.current_state);
+
         // Execute the state and capture any errors
         let state_error = self.execute_state_and_capture_errors(run).await?;
 
@@ -611,6 +612,29 @@ impl WorkflowExecutor {
     ) -> ExecutorResult<()> {
         match result {
             Ok(result_value) => {
+                // Set standard variables that are available after every action
+                run.context.insert("success".to_string(), Value::Bool(true));
+                run.context
+                    .insert("failure".to_string(), Value::Bool(false));
+
+                // Only set is_error to false if it's not already true (preserve error state)
+                if !run
+                    .context
+                    .get("is_error")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+                {
+                    run.context
+                        .insert("is_error".to_string(), Value::Bool(false));
+                }
+
+                run.context
+                    .insert("result".to_string(), result_value.clone());
+
+                // Also set the legacy last_action_result for backward compatibility
+                run.context
+                    .insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
+
                 self.log_event(
                     ExecutionEventType::StateExecution,
                     format!(
@@ -630,7 +654,18 @@ impl WorkflowExecutor {
         run: &mut WorkflowRun,
         action_error: ActionError,
     ) -> ExecutorResult<()> {
-        // Mark action as failed in context
+        // Set standard variables that are available after every action
+        run.context
+            .insert("success".to_string(), Value::Bool(false));
+        run.context.insert("failure".to_string(), Value::Bool(true));
+        run.context
+            .insert("is_error".to_string(), Value::Bool(true));
+        run.context.insert(
+            "result".to_string(),
+            Value::String(action_error.to_string()),
+        );
+
+        // Also set the legacy last_action_result for backward compatibility
         run.context
             .insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(false));
 

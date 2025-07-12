@@ -101,7 +101,9 @@ Transitions control flow between states:
 - **Always**: Unconditional transition
 - **OnSuccess**: Transition when action succeeds
 - **OnFailure**: Transition when action fails
-- **Conditional**: Based on regex matching of output
+- **Conditional**: Based on regex matching or CEL expressions
+  - Regex patterns: `"pattern"` or `/regex/`
+  - CEL expressions: Complex conditions like `var.startsWith('Hello')` or `is_error == true`
 
 ### Special States
 
@@ -139,6 +141,16 @@ stateDiagram-v2
     Check --> OptionB: "pattern_b"
     Check --> Default: Always
 ```
+
+#### Choice State Detection
+
+SwissArmyHammer automatically detects choice states based on their transition patterns. A state is identified as a choice state when it has:
+
+- Multiple outgoing transitions
+- At least one transition with a condition (regex pattern or CEL expression)
+- Different transition types (e.g., conditional and "always" transitions)
+
+This automatic detection ensures that branching logic works correctly without requiring explicit choice state declarations in the Mermaid diagram.
 
 ### Parallel Execution
 
@@ -574,6 +586,35 @@ stateDiagram-v2
 - RunTypeA: Run workflow "process-type-a" with data="${input}"
 - RunTypeB: Run workflow "process-type-b" with data="${input}"
 ```
+
+### CEL Expression Branching
+
+Use CEL expressions for complex conditional logic:
+
+```mermaid
+stateDiagram-v2
+    [*] --> BranchDecision
+    BranchDecision --> ProcessNormal: example_var.startsWith('Hello')
+    BranchDecision --> ProcessError: is_error == true
+    BranchDecision --> ProcessSpecial: count > 10 && status == 'active'
+    BranchDecision --> ProcessDefault: always
+    ProcessNormal --> [*]
+    ProcessError --> [*]
+    ProcessSpecial --> [*]
+    ProcessDefault --> [*]
+```
+
+```markdown
+## Actions
+
+- BranchDecision: Execute prompt "analyze-data" with input="${data}"
+- ProcessNormal: Log "Processing normal flow for ${example_var}"
+- ProcessError: Execute prompt "handle-error" with error="${error}"
+- ProcessSpecial: Execute prompt "special-handler" with count="${count}"
+- ProcessDefault: Log "No special conditions met"
+```
+
+The choice state (BranchDecision) is automatically detected and will evaluate each condition in order, taking the first matching transition.
 
 ### Parallel Processing
 

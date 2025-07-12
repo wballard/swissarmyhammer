@@ -138,12 +138,19 @@ impl WorkflowExecutor {
             .collect();
 
         // Check if this is a choice state and validate it has transitions
-        let is_choice_state = run
+        let state_type = run
             .workflow
             .states
             .get(current_state)
-            .map(|state| state.state_type == crate::workflow::StateType::Choice)
-            .unwrap_or(false);
+            .map(|state| &state.state_type);
+        let is_choice_state = state_type == Some(&crate::workflow::StateType::Choice);
+
+        tracing::debug!(
+            "State '{}' type: {:?}, is_choice_state: {}",
+            current_state,
+            state_type,
+            is_choice_state
+        );
 
         if is_choice_state {
             if transitions.is_empty() {
@@ -159,7 +166,10 @@ impl WorkflowExecutor {
             self.validate_choice_state_determinism(current_state, &transitions)?;
         }
 
-        for transition in transitions {
+        // Evaluate all conditions to check for multiple matches
+        let mut matching_transitions = Vec::new();
+
+        for transition in &transitions {
             if self.evaluate_condition(&transition.condition, &run.context)? {
                 self.log_event(
                     ExecutionEventType::ConditionEvaluated,
@@ -170,8 +180,28 @@ impl WorkflowExecutor {
                         transition.to_state
                     ),
                 );
-                return Ok(Some(transition.to_state.clone()));
+                matching_transitions.push(transition);
             }
+        }
+
+        // Check for multiple matches and warn user
+        if matching_transitions.len() > 1 {
+            let matching_states: Vec<&str> = matching_transitions
+                .iter()
+                .map(|t| t.to_state.as_str())
+                .collect();
+
+            tracing::warn!(
+                "Multiple transition conditions are true from state '{}' to states: [{}]. Using first match: '{}'",
+                current_state,
+                matching_states.join(", "),
+                matching_transitions[0].to_state
+            );
+        }
+
+        // Return the first match if any
+        if let Some(first_match) = matching_transitions.first() {
+            return Ok(Some(first_match.to_state.clone()));
         }
 
         // If this is a choice state and no conditions matched, it's an error

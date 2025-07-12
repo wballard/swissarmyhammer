@@ -180,6 +180,25 @@ impl liquid::partials::PartialSource for PromptPartialSource {
     }
 }
 
+/// Extract all variable names from a liquid template
+fn extract_template_variables(template: &str) -> Vec<String> {
+    // Match {{ variable }}, {{ variable.property }}, {{ variable | filter }}, etc.
+    let re = regex::Regex::new(r"\{\{\s*(\w+)(?:\.\w+)*\s*(?:\|[^\}]+)?\}\}").unwrap();
+    let mut variables = std::collections::HashSet::new();
+    
+    for cap in re.captures_iter(template) {
+        variables.insert(cap[1].to_string());
+    }
+    
+    // Also check for variables in {% if %}, {% unless %}, {% for %} tags
+    let tag_re = regex::Regex::new(r"\{%\s*(?:if|unless|for\s+\w+\s+in)\s+(\w+)").unwrap();
+    for cap in tag_re.captures_iter(template) {
+        variables.insert(cap[1].to_string());
+    }
+    
+    variables.into_iter().collect()
+}
+
 /// Template wrapper for Liquid templates
 pub struct Template {
     parser: Parser,
@@ -224,6 +243,14 @@ impl Template {
             .map_err(|e| SwissArmyHammerError::Template(e.to_string()))?;
 
         let mut object = Object::new();
+        
+        // First, initialize all template variables as nil so filters like | default work
+        let variables = extract_template_variables(&self.template_str);
+        for var in variables {
+            object.insert(var.into(), liquid::model::Value::Nil);
+        }
+        
+        // Then override with provided values
         for (key, value) in args {
             object.insert(
                 key.clone().into(),
@@ -406,9 +433,9 @@ mod tests {
         let args = HashMap::new();
 
         let result = engine.render("Hello {{ name }}!", &args);
-        // Liquid throws an error for undefined variables
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Unknown variable"));
+        // With our fix, undefined variables are now initialized as nil and render as empty
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Hello !");
     }
 
     #[test]
@@ -428,9 +455,64 @@ mod tests {
         let template = Template::new("Hello {{ name }}!").unwrap();
         let args = HashMap::new();
 
-        // Liquid will error on undefined variables
+        // With our fix, undefined variables are now initialized as nil and render as empty
         let result = template.render(&args);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Unknown variable"));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Hello !");
+    }
+
+    #[test]
+    fn test_liquid_default_filter_with_missing_variable() {
+        // Test that the | default filter works when variable is not provided
+        let template = Template::new("Hello {{ name | default: 'World' }}!").unwrap();
+        let args = HashMap::new(); // No 'name' variable provided
+
+        let result = template.render(&args).unwrap();
+        assert_eq!(result, "Hello World!");
+    }
+
+    #[test]
+    fn test_liquid_default_filter_with_provided_variable() {
+        // Test that the | default filter is ignored when variable is provided
+        let template = Template::new("Hello {{ name | default: 'World' }}!").unwrap();
+        let mut args = HashMap::new();
+        args.insert("name".to_string(), "Alice".to_string());
+
+        let result = template.render(&args).unwrap();
+        assert_eq!(result, "Hello Alice!");
+    }
+
+    #[test]
+    fn test_liquid_default_filter_multiple_variables() {
+        // Test multiple variables with default filters
+        let template = Template::new("{{ greeting | default: 'Hello' }} {{ name | default: 'World' }} in {{ language | default: 'English' }}!").unwrap();
+        let mut args = HashMap::new();
+        args.insert("name".to_string(), "Bob".to_string()); // Only provide name
+
+        let result = template.render(&args).unwrap();
+        assert_eq!(result, "Hello Bob in English!");
+    }
+
+    #[test]
+    fn test_extract_template_variables() {
+        // Test the extract_template_variables function
+        let template = "Hello {{ name }}, you have {{ count }} messages in {{ language | default: 'English' }}";
+        let vars = extract_template_variables(template);
+        
+        assert!(vars.contains(&"name".to_string()));
+        assert!(vars.contains(&"count".to_string()));
+        assert!(vars.contains(&"language".to_string()));
+        assert_eq!(vars.len(), 3);
+    }
+
+    #[test]
+    fn test_extract_template_variables_with_conditionals() {
+        // Test extraction from conditional tags
+        let template = "{% if premium %}Premium user{% endif %} {% unless disabled %}Active{% endunless %}";
+        let vars = extract_template_variables(template);
+        
+        assert!(vars.contains(&"premium".to_string()));
+        assert!(vars.contains(&"disabled".to_string()));
+        assert_eq!(vars.len(), 2);
     }
 }

@@ -290,6 +290,7 @@ Examples:
   swissarmyhammer prompt test -f my-prompt.md                       # Test file
   swissarmyhammer prompt test help --arg topic=git                  # Non-interactive
   swissarmyhammer prompt test plan --debug --save output.md         # Debug + save
+  swissarmyhammer prompt test code-review --set author=John --set version=1.0  # With template variables
 ")]
     Test {
         /// Prompt name to test (alternative to --file)
@@ -554,6 +555,12 @@ Usage:
   swissarmyhammer flow test my-workflow
   swissarmyhammer flow test my-workflow --var key=value
   swissarmyhammer flow test my-workflow --set template_var=value
+
+Examples:
+  swissarmyhammer flow test hello-world                               # Test basic workflow
+  swissarmyhammer flow test greeting --set name=John --set language=Spanish  # With template variables
+  swissarmyhammer flow test code-review --var file=main.rs --timeout 60s     # With vars and timeout
+  swissarmyhammer flow test deploy --interactive                      # Step-by-step execution
 
 This is equivalent to 'flow run --test' but provided as a separate command
 for better discoverability and clearer intent.

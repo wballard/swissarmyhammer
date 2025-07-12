@@ -20,6 +20,7 @@ Test prompts interactively by providing arguments and viewing the rendered outpu
 
 ### Argument Specification
 - `--arg KEY=VALUE` - Provide argument values directly (can be used multiple times)
+- `--set KEY=VALUE` - Set liquid template variables (can be used multiple times)
 
 ### Output Control
 - `--raw` - Show raw template without rendering
@@ -243,6 +244,83 @@ else
   echo "✗ Prompt test failed, fix issues before deploying"
   exit 1
 fi
+```
+
+## Template Variables with --set
+
+The `--set` parameter allows you to provide additional liquid template variables beyond the prompt's defined arguments. This is useful for:
+
+1. Providing metadata like author names, versions, or timestamps
+2. Overriding default values with template-level variables
+3. Testing liquid template features without modifying the prompt definition
+
+### Variable Precedence
+
+When both `--arg` and `--set` provide the same variable name, **`--set` takes precedence**. This allows you to override argument values using template variables.
+
+### Examples
+
+```bash
+# Basic usage with template variables
+swissarmyhammer test code-review \
+  --arg code="main.rs" \
+  --set author="John Doe" \
+  --set version="1.0"
+
+# Override an argument value with --set
+swissarmyhammer test greeting \
+  --arg name="World" \
+  --set name="Universe"  # This takes precedence, output will use "Universe"
+
+# Use template variables in liquid templates
+# If your template contains: {{author | default: "Anonymous"}}
+swissarmyhammer test my-prompt --set author="Jane Smith"
+
+# Combine with other features
+swissarmyhammer test complex-prompt \
+  --arg input="data" \
+  --set debug="true" \
+  --set timestamp="2024-01-15" \
+  --debug \
+  --save output.md
+```
+
+### Use in Templates
+
+Template variables set with `--set` can be used in liquid templates just like arguments:
+
+```liquid
+---
+title: Example Prompt
+arguments:
+  - name: content
+    required: true
+---
+
+# {{title | default: "Document"}}
+
+Author: {{author | default: "Unknown"}}
+Version: {{version | default: "1.0"}}
+
+{{content}}
+```
+
+Running this with:
+```bash
+swissarmyhammer test example \
+  --arg content="Main content here" \
+  --set author="Alice" \
+  --set title="My Document"
+```
+
+Would produce:
+```
+# My Document
+
+Author: Alice
+Version: 1.0
+
+Main content here
 ```
 
 ## See Also

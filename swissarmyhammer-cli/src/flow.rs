@@ -135,7 +135,7 @@ async fn run_workflow_command(config: WorkflowCommandConfig) -> Result<()> {
             );
         } else {
             return Err(SwissArmyHammerError::Other(format!(
-                "Invalid variable format: '{}'. Use key=value format.",
+                "Invalid variable format: '{}'. Expected 'key=value' format. Example: --var input=test",
                 var
             )));
         }
@@ -152,7 +152,7 @@ async fn run_workflow_command(config: WorkflowCommandConfig) -> Result<()> {
             );
         } else {
             return Err(SwissArmyHammerError::Other(format!(
-                "Invalid set variable format: '{}'. Use key=value format.",
+                "Invalid set variable format: '{}'. Expected 'key=value' format for liquid template variables. Example: --set author=John",
                 set_var
             )));
         }
@@ -268,8 +268,8 @@ async fn run_workflow_command(config: WorkflowCommandConfig) -> Result<()> {
 
     // Create workflow run
     let mut run = executor
-        .start_workflow(workflow)
-        .map_err(|e| SwissArmyHammerError::Other(format!("Failed to start workflow: {}", e)))?;
+        .start_workflow(workflow.clone())
+        .map_err(|e| SwissArmyHammerError::Other(format!("Failed to start workflow '{}': {}", workflow.name, e)))?;
 
     // Set initial variables
     run.context.extend(variables);
@@ -310,12 +310,12 @@ async fn run_workflow_command(config: WorkflowCommandConfig) -> Result<()> {
         tokio::select! {
             result = execute_workflow_with_progress(&mut executor, &mut run, config.interactive) => result,
             _ = timeout(timeout_duration, future::pending::<()>()) => {
-                println!("⏰ Workflow execution timed out");
+                tracing::warn!("Workflow execution timed out");
                 run.status = WorkflowRunStatus::Cancelled;
                 Ok(())
             },
             _ = shutdown_rx.recv() => {
-                println!("\n🛑 Workflow execution interrupted");
+                tracing::info!("Workflow execution interrupted by user");
                 run.status = WorkflowRunStatus::Cancelled;
                 Ok(())
             }
@@ -324,7 +324,7 @@ async fn run_workflow_command(config: WorkflowCommandConfig) -> Result<()> {
         tokio::select! {
             result = execute_workflow_with_progress(&mut executor, &mut run, config.interactive) => result,
             _ = shutdown_rx.recv() => {
-                println!("\n🛑 Workflow execution interrupted");
+                tracing::info!("Workflow execution interrupted by user");
                 run.status = WorkflowRunStatus::Cancelled;
                 Ok(())
             }
@@ -422,12 +422,12 @@ async fn resume_workflow_command(
         tokio::select! {
             result = execute_workflow_with_progress(&mut executor, &mut run, interactive) => result,
             _ = timeout(timeout_duration, future::pending::<()>()) => {
-                println!("⏰ Workflow execution timed out");
+                tracing::warn!("Workflow execution timed out");
                 run.status = WorkflowRunStatus::Cancelled;
                 Ok(())
             },
             _ = shutdown_rx.recv() => {
-                println!("\n🛑 Workflow execution interrupted");
+                tracing::info!("Workflow execution interrupted by user");
                 run.status = WorkflowRunStatus::Cancelled;
                 Ok(())
             }
@@ -436,7 +436,7 @@ async fn resume_workflow_command(
         tokio::select! {
             result = execute_workflow_with_progress(&mut executor, &mut run, interactive) => result,
             _ = shutdown_rx.recv() => {
-                println!("\n🛑 Workflow execution interrupted");
+                tracing::info!("Workflow execution interrupted by user");
                 run.status = WorkflowRunStatus::Cancelled;
                 Ok(())
             }
@@ -449,20 +449,20 @@ async fn resume_workflow_command(
     match execution_result {
         Ok(_) => match run.status {
             WorkflowRunStatus::Completed => {
-                println!("✅ Workflow resumed and completed successfully");
+                tracing::info!("✅ Workflow resumed and completed successfully");
             }
             WorkflowRunStatus::Failed => {
-                println!("❌ Workflow resumed but failed");
+                tracing::error!("❌ Workflow resumed but failed");
             }
             WorkflowRunStatus::Cancelled => {
-                println!("🚫 Workflow resumed but was cancelled");
+                tracing::warn!("🚫 Workflow resumed but was cancelled");
             }
             _ => {
-                println!("⏸️  Workflow resumed and paused");
+                tracing::info!("⏸️  Workflow resumed and paused");
             }
         },
         Err(e) => {
-            println!("❌ Workflow resume failed: {}", e);
+            tracing::error!("❌ Workflow resume failed: {}", e);
             run.fail();
             storage.store_run(&run)?;
         }
@@ -666,7 +666,7 @@ async fn status_workflow_command(run_id: String, format: OutputFormat, watch: bo
                     }
                 }
                 Err(e) => {
-                    println!("❌ Error getting run status: {}", e);
+                    tracing::error!("Error getting run status: {}", e);
                     break;
                 }
             }
@@ -756,7 +756,7 @@ async fn execute_workflow_with_progress(
 
             // Execute single step
             executor.execute_state(run).await.map_err(|e| {
-                SwissArmyHammerError::Other(format!("Failed to execute state: {}", e))
+                SwissArmyHammerError::Other(format!("Failed to execute state '{}': {}", run.current_state, e))
             })?;
 
             println!("✅ Step completed");
@@ -768,7 +768,7 @@ async fn execute_workflow_with_progress(
     } else {
         // Non-interactive execution
         executor.execute_state(run).await.map_err(|e| {
-            SwissArmyHammerError::Other(format!("Failed to execute workflow: {}", e))
+            SwissArmyHammerError::Other(format!("Failed to execute workflow '{}' at state '{}': {}", run.workflow.name, run.current_state, e))
         })?;
     }
 
@@ -865,7 +865,7 @@ fn parse_duration(s: &str) -> Result<Duration> {
     let s = s.trim();
     if s.is_empty() {
         return Err(SwissArmyHammerError::Other(
-            "Empty duration string".to_string(),
+            "Empty duration string. Expected format: 30s, 5m, or 1h".to_string(),
         ));
     }
 
@@ -880,7 +880,7 @@ fn parse_duration(s: &str) -> Result<Duration> {
     };
 
     let value: u64 = value_str.parse().map_err(|_| {
-        SwissArmyHammerError::Other(format!("Invalid duration value: {}", value_str))
+        SwissArmyHammerError::Other(format!("Invalid duration value: '{}'. Expected a positive number", value_str))
     })?;
 
     let duration = match unit {
@@ -889,7 +889,7 @@ fn parse_duration(s: &str) -> Result<Duration> {
         "h" => Duration::from_secs(value * 3600),
         _ => {
             return Err(SwissArmyHammerError::Other(format!(
-                "Invalid duration unit: {}",
+                "Invalid duration unit: '{}'. Supported units: s (seconds), m (minutes), h (hours)",
                 unit
             )))
         }
@@ -900,7 +900,7 @@ fn parse_duration(s: &str) -> Result<Duration> {
 
 /// Helper to parse WorkflowRunId from string
 fn parse_workflow_run_id(s: &str) -> Result<WorkflowRunId> {
-    WorkflowRunId::parse(s).map_err(SwissArmyHammerError::Other)
+    WorkflowRunId::parse(s).map_err(|e| SwissArmyHammerError::Other(format!("Invalid workflow run ID '{}': {}", s, e)))
 }
 
 /// Helper to convert WorkflowRunId to string
@@ -1221,7 +1221,7 @@ async fn execute_workflow_test_mode(
         .unwrap_or(false)
     {
         if start_time.elapsed() > timeout {
-            println!("⏰ Test execution timed out");
+            tracing::warn!("Test execution timed out after {:?}", timeout);
             break;
         }
 
@@ -1233,7 +1233,7 @@ async fn execute_workflow_test_mode(
             .collect();
 
         if available_transitions.is_empty() {
-            println!("⚠️  No transitions from state: {}", current_state);
+            tracing::warn!("No transitions available from state: {}", current_state);
             break;
         }
 
@@ -1258,7 +1258,7 @@ async fn execute_workflow_test_mode(
             {
                 // Mock action execution
                 if let Some(action) = &transition.action {
-                    println!("🎭 Mock executing: {}", action);
+                    tracing::debug!("Mock executing action: {}", action);
                     // Set mock result in context
                     run.context.insert(
                         "result".to_string(),
@@ -1270,7 +1270,7 @@ async fn execute_workflow_test_mode(
                 }
 
                 // Take the transition
-                println!("➡️  {}", transition_key);
+                tracing::debug!("Taking transition: {}", transition_key);
                 coverage.visited_transitions.insert(transition_key);
                 coverage.visited_states.insert(transition.to_state.clone());
                 current_state = transition.to_state.clone();
@@ -1281,8 +1281,8 @@ async fn execute_workflow_test_mode(
 
         if !transition_taken {
             // All transitions have been visited or conditions not met
-            println!(
-                "🔚 All transitions from {} have been explored",
+            tracing::debug!(
+                "All transitions from {} have been explored",
                 current_state
             );
             break;

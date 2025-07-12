@@ -58,6 +58,8 @@ impl TestRunner {
         let set_variables = self.parse_arguments(&config.set)?;
         if !set_variables.is_empty() {
             // Add set variables to the args map for liquid rendering
+            // NOTE: --set variables take precedence over prompt arguments with the same name
+            // This allows users to override default argument values using template variables
             args.extend(set_variables);
         }
 

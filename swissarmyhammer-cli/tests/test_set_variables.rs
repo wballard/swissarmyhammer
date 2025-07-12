@@ -126,7 +126,7 @@ stateDiagram-v2
     cmd.assert()
         .failure()
         .stderr(predicate::str::contains("Invalid set variable format"))
-        .stderr(predicate::str::contains("Use key=value format"));
+        .stderr(predicate::str::contains("key=value"));
 }
 
 #[test]
@@ -455,4 +455,289 @@ stateDiagram-v2
     cmd.assert()
         .success()
         .stderr(predicate::str::contains("User input:"));
+}
+
+#[test]
+fn test_workflow_with_empty_set_value() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create .swissarmyhammer/workflows directory
+    let workflow_dir = temp_dir.path().join(".swissarmyhammer").join("workflows");
+    fs::create_dir_all(&workflow_dir).unwrap();
+    
+    // Create workflow that uses template variables
+    let workflow_path = workflow_dir.join("empty-value-test.md");
+    fs::write(
+        &workflow_path,
+        r#"---
+title: Empty Value Test
+description: Tests behavior with empty set values
+version: 1.0.0
+---
+
+```mermaid
+stateDiagram-v2
+    [*] --> test
+    test --> [*]
+```
+
+## Actions
+
+- test: Log "Name: '{{ name }}', Description: '{{ description | default: 'No description' }}'"
+"#,
+    )
+    .unwrap();
+    
+    // Run workflow with empty set value
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("flow")
+        .arg("run")
+        .arg("empty-value-test")
+        .arg("--set")
+        .arg("name=")
+        .arg("--set")
+        .arg("description=")
+        .current_dir(&temp_dir);
+    
+    // Empty values should be accepted and rendered as empty strings
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Name: '', Description: 'No description'"));
+}
+
+#[test]
+fn test_workflow_with_special_chars_in_set_values() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create .swissarmyhammer/workflows directory
+    let workflow_dir = temp_dir.path().join(".swissarmyhammer").join("workflows");
+    fs::create_dir_all(&workflow_dir).unwrap();
+    
+    // Create workflow that uses template variables
+    let workflow_path = workflow_dir.join("special-chars-test.md");
+    fs::write(
+        &workflow_path,
+        r#"---
+title: Special Characters Test
+description: Tests behavior with special characters in set values
+version: 1.0.0
+---
+
+```mermaid
+stateDiagram-v2
+    [*] --> test
+    test --> [*]
+```
+
+## Actions
+
+- test: Log "Message: {{ message }}"
+"#,
+    )
+    .unwrap();
+    
+    // Run workflow with special characters
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("flow")
+        .arg("run")
+        .arg("special-chars-test")
+        .arg("--set")
+        .arg("message=Hello World! @#$%^&*()")
+        .current_dir(&temp_dir);
+    
+    cmd.assert()
+        .success();
+    
+    // Test with spaces and quotes
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("flow")
+        .arg("run")
+        .arg("special-chars-test")
+        .arg("--set")
+        .arg("message=Test with 'single' and \"double\" quotes")
+        .current_dir(&temp_dir);
+    
+    cmd.assert()
+        .success();
+}
+
+#[test]
+fn test_workflow_with_conflicting_set_and_var_names() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create .swissarmyhammer/workflows directory
+    let workflow_dir = temp_dir.path().join(".swissarmyhammer").join("workflows");
+    fs::create_dir_all(&workflow_dir).unwrap();
+    
+    // Create workflow that uses both context and template variables
+    let workflow_path = workflow_dir.join("conflict-test.md");
+    fs::write(
+        &workflow_path,
+        r#"---
+title: Variable Conflict Test
+description: Tests precedence when --set and --var have same names
+version: 1.0.0
+---
+
+```mermaid
+stateDiagram-v2
+    [*] --> test
+    test --> [*]
+```
+
+## Actions
+
+- test: Log "Value from template: {{ value }}"
+"#,
+    )
+    .unwrap();
+    
+    // Run workflow with conflicting names
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("flow")
+        .arg("run")
+        .arg("conflict-test")
+        .arg("--var")
+        .arg("value=from_var")
+        .arg("--set")
+        .arg("value=from_set")
+        .current_dir(&temp_dir);
+    
+    // --set should take precedence over --var for template rendering
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Value from template: from_set"));
+}
+
+#[test]
+fn test_workflow_with_equals_sign_in_set_value() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create .swissarmyhammer/workflows directory
+    let workflow_dir = temp_dir.path().join(".swissarmyhammer").join("workflows");
+    fs::create_dir_all(&workflow_dir).unwrap();
+    
+    // Create workflow
+    let workflow_path = workflow_dir.join("equals-test.md");
+    fs::write(
+        &workflow_path,
+        r#"---
+title: Equals Sign Test
+description: Tests values containing equals signs
+version: 1.0.0
+---
+
+```mermaid
+stateDiagram-v2
+    [*] --> test
+    test --> [*]
+```
+
+## Actions
+
+- test: Log "Formula: {{ formula }}"
+"#,
+    )
+    .unwrap();
+    
+    // Run workflow with equals sign in value
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("flow")
+        .arg("run")
+        .arg("equals-test")
+        .arg("--set")
+        .arg("formula=x=y+z")
+        .current_dir(&temp_dir);
+    
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("Formula: x=y+z"));
+}
+
+#[test]
+fn test_prompt_test_with_empty_set_value() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create prompt directory
+    let prompt_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
+    fs::create_dir_all(&prompt_dir).unwrap();
+    
+    // Create test prompt
+    let prompt_path = prompt_dir.join("empty-test.md");
+    fs::write(
+        &prompt_path,
+        r#"---
+title: Empty Test Prompt
+description: Tests empty set values
+arguments:
+  - name: content
+    required: true
+---
+
+Content: {{ content }}
+Author: {{ author | default: "Anonymous" }}
+Version: {{ version | default: "1.0" }}
+"#,
+    )
+    .unwrap();
+    
+    // Test with empty set value
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("prompt")
+        .arg("test")
+        .arg("empty-test")
+        .arg("--arg")
+        .arg("content=Main content")
+        .arg("--set")
+        .arg("author=")
+        .arg("--set")
+        .arg("version=")
+        .current_dir(&temp_dir);
+    
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Content: Main content"))
+        .stdout(predicate::str::contains("Author: "))
+        .stdout(predicate::str::contains("Version: "));
+}
+
+#[test]
+fn test_prompt_test_with_set_overriding_arg() {
+    let temp_dir = TempDir::new().unwrap();
+    
+    // Create prompt directory
+    let prompt_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
+    fs::create_dir_all(&prompt_dir).unwrap();
+    
+    // Create test prompt
+    let prompt_path = prompt_dir.join("override-test.md");
+    fs::write(
+        &prompt_path,
+        r#"---
+title: Override Test Prompt
+description: Tests set overriding arg
+arguments:
+  - name: message
+    required: true
+---
+
+Message: {{ message }}
+"#,
+    )
+    .unwrap();
+    
+    // Test with --set overriding --arg
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.arg("prompt")
+        .arg("test")
+        .arg("override-test")
+        .arg("--arg")
+        .arg("message=Original message")
+        .arg("--set")
+        .arg("message=Overridden message")
+        .current_dir(&temp_dir);
+    
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Message: Overridden message"));
 }

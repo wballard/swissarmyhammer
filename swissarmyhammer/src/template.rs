@@ -180,26 +180,68 @@ impl liquid::partials::PartialSource for PromptPartialSource {
     }
 }
 
+/// Compiled regex patterns for template variable extraction
+struct TemplateVariableExtractor {
+    variable_re: regex::Regex,
+    tag_re: regex::Regex,
+}
+
+impl TemplateVariableExtractor {
+    fn new() -> Self {
+        Self {
+            // Match {{ variable }}, {{ variable.property }}, {{ variable | filter }}, etc.
+            variable_re: regex::Regex::new(r"\{\{\s*(\w+)(?:\.\w+)*\s*(?:\|[^\}]+)?\}\}")
+                .expect("Failed to compile variable regex"),
+            // Check for variables in {% if %}, {% unless %}, {% for %} tags
+            tag_re: regex::Regex::new(r"\{%\s*(?:if|unless|for\s+\w+\s+in)\s+(\w+)")
+                .expect("Failed to compile tag regex"),
+        }
+    }
+
+    fn extract(&self, template: &str) -> Vec<String> {
+        let mut variables = std::collections::HashSet::new();
+
+        for cap in self.variable_re.captures_iter(template) {
+            variables.insert(cap[1].to_string());
+        }
+
+        for cap in self.tag_re.captures_iter(template) {
+            variables.insert(cap[1].to_string());
+        }
+
+        variables.into_iter().collect()
+    }
+}
+
 /// Extract all variable names from a liquid template
 fn extract_template_variables(template: &str) -> Vec<String> {
-    // Match {{ variable }}, {{ variable.property }}, {{ variable | filter }}, etc.
-    let re = regex::Regex::new(r"\{\{\s*(\w+)(?:\.\w+)*\s*(?:\|[^\}]+)?\}\}").unwrap();
-    let mut variables = std::collections::HashSet::new();
-    
-    for cap in re.captures_iter(template) {
-        variables.insert(cap[1].to_string());
+    // Use thread_local to ensure the regex is compiled only once per thread
+    thread_local! {
+        static EXTRACTOR: TemplateVariableExtractor = TemplateVariableExtractor::new();
     }
-    
-    // Also check for variables in {% if %}, {% unless %}, {% for %} tags
-    let tag_re = regex::Regex::new(r"\{%\s*(?:if|unless|for\s+\w+\s+in)\s+(\w+)").unwrap();
-    for cap in tag_re.captures_iter(template) {
-        variables.insert(cap[1].to_string());
-    }
-    
-    variables.into_iter().collect()
+
+    EXTRACTOR.with(|extractor| extractor.extract(template))
 }
 
 /// Template wrapper for Liquid templates
+///
+/// # Security
+///
+/// Liquid templates are safely sandboxed and cannot execute arbitrary code. The template
+/// engine only supports:
+/// - Variable substitution with filters
+/// - Control flow (if/unless/for loops)
+/// - Text manipulation through built-in filters
+///
+/// Templates cannot:
+/// - Execute system commands
+/// - Access the file system
+/// - Make network requests
+/// - Execute arbitrary code or scripts
+/// - Access environment variables (unless explicitly passed as template variables)
+///
+/// All template variables must be explicitly provided through the `render` method,
+/// ensuring complete control over what data is accessible to templates.
 pub struct Template {
     parser: Parser,
     template_str: String,
@@ -243,13 +285,13 @@ impl Template {
             .map_err(|e| SwissArmyHammerError::Template(e.to_string()))?;
 
         let mut object = Object::new();
-        
+
         // First, initialize all template variables as nil so filters like | default work
         let variables = extract_template_variables(&self.template_str);
         for var in variables {
             object.insert(var.into(), liquid::model::Value::Nil);
         }
-        
+
         // Then override with provided values
         for (key, value) in args {
             object.insert(
@@ -498,7 +540,7 @@ mod tests {
         // Test the extract_template_variables function
         let template = "Hello {{ name }}, you have {{ count }} messages in {{ language | default: 'English' }}";
         let vars = extract_template_variables(template);
-        
+
         assert!(vars.contains(&"name".to_string()));
         assert!(vars.contains(&"count".to_string()));
         assert!(vars.contains(&"language".to_string()));
@@ -508,11 +550,96 @@ mod tests {
     #[test]
     fn test_extract_template_variables_with_conditionals() {
         // Test extraction from conditional tags
-        let template = "{% if premium %}Premium user{% endif %} {% unless disabled %}Active{% endunless %}";
+        let template =
+            "{% if premium %}Premium user{% endif %} {% unless disabled %}Active{% endunless %}";
         let vars = extract_template_variables(template);
-        
+
         assert!(vars.contains(&"premium".to_string()));
         assert!(vars.contains(&"disabled".to_string()));
         assert_eq!(vars.len(), 2);
+    }
+
+    #[test]
+    fn test_extract_template_variables_whitespace_variations() {
+        // Test whitespace variations in liquid templates
+        let templates = vec![
+            "{{name}}",
+            "{{ name }}",
+            "{{  name  }}",
+            "{{\tname\t}}",
+            "{{ name}}",
+            "{{name }}",
+        ];
+
+        for template in templates {
+            let vars = extract_template_variables(template);
+            assert!(
+                vars.contains(&"name".to_string()),
+                "Failed for template: {}",
+                template
+            );
+            assert_eq!(vars.len(), 1, "Failed for template: {}", template);
+        }
+    }
+
+    #[test]
+    fn test_extract_template_variables_unicode() {
+        // Test unicode characters in variable names
+        // Note: Rust regex \w matches Unicode word characters by default
+        let template = "Hello {{ café }}, {{ 用户名 }}, {{ user_name }}";
+        let vars = extract_template_variables(template);
+
+        // All three are valid variable names in Liquid/Rust regex
+        assert!(vars.contains(&"café".to_string()));
+        assert!(vars.contains(&"用户名".to_string()));
+        assert!(vars.contains(&"user_name".to_string()));
+        assert_eq!(vars.len(), 3);
+    }
+
+    #[test]
+    fn test_extract_template_variables_long_names() {
+        // Test very long template variable names
+        let long_var_name = "a".repeat(100);
+        let template = format!("Hello {{{{ {} }}}}", long_var_name);
+        let vars = extract_template_variables(&template);
+
+        assert!(vars.contains(&long_var_name));
+        assert_eq!(vars.len(), 1);
+    }
+
+    #[test]
+    fn test_extract_template_variables_no_recursive_parsing() {
+        // Test handling of nested/malformed template syntax
+        let template = "{{ {{ inner }} }} and {{ var_{{ suffix }} }}";
+        let vars = extract_template_variables(template);
+
+        // The regex will find "inner" and "suffix" as they appear within {{ }}
+        // even though the overall syntax is malformed
+        assert!(vars.contains(&"inner".to_string()));
+        assert!(vars.contains(&"suffix".to_string()));
+        assert_eq!(vars.len(), 2);
+    }
+
+    #[test]
+    fn test_extract_template_variables_duplicates() {
+        // Test that duplicate variables are only counted once
+        let template = "{{ name }} says hello to {{ name }} and {{ name }}";
+        let vars = extract_template_variables(template);
+
+        assert!(vars.contains(&"name".to_string()));
+        assert_eq!(vars.len(), 1);
+    }
+
+    #[test]
+    fn test_extract_template_variables_for_loops() {
+        // Test extraction from for loops
+        let template = "{% for item in items %}{{ item.name }}{% endfor %} {% for product in products %}{{ product }}{% endfor %}";
+        let vars = extract_template_variables(template);
+
+        assert!(vars.contains(&"items".to_string()));
+        assert!(vars.contains(&"item".to_string()));
+        assert!(vars.contains(&"products".to_string()));
+        assert!(vars.contains(&"product".to_string()));
+        assert_eq!(vars.len(), 4);
     }
 }

@@ -51,25 +51,30 @@ impl WorkflowResolver {
             if file.path.extension().and_then(|s| s.to_str()) == Some("md") {
                 // Extract the workflow name without extension
                 let workflow_name = file.name.strip_suffix(".md").unwrap_or(&file.name);
-                
+
                 // Parse frontmatter to extract metadata
                 let (metadata, _) = self.parse_front_matter(&file.content)?;
-                
+
                 // Extract title and description from metadata
                 let title = metadata
                     .as_ref()
                     .and_then(|m| m.get("title"))
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
-                    
+
                 let description = metadata
                     .as_ref()
                     .and_then(|m| m.get("description"))
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
-                
+
                 // Use the new parse_with_metadata function
-                if let Ok(workflow) = MermaidParser::parse_with_metadata(&file.content, workflow_name, title, description) {
+                if let Ok(workflow) = MermaidParser::parse_with_metadata(
+                    &file.content,
+                    workflow_name,
+                    title,
+                    description,
+                ) {
                     // Track the workflow source
                     self.workflow_sources
                         .insert(workflow.name.clone(), file.source.clone());
@@ -102,7 +107,7 @@ impl WorkflowResolver {
             if parts.len() >= 3 {
                 let yaml_content = parts[1];
                 let remaining = parts[2].trim_start().to_string();
-                
+
                 let metadata: serde_yaml::Value = serde_yaml::from_str(yaml_content)?;
                 return Ok((Some(metadata), remaining));
             }

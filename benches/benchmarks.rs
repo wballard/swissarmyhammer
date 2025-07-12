@@ -165,10 +165,7 @@ fn benchmark_workflow_execution(c: &mut Criterion) {
         b.iter(|| {
             let mut executor = WorkflowExecutor::new();
             let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                executor
-                    .start_workflow(black_box(simple_workflow.clone()))
-            })
+            rt.block_on(async { executor.start_workflow(black_box(simple_workflow.clone())) })
         });
     });
 
@@ -176,10 +173,7 @@ fn benchmark_workflow_execution(c: &mut Criterion) {
         b.iter(|| {
             let mut executor = WorkflowExecutor::new();
             let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                executor
-                    .start_workflow(black_box(complex_workflow.clone()))
-            })
+            rt.block_on(async { executor.start_workflow(black_box(complex_workflow.clone())) })
         });
     });
 }

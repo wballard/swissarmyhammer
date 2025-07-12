@@ -313,7 +313,11 @@ impl MermaidParser {
         // Find initial state - look for [*] as source in transitions
         let initial_state_id = Self::find_initial_state(&state_diagram.transitions)?;
 
-        let mut workflow = Workflow::new(workflow_name, workflow_description, initial_state_id.clone());
+        let mut workflow = Workflow::new(
+            workflow_name,
+            workflow_description,
+            initial_state_id.clone(),
+        );
 
         // Convert all states from mermaid to our format
         for (state_id, mermaid_state) in state_diagram.states {
@@ -397,7 +401,7 @@ impl MermaidParser {
             "version".to_string(),
             format!("{:?}", state_diagram.version),
         );
-        
+
         // Store the title in metadata if provided
         if let Some(title) = title {
             workflow.metadata.insert("title".to_string(), title);

@@ -8,9 +8,9 @@ use std::future;
 use std::io::{self, Write};
 use std::time::Duration;
 use swissarmyhammer::workflow::{
-    ExecutionVisualizer, MemoryWorkflowStorage, StateId, TransitionKey, Workflow,
-    WorkflowExecutor, WorkflowName, WorkflowResolver, WorkflowRunId, WorkflowRunStatus,
-    WorkflowStorage, WorkflowStorageBackend,
+    ExecutionVisualizer, MemoryWorkflowStorage, StateId, TransitionKey, Workflow, WorkflowExecutor,
+    WorkflowName, WorkflowResolver, WorkflowRunId, WorkflowRunStatus, WorkflowStorage,
+    WorkflowStorageBackend,
 };
 use swissarmyhammer::{Result, SwissArmyHammerError};
 use tokio::signal;
@@ -460,13 +460,13 @@ async fn list_workflows_command(
     let mut storage = MemoryWorkflowStorage::new();
     let mut resolver = WorkflowResolver::new();
     resolver.load_all_workflows(&mut storage)?;
-    
+
     // Get all workflows
     let all_workflows = storage.list_workflows()?;
-    
+
     // Collect workflow information
     let mut workflow_infos = Vec::new();
-    
+
     for workflow in all_workflows {
         // Get the source from the resolver
         let workflow_source = match resolver.workflow_sources.get(&workflow.name) {
@@ -476,17 +476,17 @@ async fn list_workflows_command(
             Some(swissarmyhammer::FileSource::Dynamic) => PromptSource::Dynamic,
             None => PromptSource::Dynamic,
         };
-        
+
         // Apply source filter
         if let Some(ref filter) = source_filter {
             if filter != &workflow_source && filter != &PromptSource::Dynamic {
                 continue;
             }
         }
-        
+
         workflow_infos.push((workflow, workflow_source));
     }
-    
+
     // Sort by name for consistent output
     workflow_infos.sort_by(|a, b| a.0.name.as_str().cmp(b.0.name.as_str()));
 
@@ -510,7 +510,10 @@ async fn list_workflows_command(
 }
 
 /// Display workflows in table format with color coding
-fn display_workflows_table(workflow_infos: &[(Workflow, PromptSource)], verbose: bool) -> Result<()> {
+fn display_workflows_table(
+    workflow_infos: &[(Workflow, PromptSource)],
+    verbose: bool,
+) -> Result<()> {
     let mut stdout = io::stdout();
     let is_tty = stdout.is_terminal();
     display_workflows_to_writer(workflow_infos, verbose, &mut stdout, is_tty)
@@ -531,9 +534,11 @@ fn display_workflows_to_writer<W: Write>(
     for (workflow, source) in workflow_infos {
         let name = workflow.name.as_str();
         let description = &workflow.description;
-        
+
         // Extract title from metadata, or use a formatted version of the name
-        let title = workflow.metadata.get("title")
+        let title = workflow
+            .metadata
+            .get("title")
             .map(|s| s.to_string())
             .unwrap_or_else(|| {
                 // Fallback: convert workflow name to a readable title
@@ -551,22 +556,17 @@ fn display_workflows_to_writer<W: Write>(
                     .collect::<Vec<_>>()
                     .join(" ")
             });
-        
+
         // Color code based on source, matching prompt list
         let first_line = if is_tty {
             let (name_colored, title_colored) = match source {
-                PromptSource::Builtin => (
-                    name.green().bold().to_string(),
-                    title.green().to_string(),
-                ),
-                PromptSource::User => (
-                    name.blue().bold().to_string(),
-                    title.blue().to_string(),
-                ),
-                PromptSource::Local => (
-                    name.yellow().bold().to_string(),
-                    title.yellow().to_string(),
-                ),
+                PromptSource::Builtin => {
+                    (name.green().bold().to_string(), title.green().to_string())
+                }
+                PromptSource::User => (name.blue().bold().to_string(), title.blue().to_string()),
+                PromptSource::Local => {
+                    (name.yellow().bold().to_string(), title.yellow().to_string())
+                }
                 PromptSource::Dynamic => (
                     name.magenta().bold().to_string(),
                     title.magenta().to_string(),
@@ -576,26 +576,28 @@ fn display_workflows_to_writer<W: Write>(
         } else {
             format!("{} | {}", name, title)
         };
-        
+
         writeln!(writer, "{}", first_line)?;
-        
+
         // Second line: Full description (indented)
         if !description.is_empty() {
             writeln!(writer, "  {}", description)?;
         } else {
             writeln!(writer, "  (no description)")?;
         }
-        
+
         // Add verbose information if requested
         if verbose {
             let terminal_count = workflow.states.values().filter(|s| s.is_terminal).count();
-            writeln!(writer, "  States: {}, Terminal: {}, Transitions: {}", 
-                workflow.states.len(), 
-                terminal_count, 
+            writeln!(
+                writer,
+                "  States: {}, Terminal: {}, Transitions: {}",
+                workflow.states.len(),
+                terminal_count,
                 workflow.transitions.len()
             )?;
         }
-        
+
         writeln!(writer)?; // Empty line between entries
     }
 
@@ -603,8 +605,16 @@ fn display_workflows_to_writer<W: Write>(
     if is_tty && !workflow_infos.is_empty() {
         writeln!(writer, "{}", "Legend:".bright_white())?;
         writeln!(writer, "  {} Built-in workflows", "●".green())?;
-        writeln!(writer, "  {} User workflows (~/.swissarmyhammer/workflows/)", "●".blue())?;
-        writeln!(writer, "  {} Local workflows (./.swissarmyhammer/workflows/)", "●".yellow())?;
+        writeln!(
+            writer,
+            "  {} User workflows (~/.swissarmyhammer/workflows/)",
+            "●".blue()
+        )?;
+        writeln!(
+            writer,
+            "  {} Local workflows (./.swissarmyhammer/workflows/)",
+            "●".yellow()
+        )?;
         writeln!(writer, "  {} Dynamic workflows", "●".magenta())?;
     }
 

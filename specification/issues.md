@@ -1,12 +1,12 @@
 # Overview
 
-Track issues directly in the repository, storying them in git, with an MCP server.
+Track issues directly in the repository, storing them in as files in git, with an MCP server.
 
 ## Rules
 
 Issues are individual markdown files stored in the root of a repository in `./issues`.
 
-Each Issue Describes work to be done in markdown.
+Each Issue describes work to be done in markdown.
 
 When issues are completed, they are moved to `./issues/complete`.
 
@@ -21,6 +21,8 @@ When a new issue is created, it need to start with the next highest number so th
 As a User, I want to be able to create an issue from the swissarmyhammer command line.
 
 As an LLM, I want to be able to create an issue using an MCP tool.
+
+As an LLM, when a user reports and issue, I want to record it as an issue for later.
 
 ### Complete
 

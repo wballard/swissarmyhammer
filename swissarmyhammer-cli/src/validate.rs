@@ -3,12 +3,12 @@ use colored::*;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use swissarmyhammer::security::validate_workflow_complexity;
+#[cfg(test)]
+use swissarmyhammer::workflow::MermaidParser;
 use swissarmyhammer::workflow::{
     MemoryWorkflowStorage, Workflow, WorkflowGraphAnalyzer, WorkflowResolver,
     WorkflowStorageBackend,
 };
-#[cfg(test)]
-use swissarmyhammer::workflow::MermaidParser;
 
 use crate::cli::ValidateFormat;
 use crate::exit_codes::{EXIT_ERROR, EXIT_SUCCESS, EXIT_WARNING};
@@ -282,19 +282,21 @@ impl Validator {
         // Use WorkflowResolver to load workflows from standard locations
         let mut storage = MemoryWorkflowStorage::new();
         let mut resolver = WorkflowResolver::new();
-        
+
         // Load all workflows using the same logic as flow list
-        resolver.load_all_workflows(&mut storage)
+        resolver
+            .load_all_workflows(&mut storage)
             .context("Failed to load workflows from standard locations (builtin, user, local)")?;
-        
+
         // Get all loaded workflows
-        let workflows = storage.list_workflows()
+        let workflows = storage
+            .list_workflows()
             .context("Failed to retrieve loaded workflows from storage")?;
-        
+
         // Validate each workflow
         for workflow in workflows {
             result.files_checked += 1;
-            
+
             // Get the source location for better error reporting
             let source_location = match resolver.workflow_sources.get(&workflow.name) {
                 Some(swissarmyhammer::FileSource::Builtin) => "builtin",
@@ -303,10 +305,14 @@ impl Validator {
                 Some(swissarmyhammer::FileSource::Dynamic) => "dynamic",
                 None => "unknown",
             };
-            
+
             // Create a path that includes the source location for better debugging
-            let workflow_path = PathBuf::from(format!("workflow:{}:{}", source_location, workflow.name.as_str()));
-            
+            let workflow_path = PathBuf::from(format!(
+                "workflow:{}:{}",
+                source_location,
+                workflow.name.as_str()
+            ));
+
             // Validate the workflow structure directly
             self.validate_workflow_structure(&workflow, &workflow_path, result)?;
         }
@@ -342,9 +348,12 @@ impl Validator {
             });
             return Ok(());
         }
-        
+
         // Check for invalid characters in workflow name
-        if !workflow_name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        if !workflow_name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        {
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Error,
                 file_path: workflow_path.to_path_buf(),
@@ -356,7 +365,7 @@ impl Validator {
             });
             return Ok(());
         }
-        
+
         // Check workflow complexity to prevent DoS
         if let Err(e) =
             validate_workflow_complexity(workflow.states.len(), workflow.transitions.len())
@@ -1091,10 +1100,7 @@ impl Validator {
     }
 }
 
-pub fn run_validate_command(
-    quiet: bool,
-    format: ValidateFormat,
-) -> Result<i32> {
+pub fn run_validate_command(quiet: bool, format: ValidateFormat) -> Result<i32> {
     let mut validator = Validator::new(quiet);
 
     // Always validate all prompts and workflows from standard locations
@@ -1483,7 +1489,7 @@ mod tests {
         std::env::set_current_dir(original_dir).unwrap();
 
         assert!(validation_result.is_ok());
-        
+
         // The test workflow in non-standard location should NOT be validated
         // Only workflows from standard locations (builtin, user, local) should be validated
         // Note: In test environment, we may not have any workflows loaded, which is fine
@@ -1552,7 +1558,7 @@ stateDiagram-v2
         std::env::set_current_dir(original_dir).unwrap();
 
         assert!(validation_result.is_ok());
-        
+
         // Check that non-standard workflows were NOT validated by verifying
         // that only the standard workflow (if any) was processed
         // In a test environment, builtin workflows might also be loaded
@@ -1562,15 +1568,15 @@ stateDiagram-v2
     fn test_validate_command_loads_same_workflows_as_flow_list() {
         // This test ensures consistency between validate and flow list commands
         // Both should load workflows from the same standard locations
-        
+
         // Create a temporary test environment
         let temp_dir = tempfile::TempDir::new().unwrap();
         let current_dir = temp_dir.path();
-        
+
         // Create workflows in standard locations
         let local_dir = current_dir.join(".swissarmyhammer").join("workflows");
         std::fs::create_dir_all(&local_dir).unwrap();
-        
+
         // Create a valid workflow
         std::fs::write(
             local_dir.join("test-workflow.mermaid"),
@@ -1587,28 +1593,28 @@ stateDiagram-v2
 "#,
         )
         .unwrap();
-        
+
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(current_dir).unwrap();
-        
+
         // Run validation
         let mut validator = Validator::new(false);
         let mut validation_result = ValidationResult::new();
         let validate_res = validator.validate_all_workflows(&mut validation_result);
-        
+
         // Load workflows using WorkflowResolver (same as flow list)
         let mut storage = MemoryWorkflowStorage::new();
         let mut resolver = WorkflowResolver::new();
         let flow_res = resolver.load_all_workflows(&mut storage);
-        
+
         std::env::set_current_dir(original_dir).unwrap();
-        
+
         assert!(validate_res.is_ok());
         assert!(flow_res.is_ok());
-        
+
         // Both methods should find the same workflows
         let flow_workflows = storage.list_workflows().unwrap();
-        
+
         // The validation should have checked at least the workflows that flow list found
         // (validation might also check builtin workflows)
         assert!(validation_result.files_checked >= flow_workflows.len());
@@ -1637,12 +1643,12 @@ stateDiagram-v2
 
     #[test]
     fn test_validate_workflow_empty_name() {
-        use swissarmyhammer::workflow::{StateId, WorkflowName};
         use std::collections::HashMap;
-        
+        use swissarmyhammer::workflow::{StateId, WorkflowName};
+
         let mut validator = Validator::new(false);
         let mut result = ValidationResult::new();
-        
+
         // Create a workflow with empty name
         // Using from() to bypass validation and test the validator's handling
         let workflow = Workflow {
@@ -1653,10 +1659,12 @@ stateDiagram-v2
             initial_state: StateId::new("start"),
             metadata: HashMap::new(),
         };
-        
+
         let workflow_path = PathBuf::from("workflow:test:");
-        validator.validate_workflow_structure(&workflow, &workflow_path, &mut result).unwrap();
-        
+        validator
+            .validate_workflow_structure(&workflow, &workflow_path, &mut result)
+            .unwrap();
+
         assert!(result.has_errors());
         assert!(result
             .issues
@@ -1666,12 +1674,12 @@ stateDiagram-v2
 
     #[test]
     fn test_validate_workflow_invalid_name() {
-        use swissarmyhammer::workflow::{StateId, WorkflowName};
         use std::collections::HashMap;
-        
+        use swissarmyhammer::workflow::{StateId, WorkflowName};
+
         let mut validator = Validator::new(false);
         let mut result = ValidationResult::new();
-        
+
         // Create a workflow with invalid characters in name
         let workflow = Workflow {
             name: WorkflowName::from("test@workflow!"),
@@ -1681,24 +1689,27 @@ stateDiagram-v2
             initial_state: StateId::new("start"),
             metadata: HashMap::new(),
         };
-        
+
         let workflow_path = PathBuf::from("workflow:test:test@workflow!");
-        validator.validate_workflow_structure(&workflow, &workflow_path, &mut result).unwrap();
-        
+        validator
+            .validate_workflow_structure(&workflow, &workflow_path, &mut result)
+            .unwrap();
+
         assert!(result.has_errors());
         assert!(result
             .issues
             .iter()
-            .any(|issue| issue.message.contains("Invalid workflow name") && issue.message.contains("only alphanumeric")));
+            .any(|issue| issue.message.contains("Invalid workflow name")
+                && issue.message.contains("only alphanumeric")));
     }
 
     #[test]
     fn test_validate_workflow_path_traversal_attempts() {
-        use swissarmyhammer::workflow::{StateId, WorkflowName};
         use std::collections::HashMap;
-        
+        use swissarmyhammer::workflow::{StateId, WorkflowName};
+
         let mut validator = Validator::new(false);
-        
+
         // Test various path traversal attempts in workflow names
         let dangerous_names = vec![
             "../evil",
@@ -1709,10 +1720,10 @@ stateDiagram-v2
             "workflow\x00null",
             "workflow%2e%2e%2f",
         ];
-        
+
         for dangerous_name in dangerous_names {
             let mut result = ValidationResult::new();
-            
+
             let workflow = Workflow {
                 name: WorkflowName::from(dangerous_name),
                 description: "Test workflow".to_string(),
@@ -1721,16 +1732,25 @@ stateDiagram-v2
                 initial_state: StateId::new("start"),
                 metadata: HashMap::new(),
             };
-            
+
             let workflow_path = PathBuf::from(format!("workflow:test:{}", dangerous_name));
-            validator.validate_workflow_structure(&workflow, &workflow_path, &mut result).unwrap();
-            
-            assert!(result.has_errors(), "Should have error for dangerous name: {}", dangerous_name);
-            assert!(result
-                .issues
-                .iter()
-                .any(|issue| issue.message.contains("Invalid workflow name")),
-                "Should have invalid name error for: {}", dangerous_name);
+            validator
+                .validate_workflow_structure(&workflow, &workflow_path, &mut result)
+                .unwrap();
+
+            assert!(
+                result.has_errors(),
+                "Should have error for dangerous name: {}",
+                dangerous_name
+            );
+            assert!(
+                result
+                    .issues
+                    .iter()
+                    .any(|issue| issue.message.contains("Invalid workflow name")),
+                "Should have invalid name error for: {}",
+                dangerous_name
+            );
         }
     }
 
@@ -1946,7 +1966,7 @@ stateDiagram-v2
         // from standard locations (builtin, user ~/.swissarmyhammer/workflows, local ./.swissarmyhammer/workflows)
         // In a temp directory test environment, we might find the local workflow if the resolver
         // properly walks up to find .swissarmyhammer directories
-        
+
         // With the new implementation using WorkflowResolver, workflows are only loaded
         // from standard locations. In a test environment, it may load builtin workflows
         // but won't find the test workflows we created in the temp directory.

@@ -261,7 +261,7 @@ fn run_validate(quiet: bool, format: cli::ValidateFormat, workflow_dirs: Vec<Str
 
     // workflow_dirs parameter is kept for CLI compatibility but is ignored
     let _ = workflow_dirs;
-    
+
     match validate::run_validate_command(quiet, format) {
         Ok(exit_code) => exit_code,
         Err(e) => {

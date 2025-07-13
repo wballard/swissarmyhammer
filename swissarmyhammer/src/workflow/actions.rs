@@ -4,6 +4,7 @@
 //! including Claude integration, variable operations, and control flow actions.
 
 use crate::workflow::action_parser::ActionParser;
+use crate::workflow::{WorkflowExecutor, WorkflowName, WorkflowRunStatus, WorkflowStorage};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -874,90 +875,132 @@ impl Action for SubWorkflowAction {
         // Substitute variables in input
         let substituted_inputs = self.substitute_variables(context);
 
-        // Build arguments for the sub-workflow
-        let mut args = vec![
-            "--dangerously-skip-permissions".to_string(),
-            "--output-format".to_string(),
-            "stream-json".to_string(),
-            "flow".to_string(),
-            "run".to_string(),
-            self.workflow_name.clone(),
-        ];
+        // Validate input keys early
+        for (key, _) in &substituted_inputs {
+            if !is_valid_argument_key(key) {
+                return Err(ActionError::ParseError(
+                    format!("Invalid input variable key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
+                ));
+            }
+        }
 
         // Add workflow stack to track circular dependencies
         let mut new_stack = workflow_stack;
         new_stack.push(Value::String(self.workflow_name.clone()));
 
-        // Add input variables as arguments
-        for (key, value) in substituted_inputs {
-            if !is_valid_argument_key(&key) {
-                return Err(ActionError::ParseError(
-                    format!("Invalid input variable key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
-                ));
-            }
-            args.push("--var".to_string());
-            args.push(format!("{}={}", key, value));
-        }
+        // Execute the sub-workflow in-process
+        tracing::debug!("Executing sub-workflow '{}' in-process", self.workflow_name);
 
-        // Pass the workflow stack to the sub-workflow
-        args.push("--var".to_string());
-        args.push(format!(
-            "{}={}",
-            WORKFLOW_STACK_KEY,
-            serde_json::to_string(&new_stack).unwrap_or_default()
-        ));
-
-        // Execute the sub-workflow using the 'flow' command
-        let mut cmd = Command::new("swissarmyhammer");
-        for arg in args {
-            cmd.arg(arg);
-        }
-
-        cmd.stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .stdin(std::process::Stdio::null());
-
-        let child = cmd.spawn().map_err(|e| {
-            ActionError::ExecutionError(format!("Failed to spawn sub-workflow: {}", e))
+        // Create storage and load the workflow
+        let storage = WorkflowStorage::file_system().map_err(|e| {
+            ActionError::ExecutionError(format!("Failed to create workflow storage: {}", e))
         })?;
 
-        // Execute with timeout
-        let output = match timeout(self.timeout, child.wait_with_output()).await {
-            Ok(Ok(output)) => output,
-            Ok(Err(e)) => {
-                return Err(ActionError::ExecutionError(format!(
-                    "Failed to execute sub-workflow: {}",
-                    e
-                )))
-            }
-            Err(_) => {
-                return Err(ActionError::Timeout {
-                    timeout: self.timeout,
-                });
-            }
-        };
+        let workflow_name_typed = WorkflowName::new(&self.workflow_name);
+        let workflow = storage.get_workflow(&workflow_name_typed).map_err(|e| {
+            ActionError::ExecutionError(format!(
+                "Failed to load sub-workflow '{}': {}",
+                self.workflow_name, e
+            ))
+        })?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(ActionError::ExecutionError(format!(
-                "Sub-workflow '{}' failed: {}",
-                self.workflow_name, stderr
-            )));
+        // Create executor
+        let mut executor = WorkflowExecutor::new();
+
+        // Start the workflow
+        let mut run = executor.start_workflow(workflow).map_err(|e| {
+            ActionError::ExecutionError(format!(
+                "Failed to start sub-workflow '{}': {}",
+                self.workflow_name, e
+            ))
+        })?;
+
+        // Set up the context for the sub-workflow
+        // Copy the current context variables that should be inherited
+        let quiet = context
+            .get("_quiet")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let timeout_secs = context.get("_timeout_secs").and_then(|v| v.as_u64());
+
+        // Add input variables
+        for (key, value) in substituted_inputs {
+            run.context.insert(key, Value::String(value));
         }
 
-        // Parse the output
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let result = parse_workflow_output(&stdout)?;
+        // Add workflow stack to the sub-workflow context
+        run.context
+            .insert(WORKFLOW_STACK_KEY.to_string(), Value::Array(new_stack));
 
-        // Store result in context if variable name specified
-        if let Some(var_name) = &self.result_variable {
-            context.insert(var_name.clone(), result.clone());
+        // Copy special variables
+        if quiet {
+            run.context.insert("_quiet".to_string(), Value::Bool(true));
         }
 
-        // Mark action as successful
-        context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
+        if let Some(timeout_secs) = timeout_secs {
+            run.context.insert(
+                "_timeout_secs".to_string(),
+                Value::Number(serde_json::Number::from(timeout_secs)),
+            );
+        }
 
-        Ok(result)
+        // Execute the workflow with timeout
+        let execution_future = executor.execute_state(&mut run);
+
+        let _result = match timeout(self.timeout, execution_future).await {
+            Ok(Ok(_)) => {
+                // Workflow executed successfully
+                tracing::debug!(
+                    "Sub-workflow '{}' completed with status: {:?}",
+                    self.workflow_name,
+                    run.status
+                );
+                Ok(())
+            }
+            Ok(Err(e)) => Err(ActionError::ExecutionError(format!(
+                "Sub-workflow '{}' execution failed: {}",
+                self.workflow_name, e
+            ))),
+            Err(_) => Err(ActionError::Timeout {
+                timeout: self.timeout,
+            }),
+        }?;
+
+        // Check the workflow status
+        match run.status {
+            WorkflowRunStatus::Completed => {
+                // Extract the context as the result
+                let result = Value::Object(
+                    run.context
+                        .into_iter()
+                        .filter(|(k, _)| !k.starts_with('_')) // Filter out internal variables
+                        .collect(),
+                );
+
+                // Store result in context if variable name specified
+                if let Some(var_name) = &self.result_variable {
+                    context.insert(var_name.clone(), result.clone());
+                }
+
+                // Mark action as successful
+                context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
+
+                Ok(result)
+            }
+            WorkflowRunStatus::Failed => Err(ActionError::ExecutionError(format!(
+                "Sub-workflow '{}' failed",
+                self.workflow_name
+            ))),
+            WorkflowRunStatus::Cancelled => Err(ActionError::ExecutionError(format!(
+                "Sub-workflow '{}' was cancelled",
+                self.workflow_name
+            ))),
+            _ => Err(ActionError::ExecutionError(format!(
+                "Sub-workflow '{}' ended in unexpected state: {:?}",
+                self.workflow_name, run.status
+            ))),
+        }
     }
 
     fn description(&self) -> String {
@@ -972,56 +1015,6 @@ impl Action for SubWorkflowAction {
     }
 
     impl_as_any!();
-}
-
-/// Parse workflow execution output
-fn parse_workflow_output(output: &str) -> ActionResult<Value> {
-    // Try to parse as JSON first
-    if let Ok(json) = serde_json::from_str::<Value>(output) {
-        return Ok(json);
-    }
-
-    // Parse streaming JSON output
-    let mut result = HashMap::new();
-    let mut success = false;
-
-    for line in output.lines() {
-        if line.trim().is_empty() {
-            continue;
-        }
-
-        if let Ok(json) = serde_json::from_str::<Value>(line) {
-            if let Some(Value::String(event_type)) = json.get("type") {
-                match event_type.as_str() {
-                    "workflow_completed" => {
-                        success = true;
-                        if let Some(Value::Object(obj)) = json.get("context") {
-                            for (k, v) in obj {
-                                result.insert(k.clone(), v.clone());
-                            }
-                        }
-                    }
-                    "error" => {
-                        if let Some(Value::String(error)) = json.get("message") {
-                            return Err(ActionError::ExecutionError(format!(
-                                "Sub-workflow error: {}",
-                                error
-                            )));
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-
-    if !success {
-        return Err(ActionError::ExecutionError(
-            "Sub-workflow did not complete successfully".to_string(),
-        ));
-    }
-
-    Ok(Value::Object(serde_json::Map::from_iter(result)))
 }
 
 /// Format Claude output JSON line as YAML for better readability

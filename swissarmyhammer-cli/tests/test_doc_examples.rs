@@ -9,7 +9,7 @@ use walkdir::WalkDir;
 #[test]
 fn test_all_doc_example_prompts_are_valid() {
     let doc_examples_dir = Path::new("../doc/examples/prompts");
-    
+
     // Skip if examples directory doesn't exist (e.g., in CI without full checkout)
     if !doc_examples_dir.exists() {
         eprintln!("Skipping doc examples test - examples directory not found");
@@ -27,14 +27,14 @@ fn test_all_doc_example_prompts_are_valid() {
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
-        
+
         // Only process .md files
         if path.extension().and_then(|s| s.to_str()) != Some("md") {
             continue;
         }
 
         tested_files += 1;
-        
+
         // Read the file content
         let content = match fs::read_to_string(&path) {
             Ok(content) => content,
@@ -61,7 +61,10 @@ fn test_all_doc_example_prompts_are_valid() {
         }
 
         if end_line.is_none() {
-            failed_files.push(format!("{}: Missing closing YAML delimiter", path.display()));
+            failed_files.push(format!(
+                "{}: Missing closing YAML delimiter",
+                path.display()
+            ));
             continue;
         }
 
@@ -74,14 +77,21 @@ fn test_all_doc_example_prompts_are_valid() {
                 if let Some(map) = yaml_map {
                     // Must have either 'name' or 'title'
                     if !map.contains_key("name") && !map.contains_key("title") {
-                        failed_files.push(format!("{}: Missing 'name' or 'title' field", path.display()));
+                        failed_files.push(format!(
+                            "{}: Missing 'name' or 'title' field",
+                            path.display()
+                        ));
                     }
                     // Must have 'description'
                     if !map.contains_key("description") {
-                        failed_files.push(format!("{}: Missing 'description' field", path.display()));
+                        failed_files
+                            .push(format!("{}: Missing 'description' field", path.display()));
                     }
                 } else {
-                    failed_files.push(format!("{}: YAML front matter is not a mapping", path.display()));
+                    failed_files.push(format!(
+                        "{}: YAML front matter is not a mapping",
+                        path.display()
+                    ));
                 }
             }
             Err(e) => {
@@ -95,11 +105,12 @@ fn test_all_doc_example_prompts_are_valid() {
         // Basic Liquid syntax check using regex
         // Check for common syntax errors
         let unclosed_tags = regex::Regex::new(r"\{%\s*(?:if|for|unless|case)\s+[^%]*%\}").unwrap();
-        let closing_tags = regex::Regex::new(r"\{%\s*(?:endif|endfor|endunless|endcase)\s*%\}").unwrap();
-        
+        let closing_tags =
+            regex::Regex::new(r"\{%\s*(?:endif|endfor|endunless|endcase)\s*%\}").unwrap();
+
         let open_count = unclosed_tags.find_iter(&template_content).count();
         let close_count = closing_tags.find_iter(&template_content).count();
-        
+
         if open_count != close_count {
             failed_files.push(format!(
                 "{}: Mismatched Liquid tags - {} opening tags, {} closing tags",
@@ -112,7 +123,10 @@ fn test_all_doc_example_prompts_are_valid() {
         // Check for malformed variable syntax
         let malformed_vars = regex::Regex::new(r"\{\{[^}]*\{").unwrap();
         if malformed_vars.is_match(&template_content) {
-            failed_files.push(format!("{}: Malformed variable syntax detected", path.display()));
+            failed_files.push(format!(
+                "{}: Malformed variable syntax detected",
+                path.display()
+            ));
         }
     }
 
@@ -128,13 +142,16 @@ fn test_all_doc_example_prompts_are_valid() {
         );
     }
 
-    println!("Successfully validated {} documentation example prompts", tested_files);
+    println!(
+        "Successfully validated {} documentation example prompts",
+        tested_files
+    );
 }
 
 #[test]
 fn test_doc_examples_directory_structure() {
     let doc_examples_dir = Path::new("../doc/examples");
-    
+
     // Skip if examples directory doesn't exist
     if !doc_examples_dir.exists() {
         eprintln!("Skipping doc examples structure test - examples directory not found");
@@ -143,7 +160,7 @@ fn test_doc_examples_directory_structure() {
 
     // Check expected subdirectories exist
     let expected_dirs = vec!["prompts", "workflows", "scripts", "configs"];
-    
+
     for dir_name in expected_dirs {
         let dir_path = doc_examples_dir.join(dir_name);
         assert!(
@@ -157,7 +174,7 @@ fn test_doc_examples_directory_structure() {
 #[test]
 fn test_doc_markdown_includes_valid_paths() {
     let doc_src_dir = Path::new("../doc/src");
-    
+
     // Skip if doc directory doesn't exist
     if !doc_src_dir.exists() {
         eprintln!("Skipping markdown includes test - doc directory not found");
@@ -174,7 +191,7 @@ fn test_doc_markdown_includes_valid_paths() {
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
-        
+
         // Only process .md files
         if path.extension().and_then(|s| s.to_str()) != Some("md") {
             continue;
@@ -188,17 +205,14 @@ fn test_doc_markdown_includes_valid_paths() {
 
         // Find all {{#include ...}} directives
         let include_regex = regex::Regex::new(r"\{\{#include\s+([^\}]+)\}\}").unwrap();
-        
+
         for captures in include_regex.captures_iter(&content) {
             if let Some(include_path) = captures.get(1) {
                 let include_path_str = include_path.as_str().trim();
-                
+
                 // Resolve the include path relative to the markdown file
-                let resolved_path = path
-                    .parent()
-                    .unwrap()
-                    .join(include_path_str);
-                
+                let resolved_path = path.parent().unwrap().join(include_path_str);
+
                 // Check if the included file exists
                 if !resolved_path.exists() {
                     invalid_includes.push(format!(
@@ -224,7 +238,7 @@ fn test_doc_markdown_includes_valid_paths() {
 #[test]
 fn test_example_prompts_have_required_fields() {
     let doc_examples_dir = Path::new("../doc/examples/prompts");
-    
+
     // Skip if examples directory doesn't exist
     if !doc_examples_dir.exists() {
         eprintln!("Skipping prompt fields test - examples directory not found");
@@ -240,7 +254,7 @@ fn test_example_prompts_have_required_fields() {
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
-        
+
         if path.extension().and_then(|s| s.to_str()) != Some("md") {
             continue;
         }
@@ -253,9 +267,12 @@ fn test_example_prompts_have_required_fields() {
         // Check for required fields in YAML front matter
         let has_name_or_title = content.contains("\nname:") || content.contains("\ntitle:");
         let has_description = content.contains("\ndescription:");
-        
+
         if !has_name_or_title {
-            missing_fields.push(format!("{}: Missing 'name' or 'title' field", path.display()));
+            missing_fields.push(format!(
+                "{}: Missing 'name' or 'title' field",
+                path.display()
+            ));
         }
         if !has_description {
             missing_fields.push(format!("{}: Missing 'description' field", path.display()));

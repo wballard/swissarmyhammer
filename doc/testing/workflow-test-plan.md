@@ -193,9 +193,9 @@ Tests for workflow persistence.
   - Setup: Default installation
   - Expected: All builtin workflows loadable
 
-- **Test Case**: Custom workflow directory
-  - Setup: User-defined workflow directory
-  - Expected: Workflows loaded from custom path
+- **Test Case**: Standard workflow directories
+  - Setup: Standard locations (builtin, ~/.swissarmyhammer/workflows, ./.swissarmyhammer/workflows)
+  - Expected: Workflows loaded only from standard locations, custom paths ignored
 
 #### 6.2 Workflow Run Storage
 - **Test Case**: Save run state

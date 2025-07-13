@@ -16,9 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Performance benchmarks
 
 ### Changed
+- **BREAKING**: The `validate` command no longer accepts custom workflow directories via `--workflow-dir`. Workflows are now only loaded from standard locations (builtin, user `~/.swissarmyhammer/workflows`, and local `./.swissarmyhammer/workflows`)
 - Improved template rendering performance
 - Better error handling in MCP server
 - Enhanced file watching efficiency
+- Validation error paths for workflows now include source location (e.g., `workflow:builtin:example` instead of `workflow:example`)
 
 ### Fixed
 - Memory leak in file watcher

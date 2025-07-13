@@ -248,7 +248,7 @@ async fn run_flow(subcommand: cli::FlowSubcommand) -> i32 {
 ///
 /// * `quiet` - Only show errors, no warnings or info
 /// * `format` - Output format (text or json)
-/// * `workflow_dirs` - Specific workflow directories to validate (empty means search from current dir)
+/// * `workflow_dirs` - [DEPRECATED] This parameter is ignored
 ///
 /// # Returns
 ///
@@ -259,7 +259,10 @@ async fn run_flow(subcommand: cli::FlowSubcommand) -> i32 {
 fn run_validate(quiet: bool, format: cli::ValidateFormat, workflow_dirs: Vec<String>) -> i32 {
     use validate;
 
-    match validate::run_validate_command(quiet, format, workflow_dirs) {
+    // workflow_dirs parameter is kept for CLI compatibility but is ignored
+    let _ = workflow_dirs;
+    
+    match validate::run_validate_command(quiet, format) {
         Ok(exit_code) => exit_code,
         Err(e) => {
             eprintln!("Validate error: {}", e);

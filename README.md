@@ -56,6 +56,53 @@ Please review this code for:
 - **🔍 Built-in Library** - 20+ ready-to-use prompts for common tasks
 - **🎯 Custom Filters** - Domain-specific Liquid filters for code, text, and data processing
 
+## 📂 Directory Structure
+
+SwissArmyHammer uses a hierarchical system for organizing prompts and workflows. Files are loaded from three standard locations, with later sources overriding earlier ones:
+
+### Standard Locations
+
+1. **Builtin** - Embedded in the SwissArmyHammer binary
+   - Pre-installed prompts and workflows for common tasks
+   - Always available, no setup required
+
+2. **User** - Your personal collection
+   - Prompts: `~/.swissarmyhammer/prompts/`
+   - Workflows: `~/.swissarmyhammer/workflows/`
+   - Shared across all your projects
+
+3. **Local** - Project-specific files
+   - Prompts: `./.swissarmyhammer/prompts/`
+   - Workflows: `./.swissarmyhammer/workflows/`
+   - Searched in current directory and parent directories
+   - Perfect for project-specific customizations
+
+### Example Structure
+
+```
+~/.swissarmyhammer/          # User directory
+├── prompts/
+│   ├── code-review.md       # Personal code review prompt
+│   └── daily-standup.md     # Your daily standup template
+└── workflows/
+    └── release-process.md   # Your release workflow
+
+./my-project/                # Project directory
+└── .swissarmyhammer/        # Local directory
+    ├── prompts/
+    │   └── api-docs.md      # Project-specific API documentation prompt
+    └── workflows/
+        └── ci-cd.md         # Project CI/CD workflow
+```
+
+### Precedence
+
+When files have the same name in multiple locations:
+- Local overrides User
+- User overrides Builtin
+
+This allows you to customize built-in prompts for your needs while keeping the originals intact.
+
 ## 🚀 Quick Start
 
 ### Install

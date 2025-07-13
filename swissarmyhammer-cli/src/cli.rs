@@ -193,7 +193,10 @@ Validates BOTH prompt files AND workflows for syntax errors and best practices.
 
 This command comprehensively validates:
 - All prompt files from builtin, user, and local directories
-- All workflow files (.mermaid) in specified or discovered workflow directories
+- All workflow files from standard locations (builtin, user, local)
+
+NOTE: The --workflow-dir parameter is deprecated and will be ignored.
+Workflows are now only loaded from standard locations.
 
 Validation checks:
 - YAML front matter syntax (skipped for .liquid files with {% partial %} marker)
@@ -217,8 +220,8 @@ Examples:
         #[arg(long, value_enum, default_value = "text")]
         format: ValidateFormat,
 
-        /// Specific workflow directories to validate (can be specified multiple times)
-        #[arg(long = "workflow-dir", value_name = "DIR")]
+        /// [DEPRECATED] This parameter is ignored. Workflows are now only loaded from standard locations.
+        #[arg(long = "workflow-dir", value_name = "DIR", hide = true)]
         workflow_dirs: Vec<String>,
     },
 }

@@ -2,6 +2,10 @@ use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
 
+// Note: This test uses WalkDir instead of PromptResolver because it's specifically
+// validating documentation example files, not actual runtime prompts. Documentation
+// examples are stored outside the standard prompt locations (builtin/user/local) and
+// need direct file system access for validation purposes.
 #[test]
 fn test_all_doc_example_prompts_are_valid() {
     let doc_examples_dir = Path::new("../doc/examples/prompts");
@@ -16,6 +20,7 @@ fn test_all_doc_example_prompts_are_valid() {
     let mut failed_files = vec![];
 
     // Walk through all .md files in the prompts examples directory
+    // Using WalkDir is appropriate here as we're validating documentation files, not runtime prompts
     for entry in WalkDir::new(doc_examples_dir)
         .follow_links(false)
         .into_iter()
@@ -162,6 +167,7 @@ fn test_doc_markdown_includes_valid_paths() {
     let mut invalid_includes = vec![];
 
     // Walk through all .md files in doc/src
+    // WalkDir is used here to check documentation includes, not runtime files
     for entry in WalkDir::new(doc_src_dir)
         .follow_links(false)
         .into_iter()
@@ -227,6 +233,7 @@ fn test_example_prompts_have_required_fields() {
 
     let mut missing_fields = vec![];
 
+    // Direct file system traversal is needed for documentation validation
     for entry in WalkDir::new(doc_examples_dir)
         .follow_links(false)
         .into_iter()

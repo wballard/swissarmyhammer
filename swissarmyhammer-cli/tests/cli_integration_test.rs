@@ -224,7 +224,7 @@ fn test_flow_test_simple_workflow() -> Result<()> {
     );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    
+
     // Check for test mode indicators
     assert!(
         stdout.contains("Test mode"),
@@ -269,12 +269,9 @@ fn test_flow_test_with_set_variables() -> Result<()> {
     );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    
+
     // Check that template variables are processed
-    assert!(
-        stdout.contains("Test mode"),
-        "should be in test mode"
-    );
+    assert!(stdout.contains("Test mode"), "should be in test mode");
     assert!(
         stdout.contains("Test execution completed"),
         "should show test execution completion"
@@ -496,7 +493,7 @@ fn test_flow_test_coverage_complete() -> Result<()> {
     assert!(output.status.success(), "flow test should succeed");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    
+
     // For a simple linear workflow, we should achieve full coverage
     if stdout.contains("Full state coverage achieved") {
         assert!(
@@ -506,10 +503,7 @@ fn test_flow_test_coverage_complete() -> Result<()> {
     }
 
     // Check that percentage is calculated and displayed
-    assert!(
-        stdout.contains("%"),
-        "should show coverage percentage"
-    );
+    assert!(stdout.contains("%"), "should show coverage percentage");
 
     Ok(())
 }

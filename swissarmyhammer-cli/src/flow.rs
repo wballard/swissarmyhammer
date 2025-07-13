@@ -267,9 +267,12 @@ async fn run_workflow_command(config: WorkflowCommandConfig) -> Result<()> {
     let mut executor = WorkflowExecutor::new();
 
     // Create workflow run
-    let mut run = executor
-        .start_workflow(workflow.clone())
-        .map_err(|e| SwissArmyHammerError::Other(format!("Failed to start workflow '{}': {}", workflow.name, e)))?;
+    let mut run = executor.start_workflow(workflow.clone()).map_err(|e| {
+        SwissArmyHammerError::Other(format!(
+            "Failed to start workflow '{}': {}",
+            workflow.name, e
+        ))
+    })?;
 
     // Set initial variables
     run.context.extend(variables);
@@ -756,7 +759,10 @@ async fn execute_workflow_with_progress(
 
             // Execute single step
             executor.execute_state(run).await.map_err(|e| {
-                SwissArmyHammerError::Other(format!("Failed to execute state '{}': {}", run.current_state, e))
+                SwissArmyHammerError::Other(format!(
+                    "Failed to execute state '{}': {}",
+                    run.current_state, e
+                ))
             })?;
 
             println!("✅ Step completed");
@@ -768,7 +774,10 @@ async fn execute_workflow_with_progress(
     } else {
         // Non-interactive execution
         executor.execute_state(run).await.map_err(|e| {
-            SwissArmyHammerError::Other(format!("Failed to execute workflow '{}' at state '{}': {}", run.workflow.name, run.current_state, e))
+            SwissArmyHammerError::Other(format!(
+                "Failed to execute workflow '{}' at state '{}': {}",
+                run.workflow.name, run.current_state, e
+            ))
         })?;
     }
 
@@ -880,7 +889,10 @@ fn parse_duration(s: &str) -> Result<Duration> {
     };
 
     let value: u64 = value_str.parse().map_err(|_| {
-        SwissArmyHammerError::Other(format!("Invalid duration value: '{}'. Expected a positive number", value_str))
+        SwissArmyHammerError::Other(format!(
+            "Invalid duration value: '{}'. Expected a positive number",
+            value_str
+        ))
     })?;
 
     let duration = match unit {
@@ -900,7 +912,8 @@ fn parse_duration(s: &str) -> Result<Duration> {
 
 /// Helper to parse WorkflowRunId from string
 fn parse_workflow_run_id(s: &str) -> Result<WorkflowRunId> {
-    WorkflowRunId::parse(s).map_err(|e| SwissArmyHammerError::Other(format!("Invalid workflow run ID '{}': {}", s, e)))
+    WorkflowRunId::parse(s)
+        .map_err(|e| SwissArmyHammerError::Other(format!("Invalid workflow run ID '{}': {}", s, e)))
 }
 
 /// Helper to convert WorkflowRunId to string
@@ -1281,10 +1294,7 @@ async fn execute_workflow_test_mode(
 
         if !transition_taken {
             // All transitions have been visited or conditions not met
-            tracing::debug!(
-                "All transitions from {} have been explored",
-                current_state
-            );
+            tracing::debug!("All transitions from {} have been explored", current_state);
             break;
         }
     }

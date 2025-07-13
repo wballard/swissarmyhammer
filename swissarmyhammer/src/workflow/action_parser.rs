@@ -4,153 +4,217 @@ use crate::workflow::actions::{
     ActionError, ActionResult, LogAction, LogLevel, PromptAction, SetVariableAction,
     SubWorkflowAction, WaitAction,
 };
+use chumsky::prelude::*;
 use regex::Regex;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Duration;
 
-/// Robust action parser using regex patterns
-pub struct ActionParser {
-    /// Regex for parsing prompt actions
-    prompt_regex: Regex,
-    /// Regex for parsing wait actions with duration
-    wait_duration_regex: Regex,
-    /// Regex for parsing log actions
-    log_regex: Regex,
-    /// Regex for parsing set variable actions
-    set_variable_regex: Regex,
-    /// Regex for parsing arguments
-    argument_regex: Regex,
-    /// Regex for parsing sub-workflow actions
-    sub_workflow_regex: Regex,
-}
+// Type alias for parser error type
+type ParserError<'a> = extra::Err<Rich<'a, char>>;
+
+/// Robust action parser using chumsky parser combinators
+pub struct ActionParser;
 
 impl ActionParser {
-    /// Create a new action parser with compiled regex patterns
+    /// Create a new action parser
     pub fn new() -> ActionResult<Self> {
-        Ok(Self {
-            prompt_regex: Regex::new(r#"^[Ee]xecute\s+prompt\s+"([^"]+)"(?:\s+with\s+(.+))?$"#)
-                .map_err(|e| {
-                    ActionError::ParseError(format!("Failed to compile prompt regex: {}", e))
-                })?,
-            wait_duration_regex: Regex::new(
-                r#"^[Ww]ait\s+(\d+)\s+(seconds?|minutes?|hours?|sec|min|h|s|m)(?:\s+(.+))?$"#,
+        Ok(Self)
+    }
+
+    // Helper parsers
+
+    /// Parse whitespace (spaces and tabs)
+    fn whitespace<'a>() -> impl Parser<'a, &'a str, (), ParserError<'a>> {
+        one_of(" \t").repeated().at_least(1).ignored()
+    }
+
+    /// Parse optional whitespace
+    fn opt_whitespace<'a>() -> impl Parser<'a, &'a str, (), ParserError<'a>> {
+        one_of(" \t").repeated().ignored()
+    }
+
+    /// Parse a case-insensitive word
+    fn case_insensitive<'a>(word: &'static str) -> impl Parser<'a, &'a str, (), ParserError<'a>> {
+        any()
+            .filter(move |c: &char| c.is_alphabetic())
+            .repeated()
+            .exactly(word.len())
+            .collect::<String>()
+            .try_map(move |s, span| {
+                if s.to_lowercase() == word.to_lowercase() {
+                    Ok(())
+                } else {
+                    Err(Rich::custom(
+                        span,
+                        format!("expected '{}', found '{}'", word, s),
+                    ))
+                }
+            })
+            .ignored()
+    }
+
+    /// Parse a quoted string
+    fn quoted_string<'a>() -> impl Parser<'a, &'a str, String, ParserError<'a>> {
+        just('"')
+            .ignore_then(none_of('"').repeated().collect::<String>())
+            .then_ignore(just('"'))
+    }
+
+    /// Parse an identifier (variable/argument name)
+    fn identifier<'a>() -> impl Parser<'a, &'a str, String, ParserError<'a>> {
+        any()
+            .filter(|c: &char| c.is_alphabetic() || *c == '_')
+            .then(
+                any()
+                    .filter(|c: &char| c.is_alphanumeric() || *c == '_')
+                    .repeated()
+                    .collect::<String>(),
             )
-            .map_err(|e| {
-                ActionError::ParseError(format!("Failed to compile wait duration regex: {}", e))
-            })?,
-            log_regex: Regex::new(r#"^[Ll]og\s+(?:(error|warning)\s+)?"([^"]+)"$"#).map_err(
-                |e| ActionError::ParseError(format!("Failed to compile log regex: {}", e)),
-            )?,
-            set_variable_regex: Regex::new(
-                r#"^[Ss]et\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*"?([^"]*)"?$"#,
+            .map(|(first, rest)| format!("{}{}", first, rest))
+    }
+
+    /// Parse an argument key (allows hyphens)
+    fn argument_key<'a>() -> impl Parser<'a, &'a str, String, ParserError<'a>> {
+        any()
+            .filter(|c: &char| c.is_alphabetic() || *c == '_')
+            .then(
+                any()
+                    .filter(|c: &char| c.is_alphanumeric() || *c == '_' || *c == '-')
+                    .repeated()
+                    .collect::<String>(),
             )
-            .map_err(|e| {
-                ActionError::ParseError(format!("Failed to compile set variable regex: {}", e))
-            })?,
-            argument_regex: Regex::new(r#"([a-zA-Z_][a-zA-Z0-9_-]*)="([^"]*)"#).map_err(|e| {
-                ActionError::ParseError(format!("Failed to compile argument regex: {}", e))
-            })?,
-            sub_workflow_regex: Regex::new(
-                r#"^(?:[Rr]un\s+workflow|[Dd]elegate(?:\s+to)?)\s+"([^"]+)"(?:\s+with\s+(.+))?$"#,
-            )
-            .map_err(|e| {
-                ActionError::ParseError(format!("Failed to compile sub-workflow regex: {}", e))
-            })?,
-        })
+            .map(|(first, rest)| format!("{}{}", first, rest))
     }
 
     /// Parse a prompt action from description
     /// Format: Execute prompt "prompt-name" with arg1="value1" arg2="value2"
     pub fn parse_prompt_action(&self, description: &str) -> ActionResult<Option<PromptAction>> {
-        if let Some(captures) = self.prompt_regex.captures(description.trim()) {
-            let prompt_name = captures.get(1).unwrap().as_str().to_string();
-            let mut action = PromptAction::new(prompt_name);
+        let parser = Self::case_insensitive("execute")
+            .then_ignore(Self::whitespace())
+            .then_ignore(Self::case_insensitive("prompt"))
+            .then_ignore(Self::whitespace())
+            .ignore_then(Self::quoted_string())
+            .then(
+                Self::whitespace()
+                    .ignore_then(Self::case_insensitive("with"))
+                    .ignore_then(Self::whitespace())
+                    .then(
+                        Self::argument_key()
+                            .then_ignore(just('='))
+                            .then(Self::quoted_string())
+                            .separated_by(Self::whitespace())
+                            .collect::<Vec<(String, String)>>(),
+                    )
+                    .map(|(_, args)| args)
+                    .or_not(),
+            );
 
-            // Parse arguments if present
-            if let Some(args_match) = captures.get(2) {
-                let args_str = args_match.as_str();
-                for arg_capture in self.argument_regex.captures_iter(args_str) {
-                    if let (Some(key), Some(value)) = (arg_capture.get(1), arg_capture.get(2)) {
-                        let key = key.as_str().to_string();
-                        let value = value.as_str().to_string();
+        match parser.parse(description.trim()).into_result() {
+            Ok((prompt_name, args)) => {
+                let mut action = PromptAction::new(prompt_name);
 
-                        // Handle special "result" argument
+                if let Some(arguments) = args {
+                    for (key, value) in arguments {
                         if key == "result" {
                             action = action.with_result_variable(value);
                         } else {
-                            // Validate key format
                             if !self.is_valid_argument_key(&key) {
                                 return Err(ActionError::ParseError(
                                     format!("Invalid argument key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
                                 ));
                             }
-
                             action.arguments.insert(key, value);
                         }
                     }
                 }
+
+                Ok(Some(action))
             }
-
-            return Ok(Some(action));
+            Err(_) => Ok(None),
         }
-
-        Ok(None)
     }
 
     /// Parse a wait action from description
     /// Format: Wait for user confirmation OR Wait 30 seconds
     pub fn parse_wait_action(&self, description: &str) -> ActionResult<Option<WaitAction>> {
-        let lower_desc = description.to_lowercase();
+        // Parser for "Wait for user" is now handled by string contains check below
 
-        // Check for user input wait
+        // Parser for duration units
+        let duration_unit = choice((
+            Self::case_insensitive("seconds")
+                .to("seconds".to_string())
+                .or(Self::case_insensitive("second").to("second".to_string())),
+            Self::case_insensitive("minutes")
+                .to("minutes".to_string())
+                .or(Self::case_insensitive("minute").to("minute".to_string())),
+            Self::case_insensitive("hours")
+                .to("hours".to_string())
+                .or(Self::case_insensitive("hour").to("hour".to_string())),
+            Self::case_insensitive("sec").to("sec".to_string()),
+            Self::case_insensitive("min").to("min".to_string()),
+            just("h").to("h".to_string()),
+            just("s").to("s".to_string()),
+            just("m").to("m".to_string()),
+        ));
+
+        // Parser for "Wait N units"
+        let wait_duration = Self::case_insensitive("wait")
+            .then_ignore(Self::whitespace())
+            .ignore_then(text::int(10).from_str::<u64>().unwrapped())
+            .then_ignore(Self::whitespace())
+            .then(duration_unit)
+            .then(
+                Self::whitespace()
+                    .then(any().repeated().collect::<String>())
+                    .map(|(_, msg)| msg)
+                    .or_not(),
+            );
+
+        // Try to parse as user wait first
+        let lower_desc = description.to_lowercase();
         if lower_desc.contains("wait for user") {
             return Ok(Some(
                 WaitAction::new_user_input().with_message(description.to_string()),
             ));
         }
 
-        // Check for duration wait
-        if let Some(captures) = self.wait_duration_regex.captures(description.trim()) {
-            let duration_value: u64 = captures
-                .get(1)
-                .unwrap()
-                .as_str()
-                .parse()
-                .map_err(|_| ActionError::ParseError("Invalid duration value".to_string()))?;
-            let unit = captures.get(2).unwrap().as_str().to_lowercase();
-            let message = captures.get(3).map(|m| m.as_str().to_string());
+        // Try to parse as duration wait
+        match wait_duration.parse(description.trim()).into_result() {
+            Ok(((duration_value, unit), message)) => {
+                let duration = self.parse_duration_unit(duration_value, &unit)?;
+                let mut action = WaitAction::new_duration(duration);
 
-            let duration = self.parse_duration_unit(duration_value, &unit)?;
-            let mut action = WaitAction::new_duration(duration);
+                if let Some(msg) = message {
+                    action = action.with_message(msg);
+                }
 
-            if let Some(msg) = message {
-                action = action.with_message(msg);
+                Ok(Some(action))
             }
-
-            return Ok(Some(action));
+            Err(_) => Ok(None),
         }
-
-        Ok(None)
     }
 
     /// Parse a log action from description
     /// Format: Log "message" OR Log error "message"
     pub fn parse_log_action(&self, description: &str) -> ActionResult<Option<LogAction>> {
-        if let Some(captures) = self.log_regex.captures(description.trim()) {
-            let level_str = captures.get(1).map(|m| m.as_str()).unwrap_or("");
-            let message = captures.get(2).unwrap().as_str().to_string();
+        let log_level = choice((
+            Self::case_insensitive("error").to(LogLevel::Error),
+            Self::case_insensitive("warning").to(LogLevel::Warning),
+        ));
 
-            let level = match level_str.to_lowercase().as_str() {
-                "error" => LogLevel::Error,
-                "warning" => LogLevel::Warning,
-                _ => LogLevel::Info,
-            };
+        let parser = Self::case_insensitive("log")
+            .then_ignore(Self::whitespace())
+            .ignore_then(log_level.then_ignore(Self::whitespace()).or_not())
+            .then(Self::quoted_string());
 
-            return Ok(Some(LogAction::new(message, level)));
+        match parser.parse(description.trim()).into_result() {
+            Ok((level, message)) => {
+                let level = level.unwrap_or(LogLevel::Info);
+                Ok(Some(LogAction::new(message, level)))
+            }
+            Err(_) => Ok(None),
         }
-
-        Ok(None)
     }
 
     /// Parse a set variable action from description
@@ -159,21 +223,32 @@ impl ActionParser {
         &self,
         description: &str,
     ) -> ActionResult<Option<SetVariableAction>> {
-        if let Some(captures) = self.set_variable_regex.captures(description.trim()) {
-            let var_name = captures.get(1).unwrap().as_str().to_string();
-            let value = captures.get(2).unwrap().as_str().to_string();
+        let value_parser = choice((
+            Self::quoted_string(),
+            none_of('"').repeated().at_least(1).collect::<String>(),
+        ));
 
-            // Validate variable name
-            if !self.is_valid_variable_name(&var_name) {
-                return Err(ActionError::ParseError(
-                    format!("Invalid variable name '{}': must start with letter or underscore and contain only alphanumeric characters and underscores", var_name)
-                ));
+        let parser = Self::case_insensitive("set")
+            .then_ignore(Self::whitespace())
+            .ignore_then(Self::identifier())
+            .then_ignore(Self::opt_whitespace())
+            .then_ignore(just('='))
+            .then_ignore(Self::opt_whitespace())
+            .then(value_parser);
+
+        match parser.parse(description.trim()).into_result() {
+            Ok((var_name, value)) => {
+                // Validate variable name
+                if !self.is_valid_variable_name(&var_name) {
+                    return Err(ActionError::ParseError(
+                        format!("Invalid variable name '{}': must start with letter or underscore and contain only alphanumeric characters and underscores", var_name)
+                    ));
+                }
+
+                Ok(Some(SetVariableAction::new(var_name, value)))
             }
-
-            return Ok(Some(SetVariableAction::new(var_name, value)));
+            Err(_) => Ok(None),
         }
-
-        Ok(None)
     }
 
     /// Parse a sub-workflow action from description
@@ -183,50 +258,70 @@ impl ActionParser {
         &self,
         description: &str,
     ) -> ActionResult<Option<SubWorkflowAction>> {
-        if let Some(captures) = self.sub_workflow_regex.captures(description.trim()) {
-            let workflow_name = captures.get(1).unwrap().as_str().to_string();
-            let mut action = SubWorkflowAction::new(workflow_name);
+        // Parser for "Run workflow" or "Delegate to"
+        let run_workflow = Self::case_insensitive("run")
+            .then_ignore(Self::whitespace())
+            .then_ignore(Self::case_insensitive("workflow"));
 
-            // Parse input variables if present
-            if let Some(inputs_match) = captures.get(2) {
-                let inputs_str = inputs_match.as_str();
+        let delegate_to = Self::case_insensitive("delegate")
+            .then_ignore(Self::whitespace())
+            .then_ignore(Self::case_insensitive("to").or_not());
 
-                // Check if it's a single input without quotes (e.g., with input="${data}")
-                if inputs_str.starts_with("input=") {
-                    let value = inputs_str.strip_prefix("input=").unwrap_or("");
-                    let value = value.trim_matches('"');
-                    action
-                        .input_variables
-                        .insert("input".to_string(), value.to_string());
-                } else {
-                    // Parse multiple arguments
-                    for arg_capture in self.argument_regex.captures_iter(inputs_str) {
-                        if let (Some(key), Some(value)) = (arg_capture.get(1), arg_capture.get(2)) {
-                            let key = key.as_str().to_string();
-                            let value = value.as_str().to_string();
+        let workflow_prefix = choice((run_workflow.to(()), delegate_to.to(())));
 
-                            // Handle special "result" argument
-                            if key == "result" {
-                                action = action.with_result_variable(value);
-                            } else {
-                                // Validate key format
-                                if !self.is_valid_argument_key(&key) {
-                                    return Err(ActionError::ParseError(
-                                        format!("Invalid input variable key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
-                                    ));
-                                }
+        // Parser for single input format
+        let single_input = Self::case_insensitive("input")
+            .then_ignore(just('='))
+            .then(choice((
+                Self::quoted_string(),
+                none_of(' ').repeated().at_least(1).collect::<String>(),
+            )));
 
-                                action.input_variables.insert(key, value);
+        // Parser for arguments
+        let argument_parser = Self::argument_key()
+            .then_ignore(just('='))
+            .then(Self::quoted_string())
+            .separated_by(Self::whitespace())
+            .collect::<Vec<(String, String)>>();
+
+        let parser = workflow_prefix
+            .then_ignore(Self::whitespace())
+            .ignore_then(Self::quoted_string())
+            .then(
+                Self::whitespace()
+                    .then_ignore(Self::case_insensitive("with"))
+                    .then_ignore(Self::whitespace())
+                    .then(choice((
+                        single_input.map(|(_, value)| vec![("input".to_string(), value)]),
+                        argument_parser,
+                    )))
+                    .map(|(_, args)| args)
+                    .or_not(),
+            );
+
+        match parser.parse(description.trim()).into_result() {
+            Ok((workflow_name, args)) => {
+                let mut action = SubWorkflowAction::new(workflow_name);
+
+                if let Some(arguments) = args {
+                    for (key, value) in arguments {
+                        if key == "result" {
+                            action = action.with_result_variable(value);
+                        } else {
+                            if !self.is_valid_argument_key(&key) {
+                                return Err(ActionError::ParseError(
+                                    format!("Invalid input variable key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
+                                ));
                             }
+                            action.input_variables.insert(key, value);
                         }
                     }
                 }
+
+                Ok(Some(action))
             }
-
-            return Ok(Some(action));
+            Err(_) => Ok(None),
         }
-
-        Ok(None)
     }
 
     /// Safely substitute variables in a string using regex
@@ -336,10 +431,14 @@ mod tests {
         let parser = ActionParser::new().unwrap();
 
         // Test user input wait
-        let action = parser
+        let result = parser
             .parse_wait_action("Wait for user confirmation")
-            .unwrap()
             .unwrap();
+        assert!(
+            result.is_some(),
+            "Failed to parse 'Wait for user confirmation'"
+        );
+        let action = result.unwrap();
         assert!(action.duration.is_none());
 
         // Test duration wait

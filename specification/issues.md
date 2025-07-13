@@ -16,6 +16,10 @@ When a new issue is created, it need to start with the next highest number so th
 
 ## Use Cases
 
+This will be an MCP Tool capability to swissarmyhammer.
+Think deeply about creating great descriptions of the tool capability to allow Claude to call it reliably.
+Research best practices for making MCP tools.
+
 ### Create
 
 As a User, I want to be able to create an issue from the swissarmyhammer command line.

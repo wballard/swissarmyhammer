@@ -1,6 +1,5 @@
 use crate::file_loader::{FileSource, VirtualFileSystem};
-use crate::{PromptLibrary, PromptLoader};
-use anyhow::Result;
+use crate::{PromptLibrary, PromptLoader, Result};
 use std::collections::HashMap;
 
 // Include the generated builtin prompts

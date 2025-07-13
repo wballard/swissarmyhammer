@@ -62,7 +62,7 @@ pub fn handle_cli_result<T>(result: CliResult<T>) -> i32 {
     match result {
         Ok(_) => EXIT_SUCCESS,
         Err(e) => {
-            eprintln!("Error: {}", e.full_chain());
+            tracing::error!("Error: {}", e.full_chain());
             e.exit_code
         }
     }

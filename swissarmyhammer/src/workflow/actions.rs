@@ -5,6 +5,7 @@
 
 use crate::workflow::action_parser::ActionParser;
 use crate::workflow::{WorkflowExecutor, WorkflowName, WorkflowRunStatus, WorkflowStorage};
+use chrono::{Local, Timelike};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -61,6 +62,84 @@ pub enum ActionError {
 /// Result type for action operations
 pub type ActionResult<T> = Result<T, ActionError>;
 
+/// Configuration for action timeouts
+#[derive(Debug, Clone)]
+pub struct ActionTimeouts {
+    /// Default timeout for prompt actions
+    pub prompt_timeout: Duration,
+    /// Default timeout for user input actions
+    pub user_input_timeout: Duration,
+    /// Default timeout for sub-workflow actions
+    pub sub_workflow_timeout: Duration,
+}
+
+impl Default for ActionTimeouts {
+    fn default() -> Self {
+        Self {
+            prompt_timeout: Duration::from_secs(
+                std::env::var("SWISSARMYHAMMER_PROMPT_TIMEOUT")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(300),
+            ), // 5 minutes default
+            user_input_timeout: Duration::from_secs(
+                std::env::var("SWISSARMYHAMMER_USER_INPUT_TIMEOUT")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(300),
+            ), // 5 minutes default
+            sub_workflow_timeout: Duration::from_secs(
+                std::env::var("SWISSARMYHAMMER_SUB_WORKFLOW_TIMEOUT")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(600),
+            ), // 10 minutes default
+        }
+    }
+}
+
+/// Type-safe context keys for workflow execution
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ContextKey {
+    /// Key for Claude response
+    ClaudeResponse,
+    /// Key for last action result
+    LastActionResult,
+    /// Key for workflow execution stack (for circular dependency detection)
+    WorkflowStack,
+    /// Custom key for other values
+    Custom(String),
+}
+
+impl ContextKey {
+    /// Convert to string representation for use as HashMap key
+    pub fn as_str(&self) -> &str {
+        match self {
+            ContextKey::ClaudeResponse => "claude_response",
+            ContextKey::LastActionResult => "last_action_result",
+            ContextKey::WorkflowStack => "_workflow_stack",
+            ContextKey::Custom(s) => s,
+        }
+    }
+}
+
+impl From<ContextKey> for String {
+    fn from(key: ContextKey) -> Self {
+        match key {
+            ContextKey::ClaudeResponse => "claude_response".to_string(),
+            ContextKey::LastActionResult => "last_action_result".to_string(),
+            ContextKey::WorkflowStack => "_workflow_stack".to_string(),
+            ContextKey::Custom(s) => s,
+        }
+    }
+}
+
+impl From<&ContextKey> for String {
+    fn from(key: &ContextKey) -> Self {
+        key.as_str().to_string()
+    }
+}
+
 /// Context key for Claude response
 const CLAUDE_RESPONSE_KEY: &str = "claude_response";
 
@@ -85,6 +164,128 @@ pub trait Action: Send + Sync {
     /// For testing: allow downcasting
     #[doc(hidden)]
     fn as_any(&self) -> &dyn std::any::Any;
+}
+
+/// Trait for actions that support variable substitution
+pub trait VariableSubstitution {
+    /// Substitute variables in a single string value
+    fn substitute_string(&self, value: &str, context: &HashMap<String, Value>) -> String {
+        substitute_variables_in_string(value, context)
+    }
+    
+    /// Substitute variables in a HashMap of string values
+    fn substitute_map(&self, values: &HashMap<String, String>, context: &HashMap<String, Value>) -> HashMap<String, String> {
+        let mut substituted = HashMap::new();
+        for (key, value) in values {
+            substituted.insert(key.clone(), self.substitute_string(value, context));
+        }
+        substituted
+    }
+}
+
+/// Retry strategy for retryable actions
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub enum RetryStrategy {
+    /// Wait until the next hour (used for rate limits)
+    WaitUntilNextHour,
+    /// Exponential backoff with base delay and max delay
+    ExponentialBackoff {
+        /// Base delay to start with
+        base: Duration,
+        /// Maximum delay to wait
+        max: Duration,
+    },
+    /// Fixed delay between retries
+    FixedDelay(Duration),
+}
+
+/// Trait for actions that support retry on failure
+#[async_trait::async_trait]
+pub trait RetryableAction: Action {
+    /// Get the maximum number of retries
+    fn max_retries(&self) -> u32 {
+        2 // Default to 2 retries
+    }
+    
+    /// Get the retry strategy
+    fn retry_strategy(&self) -> RetryStrategy {
+        RetryStrategy::WaitUntilNextHour // Default for backward compatibility
+    }
+    
+    /// Check if an error is retryable
+    fn is_retryable_error(&self, error: &ActionError) -> bool {
+        matches!(error, ActionError::RateLimit { .. })
+    }
+    
+    /// Calculate wait time based on retry strategy and attempt number
+    fn calculate_wait_time(&self, error: &ActionError, attempt: u32) -> Duration {
+        match error {
+            ActionError::RateLimit { wait_time, .. } => *wait_time,
+            _ => match self.retry_strategy() {
+                RetryStrategy::WaitUntilNextHour => {
+                    // Calculate time until next hour
+                    let now = Local::now();
+                    let next_hour = now
+                        .with_minute(0)
+                        .unwrap()
+                        .with_second(0)
+                        .unwrap()
+                        .with_nanosecond(0)
+                        .unwrap()
+                        + chrono::Duration::hours(1);
+                    let wait_duration = next_hour - now;
+                    Duration::from_secs(wait_duration.num_seconds() as u64)
+                }
+                RetryStrategy::ExponentialBackoff { base, max } => {
+                    let multiplier = 2u32.pow(attempt.saturating_sub(1));
+                    let delay = base.saturating_mul(multiplier);
+                    if delay > max {
+                        max
+                    } else {
+                        delay
+                    }
+                }
+                RetryStrategy::FixedDelay(delay) => delay,
+            }
+        }
+    }
+    
+    /// Execute the action once (without retry)
+    async fn execute_once(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value>;
+    
+    /// Execute the action with retry logic
+    async fn execute_with_retry(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
+        let mut retries = 0;
+        
+        loop {
+            match self.execute_once(context).await {
+                Ok(response) => return Ok(response),
+                Err(error) if self.is_retryable_error(&error) => {
+                    if retries >= self.max_retries() {
+                        // Max retries exceeded, return the error
+                        return Err(error);
+                    }
+                    
+                    retries += 1;
+                    let wait_time = self.calculate_wait_time(&error, retries);
+                    
+                    tracing::warn!(
+                        "Error occurred (attempt {}/{}): {}. Waiting {:?} before retry...",
+                        retries,
+                        self.max_retries() + 1,
+                        error,
+                        wait_time
+                    );
+                    
+                    tokio::time::sleep(wait_time).await;
+                    
+                    tracing::info!("Retrying after wait...");
+                }
+                Err(error) => return Err(error), // Non-retryable errors
+            }
+        }
+    }
 }
 
 /// Action that executes a prompt using Claude
@@ -120,11 +321,12 @@ pub struct PromptAction {
 impl PromptAction {
     /// Create a new prompt action
     pub fn new(prompt_name: String) -> Self {
+        let timeouts = ActionTimeouts::default();
         Self {
             prompt_name,
             arguments: HashMap::new(),
             result_variable: None,
-            timeout: Duration::from_secs(300), // 5 minute default
+            timeout: timeouts.prompt_timeout,
             quiet: false,                      // Default to showing output
             max_retries: 2,                    // Default to 2 retries for rate limits
         }
@@ -162,49 +364,16 @@ impl PromptAction {
 
     /// Substitute variables in arguments using the context
     fn substitute_variables(&self, context: &HashMap<String, Value>) -> HashMap<String, String> {
-        let mut substituted = HashMap::new();
-
-        for (key, value) in &self.arguments {
-            let substituted_value = substitute_variables_in_string(value, context);
-            substituted.insert(key.clone(), substituted_value);
-        }
-
-        substituted
+        self.substitute_map(&self.arguments, context)
     }
 }
+
+impl VariableSubstitution for PromptAction {}
 
 #[async_trait::async_trait]
 impl Action for PromptAction {
     async fn execute(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
-        let mut retries = 0;
-
-        loop {
-            // Execute the command and handle rate limit errors
-            match self.execute_once(context).await {
-                Ok(response) => return Ok(response),
-                Err(ActionError::RateLimit { message, wait_time }) => {
-                    if retries >= self.max_retries {
-                        // Max retries exceeded, return the rate limit error
-                        return Err(ActionError::RateLimit { message, wait_time });
-                    }
-
-                    retries += 1;
-                    tracing::warn!(
-                        "Rate limit reached (attempt {}/{}). Waiting {:?} until next hour...",
-                        retries,
-                        self.max_retries + 1,
-                        wait_time
-                    );
-
-                    // Wait until the next hour
-                    tokio::time::sleep(wait_time).await;
-
-                    tracing::info!("Retrying after rate limit wait...");
-                    // Continue to retry
-                }
-                Err(e) => return Err(e), // Other errors are not retried
-            }
-        }
+        self.execute_with_retry(context).await
     }
 
     fn description(&self) -> String {
@@ -221,6 +390,63 @@ impl Action for PromptAction {
     impl_as_any!();
 }
 
+#[async_trait::async_trait]
+impl RetryableAction for PromptAction {
+    fn max_retries(&self) -> u32 {
+        self.max_retries
+    }
+    
+    async fn execute_once(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
+        // Moved from the existing execute_once method in impl PromptAction
+        self.execute_once_internal(context).await
+    }
+}
+
+/// Resolve the path to the swissarmyhammer binary
+///
+/// This function handles the complexity of finding the correct binary path,
+/// especially in test environments where current_exe might point to the test binary.
+///
+/// # Returns
+/// The path to the swissarmyhammer binary
+fn resolve_swissarmyhammer_binary() -> std::path::PathBuf {
+    // Use the current executable path to ensure we call the right binary
+    let current_exe =
+        std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("swissarmyhammer"));
+
+    // In test environment, current_exe might point to test binary, so try to find the actual swissarmyhammer binary
+    if current_exe.to_string_lossy().contains("test") || current_exe.to_string_lossy().contains("deps") {
+        // We're in a test, try to find the actual binary
+        if let Ok(cargo_target) = std::env::var("CARGO_TARGET_DIR") {
+            let debug_binary = std::path::PathBuf::from(cargo_target)
+                .join("debug")
+                .join("swissarmyhammer");
+            if debug_binary.exists() {
+                return debug_binary;
+            }
+        }
+        
+        // Fallback to target/debug/swissarmyhammer relative to workspace
+        if let Ok(workspace_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+            let workspace_root = std::path::Path::new(&workspace_dir)
+                .parent()
+                .unwrap_or(std::path::Path::new("."));
+            let debug_binary = workspace_root
+                .join("target")
+                .join("debug")
+                .join("swissarmyhammer");
+            if debug_binary.exists() {
+                return debug_binary;
+            }
+        }
+        
+        // Final fallback
+        std::path::PathBuf::from("swissarmyhammer")
+    } else {
+        current_exe
+    }
+}
+
 impl PromptAction {
     /// Render the prompt using swissarmyhammer prompt test
     async fn render_prompt_with_swissarmyhammer(
@@ -231,44 +457,7 @@ impl PromptAction {
         let args = self.substitute_variables(context);
 
         // Build the command to render the prompt
-        // Use the current executable path to ensure we call the right binary
-        let current_exe =
-            std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("swissarmyhammer"));
-
-        // In test environment, current_exe might point to test binary, so try to find the actual swissarmyhammer binary
-        let cmd_binary = if current_exe.to_string_lossy().contains("test")
-            || current_exe.to_string_lossy().contains("deps")
-        {
-            // We're in a test, try to find the actual binary
-            if let Ok(cargo_target) = std::env::var("CARGO_TARGET_DIR") {
-                let debug_binary = std::path::PathBuf::from(cargo_target)
-                    .join("debug")
-                    .join("swissarmyhammer");
-                if debug_binary.exists() {
-                    debug_binary
-                } else {
-                    std::path::PathBuf::from("swissarmyhammer")
-                }
-            } else {
-                // Fallback to target/debug/swissarmyhammer relative to workspace
-                let workspace_dir =
-                    std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-                let workspace_root = std::path::Path::new(&workspace_dir)
-                    .parent()
-                    .unwrap_or(std::path::Path::new("."));
-                let debug_binary = workspace_root
-                    .join("target")
-                    .join("debug")
-                    .join("swissarmyhammer");
-                if debug_binary.exists() {
-                    debug_binary
-                } else {
-                    std::path::PathBuf::from("swissarmyhammer")
-                }
-            }
-        } else {
-            current_exe
-        };
+        let cmd_binary = resolve_swissarmyhammer_binary();
 
         let mut cmd = Command::new(&cmd_binary);
         cmd.arg("prompt")
@@ -325,7 +514,7 @@ impl PromptAction {
     /// # Returns
     /// * `Ok(Value)` - The command response on success
     /// * `Err(ActionError)` - Various errors including rate limits
-    async fn execute_once(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
+    async fn execute_once_internal(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
         // First, render the prompt using swissarmyhammer
         let rendered_prompt = self.render_prompt_with_swissarmyhammer(context).await?;
 
@@ -618,9 +807,9 @@ impl Action for WaitAction {
                 let mut reader = BufReader::new(stdin());
                 let mut line = String::new();
 
-                // Use a 5-minute timeout for user input
-                const USER_INPUT_TIMEOUT: Duration = Duration::from_secs(300);
-                match timeout(USER_INPUT_TIMEOUT, reader.read_line(&mut line)).await {
+                // Use configurable timeout for user input
+                let timeouts = ActionTimeouts::default();
+                match timeout(timeouts.user_input_timeout, reader.read_line(&mut line)).await {
                     Ok(Ok(_)) => {
                         // Successfully read input
                     }
@@ -629,7 +818,7 @@ impl Action for WaitAction {
                     }
                     Err(_) => {
                         return Err(ActionError::Timeout {
-                            timeout: USER_INPUT_TIMEOUT,
+                            timeout: timeouts.user_input_timeout,
                         });
                     }
                 }
@@ -698,11 +887,13 @@ impl LogAction {
     }
 }
 
+impl VariableSubstitution for LogAction {}
+
 #[async_trait::async_trait]
 impl Action for LogAction {
     async fn execute(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
         // Substitute variables in message
-        let message = substitute_variables_in_string(&self.message, context);
+        let message = self.substitute_string(&self.message, context);
 
         match self.level {
             LogLevel::Info => tracing::info!("{}", message),
@@ -759,11 +950,13 @@ impl SetVariableAction {
     }
 }
 
+impl VariableSubstitution for SetVariableAction {}
+
 #[async_trait::async_trait]
 impl Action for SetVariableAction {
     async fn execute(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
         // Substitute variables in value
-        let substituted_value = substitute_variables_in_string(&self.value, context);
+        let substituted_value = self.substitute_string(&self.value, context);
 
         // Try to parse as JSON first, fall back to string
         let json_value = match serde_json::from_str(&substituted_value) {
@@ -811,11 +1004,12 @@ fn substitute_variables_in_string(input: &str, context: &HashMap<String, Value>)
 impl SubWorkflowAction {
     /// Create a new sub-workflow action
     pub fn new(workflow_name: String) -> Self {
+        let timeouts = ActionTimeouts::default();
         Self {
             workflow_name,
             input_variables: HashMap::new(),
             result_variable: None,
-            timeout: Duration::from_secs(600), // 10 minute default
+            timeout: timeouts.sub_workflow_timeout,
         }
     }
 
@@ -839,16 +1033,11 @@ impl SubWorkflowAction {
 
     /// Substitute variables in input values using the context
     fn substitute_variables(&self, context: &HashMap<String, Value>) -> HashMap<String, String> {
-        let mut substituted = HashMap::new();
-
-        for (key, value) in &self.input_variables {
-            let substituted_value = substitute_variables_in_string(value, context);
-            substituted.insert(key.clone(), substituted_value);
-        }
-
-        substituted
+        self.substitute_map(&self.input_variables, context)
     }
 }
+
+impl VariableSubstitution for SubWorkflowAction {}
 
 #[async_trait::async_trait]
 impl Action for SubWorkflowAction {
@@ -865,7 +1054,7 @@ impl Action for SubWorkflowAction {
             if let Some(workflow_name) = stack_item.as_str() {
                 if workflow_name == self.workflow_name {
                     return Err(ActionError::ExecutionError(format!(
-                        "Circular dependency detected: workflow '{}' is already in the execution stack",
+                        "Circular workflow dependency detected: workflow '{}' is already in the execution stack",
                         self.workflow_name
                     )));
                 }
@@ -1275,7 +1464,7 @@ mod tests {
         let error = result.unwrap_err();
         match error {
             ActionError::ExecutionError(msg) => {
-                assert!(msg.contains("Circular dependency detected"));
+                assert!(msg.contains("Circular workflow dependency detected"));
                 assert!(msg.contains("workflow-a"));
             }
             _ => panic!("Expected ExecutionError for circular dependency"),

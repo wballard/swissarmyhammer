@@ -60,10 +60,11 @@ async fn main() {
 
         // Ensure the directory exists
         if let Err(e) = fs::create_dir_all(&log_dir) {
-            eprintln!("Warning: Failed to create log directory: {}", e);
+            tracing::warn!("Failed to create log directory: {}", e);
         }
 
-        let log_file = log_dir.join("mcp.log");
+        let log_filename = std::env::var("SWISSARMYHAMMER_LOG_FILE").unwrap_or_else(|_| "mcp.log".to_string());
+        let log_file = log_dir.join(log_filename);
 
         // Try to open the log file
         match std::fs::OpenOptions::new()
@@ -80,7 +81,7 @@ async fn main() {
             }
             Err(e) => {
                 // Fallback to stderr if file logging fails
-                eprintln!("Warning: Failed to open log file, using stderr: {}", e);
+                tracing::warn!("Failed to open log file, using stderr: {}", e);
                 tracing_subscriber::fmt()
                     .with_writer(std::io::stderr)
                     .with_max_level(log_level)
@@ -151,7 +152,7 @@ async fn run_server() -> i32 {
     // Initialize prompts (this will load user and local prompts)
     if let Err(e) = server.initialize().await {
         tracing::error!("Failed to initialize MCP server: {}", e);
-        return 1;
+        return EXIT_WARNING;
     }
 
     // Don't start file watching here - it will be started when MCP client connects
@@ -197,7 +198,7 @@ fn run_doctor() -> i32 {
     match doctor.run_diagnostics() {
         Ok(exit_code) => exit_code,
         Err(e) => {
-            eprintln!("Doctor error: {}", e);
+            tracing::error!("Doctor error: {}", e);
             EXIT_ERROR
         }
     }
@@ -216,7 +217,7 @@ fn run_completions(shell: clap_complete::Shell) -> i32 {
     match completions::print_completion(shell) {
         Ok(_) => EXIT_SUCCESS,
         Err(e) => {
-            eprintln!("Completion error: {}", e);
+            tracing::error!("Completion error: {}", e);
             EXIT_WARNING
         }
     }
@@ -228,7 +229,7 @@ async fn run_flow(subcommand: cli::FlowSubcommand) -> i32 {
     match flow::run_flow_command(subcommand).await {
         Ok(_) => EXIT_SUCCESS,
         Err(e) => {
-            eprintln!("Flow error: {}", e);
+            tracing::error!("Flow error: {}", e);
             EXIT_WARNING
         }
     }
@@ -265,7 +266,7 @@ fn run_validate(quiet: bool, format: cli::ValidateFormat, workflow_dirs: Vec<Str
     match validate::run_validate_command(quiet, format) {
         Ok(exit_code) => exit_code,
         Err(e) => {
-            eprintln!("Validate error: {}", e);
+            tracing::error!("Validate error: {}", e);
             EXIT_ERROR
         }
     }

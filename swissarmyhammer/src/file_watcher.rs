@@ -3,8 +3,7 @@
 //! This module provides a unified file watching system that can monitor
 //! prompt directories for changes and trigger appropriate reload actions.
 
-use crate::PromptResolver;
-use anyhow::Result;
+use crate::{PromptResolver, Result};
 use notify::{
     event::{Event, EventKind},
     RecommendedWatcher, RecursiveMode, Watcher,
@@ -97,7 +96,7 @@ impl FileWatcher {
         // Create the file watcher
         let (tx, mut rx) = mpsc::channel(config.channel_buffer_size);
         let mut watcher = RecommendedWatcher::new(
-            move |result: Result<Event, notify::Error>| {
+            move |result: std::result::Result<Event, notify::Error>| {
                 if let Ok(event) = result {
                     if let Err(e) = tx.blocking_send(event) {
                         tracing::error!("Failed to send file watch event: {}", e);
@@ -105,7 +104,8 @@ impl FileWatcher {
                 }
             },
             notify::Config::default(),
-        )?;
+        )
+        .map_err(|e| crate::SwissArmyHammerError::Other(format!("Failed to create file watcher: {}", e)))?;
 
         // Watch all directories
         let recursive_mode = if config.recursive {
@@ -115,7 +115,8 @@ impl FileWatcher {
         };
 
         for path in &watch_paths {
-            watcher.watch(path, recursive_mode)?;
+            watcher.watch(path, recursive_mode)
+                .map_err(|e| crate::SwissArmyHammerError::Other(format!("Failed to watch directory {:?}: {}", path, e)))?;
             tracing::info!("Watching directory: {:?}", path);
         }
 

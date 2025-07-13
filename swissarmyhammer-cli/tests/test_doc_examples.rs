@@ -8,7 +8,9 @@ use walkdir::WalkDir;
 // need direct file system access for validation purposes.
 #[test]
 fn test_all_doc_example_prompts_are_valid() {
-    let doc_examples_dir = Path::new("../doc/examples/prompts");
+    let doc_examples_dir = std::env::var("SWISSARMYHAMMER_DOC_EXAMPLES_PATH")
+        .unwrap_or_else(|_| "../doc/examples/prompts".to_string());
+    let doc_examples_dir = Path::new(&doc_examples_dir);
 
     // Skip if examples directory doesn't exist (e.g., in CI without full checkout)
     if !doc_examples_dir.exists() {
@@ -150,7 +152,10 @@ fn test_all_doc_example_prompts_are_valid() {
 
 #[test]
 fn test_doc_examples_directory_structure() {
-    let doc_examples_dir = Path::new("../doc/examples");
+    let doc_examples_dir = std::env::var("SWISSARMYHAMMER_DOC_EXAMPLES_PATH")
+        .map(|p| p.replace("/prompts", ""))
+        .unwrap_or_else(|_| "../doc/examples".to_string());
+    let doc_examples_dir = Path::new(&doc_examples_dir);
 
     // Skip if examples directory doesn't exist
     if !doc_examples_dir.exists() {
@@ -237,7 +242,9 @@ fn test_doc_markdown_includes_valid_paths() {
 
 #[test]
 fn test_example_prompts_have_required_fields() {
-    let doc_examples_dir = Path::new("../doc/examples/prompts");
+    let doc_examples_dir = std::env::var("SWISSARMYHAMMER_DOC_EXAMPLES_PATH")
+        .unwrap_or_else(|_| "../doc/examples/prompts".to_string());
+    let doc_examples_dir = Path::new(&doc_examples_dir);
 
     // Skip if examples directory doesn't exist
     if !doc_examples_dir.exists() {

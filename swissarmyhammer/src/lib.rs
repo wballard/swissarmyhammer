@@ -95,58 +95,9 @@ pub use workflow::{
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Error types used throughout the library
-pub mod error {
-    use thiserror::Error;
+pub mod error;
 
-    /// Main error type for the library
-    #[derive(Debug, Error)]
-    pub enum SwissArmyHammerError {
-        /// IO operation failed
-        #[error("IO error: {0}")]
-        Io(#[from] std::io::Error),
-
-        /// Template parsing or rendering failed
-        #[error("Template error: {0}")]
-        Template(String),
-
-        /// Prompt not found
-        #[error("Prompt not found: {0}")]
-        PromptNotFound(String),
-
-        /// Invalid configuration
-        #[error("Configuration error: {0}")]
-        Config(String),
-
-        /// Storage backend error
-        #[error("Storage error: {0}")]
-        Storage(String),
-
-        /// Workflow not found
-        #[error("Workflow not found: {0}")]
-        WorkflowNotFound(String),
-
-        /// Workflow run not found
-        #[error("Workflow run not found: {0}")]
-        WorkflowRunNotFound(String),
-
-        /// Serialization/deserialization error
-        #[error("Serialization error: {0}")]
-        Serialization(#[from] serde_yaml::Error),
-
-        /// JSON serialization/deserialization error
-        #[error("JSON error: {0}")]
-        Json(#[from] serde_json::Error),
-
-        /// Other errors
-        #[error("{0}")]
-        Other(String),
-    }
-
-    /// Result type alias
-    pub type Result<T> = std::result::Result<T, SwissArmyHammerError>;
-}
-
-pub use error::{Result, SwissArmyHammerError};
+pub use error::{ErrorChainExt, ErrorContext, Result, SwissArmyHammerError};
 
 /// Prelude module for convenient imports
 pub mod prelude {

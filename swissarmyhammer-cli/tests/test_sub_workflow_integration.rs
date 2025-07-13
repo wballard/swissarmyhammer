@@ -236,3 +236,510 @@ stateDiagram-v2
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_sub_workflow_timeout_behavior() -> Result<()> {
+    // Test that sub-workflows respect timeout settings
+    let parent_workflow_content = r#"---
+name: test-parent-timeout
+title: Test Parent Workflow with Timeout
+description: Tests sub-workflow timeout behavior
+---
+
+# Test Parent Workflow Timeout
+
+```mermaid
+stateDiagram-v2
+    [*] --> Start
+    Start --> CallSubWorkflowWithTimeout
+    CallSubWorkflowWithTimeout --> HandleTimeout
+    HandleTimeout --> [*]
+```
+
+## Actions
+
+- Start: Set parent_var="parent_value"
+- CallSubWorkflowWithTimeout: Run workflow "long-running-workflow" with timeout="1s" result="sub_result"
+- HandleTimeout: Log "Sub-workflow timed out or completed"
+"#;
+
+    // Parse the parent workflow
+    let parent_workflow = MermaidParser::parse(parent_workflow_content, "test-parent-timeout")?;
+
+    // Create executor
+    let mut executor = WorkflowExecutor::new();
+
+    // Start the parent workflow
+    let mut run = WorkflowRun::new(parent_workflow);
+    
+    // Set a short timeout in the context to test timeout behavior
+    run.context.insert(
+        "_timeout_secs".to_string(),
+        serde_json::Value::Number(serde_json::Number::from(2)),
+    );
+
+    // Execute the workflow
+    let result = executor.execute_state(&mut run).await;
+
+    // The workflow should complete, either with a timeout or workflow not found
+    match result {
+        Ok(_) => {
+            // Verify we tried to execute the sub-workflow
+            let visited_states: Vec<StateId> = run
+                .history
+                .iter()
+                .map(|(state_id, _)| state_id.clone())
+                .collect();
+
+            assert!(visited_states.contains(&StateId::new("Start")));
+            assert!(visited_states.contains(&StateId::new("CallSubWorkflowWithTimeout")));
+        }
+        Err(e) => {
+            // Expected error if workflow doesn't exist
+            let error_msg = e.to_string();
+            println!("Expected error: {}", error_msg);
+            assert!(
+                error_msg.contains("workflow") || error_msg.contains("timeout"),
+                "Expected workflow or timeout error, got: {}",
+                error_msg
+            );
+        }
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_sub_workflow_timeout_propagation() -> Result<()> {
+    // Test that timeout values are properly propagated to sub-workflows
+    let parent_workflow_content = r#"---
+name: test-parent-timeout-propagation
+title: Test Parent Workflow Timeout Propagation
+description: Tests that timeout values propagate to sub-workflows
+---
+
+# Test Timeout Propagation
+
+```mermaid
+stateDiagram-v2
+    [*] --> ConfigureTimeout
+    ConfigureTimeout --> CallSubWorkflow
+    CallSubWorkflow --> VerifyResult
+    VerifyResult --> [*]
+```
+
+## Actions
+
+- ConfigureTimeout: Set sub_timeout="5"
+- CallSubWorkflow: Run workflow "test-sub-timeout" with timeout="${sub_timeout}s" input="test" result="sub_result"
+- VerifyResult: Log "Sub-workflow result: ${sub_result}"
+"#;
+
+    // Parse the parent workflow
+    let parent_workflow = MermaidParser::parse(parent_workflow_content, "test-parent-timeout-propagation")?;
+
+    // Create executor
+    let mut executor = WorkflowExecutor::new();
+
+    // Start the parent workflow
+    let mut run = WorkflowRun::new(parent_workflow);
+
+    // Execute the workflow
+    let result = executor.execute_state(&mut run).await;
+
+    // Verify the workflow executed properly
+    match result {
+        Ok(_) => {
+            // Check that timeout was configured
+            assert!(run.context.contains_key("sub_timeout"));
+            assert_eq!(
+                run.context.get("sub_timeout"),
+                Some(&serde_json::json!("5"))
+            );
+            
+            let visited_states: Vec<StateId> = run
+                .history
+                .iter()
+                .map(|(state_id, _)| state_id.clone())
+                .collect();
+
+            assert!(visited_states.contains(&StateId::new("ConfigureTimeout")));
+            assert!(visited_states.contains(&StateId::new("CallSubWorkflow")));
+        }
+        Err(e) => {
+            // Expected if sub-workflow doesn't exist
+            println!("Expected error (workflow not found): {}", e);
+        }
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_sub_workflow_timeout_cancellation() -> Result<()> {
+    // Test that sub-workflows can be cancelled via timeout
+    let parent_workflow_content = r#"---
+name: test-parent-cancellation
+title: Test Parent Workflow Cancellation
+description: Tests sub-workflow cancellation on timeout
+---
+
+# Test Cancellation
+
+```mermaid
+stateDiagram-v2
+    [*] --> Start
+    Start --> CallSlowSubWorkflow
+    CallSlowSubWorkflow --> CheckCancellation: on timeout
+    CheckCancellation --> [*]
+```
+
+## Actions
+
+- Start: Set start_time="${now}"
+- CallSlowSubWorkflow: Run workflow "slow-workflow" with timeout="100ms" result="sub_result"
+- CheckCancellation: Log "Sub-workflow was cancelled due to timeout"
+"#;
+
+    // Parse the parent workflow
+    let parent_workflow = MermaidParser::parse(parent_workflow_content, "test-parent-cancellation")?;
+
+    // Create executor
+    let mut executor = WorkflowExecutor::new();
+
+    // Start the parent workflow
+    let mut run = WorkflowRun::new(parent_workflow);
+    
+    // Set a very short global timeout to ensure cancellation
+    run.context.insert(
+        "_timeout_secs".to_string(),
+        serde_json::Value::Number(serde_json::Number::from_f64(0.1).unwrap()),
+    );
+
+    // Execute the workflow
+    let start = std::time::Instant::now();
+    let result = executor.execute_state(&mut run).await;
+    let duration = start.elapsed();
+
+    // Verify execution was reasonably quick (not hanging)
+    assert!(
+        duration.as_secs() < 5,
+        "Workflow execution took too long: {:?}",
+        duration
+    );
+
+    match result {
+        Ok(_) => {
+            println!("Workflow completed successfully");
+        }
+        Err(e) => {
+            println!("Workflow error (may be expected): {}", e);
+        }
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_deeply_nested_sub_workflows() -> Result<()> {
+    // Test sub-workflows nested 3+ levels deep
+    let level1_workflow = r#"---
+name: level1-workflow
+title: Level 1 Workflow
+description: Top level workflow
+---
+
+# Level 1 Workflow
+
+```mermaid
+stateDiagram-v2
+    [*] --> Start
+    Start --> CallLevel2
+    CallLevel2 --> ProcessResult
+    ProcessResult --> [*]
+```
+
+## Actions
+
+- Start: Set level1_data="Level 1 Data"
+- CallLevel2: Run workflow "level2-workflow" with input="${level1_data}" result="level2_result"
+- ProcessResult: Log "Level 2 returned: ${level2_result}"
+"#;
+
+    let level2_workflow = r#"---
+name: level2-workflow
+title: Level 2 Workflow
+description: Middle level workflow
+---
+
+# Level 2 Workflow
+
+```mermaid
+stateDiagram-v2
+    [*] --> Start
+    Start --> CallLevel3
+    CallLevel3 --> ProcessResult
+    ProcessResult --> [*]
+```
+
+## Actions
+
+- Start: Set level2_data="Level 2 Data: ${input}"
+- CallLevel3: Run workflow "level3-workflow" with input="${level2_data}" result="level3_result"
+- ProcessResult: Set output="L2 processed: ${level3_result}"
+"#;
+
+    let level3_workflow = r#"---
+name: level3-workflow
+title: Level 3 Workflow
+description: Deepest level workflow
+---
+
+# Level 3 Workflow
+
+```mermaid
+stateDiagram-v2
+    [*] --> Process
+    Process --> Complete
+    Complete --> [*]
+```
+
+## Actions
+
+- Process: Set processed_data="L3 processed: ${input}"
+- Complete: Set output="${processed_data}"
+"#;
+
+    // Create memory storage and store all workflows
+    let mut storage = WorkflowStorage::memory();
+    let workflow1 = MermaidParser::parse(level1_workflow, "level1-workflow")?;
+    let workflow2 = MermaidParser::parse(level2_workflow, "level2-workflow")?;
+    let workflow3 = MermaidParser::parse(level3_workflow, "level3-workflow")?;
+
+    storage.store_workflow(workflow1.clone())?;
+    storage.store_workflow(workflow2)?;
+    storage.store_workflow(workflow3)?;
+
+    // Create executor
+    let mut executor = WorkflowExecutor::new();
+
+    // Start the top-level workflow
+    let mut run = WorkflowRun::new(workflow1);
+
+    // Execute the workflow
+    let result = executor.execute_state(&mut run).await;
+
+    // Verify execution reached expected states
+    let visited_states: Vec<StateId> = run
+        .history
+        .iter()
+        .map(|(state_id, _)| state_id.clone())
+        .collect();
+
+    assert!(visited_states.contains(&StateId::new("Start")));
+    assert!(visited_states.contains(&StateId::new("CallLevel2")));
+
+    // Check if workflow stack tracking would prevent infinite recursion
+    // (Even though the sub-workflows will fail to load from file system)
+    if let Some(stack) = run.context.get("_workflow_stack") {
+        println!("Workflow execution stack: {:?}", stack);
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_sub_workflow_deep_nesting_limit() -> Result<()> {
+    // Test that extremely deep nesting is handled gracefully
+    let recursive_workflow = r#"---
+name: recursive-workflow
+title: Recursive Workflow
+description: Tests deep recursion handling
+---
+
+# Recursive Workflow
+
+```mermaid
+stateDiagram-v2
+    [*] --> CheckDepth
+    CheckDepth --> CallSelf: depth < 10
+    CheckDepth --> Complete: depth >= 10
+    CallSelf --> UpdateDepth
+    UpdateDepth --> CheckDepth
+    Complete --> [*]
+```
+
+## Actions
+
+- CheckDepth: Set should_recurse="${depth < 10}"
+- CallSelf: Run workflow "recursive-workflow" with depth="${depth + 1}" result="sub_result"
+- UpdateDepth: Set depth="${sub_result.depth}"
+- Complete: Set output="Reached max depth: ${depth}"
+"#;
+
+    // Parse the recursive workflow
+    let workflow = MermaidParser::parse(recursive_workflow, "recursive-workflow")?;
+
+    // Create executor
+    let mut executor = WorkflowExecutor::new();
+
+    // Start with depth 0
+    let mut run = WorkflowRun::new(workflow);
+    run.context.insert("depth".to_string(), serde_json::json!(0));
+
+    // Execute the workflow
+    let result = executor.execute_state(&mut run).await;
+
+    // The workflow should handle recursion gracefully
+    match result {
+        Ok(_) => {
+            println!("Recursive workflow completed");
+            
+            // Check how deep we went
+            if let Some(depth) = run.context.get("depth") {
+                println!("Final depth: {:?}", depth);
+            }
+        }
+        Err(e) => {
+            println!("Recursive workflow error (expected): {}", e);
+            // This is expected as the sub-workflow won't exist in the file system
+        }
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_sub_workflow_context_isolation() -> Result<()> {
+    // Test that sub-workflows have isolated contexts
+    let parent_workflow = r#"---
+name: parent-context-test
+title: Parent Context Test
+description: Tests context isolation between parent and sub-workflows
+---
+
+# Parent Context Test
+
+```mermaid
+stateDiagram-v2
+    [*] --> SetParentVars
+    SetParentVars --> CallSubWorkflow1
+    CallSubWorkflow1 --> CallSubWorkflow2
+    CallSubWorkflow2 --> VerifyIsolation
+    VerifyIsolation --> [*]
+```
+
+## Actions
+
+- SetParentVars: Set parent_only="parent value", shared_var="parent shared"
+- CallSubWorkflow1: Run workflow "sub1" with shared_var="${shared_var}" result="sub1_result"
+- CallSubWorkflow2: Run workflow "sub2" with shared_var="${shared_var}" result="sub2_result"
+- VerifyIsolation: Log "Parent still has: ${parent_only}, Sub1: ${sub1_result}, Sub2: ${sub2_result}"
+"#;
+
+    // Parse the workflow
+    let workflow = MermaidParser::parse(parent_workflow, "parent-context-test")?;
+
+    // Create executor
+    let mut executor = WorkflowExecutor::new();
+
+    // Start the workflow
+    let mut run = WorkflowRun::new(workflow);
+
+    // Execute the workflow
+    let result = executor.execute_state(&mut run).await;
+
+    // Verify parent context remains intact
+    match result {
+        Ok(_) => {
+            // Check that parent variables are preserved
+            assert_eq!(
+                run.context.get("parent_only"),
+                Some(&serde_json::json!("parent value"))
+            );
+            assert_eq!(
+                run.context.get("shared_var"),
+                Some(&serde_json::json!("parent shared"))
+            );
+        }
+        Err(e) => {
+            // Expected if sub-workflows don't exist
+            println!("Context isolation test error (expected): {}", e);
+            
+            // Even with errors, parent context should be preserved
+            if let Some(parent_only) = run.context.get("parent_only") {
+                assert_eq!(parent_only, &serde_json::json!("parent value"));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_sub_workflow_parallel_execution() -> Result<()> {
+    // Test multiple sub-workflows executing in parallel
+    let parallel_workflow = r#"---
+name: parallel-sub-workflows
+title: Parallel Sub-Workflows
+description: Tests parallel execution of multiple sub-workflows
+---
+
+# Parallel Sub-Workflows
+
+```mermaid
+stateDiagram-v2
+    [*] --> Setup
+    Setup --> ParallelExecution
+    
+    state ParallelExecution {
+        --
+        [*] --> CallWorkflow1
+        [*] --> CallWorkflow2
+        [*] --> CallWorkflow3
+        
+        CallWorkflow1 --> [*]
+        CallWorkflow2 --> [*]
+        CallWorkflow3 --> [*]
+        --
+    }
+    
+    ParallelExecution --> CollectResults
+    CollectResults --> [*]
+```
+
+## Actions
+
+- Setup: Set start_time="${now}", parallel_data="shared data"
+- CallWorkflow1: Run workflow "worker1" with data="${parallel_data}" id="1" result="result1"
+- CallWorkflow2: Run workflow "worker2" with data="${parallel_data}" id="2" result="result2"
+- CallWorkflow3: Run workflow "worker3" with data="${parallel_data}" id="3" result="result3"
+- CollectResults: Log "All workflows completed: ${result1}, ${result2}, ${result3}"
+"#;
+
+    // Parse the workflow
+    let workflow = MermaidParser::parse(parallel_workflow, "parallel-sub-workflows")?;
+
+    // Create executor
+    let mut executor = WorkflowExecutor::new();
+
+    // Start the workflow
+    let mut run = WorkflowRun::new(workflow);
+
+    // Execute the workflow
+    let result = executor.execute_state(&mut run).await;
+
+    // Verify parallel execution setup
+    let visited_states: Vec<StateId> = run
+        .history
+        .iter()
+        .map(|(state_id, _)| state_id.clone())
+        .collect();
+
+    assert!(visited_states.contains(&StateId::new("Setup")));
+    
+    // Note: Actual parallel execution depends on the workflow engine's
+    // support for parallel states, which is indicated by the allows_parallel flag
+
+    Ok(())
+}

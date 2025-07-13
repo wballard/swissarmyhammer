@@ -416,7 +416,7 @@ impl WorkflowMetrics {
         self.update_global_metrics();
 
         if removed_runs > 0 || removed_workflows > 0 {
-            eprintln!(
+            tracing::info!(
                 "Metrics cleanup completed: removed {} old runs and {} old workflow summaries",
                 removed_runs, removed_workflows
             );

@@ -5,7 +5,7 @@ use crate::workflow::{
     FileSystemWorkflowRunStorage, FileSystemWorkflowStorage, WorkflowRunStorageBackend,
     WorkflowStorage, WorkflowStorageBackend,
 };
-use crate::{PromptLibrary, PromptResolver};
+use crate::{PromptLibrary, PromptResolver, Result, SwissArmyHammerError};
 use rmcp::model::*;
 use rmcp::service::RequestContext;
 use rmcp::{Error as McpError, RoleServer, ServerHandler};
@@ -42,11 +42,11 @@ pub struct McpServer {
 
 impl McpServer {
     /// Create a new MCP server
-    pub fn new(library: PromptLibrary) -> anyhow::Result<Self> {
+    pub fn new(library: PromptLibrary) -> Result<Self> {
         // Initialize workflow storage with filesystem backend
         let workflow_backend = Arc::new(FileSystemWorkflowStorage::new().map_err(|e| {
             tracing::error!("Failed to create workflow storage: {}", e);
-            anyhow::anyhow!("Failed to create workflow storage: {}", e)
+            SwissArmyHammerError::Other(format!("Failed to create workflow storage: {}", e))
         })?) as Arc<dyn WorkflowStorageBackend>;
 
         // Create runs directory in user's home directory
@@ -54,7 +54,7 @@ impl McpServer {
 
         let run_backend = Arc::new(FileSystemWorkflowRunStorage::new(runs_path).map_err(|e| {
             tracing::error!("Failed to create workflow run storage: {}", e);
-            anyhow::anyhow!("Failed to create workflow run storage: {}", e)
+            SwissArmyHammerError::Other(format!("Failed to create workflow run storage: {}", e))
         })?) as Arc<dyn WorkflowRunStorageBackend>;
 
         let workflow_storage = WorkflowStorage::new(workflow_backend, run_backend);
@@ -72,7 +72,7 @@ impl McpServer {
     }
 
     /// Initialize the server with prompt directories using PromptResolver
-    pub async fn initialize(&self) -> anyhow::Result<()> {
+    pub async fn initialize(&self) -> Result<()> {
         let mut library = self.library.write().await;
         let mut resolver = PromptResolver::new();
 
@@ -92,7 +92,7 @@ impl McpServer {
     }
 
     /// List all available prompts (excluding partial templates)
-    pub async fn list_prompts(&self) -> anyhow::Result<Vec<String>> {
+    pub async fn list_prompts(&self) -> Result<Vec<String>> {
         let library = self.library.read().await;
         let prompts = library.list()?;
         Ok(prompts
@@ -103,7 +103,7 @@ impl McpServer {
     }
 
     /// List all available workflows
-    pub async fn list_workflows(&self) -> anyhow::Result<Vec<String>> {
+    pub async fn list_workflows(&self) -> Result<Vec<String>> {
         let workflow_storage = self.workflow_storage.read().await;
         let workflows = workflow_storage.list_workflows()?;
         Ok(workflows.iter().map(|w| w.name.to_string()).collect())
@@ -131,16 +131,16 @@ impl McpServer {
         &self,
         name: &str,
         arguments: Option<&HashMap<String, String>>,
-    ) -> anyhow::Result<String> {
+    ) -> Result<String> {
         let library = self.library.read().await;
         let prompt = library.get(name)?;
 
         // Check if this is a partial template
         if Self::is_partial_template(&prompt) {
-            return Err(anyhow::anyhow!(
+            return Err(SwissArmyHammerError::Other(format!(
                 "Cannot access partial template '{}' via MCP. Partial templates are for internal use only.",
                 name
-            ));
+            )));
         }
 
         // Handle arguments if provided
@@ -168,7 +168,7 @@ impl McpFileWatcherCallback {
 }
 
 impl FileWatcherCallback for McpFileWatcherCallback {
-    async fn on_file_changed(&self, paths: Vec<std::path::PathBuf>) -> anyhow::Result<()> {
+    async fn on_file_changed(&self, paths: Vec<std::path::PathBuf>) -> Result<()> {
         tracing::info!("📄 Prompt file changed: {:?}", paths);
 
         // Reload the library
@@ -202,7 +202,7 @@ impl FileWatcherCallback for McpFileWatcherCallback {
 
 impl McpServer {
     /// Start watching prompt directories for changes
-    pub async fn start_file_watching(&self, peer: rmcp::Peer<RoleServer>) -> anyhow::Result<()> {
+    pub async fn start_file_watching(&self, peer: rmcp::Peer<RoleServer>) -> Result<()> {
         const MAX_RETRIES: u32 = 3;
         const INITIAL_BACKOFF_MS: u64 = 100;
 
@@ -301,12 +301,12 @@ impl McpServer {
     }
 
     /// Reload prompts from disk
-    async fn reload_prompts(&self) -> anyhow::Result<()> {
+    async fn reload_prompts(&self) -> Result<()> {
         self.reload_prompts_with_retry().await
     }
 
     /// Reload prompts with retry logic for transient file system errors
-    async fn reload_prompts_with_retry(&self) -> anyhow::Result<()> {
+    async fn reload_prompts_with_retry(&self) -> Result<()> {
         const MAX_RETRIES: u32 = 3;
         const INITIAL_BACKOFF_MS: u64 = 100;
 
@@ -343,9 +343,9 @@ impl McpServer {
     }
 
     /// Check if an error is a retryable file system error
-    fn is_retryable_fs_error(error: &anyhow::Error) -> bool {
+    fn is_retryable_fs_error(error: &SwissArmyHammerError) -> bool {
         // Check for common transient file system errors
-        if let Some(io_err) = error.downcast_ref::<std::io::Error>() {
+        if let SwissArmyHammerError::Io(io_err) = error {
             matches!(
                 io_err.kind(),
                 std::io::ErrorKind::TimedOut
@@ -363,7 +363,7 @@ impl McpServer {
     }
 
     /// Internal reload method that performs the actual reload
-    async fn reload_prompts_internal(&self) -> anyhow::Result<()> {
+    async fn reload_prompts_internal(&self) -> Result<()> {
         let mut library = self.library.write().await;
         let mut resolver = PromptResolver::new();
 
@@ -390,7 +390,7 @@ impl ServerHandler for McpServer {
         &self,
         request: InitializeRequestParam,
         context: RequestContext<RoleServer>,
-    ) -> Result<InitializeResult, McpError> {
+    ) -> std::result::Result<InitializeResult, McpError> {
         tracing::info!(
             "🚀 MCP client connecting: {} v{}",
             request.client_info.name,
@@ -434,7 +434,7 @@ impl ServerHandler for McpServer {
         &self,
         _request: Option<PaginatedRequestParam>,
         _context: RequestContext<RoleServer>,
-    ) -> Result<ListPromptsResult, McpError> {
+    ) -> std::result::Result<ListPromptsResult, McpError> {
         let library = self.library.read().await;
         match library.list() {
             Ok(prompts) => {
@@ -465,7 +465,7 @@ impl ServerHandler for McpServer {
         &self,
         request: GetPromptRequestParam,
         _context: RequestContext<RoleServer>,
-    ) -> Result<GetPromptResult, McpError> {
+    ) -> std::result::Result<GetPromptResult, McpError> {
         let library = self.library.read().await;
         match library.get(&request.name) {
             Ok(prompt) => {

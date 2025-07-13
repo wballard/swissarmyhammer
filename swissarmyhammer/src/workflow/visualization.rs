@@ -177,8 +177,8 @@ impl ExecutionVisualizer {
                 match completed.signed_duration_since(run.started_at).to_std() {
                     Ok(duration) => duration,
                     Err(e) => {
-                        eprintln!(
-                            "Warning: Failed to calculate duration for run {}: {}",
+                        tracing::warn!(
+                            "Failed to calculate duration for run {}: {}",
                             run.id, e
                         );
                         Duration::ZERO
@@ -405,7 +405,7 @@ impl ExecutionVisualizer {
             match trace.total_duration {
                 Some(duration) => format!("{:?}", duration),
                 None => {
-                    eprintln!("Warning: No duration available for trace {}", trace.run_id);
+                    tracing::warn!("No duration available for trace {}", trace.run_id);
                     "N/A".to_string()
                 }
             },

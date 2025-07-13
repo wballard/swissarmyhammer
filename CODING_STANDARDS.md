@@ -1,0 +1,1 @@
+- DO NOT duplicate the file loading and resolutuion logic between commands

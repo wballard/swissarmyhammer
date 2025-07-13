@@ -1,24 +1,21 @@
 //! Tests for concurrent action execution
 
 use super::*;
-use tokio::sync::Mutex;
 use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::Mutex;
 
 #[tokio::test]
 async fn test_concurrent_set_variable_actions() {
     // Test that multiple SetVariableActions can execute concurrently without race conditions
     let context = Arc::new(Mutex::new(create_test_context()));
-    
+
     let actions: Vec<SetVariableAction> = (0..10)
-        .map(|i| SetVariableAction::new(
-            format!("concurrent_var_{}", i),
-            format!("value_{}", i),
-        ))
+        .map(|i| SetVariableAction::new(format!("concurrent_var_{}", i), format!("value_{}", i)))
         .collect();
 
     let mut handles = vec![];
-    
+
     for action in actions {
         let context_clone = Arc::clone(&context);
         let handle = tokio::spawn(async move {
@@ -41,7 +38,8 @@ async fn test_concurrent_set_variable_actions() {
         assert_eq!(
             ctx.get(&key),
             Some(&Value::String(expected_value)),
-            "Variable {} was not set correctly", key
+            "Variable {} was not set correctly",
+            key
         );
     }
 }
@@ -50,7 +48,7 @@ async fn test_concurrent_set_variable_actions() {
 async fn test_concurrent_log_actions() {
     // Test that multiple LogActions can execute concurrently
     let mut context = create_test_context();
-    
+
     let actions: Vec<LogAction> = vec![
         LogAction::info("Concurrent log 1".to_string()),
         LogAction::warning("Concurrent log 2".to_string()),
@@ -58,14 +56,12 @@ async fn test_concurrent_log_actions() {
     ];
 
     let start = Instant::now();
-    
+
     // Execute all log actions concurrently
     let mut handles = vec![];
     for action in actions {
         let mut ctx = context.clone();
-        let handle = tokio::spawn(async move {
-            action.execute(&mut ctx).await
-        });
+        let handle = tokio::spawn(async move { action.execute(&mut ctx).await });
         handles.push(handle);
     }
 
@@ -76,9 +72,13 @@ async fn test_concurrent_log_actions() {
     }
 
     let duration = start.elapsed();
-    
+
     // Verify execution was concurrent (should be much less than sequential)
-    assert!(duration.as_millis() < 100, "Concurrent execution took too long: {:?}", duration);
+    assert!(
+        duration.as_millis() < 100,
+        "Concurrent execution took too long: {:?}",
+        duration
+    );
 }
 
 #[tokio::test]
@@ -86,21 +86,18 @@ async fn test_concurrent_wait_actions() {
     // Test that WaitActions execute concurrently
     let wait_duration = Duration::from_millis(100);
     let num_actions = 5;
-    
+
     let actions: Vec<WaitAction> = (0..num_actions)
-        .map(|i| WaitAction::new_duration(wait_duration)
-            .with_message(format!("Wait action {}", i)))
+        .map(|i| WaitAction::new_duration(wait_duration).with_message(format!("Wait action {}", i)))
         .collect();
 
     let start = Instant::now();
-    
+
     // Execute all wait actions concurrently
     let mut handles = vec![];
     for action in actions {
         let mut context = create_test_context();
-        let handle = tokio::spawn(async move {
-            action.execute(&mut context).await
-        });
+        let handle = tokio::spawn(async move { action.execute(&mut context).await });
         handles.push(handle);
     }
 
@@ -110,12 +107,12 @@ async fn test_concurrent_wait_actions() {
     }
 
     let duration = start.elapsed();
-    
+
     // If executed concurrently, total time should be close to single wait duration
     // If sequential, it would be num_actions * wait_duration
     assert!(
         duration < Duration::from_millis(200),
-        "Concurrent wait actions took too long: {:?} (expected < 200ms)", 
+        "Concurrent wait actions took too long: {:?} (expected < 200ms)",
         duration
     );
 }
@@ -124,7 +121,7 @@ async fn test_concurrent_wait_actions() {
 async fn test_concurrent_mixed_actions() {
     // Test different action types executing concurrently
     let context = Arc::new(Mutex::new(create_test_context()));
-    
+
     let set_action = SetVariableAction::new("mixed_var".to_string(), "mixed_value".to_string());
     let log_action = LogAction::info("Mixed concurrent test".to_string());
     let wait_action = WaitAction::new_duration(Duration::from_millis(50));
@@ -149,7 +146,7 @@ async fn test_concurrent_mixed_actions() {
 
     // Wait for all actions
     let results = tokio::join!(handle1, handle2, handle3);
-    
+
     assert!(results.0.is_ok());
     assert!(results.1.is_ok());
     assert!(results.2.is_ok());
@@ -166,13 +163,11 @@ async fn test_concurrent_mixed_actions() {
 async fn test_concurrent_action_error_isolation() {
     // Test that errors in one concurrent action don't affect others
     let context = Arc::new(Mutex::new(create_test_context()));
-    
+
     // Create an action with invalid JSON (will be stored as string)
-    let failing_action = SetVariableAction::new(
-        "fail_var".to_string(),
-        "{invalid json".to_string(),
-    );
-    
+    let failing_action =
+        SetVariableAction::new("fail_var".to_string(), "{invalid json".to_string());
+
     // Create actions that should succeed
     let success_action1 = SetVariableAction::new("success1".to_string(), "value1".to_string());
     let success_action2 = SetVariableAction::new("success2".to_string(), "value2".to_string());
@@ -196,35 +191,46 @@ async fn test_concurrent_action_error_isolation() {
     });
 
     let (result1, result2, result3) = tokio::join!(handle1, handle2, handle3);
-    
+
     // All actions should succeed (SetVariableAction doesn't fail on invalid JSON)
     assert!(result1.is_ok());
-    
+
     // Other actions should succeed
     assert!(result2.is_ok());
     assert!(result3.is_ok());
 
     // Verify successful actions completed
     let ctx = context.lock().await;
-    assert_eq!(ctx.get("success1"), Some(&Value::String("value1".to_string())));
-    assert_eq!(ctx.get("success2"), Some(&Value::String("value2".to_string())));
+    assert_eq!(
+        ctx.get("success1"),
+        Some(&Value::String("value1".to_string()))
+    );
+    assert_eq!(
+        ctx.get("success2"),
+        Some(&Value::String("value2".to_string()))
+    );
     // SetVariableAction stores invalid JSON as a string, it doesn't fail
-    assert_eq!(ctx.get("fail_var"), Some(&Value::String("{invalid json".to_string())));
+    assert_eq!(
+        ctx.get("fail_var"),
+        Some(&Value::String("{invalid json".to_string()))
+    );
 }
 
 #[tokio::test]
 async fn test_concurrent_prompt_action_rate_limiting() {
     // Test that concurrent PromptActions handle rate limiting properly
     // This test simulates rate limiting scenarios
-    
+
     let actions: Vec<PromptAction> = (0..3)
-        .map(|i| PromptAction::new(format!("test-prompt-{}", i))
-            .with_argument("arg".to_string(), format!("value{}", i))
-            .with_max_retries(1))
+        .map(|i| {
+            PromptAction::new(format!("test-prompt-{}", i))
+                .with_argument("arg".to_string(), format!("value{}", i))
+                .with_max_retries(1)
+        })
         .collect();
 
     let start = Instant::now();
-    
+
     // Execute actions concurrently
     let mut handles = vec![];
     for action in actions {
@@ -243,7 +249,7 @@ async fn test_concurrent_prompt_action_rate_limiting() {
     }
 
     let duration = start.elapsed();
-    
+
     // Verify that execution attempted concurrently
     // (actual rate limiting would depend on external service)
     println!("Concurrent prompt actions completed in {:?}", duration);
@@ -253,20 +259,22 @@ async fn test_concurrent_prompt_action_rate_limiting() {
 async fn test_concurrent_sub_workflow_actions() {
     // Test concurrent sub-workflow execution
     let context = Arc::new(Mutex::new(create_test_context()));
-    
+
     // Initialize workflow stack to prevent circular dependency errors
     {
         let mut ctx = context.lock().await;
         ctx.insert("_workflow_stack".to_string(), serde_json::json!([]));
     }
-    
+
     let actions: Vec<SubWorkflowAction> = (0..3)
-        .map(|i| SubWorkflowAction::new(format!("sub-workflow-{}", i))
-            .with_input("input".to_string(), format!("data{}", i)))
+        .map(|i| {
+            SubWorkflowAction::new(format!("sub-workflow-{}", i))
+                .with_input("input".to_string(), format!("data{}", i))
+        })
         .collect();
 
     let mut handles = vec![];
-    
+
     for action in actions {
         let ctx_clone = Arc::clone(&context);
         let handle = tokio::spawn(async move {
@@ -292,12 +300,12 @@ async fn test_concurrent_action_context_consistency() {
     // Test that concurrent actions maintain context consistency
     let shared_key = "shared_counter";
     let initial_value = 0;
-    
+
     let context = Arc::new(Mutex::new(HashMap::new()));
-    context.lock().await.insert(
-        shared_key.to_string(),
-        Value::Number(initial_value.into())
-    );
+    context
+        .lock()
+        .await
+        .insert(shared_key.to_string(), Value::Number(initial_value.into()));
 
     // Create multiple actions that read and update the same variable
     let num_actions = 10;
@@ -306,28 +314,23 @@ async fn test_concurrent_action_context_consistency() {
     for i in 0..num_actions {
         let ctx_clone = Arc::clone(&context);
         let key = shared_key.to_string();
-        
+
         let handle = tokio::spawn(async move {
             // Simulate read-modify-write operation
             let mut ctx = ctx_clone.lock().await;
-            
+
             // Read current value
-            let current = ctx.get(&key)
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0);
-            
+            let current = ctx.get(&key).and_then(|v| v.as_i64()).unwrap_or(0);
+
             // Simulate some processing
             tokio::time::sleep(Duration::from_millis(10)).await;
-            
+
             // Write incremented value
-            ctx.insert(
-                key.clone(),
-                Value::Number((current + 1).into())
-            );
-            
+            ctx.insert(key.clone(), Value::Number((current + 1).into()));
+
             println!("Action {} updated counter to {}", i, current + 1);
         });
-        
+
         handles.push(handle);
     }
 
@@ -338,16 +341,15 @@ async fn test_concurrent_action_context_consistency() {
 
     // Verify final value
     let final_ctx = context.lock().await;
-    let final_value = final_ctx.get(shared_key)
+    let final_value = final_ctx
+        .get(shared_key)
         .and_then(|v| v.as_i64())
         .unwrap_or(0);
 
     // Due to the mutex, all increments should be atomic
     assert_eq!(
-        final_value, 
-        num_actions as i64,
-        "Expected counter to be {}, but was {}", 
-        num_actions, 
-        final_value
+        final_value, num_actions as i64,
+        "Expected counter to be {}, but was {}",
+        num_actions, final_value
     );
 }

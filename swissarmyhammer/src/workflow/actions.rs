@@ -172,9 +172,13 @@ pub trait VariableSubstitution {
     fn substitute_string(&self, value: &str, context: &HashMap<String, Value>) -> String {
         substitute_variables_in_string(value, context)
     }
-    
+
     /// Substitute variables in a HashMap of string values
-    fn substitute_map(&self, values: &HashMap<String, String>, context: &HashMap<String, Value>) -> HashMap<String, String> {
+    fn substitute_map(
+        &self,
+        values: &HashMap<String, String>,
+        context: &HashMap<String, Value>,
+    ) -> HashMap<String, String> {
         let mut substituted = HashMap::new();
         for (key, value) in values {
             substituted.insert(key.clone(), self.substitute_string(value, context));
@@ -207,17 +211,17 @@ pub trait RetryableAction: Action {
     fn max_retries(&self) -> u32 {
         2 // Default to 2 retries
     }
-    
+
     /// Get the retry strategy
     fn retry_strategy(&self) -> RetryStrategy {
         RetryStrategy::WaitUntilNextHour // Default for backward compatibility
     }
-    
+
     /// Check if an error is retryable
     fn is_retryable_error(&self, error: &ActionError) -> bool {
         matches!(error, ActionError::RateLimit { .. })
     }
-    
+
     /// Calculate wait time based on retry strategy and attempt number
     fn calculate_wait_time(&self, error: &ActionError, attempt: u32) -> Duration {
         match error {
@@ -247,17 +251,20 @@ pub trait RetryableAction: Action {
                     }
                 }
                 RetryStrategy::FixedDelay(delay) => delay,
-            }
+            },
         }
     }
-    
+
     /// Execute the action once (without retry)
     async fn execute_once(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value>;
-    
+
     /// Execute the action with retry logic
-    async fn execute_with_retry(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
+    async fn execute_with_retry(
+        &self,
+        context: &mut HashMap<String, Value>,
+    ) -> ActionResult<Value> {
         let mut retries = 0;
-        
+
         loop {
             match self.execute_once(context).await {
                 Ok(response) => return Ok(response),
@@ -266,10 +273,10 @@ pub trait RetryableAction: Action {
                         // Max retries exceeded, return the error
                         return Err(error);
                     }
-                    
+
                     retries += 1;
                     let wait_time = self.calculate_wait_time(&error, retries);
-                    
+
                     tracing::warn!(
                         "Error occurred (attempt {}/{}): {}. Waiting {:?} before retry...",
                         retries,
@@ -277,9 +284,9 @@ pub trait RetryableAction: Action {
                         error,
                         wait_time
                     );
-                    
+
                     tokio::time::sleep(wait_time).await;
-                    
+
                     tracing::info!("Retrying after wait...");
                 }
                 Err(error) => return Err(error), // Non-retryable errors
@@ -327,8 +334,8 @@ impl PromptAction {
             arguments: HashMap::new(),
             result_variable: None,
             timeout: timeouts.prompt_timeout,
-            quiet: false,                      // Default to showing output
-            max_retries: 2,                    // Default to 2 retries for rate limits
+            quiet: false,   // Default to showing output
+            max_retries: 2, // Default to 2 retries for rate limits
         }
     }
 
@@ -395,7 +402,7 @@ impl RetryableAction for PromptAction {
     fn max_retries(&self) -> u32 {
         self.max_retries
     }
-    
+
     async fn execute_once(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
         // Moved from the existing execute_once method in impl PromptAction
         self.execute_once_internal(context).await
@@ -415,7 +422,9 @@ fn resolve_swissarmyhammer_binary() -> std::path::PathBuf {
         std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("swissarmyhammer"));
 
     // In test environment, current_exe might point to test binary, so try to find the actual swissarmyhammer binary
-    if current_exe.to_string_lossy().contains("test") || current_exe.to_string_lossy().contains("deps") {
+    if current_exe.to_string_lossy().contains("test")
+        || current_exe.to_string_lossy().contains("deps")
+    {
         // We're in a test, try to find the actual binary
         if let Ok(cargo_target) = std::env::var("CARGO_TARGET_DIR") {
             let debug_binary = std::path::PathBuf::from(cargo_target)
@@ -425,7 +434,7 @@ fn resolve_swissarmyhammer_binary() -> std::path::PathBuf {
                 return debug_binary;
             }
         }
-        
+
         // Fallback to target/debug/swissarmyhammer relative to workspace
         if let Ok(workspace_dir) = std::env::var("CARGO_MANIFEST_DIR") {
             let workspace_root = std::path::Path::new(&workspace_dir)
@@ -439,7 +448,7 @@ fn resolve_swissarmyhammer_binary() -> std::path::PathBuf {
                 return debug_binary;
             }
         }
-        
+
         // Final fallback
         std::path::PathBuf::from("swissarmyhammer")
     } else {
@@ -514,7 +523,10 @@ impl PromptAction {
     /// # Returns
     /// * `Ok(Value)` - The command response on success
     /// * `Err(ActionError)` - Various errors including rate limits
-    async fn execute_once_internal(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
+    async fn execute_once_internal(
+        &self,
+        context: &mut HashMap<String, Value>,
+    ) -> ActionResult<Value> {
         // First, render the prompt using swissarmyhammer
         let rendered_prompt = self.render_prompt_with_swissarmyhammer(context).await?;
 

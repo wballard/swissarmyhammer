@@ -177,10 +177,7 @@ impl ExecutionVisualizer {
                 match completed.signed_duration_since(run.started_at).to_std() {
                     Ok(duration) => duration,
                     Err(e) => {
-                        tracing::warn!(
-                            "Failed to calculate duration for run {}: {}",
-                            run.id, e
-                        );
+                        tracing::warn!("Failed to calculate duration for run {}: {}", run.id, e);
                         Duration::ZERO
                     }
                 }

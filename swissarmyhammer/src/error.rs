@@ -283,16 +283,16 @@ pub struct ErrorChain<'a>(&'a dyn std::error::Error);
 impl<'a> fmt::Display for ErrorChain<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Error: {}", self.0)?;
-        
+
         let mut current = self.0.source();
         let mut level = 1;
-        
+
         while let Some(err) = current {
             writeln!(f, "{:indent$}Caused by: {}", "", err, indent = level * 2)?;
             current = err.source();
             level += 1;
         }
-        
+
         Ok(())
     }
 }
@@ -317,7 +317,7 @@ mod tests {
     fn test_error_context() {
         let err: Result<()> = Err(io::Error::new(io::ErrorKind::NotFound, "file not found").into());
         let err_with_context = err.context("Failed to open config file");
-        
+
         assert!(err_with_context.is_err());
         let msg = err_with_context.unwrap_err().to_string();
         assert!(msg.contains("Failed to open config file"));
@@ -330,7 +330,7 @@ mod tests {
             message: "Failed to load workflow".to_string(),
             source: Box::new(io_err),
         };
-        
+
         let chain = err.error_chain().to_string();
         assert!(chain.contains("Failed to load workflow"));
         assert!(chain.contains("file not found"));

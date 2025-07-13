@@ -271,7 +271,7 @@ stateDiagram-v2
 
     // Start the parent workflow
     let mut run = WorkflowRun::new(parent_workflow);
-    
+
     // Set a short timeout in the context to test timeout behavior
     run.context.insert(
         "_timeout_secs".to_string(),
@@ -336,7 +336,8 @@ stateDiagram-v2
 "#;
 
     // Parse the parent workflow
-    let parent_workflow = MermaidParser::parse(parent_workflow_content, "test-parent-timeout-propagation")?;
+    let parent_workflow =
+        MermaidParser::parse(parent_workflow_content, "test-parent-timeout-propagation")?;
 
     // Create executor
     let mut executor = WorkflowExecutor::new();
@@ -352,11 +353,8 @@ stateDiagram-v2
         Ok(_) => {
             // Check that timeout was configured
             assert!(run.context.contains_key("sub_timeout"));
-            assert_eq!(
-                run.context.get("sub_timeout"),
-                Some(&serde_json::json!("5"))
-            );
-            
+            assert_eq!(run.context.get("sub_timeout"), Some(&serde_json::json!(5)));
+
             let visited_states: Vec<StateId> = run
                 .history
                 .iter()
@@ -402,14 +400,15 @@ stateDiagram-v2
 "#;
 
     // Parse the parent workflow
-    let parent_workflow = MermaidParser::parse(parent_workflow_content, "test-parent-cancellation")?;
+    let parent_workflow =
+        MermaidParser::parse(parent_workflow_content, "test-parent-cancellation")?;
 
     // Create executor
     let mut executor = WorkflowExecutor::new();
 
     // Start the parent workflow
     let mut run = WorkflowRun::new(parent_workflow);
-    
+
     // Set a very short global timeout to ensure cancellation
     run.context.insert(
         "_timeout_secs".to_string(),
@@ -585,7 +584,8 @@ stateDiagram-v2
 
     // Start with depth 0
     let mut run = WorkflowRun::new(workflow);
-    run.context.insert("depth".to_string(), serde_json::json!(0));
+    run.context
+        .insert("depth".to_string(), serde_json::json!(0));
 
     // Execute the workflow
     let result = executor.execute_state(&mut run).await;
@@ -594,7 +594,7 @@ stateDiagram-v2
     match result {
         Ok(_) => {
             println!("Recursive workflow completed");
-            
+
             // Check how deep we went
             if let Some(depth) = run.context.get("depth") {
                 println!("Final depth: {:?}", depth);
@@ -622,8 +622,9 @@ description: Tests context isolation between parent and sub-workflows
 
 ```mermaid
 stateDiagram-v2
-    [*] --> SetParentVars
-    SetParentVars --> CallSubWorkflow1
+    [*] --> SetParentOnly
+    SetParentOnly --> SetSharedVar
+    SetSharedVar --> CallSubWorkflow1
     CallSubWorkflow1 --> CallSubWorkflow2
     CallSubWorkflow2 --> VerifyIsolation
     VerifyIsolation --> [*]
@@ -631,7 +632,8 @@ stateDiagram-v2
 
 ## Actions
 
-- SetParentVars: Set parent_only="parent value", shared_var="parent shared"
+- SetParentOnly: Set parent_only="parent value"
+- SetSharedVar: Set shared_var="parent shared"
 - CallSubWorkflow1: Run workflow "sub1" with shared_var="${shared_var}" result="sub1_result"
 - CallSubWorkflow2: Run workflow "sub2" with shared_var="${shared_var}" result="sub2_result"
 - VerifyIsolation: Log "Parent still has: ${parent_only}, Sub1: ${sub1_result}, Sub2: ${sub2_result}"
@@ -665,7 +667,7 @@ stateDiagram-v2
         Err(e) => {
             // Expected if sub-workflows don't exist
             println!("Context isolation test error (expected): {}", e);
-            
+
             // Even with errors, parent context should be preserved
             if let Some(parent_only) = run.context.get("parent_only") {
                 assert_eq!(parent_only, &serde_json::json!("parent value"));
@@ -737,7 +739,7 @@ stateDiagram-v2
         .collect();
 
     assert!(visited_states.contains(&StateId::new("Setup")));
-    
+
     // Note: Actual parallel execution depends on the workflow engine's
     // support for parallel states, which is indicated by the allows_parallel flag
 

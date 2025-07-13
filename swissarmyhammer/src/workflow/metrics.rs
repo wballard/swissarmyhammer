@@ -418,7 +418,8 @@ impl WorkflowMetrics {
         if removed_runs > 0 || removed_workflows > 0 {
             tracing::info!(
                 "Metrics cleanup completed: removed {} old runs and {} old workflow summaries",
-                removed_runs, removed_workflows
+                removed_runs,
+                removed_workflows
             );
         }
     }

@@ -114,13 +114,13 @@ impl ValidationResult {
 pub trait ValidationRule {
     /// Get the name of this validation rule
     fn name(&self) -> &'static str;
-    
+
     /// Check if this rule should be applied to the given context
     fn should_validate(&self, _context: &ValidationContext) -> bool {
         // By default, all rules are applied
         true
     }
-    
+
     /// Perform the validation
     fn validate(&self, context: &ValidationContext, result: &mut ValidationResult);
 }
@@ -343,12 +343,12 @@ pub struct Validator {
 
 impl Validator {
     pub fn new(quiet: bool) -> Self {
-        Self { 
+        Self {
             quiet,
             config: ValidationConfig::default(),
         }
     }
-    
+
     pub fn with_config(quiet: bool, config: ValidationConfig) -> Self {
         Self { quiet, config }
     }
@@ -593,9 +593,9 @@ impl Validator {
                 column: None,
                 message: format!(
                     "Workflow too complex: {} states + {} transitions = {} (max allowed: {})",
-                    workflow.states.len(), 
-                    workflow.transitions.len(), 
-                    total_complexity, 
+                    workflow.states.len(),
+                    workflow.transitions.len(),
+                    total_complexity,
                     self.config.max_workflow_complexity
                 ),
                 suggestion: Some("Split complex workflows into smaller sub-workflows".to_string()),
@@ -737,11 +737,7 @@ impl Validator {
     ///
     /// Errors are recorded in the ValidationResult parameter
     #[cfg(test)]
-    pub fn validate_workflow(
-        &mut self,
-        workflow_path: &Path,
-        result: &mut ValidationResult,
-    ) {
+    pub fn validate_workflow(&mut self, workflow_path: &Path, result: &mut ValidationResult) {
         result.files_checked += 1;
 
         // Read the workflow file
@@ -1413,8 +1409,7 @@ mod tests {
         .unwrap();
 
         let mut result = ValidationResult::new();
-        validator
-            .validate_workflow(&workflow_path, &mut result);
+        validator.validate_workflow(&workflow_path, &mut result);
 
         assert_eq!(result.errors, 0);
         assert_eq!(result.warnings, 0);
@@ -1438,8 +1433,7 @@ mod tests {
         .unwrap();
 
         let mut result = ValidationResult::new();
-        validator
-            .validate_workflow(&workflow_path, &mut result);
+        validator.validate_workflow(&workflow_path, &mut result);
 
         assert!(result.has_errors());
         assert!(result
@@ -1467,8 +1461,7 @@ mod tests {
         .unwrap();
 
         let mut result = ValidationResult::new();
-        validator
-            .validate_workflow(&workflow_path, &mut result);
+        validator.validate_workflow(&workflow_path, &mut result);
 
         assert!(result.has_errors());
         assert!(
@@ -1498,8 +1491,7 @@ mod tests {
         .unwrap();
 
         let mut result = ValidationResult::new();
-        validator
-            .validate_workflow(&workflow_path, &mut result);
+        validator.validate_workflow(&workflow_path, &mut result);
 
         assert!(result.has_errors());
         assert!(
@@ -1532,8 +1524,7 @@ mod tests {
         .unwrap();
 
         let mut result = ValidationResult::new();
-        validator
-            .validate_workflow(&workflow_path, &mut result);
+        validator.validate_workflow(&workflow_path, &mut result);
 
         assert!(result.has_warnings());
         assert!(result.issues.iter().any(|issue| {
@@ -1561,8 +1552,7 @@ mod tests {
         .unwrap();
 
         let mut result = ValidationResult::new();
-        validator
-            .validate_workflow(&workflow_path, &mut result);
+        validator.validate_workflow(&workflow_path, &mut result);
 
         // Should validate action syntax
         assert_eq!(result.errors, 0);
@@ -1587,8 +1577,7 @@ mod tests {
         .unwrap();
 
         let mut result = ValidationResult::new();
-        validator
-            .validate_workflow(&workflow_path, &mut result);
+        validator.validate_workflow(&workflow_path, &mut result);
 
         assert!(result.has_warnings());
         assert!(
@@ -1723,13 +1712,15 @@ stateDiagram-v2
         )
         .unwrap();
 
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir = std::env::current_dir().ok();
         std::env::set_current_dir(current_dir).unwrap();
 
         let mut result = ValidationResult::new();
         let _ = validator.validate_all_workflows(&mut result);
 
-        std::env::set_current_dir(original_dir).unwrap();
+        if let Some(original) = original_dir {
+            let _ = std::env::set_current_dir(original);
+        }
 
         // Check that non-standard workflows were NOT validated by verifying
         // that only the standard workflow (if any) was processed
@@ -1801,8 +1792,7 @@ stateDiagram-v2
         std::fs::write(&workflow_path, "").unwrap();
 
         let mut result = ValidationResult::new();
-        validator
-            .validate_workflow(&workflow_path, &mut result);
+        validator.validate_workflow(&workflow_path, &mut result);
 
         assert!(result.has_errors());
         assert!(result
@@ -1831,8 +1821,7 @@ stateDiagram-v2
         };
 
         let workflow_path = PathBuf::from("workflow:test:");
-        validator
-            .validate_workflow_structure(&workflow, &workflow_path, &mut result);
+        validator.validate_workflow_structure(&workflow, &workflow_path, &mut result);
 
         assert!(result.has_errors());
         assert!(result
@@ -1860,8 +1849,7 @@ stateDiagram-v2
         };
 
         let workflow_path = PathBuf::from("workflow:test:test@workflow!");
-        validator
-            .validate_workflow_structure(&workflow, &workflow_path, &mut result);
+        validator.validate_workflow_structure(&workflow, &workflow_path, &mut result);
 
         assert!(result.has_errors());
         assert!(result
@@ -1902,8 +1890,7 @@ stateDiagram-v2
             };
 
             let workflow_path = PathBuf::from(format!("workflow:test:{}", dangerous_name));
-            validator
-                .validate_workflow_structure(&workflow, &workflow_path, &mut result);
+            validator.validate_workflow_structure(&workflow, &workflow_path, &mut result);
 
             assert!(
                 result.has_errors(),
@@ -1945,8 +1932,7 @@ stateDiagram-v2
             std::fs::write(&workflow_path, content).unwrap();
 
             let mut result = ValidationResult::new();
-            validator
-                .validate_workflow(&workflow_path, &mut result);
+            validator.validate_workflow(&workflow_path, &mut result);
 
             assert!(result.has_errors(), "Test case {} should have errors", i);
             assert!(
@@ -1983,8 +1969,7 @@ stateDiagram-v2
         .unwrap();
 
         let mut result = ValidationResult::new();
-        validator
-            .validate_workflow(&workflow_path, &mut result);
+        validator.validate_workflow(&workflow_path, &mut result);
 
         // Should have errors for unreachable states C, D, E (they're not connected to initial state)
         assert!(result.has_errors());
@@ -2020,8 +2005,7 @@ stateDiagram-v2
         .unwrap();
 
         let mut result = ValidationResult::new();
-        validator
-            .validate_workflow(&workflow_path, &mut result);
+        validator.validate_workflow(&workflow_path, &mut result);
 
         // Self-loops are valid, should have no errors
         assert!(!result.has_errors());
@@ -2058,8 +2042,7 @@ stateDiagram-v2
         .unwrap();
 
         let mut result = ValidationResult::new();
-        validator
-            .validate_workflow(&workflow_path, &mut result);
+        validator.validate_workflow(&workflow_path, &mut result);
 
         // Current implementation may not detect all undefined variables in complex expressions
         // This is a known limitation mentioned in CODE_REVIEW.md

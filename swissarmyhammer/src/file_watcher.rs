@@ -105,7 +105,9 @@ impl FileWatcher {
             },
             notify::Config::default(),
         )
-        .map_err(|e| crate::SwissArmyHammerError::Other(format!("Failed to create file watcher: {}", e)))?;
+        .map_err(|e| {
+            crate::SwissArmyHammerError::Other(format!("Failed to create file watcher: {}", e))
+        })?;
 
         // Watch all directories
         let recursive_mode = if config.recursive {
@@ -115,8 +117,12 @@ impl FileWatcher {
         };
 
         for path in &watch_paths {
-            watcher.watch(path, recursive_mode)
-                .map_err(|e| crate::SwissArmyHammerError::Other(format!("Failed to watch directory {:?}: {}", path, e)))?;
+            watcher.watch(path, recursive_mode).map_err(|e| {
+                crate::SwissArmyHammerError::Other(format!(
+                    "Failed to watch directory {:?}: {}",
+                    path, e
+                ))
+            })?;
             tracing::info!("Watching directory: {:?}", path);
         }
 

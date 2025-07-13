@@ -63,7 +63,8 @@ async fn main() {
             tracing::warn!("Failed to create log directory: {}", e);
         }
 
-        let log_filename = std::env::var("SWISSARMYHAMMER_LOG_FILE").unwrap_or_else(|_| "mcp.log".to_string());
+        let log_filename =
+            std::env::var("SWISSARMYHAMMER_LOG_FILE").unwrap_or_else(|_| "mcp.log".to_string());
         let log_file = log_dir.join(log_filename);
 
         // Try to open the log file

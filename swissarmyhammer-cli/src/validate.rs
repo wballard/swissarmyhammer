@@ -479,9 +479,6 @@ impl Validator {
             prompt_title,
         );
 
-        // Also validate workflows
-        self.validate_all_workflows(result)?;
-
         Ok(())
     }
 
@@ -667,26 +664,50 @@ impl Validator {
         // Check for circular dependencies
         let all_cycles = graph_analyzer.detect_all_cycles();
         if !all_cycles.is_empty() {
-            // Report only the first cycle to avoid clutter
-            let first_cycle = &all_cycles[0];
-            let cycle_str = first_cycle
-                .iter()
-                .map(|s| s.as_str())
-                .collect::<Vec<_>>()
-                .join(" -> ");
-
-            result.add_issue(ValidationIssue {
-                level: ValidationLevel::Warning,
-                file_path: workflow_path.to_path_buf(),
-                prompt_title: None,
-                line: None,
-                column: None,
-                message: format!("Circular dependency detected: {}", cycle_str),
-                suggestion: Some(
-                    "Ensure the workflow has proper exit conditions to avoid infinite loops"
-                        .to_string(),
-                ),
-            });
+            // Normalize cycles to detect duplicates
+            let mut unique_cycles = std::collections::HashSet::new();
+            
+            for cycle in all_cycles {
+                if cycle.is_empty() {
+                    continue;
+                }
+                
+                // Normalize the cycle by finding the lexicographically smallest state
+                // and rotating the cycle to start from that state
+                let min_pos = cycle
+                    .iter()
+                    .enumerate()
+                    .min_by_key(|(_, state)| state.as_str())
+                    .map(|(pos, _)| pos)
+                    .unwrap_or(0);
+                
+                // Create normalized cycle starting from the minimum state
+                let mut normalized = Vec::new();
+                for i in 0..cycle.len() - 1 { // -1 because last element is duplicate of first
+                    let idx = (min_pos + i) % (cycle.len() - 1);
+                    normalized.push(cycle[idx].as_str());
+                }
+                
+                // Convert to string for HashSet comparison
+                let cycle_key = normalized.join(" -> ");
+                unique_cycles.insert(cycle_key);
+            }
+            
+            // Report only the first unique cycle to avoid clutter
+            if let Some(first_cycle) = unique_cycles.iter().next() {
+                result.add_issue(ValidationIssue {
+                    level: ValidationLevel::Warning,
+                    file_path: workflow_path.to_path_buf(),
+                    prompt_title: None,
+                    line: None,
+                    column: None,
+                    message: format!("Circular dependency detected: {}", first_cycle),
+                    suggestion: Some(
+                        "Ensure the workflow has proper exit conditions to avoid infinite loops"
+                            .to_string(),
+                    ),
+                });
+            }
         }
 
         // Validate actions in transitions
@@ -1531,6 +1552,44 @@ mod tests {
             let msg_lower = issue.message.to_lowercase();
             msg_lower.contains("circular") || msg_lower.contains("cycle")
         }));
+    }
+
+    #[test]
+    fn test_validate_workflow_circular_dependency_single_warning() {
+        let mut validator = Validator::new(false);
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let workflow_path = temp_dir.path().join("tdd.mermaid");
+
+        // Create the TDD workflow from the issue example with the circular dependency
+        std::fs::write(
+            &workflow_path,
+            r#"stateDiagram-v2
+    [*] --> check
+    check --> loop
+    loop --> test
+    test --> check
+    check --> done
+    done --> [*]
+"#,
+        )
+        .unwrap();
+
+        let mut result = ValidationResult::new();
+        validator.validate_workflow(&workflow_path, &mut result);
+
+        // Count circular dependency warnings
+        let circular_warnings: Vec<_> = result.issues.iter().filter(|issue| {
+            issue.level == ValidationLevel::Warning
+                && issue.message.contains("Circular dependency detected")
+        }).collect();
+        
+        // Print all warnings for debugging
+        for warning in &circular_warnings {
+            eprintln!("Warning: {}", warning.message);
+        }
+
+        // Should only have one circular dependency warning for the same cycle
+        assert_eq!(circular_warnings.len(), 1, "Should only report one circular dependency warning, but got {}", circular_warnings.len());
     }
 
     #[test]

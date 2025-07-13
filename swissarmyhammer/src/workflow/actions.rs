@@ -419,7 +419,11 @@ impl PromptAction {
         let mut _got_result = false;
 
         // Get timeout from context or use default
-        let line_timeout = Duration::from_secs(60 * 60);
+        let line_timeout = context
+            .get("_timeout_secs")
+            .and_then(|v| v.as_u64())
+            .map(Duration::from_secs)
+            .unwrap_or_else(|| Duration::from_secs(60 * 60));
 
         tracing::debug!("Using line timeout: {:?}", line_timeout);
 

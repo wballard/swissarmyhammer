@@ -419,8 +419,7 @@ impl PromptAction {
         let mut _got_result = false;
 
         // Get timeout from context or use default
-        // Use 30 seconds per line as a reasonable default for streaming
-        let line_timeout = Duration::from_secs(30);
+        let line_timeout = Duration::from_secs(60 * 60);
 
         tracing::debug!("Using line timeout: {:?}", line_timeout);
 

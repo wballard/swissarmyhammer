@@ -243,7 +243,7 @@ let result = prompt.render(&amp;args)?;
 <pre><code class="language-rust">use swissarmyhammer::PromptLibrary;
 
 let mut library = PromptLibrary::new();
-library.add_directory("./prompts")?;
+library.add_directory("./.swissarmyhammer/prompts")?;
 
 let prompt = library.get("code-review")?;
 let rendered = prompt.render(&amp;args)?;</code></pre>
@@ -387,7 +387,7 @@ use std::collections::HashMap;
 fn main() -&gt; Result&lt;()&gt; {
     // Create library and load prompts
     let mut library = PromptLibrary::new();
-    library.add_directory("./prompts")?;
+    library.add_directory("./.swissarmyhammer/prompts")?;
     
     // Get a prompt
     let prompt = library.get("code-review")?;

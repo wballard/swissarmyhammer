@@ -187,6 +187,7 @@
 <h3 id="argument-specification"><a class="header" href="#argument-specification">Argument Specification</a></h3>
 <ul>
 <li><code>--arg KEY=VALUE</code> - Provide argument values directly (can be used multiple times)</li>
+<li><code>--set KEY=VALUE</code> - Set liquid template variables (can be used multiple times)</li>
 </ul>
 <h3 id="output-control"><a class="header" href="#output-control">Output Control</a></h3>
 <ul>
@@ -384,6 +385,69 @@ else
   echo "✗ Prompt test failed, fix issues before deploying"
   exit 1
 fi
+</code></pre>
+<h2 id="template-variables-with-set"><a class="header" href="#template-variables-with-set">Template Variables with –set</a></h2>
+<p>The <code>--set</code> parameter allows you to provide additional liquid template variables beyond the prompt’s defined arguments. This is useful for:</p>
+<ol>
+<li>Providing metadata like author names, versions, or timestamps</li>
+<li>Overriding default values with template-level variables</li>
+<li>Testing liquid template features without modifying the prompt definition</li>
+</ol>
+<h3 id="variable-precedence"><a class="header" href="#variable-precedence">Variable Precedence</a></h3>
+<p>When both <code>--arg</code> and <code>--set</code> provide the same variable name, <strong><code>--set</code> takes precedence</strong>. This allows you to override argument values using template variables.</p>
+<h3 id="examples-1"><a class="header" href="#examples-1">Examples</a></h3>
+<pre><code class="language-bash"># Basic usage with template variables
+swissarmyhammer test code-review \
+  --arg code="main.rs" \
+  --set author="John Doe" \
+  --set version="1.0"
+
+# Override an argument value with --set
+swissarmyhammer test greeting \
+  --arg name="World" \
+  --set name="Universe"  # This takes precedence, output will use "Universe"
+
+# Use template variables in liquid templates
+# If your template contains: {{author | default: "Anonymous"}}
+swissarmyhammer test my-prompt --set author="Jane Smith"
+
+# Combine with other features
+swissarmyhammer test complex-prompt \
+  --arg input="data" \
+  --set debug="true" \
+  --set timestamp="2024-01-15" \
+  --debug \
+  --save output.md
+</code></pre>
+<h3 id="use-in-templates"><a class="header" href="#use-in-templates">Use in Templates</a></h3>
+<p>Template variables set with <code>--set</code> can be used in liquid templates just like arguments:</p>
+<pre><code class="language-liquid">---
+title: Example Prompt
+arguments:
+  - name: content
+    required: true
+---
+
+# {{title | default: "Document"}}
+
+Author: {{author | default: "Unknown"}}
+Version: {{version | default: "1.0"}}
+
+{{content}}
+</code></pre>
+<p>Running this with:</p>
+<pre><code class="language-bash">swissarmyhammer test example \
+  --arg content="Main content here" \
+  --set author="Alice" \
+  --set title="My Document"
+</code></pre>
+<p>Would produce:</p>
+<pre><code># My Document
+
+Author: Alice
+Version: 1.0
+
+Main content here
 </code></pre>
 <h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
 <ul>

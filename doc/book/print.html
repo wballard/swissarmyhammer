@@ -264,16 +264,11 @@ Focus on:
 <p>SwissArmyHammer is open source software licensed under the MIT License. See the <a href="./license.html">License</a> page for details.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
 <h2 id="quick-install-recommended"><a class="header" href="#quick-install-recommended">Quick Install (Recommended)</a></h2>
-<h3 id="unix-like-systems-linuxmacos"><a class="header" href="#unix-like-systems-linuxmacos">Unix-like Systems (Linux/macOS)</a></h3>
-<pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/swissarmyhammer/swissarmyhammer/main/install.sh | sh
+<p>To update SwissArmyHammer to the latest version:</p>
+<pre><code class="language-bash"># Update from git repository
+cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli --force
 </code></pre>
-<p>This script will:</p>
-<ul>
-<li>Detect your platform automatically</li>
-<li>Download the latest release</li>
-<li>Install to <code>/usr/local/bin</code></li>
-<li>Verify the installation</li>
-</ul>
+<p>The <code>--force</code> flag will overwrite the existing installation.</p>
 <h2 id="clone-and-build"><a class="header" href="#clone-and-build">Clone and Build</a></h2>
 <p>If you are installing from source:</p>
 <ul>
@@ -297,15 +292,6 @@ cargo install --path swissarmyhammer-cli
 # Or run directly without installing
 cargo run --bin swissarmyhammer -- --help
 </code></pre>
-<h2 id="future-installation-methods"><a class="header" href="#future-installation-methods">Future Installation Methods</a></h2>
-<p>Pre-built binaries and package manager support are planned for future releases:</p>
-<ul>
-<li><strong>macOS</strong>: Homebrew formula</li>
-<li><strong>Linux</strong>: DEB and RPM packages</li>
-<li><strong>Windows</strong>: MSI installer and Chocolatey package</li>
-<li><strong>crates.io</strong>: Published crate for <code>cargo install swissarmyhammer-cli</code></li>
-</ul>
-<p>Check the <a href="https://github.com/wballard/swissarmyhammer/releases">releases page</a> for updates.</p>
 <h2 id="verification"><a class="header" href="#verification">Verification</a></h2>
 <p>After installation, verify that SwissArmyHammer is working correctly:</p>
 <pre><code class="language-bash"># Check version
@@ -336,12 +322,6 @@ swissarmyhammer completion fish &gt; ~/.config/fish/completions/swissarmyhammer.
 swissarmyhammer completion powershell &gt;&gt; $PROFILE
 </code></pre>
 <p>Remember to reload your shell or start a new terminal session for completions to take effect.</p>
-<h2 id="updating"><a class="header" href="#updating">Updating</a></h2>
-<p>To update SwissArmyHammer to the latest version:</p>
-<pre><code class="language-bash"># Update from git repository
-cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli --force
-</code></pre>
-<p>The <code>--force</code> flag will overwrite the existing installation.</p>
 <h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
 <p>Once installed, continue to the <a href="./quick-start.html">Quick Start</a> guide to set up SwissArmyHammer with Claude Code and create your first prompt.</p>
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
@@ -1776,6 +1756,194 @@ Custom setting: {{ env.MY_APP_CONFIG | default: "not set" }}
 <p>Use the <code>default</code> filter to handle missing values gracefully:</p>
 <pre><code class="language-liquid">{{ optional_var | default: "fallback value" }}
 </code></pre>
+<h2 id="partials"><a class="header" href="#partials">Partials</a></h2>
+<p>SwissArmyHammer supports partials (template fragments) that can be included in other templates. This allows you to create reusable components and organize your templates better.</p>
+<h3 id="creating-partials"><a class="header" href="#creating-partials">Creating Partials</a></h3>
+<p>To create a partial, add the <code>{% partial %}</code> tag at the beginning of your template file:</p>
+<pre><code class="language-liquid">{% partial %}
+
+## Code Review Guidelines
+
+Please review the following code for:
+- Syntax errors
+- Logic issues
+- Best practices
+- Performance concerns
+</code></pre>
+<h3 id="using-partials"><a class="header" href="#using-partials">Using Partials</a></h3>
+<p>Use the <code>{% render %}</code> tag to include partials in your templates:</p>
+<pre><code class="language-liquid"># Main Template
+
+{% render "code-review-guidelines" %}
+
+## Code to Review
+
+```{{ language }}
+{{ code }}
+</code></pre>
+<p>Please focus on {{ focus_area }}.</p>
+<pre><code>
+### Partial Resolution
+
+SwissArmyHammer automatically resolves partials based on your prompt library:
+
+1. **Exact name match**: `{% render "my-partial" %}` looks for `my-partial`
+2. **With extensions**: Also tries `my-partial.md`, `my-partial.liquid`, `my-partial.md.liquid`, `my-partial.liquid.markdown`
+3. **Without extensions**: If you have `my-partial.md.liquid`, you can reference it as `{% render "my-partial" %}`
+
+### Supported File Extensions
+
+Partials can use any of these extensions:
+- `.md` - Markdown files
+- `.liquid` - Liquid template files
+- `.md.liquid` - Markdown with Liquid processing
+- `.liquid.markdown` - Liquid with Markdown processing
+
+### Organizing Partials
+
+You can organize partials in subdirectories:
+
+</code></pre>
+<p>prompts/
+├── main-template.md.liquid
+├── partials/
+│   ├── header.liquid
+│   ├── footer.liquid
+│   └── code-review/
+│       ├── guidelines.md.liquid
+│       └── checklist.liquid
+└── shared/
+└── common-footer.md</p>
+<pre><code>
+Reference them with their relative path:
+
+```liquid
+{% render "partials/header" %}
+{% render "partials/code-review/guidelines" %}
+{% render "shared/common-footer" %}
+</code></pre>
+<h3 id="partials-with-context"><a class="header" href="#partials-with-context">Partials with Context</a></h3>
+<p>Partials have access to the same variables as the parent template:</p>
+<p><strong>Parent template:</strong></p>
+<pre><code class="language-liquid">{% assign project_name = "SwissArmyHammer" %}
+{% assign language = "Rust" %}
+
+{% render "project-info" %}
+</code></pre>
+<p><strong>Partial (project-info.liquid):</strong></p>
+<pre><code class="language-liquid">{% partial %}
+
+## Project: {{ project_name }}
+
+This {{ language }} project follows strict coding standards.
+</code></pre>
+<h3 id="examples"><a class="header" href="#examples">Examples</a></h3>
+<h4 id="basic-partial-usage"><a class="header" href="#basic-partial-usage">Basic Partial Usage</a></h4>
+<p><strong>footer.liquid:</strong></p>
+<pre><code class="language-liquid">{% partial %}
+
+---
+Generated by SwissArmyHammer
+Report issues at: https://github.com/project/issues
+</code></pre>
+<p><strong>main-template.md.liquid:</strong></p>
+<pre><code class="language-liquid"># Code Review for {{ file_name }}
+
+Please review the following code:
+
+```{{ language }}
+{{ code }}
+</code></pre>
+<p>{% render “footer” %}</p>
+<pre><code>
+#### Conditional Partials
+
+```liquid
+{% if include_security_check %}
+  {% render "security-checklist" %}
+{% endif %}
+
+{% if language == "rust" %}
+  {% render "rust-specific-guidelines" %}
+{% elsif language == "python" %}
+  {% render "python-specific-guidelines" %}
+{% endif %}
+</code></pre>
+<h4 id="nested-partials"><a class="header" href="#nested-partials">Nested Partials</a></h4>
+<p>Partials can include other partials:</p>
+<p><strong>main-header.liquid:</strong></p>
+<pre><code class="language-liquid">{% partial %}
+
+{% render "project-info" %}
+{% render "timestamp" %}
+
+---
+</code></pre>
+<p><strong>project-info.liquid:</strong></p>
+<pre><code class="language-liquid">{% partial %}
+
+# {{ project_name | default: "Unknown Project" }}
+Version: {{ version | default: "1.0.0" }}
+</code></pre>
+<h4 id="partials-in-loops"><a class="header" href="#partials-in-loops">Partials in Loops</a></h4>
+<pre><code class="language-liquid">{% for task in tasks %}
+  {% render "task-template" %}
+{% endfor %}
+</code></pre>
+<p><strong>task-template.liquid:</strong></p>
+<pre><code class="language-liquid">{% partial %}
+
+## Task: {{ task.title }}
+Status: {{ task.status }}
+Priority: {{ task.priority | default: "normal" }}
+
+{% if task.description %}
+Description: {{ task.description }}
+{% endif %}
+</code></pre>
+<h3 id="best-practices-2"><a class="header" href="#best-practices-2">Best Practices</a></h3>
+<ol>
+<li><strong>Use the <code>{% partial %}</code> tag</strong>: Always start partial files with <code>{% partial %}</code> to clearly mark them as partials</li>
+<li><strong>Meaningful names</strong>: Use descriptive names for partials (<code>code-review-guidelines</code> instead of <code>guidelines</code>)</li>
+<li><strong>Organize by function</strong>: Group related partials in subdirectories</li>
+<li><strong>Keep partials focused</strong>: Each partial should have a single responsibility</li>
+<li><strong>Document dependencies</strong>: If a partial expects certain variables, document them</li>
+<li><strong>Test partials</strong>: Test partials with different variable contexts</li>
+</ol>
+<h3 id="common-use-cases"><a class="header" href="#common-use-cases">Common Use Cases</a></h3>
+<h4 id="shared-headers-and-footers"><a class="header" href="#shared-headers-and-footers">Shared Headers and Footers</a></h4>
+<p>Create consistent headers and footers across multiple prompts:</p>
+<pre><code class="language-liquid">{% render "shared/header" %}
+
+{{ main_content }}
+
+{% render "shared/footer" %}
+</code></pre>
+<h4 id="language-specific-templates"><a class="header" href="#language-specific-templates">Language-Specific Templates</a></h4>
+<pre><code class="language-liquid">{% case language %}
+  {% when "rust" %}
+    {% render "languages/rust-template" %}
+  {% when "python" %}
+    {% render "languages/python-template" %}
+  {% when "javascript" %}
+    {% render "languages/js-template" %}
+  {% else %}
+    {% render "languages/generic-template" %}
+{% endcase %}
+</code></pre>
+<h4 id="conditional-content"><a class="header" href="#conditional-content">Conditional Content</a></h4>
+<pre><code class="language-liquid">{% if debug_mode %}
+  {% render "debug-info" %}
+{% endif %}
+
+{% if include_examples %}
+  {% render "code-examples" %}
+{% endif %}
+</code></pre>
+<h3 id="troubleshooting-4"><a class="header" href="#troubleshooting-4">Troubleshooting</a></h3>
+<p><strong>Partial not found</strong>: Check that the partial file exists in your prompt library and that the name matches exactly.</p>
+<p><strong>Variables not available</strong>: Partials use the same context as the parent template. Make sure variables are defined before rendering the partial.</p>
+<p><strong>Infinite recursion</strong>: Avoid having partials that include themselves or create circular dependencies.</p>
 <h2 id="migration-from-basic-templates"><a class="header" href="#migration-from-basic-templates">Migration from Basic Templates</a></h2>
 <p>If you’re migrating from basic <code>{{variable}}</code> syntax:</p>
 <ol>
@@ -1879,7 +2047,7 @@ Total: {{ files | size }} files
 <li>No breaking changes to existing templates</li>
 <li>Gradual migration is supported - mix old and new syntax</li>
 </ul>
-<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<h2 id="examples-1"><a class="header" href="#examples-1">Examples</a></h2>
 <h3 id="dynamic-code-review"><a class="header" href="#dynamic-code-review">Dynamic Code Review</a></h3>
 <pre><code class="language-liquid">{% if language == "python" %}
   Please review this Python code for PEP 8 compliance.
@@ -1913,7 +2081,7 @@ Total: {{ files | size }} files
   {% endfor %}
 {% endif %}
 </code></pre>
-<h2 id="best-practices-2"><a class="header" href="#best-practices-2">Best Practices</a></h2>
+<h2 id="best-practices-3"><a class="header" href="#best-practices-3">Best Practices</a></h2>
 <ol>
 <li><strong>Use meaningful variable names</strong>: <code>{{ user_email }}</code> instead of <code>{{ ue }}</code></li>
 <li><strong>Provide defaults</strong>: <code>{{ value | default: "N/A" }}</code> for optional values</li>
@@ -1959,8 +2127,7 @@ Total: {{ files | size }} files
 <p>For complete documentation of custom filters, see the <a href="./custom-filters.html">Custom Filters Reference</a>.</p>
 <h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
 <ol>
-<li><strong>No includes</strong>: Cannot include other template files</li>
-<li><strong>No custom tags</strong>: Only standard Liquid tags are supported</li>
+<li><strong>No custom tags</strong>: Only standard Liquid tags (plus SwissArmyHammer’s <code>{% partial %}</code> and <code>{% render %}</code>) are supported</li>
 <li><strong>Performance</strong>: Very large loops may impact performance</li>
 </ol>
 <h2 id="further-reading"><a class="header" href="#further-reading">Further Reading</a></h2>
@@ -2871,7 +3038,7 @@ swissarmyhammer import team-prompts.tar.gz --merge
 # Export for distribution
 swissarmyhammer export team-bundle.tar.gz --filter "team:approved"
 </code></pre>
-<h2 id="best-practices-3"><a class="header" href="#best-practices-3">Best Practices</a></h2>
+<h2 id="best-practices-4"><a class="header" href="#best-practices-4">Best Practices</a></h2>
 <h3 id="1-start-simple"><a class="header" href="#1-start-simple">1. Start Simple</a></h3>
 <p>Begin with basic organization:</p>
 <pre><code>prompts/
@@ -2932,7 +3099,7 @@ category: development
 tags: [review, quality, security]
 version: 2.0.0
 </code></pre>
-<h2 id="examples-1"><a class="header" href="#examples-1">Examples</a></h2>
+<h2 id="examples-2"><a class="header" href="#examples-2">Examples</a></h2>
 <h3 id="enterprise-setup"><a class="header" href="#enterprise-setup">Enterprise Setup</a></h3>
 <pre><code>company-prompts/
 ├── departments/
@@ -3119,14 +3286,18 @@ claude mcp list
 <p>Prompts with arguments become interactive forms in Claude Code:</p>
 <pre><code class="language-markdown">---
 name: code-review
+title: Code Review
+description: Reviews code for best practices, bugs, and improvements
 arguments:
   - name: code
     description: Code to review
     required: true
+    type_hint: string
   - name: language
     description: Programming language
     required: false
     default: auto-detect
+    type_hint: string
 ---
 </code></pre>
 <h4 id="3-live-reloading"><a class="header" href="#3-live-reloading">3. Live Reloading</a></h4>
@@ -3176,7 +3347,7 @@ arguments:
 </code></pre>
 <h4 id="custom-workflows"><a class="header" href="#custom-workflows">Custom Workflows</a></h4>
 <p>Create project-specific prompt workflows:</p>
-<pre><code class="language-markdown"># Project prompts in ./prompts/
+<pre><code class="language-markdown"># Project prompts in ./.swissarmyhammer/prompts/
 
 ## development/
 - project-setup.md - Initialize new features
@@ -3202,7 +3373,7 @@ arguments:
 <li><code>--watch &lt;BOOL&gt;</code> - Enable file watching (default: true)</li>
 <li><code>--debug</code> - Enable debug logging</li>
 </ul>
-<h4 id="examples-2"><a class="header" href="#examples-2">Examples</a></h4>
+<h4 id="examples-3"><a class="header" href="#examples-3">Examples</a></h4>
 <pre><code class="language-bash"># Basic server
 swissarmyhammer serve
 
@@ -3272,7 +3443,7 @@ category: development
 tags: ["python", "code-review", "pep8", "security"]
 ---
 </code></pre>
-<h2 id="troubleshooting-4"><a class="header" href="#troubleshooting-4">Troubleshooting</a></h2>
+<h2 id="troubleshooting-5"><a class="header" href="#troubleshooting-5">Troubleshooting</a></h2>
 <h3 id="common-issues-1"><a class="header" href="#common-issues-1">Common Issues</a></h3>
 <h4 id="swissarmyhammer-not-available"><a class="header" href="#swissarmyhammer-not-available">SwissArmyHammer Not Available</a></h4>
 <p><strong>Symptoms</strong>: SwissArmyHammer prompts don’t appear in Claude Code</p>
@@ -3345,7 +3516,7 @@ swissarmyhammer serve --debug &gt; swissarmyhammer.log 2&gt;&amp;1
 <li>Prompt directory accessibility</li>
 <li>MCP server functionality</li>
 </ul>
-<h2 id="best-practices-4"><a class="header" href="#best-practices-4">Best Practices</a></h2>
+<h2 id="best-practices-5"><a class="header" href="#best-practices-5">Best Practices</a></h2>
 <h3 id="1-organize-prompts-logically"><a class="header" href="#1-organize-prompts-logically">1. Organize Prompts Logically</a></h3>
 <p>Structure prompts by workflow rather than just topic:</p>
 <pre><code>prompts/
@@ -3391,15 +3562,15 @@ version: 1.2.0
 updated: 2024-03-20  # Track changes
 ---
 </code></pre>
-<h2 id="examples-3"><a class="header" href="#examples-3">Examples</a></h2>
+<h2 id="examples-4"><a class="header" href="#examples-4">Examples</a></h2>
 <h3 id="complete-setup-example"><a class="header" href="#complete-setup-example">Complete Setup Example</a></h3>
 <p>Here’s a complete example of setting up SwissArmyHammer for a development project:</p>
 <pre><code class="language-bash"># 1. Install SwissArmyHammer
 curl -sSL https://raw.githubusercontent.com/wballard/swissarmyhammer/main/install.sh | bash
 
 # 2. Create project prompts
-mkdir -p ./prompts/development
-cat &gt; ./prompts/development/project-review.md &lt;&lt; 'EOF'
+mkdir -p ./.swissarmyhammer/prompts/development
+cat &gt; ./.swissarmyhammer/prompts/development/project-review.md &lt;&lt; 'EOF'
 ---
 name: project-code-review
 title: Project Code Review
@@ -3518,7 +3689,7 @@ swissarmyhammer completion zsh &gt; ~/.zfunc/_swissarmyhammer
 <ol>
 <li>Built-in prompts (embedded in the binary)</li>
 <li>User prompts: <code>~/.swissarmyhammer/prompts/</code></li>
-<li>Local prompts: <code>./prompts/</code> (current directory)</li>
+<li>Local prompts: <code>./.swissarmyhammer/prompts/</code> (current directory)</li>
 </ol>
 <p>For detailed command documentation, see the individual command pages linked in the table above.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="serve-command"><a class="header" href="#serve-command">serve Command</a></h1>
@@ -3554,7 +3725,7 @@ swissarmyhammer completion zsh &gt; ~/.zfunc/_swissarmyhammer
 <h3 id="--prompts-directory"><a class="header" href="#--prompts-directory"><code>--prompts &lt;DIRECTORY&gt;</code></a></h3>
 <ul>
 <li><strong>Description</strong>: Additional directories to load prompts from</li>
-<li><strong>Default</strong>: Standard locations (<code>~/.swissarmyhammer/prompts</code>, <code>./prompts</code>)</li>
+<li><strong>Default</strong>: Standard locations (<code>~/.swissarmyhammer/prompts</code>, <code>./.swissarmyhammer/prompts</code>)</li>
 <li><strong>Repeatable</strong>: Can be used multiple times</li>
 <li><strong>Example</strong>: <code>--prompts ./custom-prompts</code></li>
 </ul>
@@ -3603,7 +3774,7 @@ swissarmyhammer serve --watch false
 </ul>
 <pre><code class="language-bash">swissarmyhammer serve --config ./project-config.toml
 </code></pre>
-<h2 id="examples-4"><a class="header" href="#examples-4">Examples</a></h2>
+<h2 id="examples-5"><a class="header" href="#examples-5">Examples</a></h2>
 <h3 id="basic-server"><a class="header" href="#basic-server">Basic Server</a></h3>
 <p>Start a basic MCP server with default settings:</p>
 <pre><code class="language-bash">swissarmyhammer serve
@@ -3612,7 +3783,7 @@ swissarmyhammer serve --watch false
 <ul>
 <li>Built-in prompts</li>
 <li>User prompts from <code>~/.swissarmyhammer/prompts/</code></li>
-<li>Local prompts from <code>./prompts/</code> (if exists)</li>
+<li>Local prompts from <code>./.swissarmyhammer/prompts/</code> (if exists)</li>
 <li>Enables file watching</li>
 </ul>
 <h3 id="development-server"><a class="header" href="#development-server">Development Server</a></h3>
@@ -3682,7 +3853,7 @@ swissarmyhammer serve --watch false
 <li>
 <p><strong>Local prompts</strong> (always checked)</p>
 <ul>
-<li>Location: <code>./prompts/</code> in current directory</li>
+<li>Location: <code>./.swissarmyhammer/prompts/</code> in current directory</li>
 <li>Project-specific prompts</li>
 </ul>
 </li>
@@ -3695,7 +3866,7 @@ swissarmyhammer serve --watch false
 <li><strong>Built-in prompts have lowest priority</strong></li>
 </ul>
 <p>Example hierarchy:</p>
-<pre><code>./prompts/code-review.md          (highest priority)
+<pre><code>./.swissarmyhammer/prompts/code-review.md          (highest priority)
 ~/.custom/code-review.md          (from --prompts ~/.custom)
 ~/.swissarmyhammer/prompts/code-review.md  (user prompts)
 built-in:code-review              (lowest priority)
@@ -3828,7 +3999,7 @@ claude mcp add sah_project swissarmyhammer serve --prompts ./prompts --builtin f
 2024-03-20T10:30:00Z ERROR   YAML error: missing required field 'description'
 2024-03-20T10:30:00Z INFO  Continuing with 24 valid prompts
 </code></pre>
-<h2 id="troubleshooting-5"><a class="header" href="#troubleshooting-5">Troubleshooting</a></h2>
+<h2 id="troubleshooting-6"><a class="header" href="#troubleshooting-6">Troubleshooting</a></h2>
 <h3 id="server-wont-start"><a class="header" href="#server-wont-start">Server Won’t Start</a></h3>
 <p><strong>Check port availability:</strong></p>
 <pre><code class="language-bash"># Try a specific port
@@ -3846,7 +4017,7 @@ swissarmyhammer serve --debug
 <p><strong>Verify directories exist:</strong></p>
 <pre><code class="language-bash"># Check default directories
 ls -la ~/.swissarmyhammer/prompts
-ls -la ./prompts
+ls -la ./.swissarmyhammer/prompts
 
 # Check custom directories
 ls -la /path/to/custom/prompts
@@ -3902,7 +4073,7 @@ builtin = true
 watch = true
 directories = [
     "~/.swissarmyhammer/prompts",
-    "./prompts",
+    "./.swissarmyhammer/prompts",
     "/team/shared-prompts"
 ]
 </code></pre>
@@ -3918,7 +4089,7 @@ export SWISSARMYHAMMER_PROMPTS_DIR=/custom/prompts
 
 swissarmyhammer serve
 </code></pre>
-<h2 id="best-practices-5"><a class="header" href="#best-practices-5">Best Practices</a></h2>
+<h2 id="best-practices-6"><a class="header" href="#best-practices-6">Best Practices</a></h2>
 <h3 id="1-use-consistent-directory-structure"><a class="header" href="#1-use-consistent-directory-structure">1. Use Consistent Directory Structure</a></h3>
 <pre><code>~/.swissarmyhammer/prompts/
 ├── development/
@@ -3992,7 +4163,7 @@ git add prompts/
 <li><code>--limit, -l N</code> - Limit results to N prompts (default: 20)</li>
 <li><code>--json</code> - Output results in JSON format</li>
 </ul>
-<h2 id="examples-5"><a class="header" href="#examples-5">Examples</a></h2>
+<h2 id="examples-6"><a class="header" href="#examples-6">Examples</a></h2>
 <h3 id="basic-search"><a class="header" href="#basic-search">Basic Search</a></h3>
 <pre><code class="language-bash"># Find prompts containing "code"
 swissarmyhammer search code
@@ -4123,6 +4294,7 @@ swissarmyhammer search debug --limit 5 | \
 <h3 id="argument-specification"><a class="header" href="#argument-specification">Argument Specification</a></h3>
 <ul>
 <li><code>--arg KEY=VALUE</code> - Provide argument values directly (can be used multiple times)</li>
+<li><code>--set KEY=VALUE</code> - Set liquid template variables (can be used multiple times)</li>
 </ul>
 <h3 id="output-control-1"><a class="header" href="#output-control-1">Output Control</a></h3>
 <ul>
@@ -4139,7 +4311,7 @@ swissarmyhammer search debug --limit 5 | \
 <li><strong>Template Rendering</strong>: Shows the rendered output</li>
 <li><strong>Actions</strong>: Offers to copy to clipboard or save to file</li>
 </ol>
-<h2 id="examples-6"><a class="header" href="#examples-6">Examples</a></h2>
+<h2 id="examples-7"><a class="header" href="#examples-7">Examples</a></h2>
 <h3 id="interactive-testing"><a class="header" href="#interactive-testing">Interactive Testing</a></h3>
 <pre><code class="language-bash"># Test a prompt interactively
 swissarmyhammer test code-review
@@ -4320,6 +4492,69 @@ else
   echo "✗ Prompt test failed, fix issues before deploying"
   exit 1
 fi
+</code></pre>
+<h2 id="template-variables-with-set"><a class="header" href="#template-variables-with-set">Template Variables with –set</a></h2>
+<p>The <code>--set</code> parameter allows you to provide additional liquid template variables beyond the prompt’s defined arguments. This is useful for:</p>
+<ol>
+<li>Providing metadata like author names, versions, or timestamps</li>
+<li>Overriding default values with template-level variables</li>
+<li>Testing liquid template features without modifying the prompt definition</li>
+</ol>
+<h3 id="variable-precedence"><a class="header" href="#variable-precedence">Variable Precedence</a></h3>
+<p>When both <code>--arg</code> and <code>--set</code> provide the same variable name, <strong><code>--set</code> takes precedence</strong>. This allows you to override argument values using template variables.</p>
+<h3 id="examples-8"><a class="header" href="#examples-8">Examples</a></h3>
+<pre><code class="language-bash"># Basic usage with template variables
+swissarmyhammer test code-review \
+  --arg code="main.rs" \
+  --set author="John Doe" \
+  --set version="1.0"
+
+# Override an argument value with --set
+swissarmyhammer test greeting \
+  --arg name="World" \
+  --set name="Universe"  # This takes precedence, output will use "Universe"
+
+# Use template variables in liquid templates
+# If your template contains: {{author | default: "Anonymous"}}
+swissarmyhammer test my-prompt --set author="Jane Smith"
+
+# Combine with other features
+swissarmyhammer test complex-prompt \
+  --arg input="data" \
+  --set debug="true" \
+  --set timestamp="2024-01-15" \
+  --debug \
+  --save output.md
+</code></pre>
+<h3 id="use-in-templates"><a class="header" href="#use-in-templates">Use in Templates</a></h3>
+<p>Template variables set with <code>--set</code> can be used in liquid templates just like arguments:</p>
+<pre><code class="language-liquid">---
+title: Example Prompt
+arguments:
+  - name: content
+    required: true
+---
+
+# {{title | default: "Document"}}
+
+Author: {{author | default: "Unknown"}}
+Version: {{version | default: "1.0"}}
+
+{{content}}
+</code></pre>
+<p>Running this with:</p>
+<pre><code class="language-bash">swissarmyhammer test example \
+  --arg content="Main content here" \
+  --set author="Alice" \
+  --set title="My Document"
+</code></pre>
+<p>Would produce:</p>
+<pre><code># My Document
+
+Author: Alice
+Version: 1.0
+
+Main content here
 </code></pre>
 <h2 id="see-also-1"><a class="header" href="#see-also-1">See Also</a></h2>
 <ul>
@@ -4751,7 +4986,7 @@ echo "Setting up development environment..."
 swissarmyhammer doctor --fix --verbose
 echo "Health check complete. Run 'swissarmyhammer serve' to start."
 </code></pre>
-<h2 id="best-practices-6"><a class="header" href="#best-practices-6">Best Practices</a></h2>
+<h2 id="best-practices-7"><a class="header" href="#best-practices-7">Best Practices</a></h2>
 <h3 id="regular-health-checks"><a class="header" href="#regular-health-checks">Regular Health Checks</a></h3>
 <pre><code class="language-bash"># Weekly health check
 swissarmyhammer doctor --verbose
@@ -4932,7 +5167,7 @@ alias sah='swissarmyhammer'
 # Completions work with alias
 sah serve --&lt;TAB&gt;
 </code></pre>
-<h2 id="troubleshooting-6"><a class="header" href="#troubleshooting-6">Troubleshooting</a></h2>
+<h2 id="troubleshooting-7"><a class="header" href="#troubleshooting-7">Troubleshooting</a></h2>
 <h3 id="completions-not-working"><a class="header" href="#completions-not-working">Completions Not Working</a></h3>
 <ol>
 <li>
@@ -5046,13 +5281,13 @@ complete -F _my_custom_prompts swissarmyhammer get
 <p>Add project-specific completions:</p>
 <pre><code class="language-bash"># .envrc (direnv) or project script
 _project_prompts() {
-    ls ./prompts/*.md 2&gt;/dev/null | xargs -n1 basename | sed 's/\.md$//'
+    ls ./.swissarmyhammer/prompts/*.md 2&gt;/dev/null | xargs -n1 basename | sed 's/\.md$//'
 }
 
 # Export for use in completions
 export SWISSARMYHAMMER_PROJECT_PROMPTS=$(_project_prompts)
 </code></pre>
-<h2 id="best-practices-7"><a class="header" href="#best-practices-7">Best Practices</a></h2>
+<h2 id="best-practices-8"><a class="header" href="#best-practices-8">Best Practices</a></h2>
 <ol>
 <li>
 <p><strong>Keep Completions Updated</strong></p>
@@ -5075,7 +5310,7 @@ swissarmyhammer completion bash | head -20
 </code></pre>
 </li>
 </ol>
-<h2 id="examples-7"><a class="header" href="#examples-7">Examples</a></h2>
+<h2 id="examples-9"><a class="header" href="#examples-9">Examples</a></h2>
 <h3 id="complete-workflow"><a class="header" href="#complete-workflow">Complete Workflow</a></h3>
 <pre><code class="language-bash"># Install completions
 swissarmyhammer completion bash &gt; ~/.local/share/bash-completion/completions/swissarmyhammer
@@ -5158,7 +5393,7 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     let mut library = PromptLibrary::new();
     
     // Add prompts from a directory
-    library.add_directory("./prompts").await?;
+    library.add_directory("./.swissarmyhammer/prompts").await?;
     
     // List available prompts
     for prompt_id in library.list_prompts() {
@@ -5231,7 +5466,7 @@ Perform a general code review covering style, bugs, and maintainability.
 let mut library = PromptLibrary::new();
 
 // Add prompts from various sources
-library.add_directory("./prompts").await?;
+library.add_directory("./.swissarmyhammer/prompts").await?;
 library.add_file("./special-prompt.md").await?;
 library.add_builtin_prompts();
 
@@ -5247,7 +5482,7 @@ let results = library.search("code review")?;</code></pre>
 <pre><code class="language-rust">use swissarmyhammer::Prompt;
 
 // Load from file
-let prompt = Prompt::from_file("./prompts/review.md").await?;
+let prompt = Prompt::from_file("./.swissarmyhammer/prompts/review.md").await?;
 
 // Access metadata
 println!("Title: {}", prompt.title());
@@ -5336,7 +5571,7 @@ let config = McpConfig {
 };
 
 let mut library = PromptLibrary::new();
-library.add_directory("./prompts").await?;
+library.add_directory("./.swissarmyhammer/prompts").await?;
 
 let server = McpServer::new(config, library);
 
@@ -5369,10 +5604,10 @@ library.add_event_handler(Box::new(MyEventHandler));</code></pre>
 <pre><code class="language-rust">use swissarmyhammer::watcher::FileWatcher;
 
 let mut library = PromptLibrary::new();
-library.add_directory("./prompts").await?;
+library.add_directory("./.swissarmyhammer/prompts").await?;
 
 // Start watching for file changes
-let _watcher = FileWatcher::new("./prompts", move |event| {
+let _watcher = FileWatcher::new("./.swissarmyhammer/prompts", move |event| {
     match event {
         FileEvent::Created(path) =&gt; {
             if let Err(e) = library.reload_file(&amp;path) {
@@ -5420,7 +5655,7 @@ async fn get_prompt(
 #[tokio::main]
 async fn main() {
     let mut library = PromptLibrary::new();
-    library.add_directory("./prompts").await.unwrap();
+    library.add_directory("./.swissarmyhammer/prompts").await.unwrap();
     let shared_library = Arc::new(RwLock::new(library));
 
     let app = Router::new()
@@ -5457,7 +5692,7 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
         .get_matches();
 
     let mut library = PromptLibrary::new();
-    library.add_directory("./prompts").await?;
+    library.add_directory("./.swissarmyhammer/prompts").await?;
 
     let prompt_id = matches.value_of("prompt").unwrap();
     let prompt = library.get(prompt_id)?;
@@ -5490,7 +5725,7 @@ struct AppConfig {
 impl Default for AppConfig {
     fn default() -&gt; Self {
         Self {
-            prompt_directories: vec!["./prompts".to_string()],
+            prompt_directories: vec!["./.swissarmyhammer/prompts".to_string()],
             default_arguments: std::collections::HashMap::new(),
             search_enabled: true,
         }
@@ -5566,7 +5801,7 @@ async fn test_prompt_rendering() {
 <li>Template rendering is thread-safe</li>
 <li>Consider using <code>Arc&lt;RwLock&lt;PromptLibrary&gt;&gt;</code> for shared access</li>
 </ul>
-<h3 id="best-practices-8"><a class="header" href="#best-practices-8">Best Practices</a></h3>
+<h3 id="best-practices-9"><a class="header" href="#best-practices-9">Best Practices</a></h3>
 <ul>
 <li>Prefer batch operations for multiple prompts</li>
 <li>Cache rendered templates when arguments don’t change</li>
@@ -5664,7 +5899,7 @@ let result = prompt.render(&amp;args)?;
 <pre><code class="language-rust">use swissarmyhammer::PromptLibrary;
 
 let mut library = PromptLibrary::new();
-library.add_directory("./prompts")?;
+library.add_directory("./.swissarmyhammer/prompts")?;
 
 let prompt = library.get("code-review")?;
 let rendered = prompt.render(&amp;args)?;</code></pre>
@@ -5808,7 +6043,7 @@ use std::collections::HashMap;
 fn main() -&gt; Result&lt;()&gt; {
     // Create library and load prompts
     let mut library = PromptLibrary::new();
-    library.add_directory("./prompts")?;
+    library.add_directory("./.swissarmyhammer/prompts")?;
     
     // Get a prompt
     let prompt = library.get("code-review")?;
@@ -7439,7 +7674,7 @@ Based on initial analysis, focus on readability and structure improvements.
 4. Validate behavior preservation
 5. Update documentation
 </code></pre>
-<h2 id="best-practices-9"><a class="header" href="#best-practices-9">Best Practices</a></h2>
+<h2 id="best-practices-10"><a class="header" href="#best-practices-10">Best Practices</a></h2>
 <h3 id="1-use-meaningful-variable-names"><a class="header" href="#1-use-meaningful-variable-names">1. Use Meaningful Variable Names</a></h3>
 <pre><code class="language-liquid">{% comment %} Bad {% endcomment %}
 {% assign x = data | split: "," %}
@@ -7480,6 +7715,875 @@ Based on initial analysis, focus on readability and structure improvements.
 <li>See <a href="./examples.html">Examples</a> for more real-world scenarios</li>
 <li>Read <a href="./template-variables.html">Template Variables</a> for Liquid syntax reference</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="workflows"><a class="header" href="#workflows">Workflows</a></h1>
+<p>SwissArmyHammer provides a powerful workflow system that allows you to define and execute complex multi-step processes using Mermaid state diagrams. This guide covers creating, running, and managing workflows.</p>
+<h2 id="overview-2"><a class="header" href="#overview-2">Overview</a></h2>
+<p>Workflows in SwissArmyHammer are defined using Mermaid state diagrams in markdown files. Each workflow consists of states (actions) and transitions that control the flow of execution. Workflows can:</p>
+<ul>
+<li>Execute prompts or other workflows</li>
+<li>Make decisions based on outputs</li>
+<li>Run actions in parallel</li>
+<li>Handle errors gracefully</li>
+<li>Resume from failures</li>
+</ul>
+<h2 id="creating-workflows"><a class="header" href="#creating-workflows">Creating Workflows</a></h2>
+<p>Workflows are stored in <code>.swissarmyhammer/workflows/</code> directories and use the <code>.md</code> file extension. Each workflow file consists of:</p>
+<ol>
+<li><strong>YAML Front Matter</strong> - Metadata about the workflow</li>
+<li><strong>Mermaid State Diagram</strong> - The workflow structure</li>
+<li><strong>Actions Section</strong> - Mappings of states to their actions</li>
+</ol>
+<p>Here’s a basic workflow structure:</p>
+<pre><code class="language-markdown">---
+name: my-workflow
+title: My Example Workflow
+description: A workflow that demonstrates basic functionality
+category: user
+tags:
+  - example
+  - automation
+---
+
+# My Example Workflow
+
+This workflow processes data through multiple stages.
+
+```mermaid
+stateDiagram-v2
+    [*] --&gt; Start
+    Start --&gt; Process
+    Process --&gt; Success: OnSuccess
+    Process --&gt; Failure: OnFailure
+    Success --&gt; [*]
+    Failure --&gt; [*]
+</code></pre>
+<h2 id="actions"><a class="header" href="#actions">Actions</a></h2>
+<ul>
+<li>Start: Execute prompt “setup” with input=“${data}”</li>
+<li>Process: Execute prompt “main-task”</li>
+<li>Success: Log “Task completed successfully”</li>
+<li>Failure: Log error “Task failed: ${error}”</li>
+</ul>
+<pre><code>
+## Workflow Components
+
+### Front Matter
+
+The YAML front matter contains workflow metadata:
+
+```yaml
+---
+name: workflow-id           # Unique identifier for the workflow
+title: Workflow Title       # Human-readable title
+description: Description    # What the workflow does
+category: builtin          # Category (builtin, user, etc.)
+tags:                      # Tags for organization
+  - automation
+  - data-processing
+---
+</code></pre>
+<h3 id="states"><a class="header" href="#states">States</a></h3>
+<p>States represent steps in your workflow. They are defined in the Mermaid diagram and their actions are specified in the Actions section:</p>
+<ul>
+<li><strong>Execute a prompt</strong>: <code>Execute prompt "prompt-name" with var="value"</code></li>
+<li><strong>Run another workflow</strong>: <code>Run workflow "workflow-name" with data="${input}"</code></li>
+<li><strong>Set variables</strong>: <code>Set result="${output}"</code></li>
+<li><strong>Log messages</strong>: <code>Log "Processing complete"</code></li>
+<li><strong>Wait</strong>: <code>Wait 5 seconds</code></li>
+</ul>
+<h3 id="actions-section"><a class="header" href="#actions-section">Actions Section</a></h3>
+<p>The Actions section maps state names to their actions using the format:</p>
+<pre><code class="language-markdown">## Actions
+
+- StateName: Action description
+- AnotherState: Execute prompt "example" with param="value"
+</code></pre>
+<h3 id="transitions"><a class="header" href="#transitions">Transitions</a></h3>
+<p>Transitions control flow between states:</p>
+<ul>
+<li><strong>Always</strong>: Unconditional transition</li>
+<li><strong>OnSuccess</strong>: Transition when action succeeds</li>
+<li><strong>OnFailure</strong>: Transition when action fails</li>
+<li><strong>Conditional</strong>: Based on regex matching or CEL expressions
+<ul>
+<li>Regex patterns: <code>"pattern"</code> or <code>/regex/</code></li>
+<li>CEL expressions: Complex conditions like <code>var.startsWith('Hello')</code> or <code>is_error == true</code></li>
+</ul>
+</li>
+</ul>
+<h3 id="special-states"><a class="header" href="#special-states">Special States</a></h3>
+<ul>
+<li><code>[*]</code>: Start and end states</li>
+<li>Fork (<code>&lt;&lt;fork&gt;&gt;</code>) and Join (<code>&lt;&lt;join&gt;&gt;</code>): For parallel execution</li>
+</ul>
+<h2 id="mermaid-syntax-guide"><a class="header" href="#mermaid-syntax-guide">Mermaid Syntax Guide</a></h2>
+<p>SwissArmyHammer uses standard Mermaid state diagram syntax. The diagram defines the workflow structure, while actions are defined separately in the Actions section:</p>
+<h3 id="basic-flow"><a class="header" href="#basic-flow">Basic Flow</a></h3>
+<pre><code class="language-mermaid">stateDiagram-v2
+    [*] --&gt; StateA
+    StateA --&gt; StateB
+    StateB --&gt; [*]
+</code></pre>
+<p>With corresponding actions:</p>
+<pre><code class="language-markdown">## Actions
+
+- StateA: Log "Starting process"
+- StateB: Execute prompt "process-data"
+</code></pre>
+<h3 id="conditional-branching"><a class="header" href="#conditional-branching">Conditional Branching</a></h3>
+<pre><code class="language-mermaid">stateDiagram-v2
+    [*] --&gt; Check
+    Check --&gt; OptionA: "pattern_a"
+    Check --&gt; OptionB: "pattern_b"
+    Check --&gt; Default: Always
+</code></pre>
+<h4 id="choice-state-detection"><a class="header" href="#choice-state-detection">Choice State Detection</a></h4>
+<p>SwissArmyHammer automatically detects choice states based on their transition patterns. A state is identified as a choice state when it has:</p>
+<ul>
+<li>Multiple outgoing transitions</li>
+<li>At least one transition with a condition (regex pattern or CEL expression)</li>
+<li>Different transition types (e.g., conditional and “always” transitions)</li>
+</ul>
+<p>This automatic detection ensures that branching logic works correctly without requiring explicit choice state declarations in the Mermaid diagram.</p>
+<h3 id="parallel-execution"><a class="header" href="#parallel-execution">Parallel Execution</a></h3>
+<pre><code class="language-mermaid">stateDiagram-v2
+    [*] --&gt; Setup
+    Setup --&gt; fork1: Always
+    
+    state fork1 &lt;&lt;fork&gt;&gt;
+    fork1 --&gt; TaskA
+    fork1 --&gt; TaskB
+    
+    TaskA --&gt; join1: Always
+    TaskB --&gt; join1: Always
+    
+    state join1 &lt;&lt;join&gt;&gt;
+    join1 --&gt; Finish
+    Finish --&gt; [*]
+</code></pre>
+<h2 id="action-reference"><a class="header" href="#action-reference">Action Reference</a></h2>
+<h3 id="execute-prompt"><a class="header" href="#execute-prompt">Execute Prompt</a></h3>
+<p>Execute a SwissArmyHammer prompt:</p>
+<pre><code>Execute prompt "prompt-name" with var1="value1" var2="${variable}"
+</code></pre>
+<h3 id="run-workflow"><a class="header" href="#run-workflow">Run Workflow</a></h3>
+<p>Delegate to another workflow:</p>
+<pre><code>Run workflow "workflow-name" with input="${data}"
+</code></pre>
+<h3 id="set-variable"><a class="header" href="#set-variable">Set Variable</a></h3>
+<p>Store values for later use:</p>
+<pre><code>Set variable_name="value"
+Set result="${output}"
+</code></pre>
+<h3 id="log-messages"><a class="header" href="#log-messages">Log Messages</a></h3>
+<p>Output information:</p>
+<pre><code>Log "Information message"
+Log error "Error message"
+Log warning "Warning message"
+</code></pre>
+<h3 id="wait"><a class="header" href="#wait">Wait</a></h3>
+<p>Pause execution:</p>
+<pre><code>Wait 5 seconds
+Wait 1 minute
+</code></pre>
+<h3 id="system-commands"><a class="header" href="#system-commands">System Commands</a></h3>
+<p>Execute shell commands:</p>
+<pre><code>Execute command "ls -la"
+Execute command "npm test"
+</code></pre>
+<h2 id="variables-and-context"><a class="header" href="#variables-and-context">Variables and Context</a></h2>
+<p>Workflows have access to:</p>
+<ul>
+<li>Input variables passed via <code>--var</code></li>
+<li>Template variables passed via <code>--set</code> (for liquid template rendering)</li>
+<li>Variables set in previous states</li>
+<li>Output from executed prompts (<code>${output}</code>)</li>
+<li>Error messages (<code>${error}</code>)</li>
+<li>Workflow metadata (<code>${workflow_name}</code>, <code>${run_id}</code>)</li>
+</ul>
+<h3 id="variable-interpolation"><a class="header" href="#variable-interpolation">Variable Interpolation</a></h3>
+<p>Use <code>${variable_name}</code> syntax to reference workflow variables:</p>
+<pre><code>Execute prompt "analyze" with file="${input_file}"
+Set result="Analysis of ${input_file}: ${output}"
+</code></pre>
+<h3 id="liquid-template-support"><a class="header" href="#liquid-template-support">Liquid Template Support</a></h3>
+<p>Workflows support Liquid template rendering in action strings when using the <code>--set</code> parameter. This allows dynamic parameterization of workflows at runtime:</p>
+<pre><code class="language-markdown">## Actions
+
+- start: Log "Starting workflow for {{ user_name | default: 'Guest' }}"
+- greet: Execute prompt "say-hello" with name="{{ name }}" language="{{ language | default: 'English' }}"
+- process: Set message="{{ greeting_type }} for {{ user_name }}!"
+- farewell: Log "Goodbye, {{ name }}!"
+</code></pre>
+<p>Run the workflow with template variables:</p>
+<pre><code class="language-bash"># Pass template variables with --set
+swissarmyhammer flow run greeting --set name=Alice --set language=French
+
+# Template variables with default values
+swissarmyhammer flow run greeting --set name=Bob
+# The language will default to 'English'
+
+# Complex template variables
+swissarmyhammer flow run data-processor --set user.name=Alice --set user.role=admin
+</code></pre>
+<h4 id="template-features-in-workflows"><a class="header" href="#template-features-in-workflows">Template Features in Workflows</a></h4>
+<p>You can use all Liquid template features in workflow action strings:</p>
+<p><strong>Filters:</strong></p>
+<pre><code class="language-markdown">- log_user: Log "Processing user: {{ username | upcase }}"
+- set_path: Set output_file="/tmp/{{ filename | slugify }}.json"
+</code></pre>
+<p><strong>Conditionals:</strong></p>
+<pre><code class="language-markdown">- notify: Log "{% if priority == 'high' %}🚨 URGENT: {% endif %}{{ message }}"
+</code></pre>
+<p><strong>Default Values:</strong></p>
+<pre><code class="language-markdown">- configure: Set timeout="{{ timeout | default: '30' }}"
+- log_mode: Log "Running in {{ mode | default: 'development' }} mode"
+</code></pre>
+<p><strong>Complex Objects:</strong></p>
+<pre><code class="language-markdown">- process_user: Execute prompt "user-handler" with name="{{ user.name }}" role="{{ user.role }}"
+</code></pre>
+<h4 id="combining-var-and-set"><a class="header" href="#combining-var-and-set">Combining –var and –set</a></h4>
+<p>You can use both <code>--var</code> (for workflow variables) and <code>--set</code> (for template variables) together:</p>
+<pre><code class="language-bash">swissarmyhammer flow run my-workflow \
+  --var input_file=data.json \
+  --var output_dir=/tmp \
+  --set user_name=Alice \
+  --set environment=production
+</code></pre>
+<ul>
+<li><code>--var</code> variables are available as <code>${variable}</code> in the workflow</li>
+<li><code>--set</code> variables are available as <code>{{ variable }}</code> in liquid templates</li>
+</ul>
+<h4 id="template-rendering-behavior"><a class="header" href="#template-rendering-behavior">Template Rendering Behavior</a></h4>
+<ul>
+<li>Templates are rendered before action parsing</li>
+<li>If a template variable is not provided, the original template syntax is preserved</li>
+<li>Template rendering errors are logged as warnings but don’t stop workflow execution</li>
+<li>Use the <code>default</code> filter to provide fallback values for optional variables</li>
+</ul>
+<h2 id="error-handling-8"><a class="header" href="#error-handling-8">Error Handling</a></h2>
+<p>Workflows provide robust error handling:</p>
+<h3 id="try-catch-pattern"><a class="header" href="#try-catch-pattern">Try-Catch Pattern</a></h3>
+<pre><code class="language-mermaid">stateDiagram-v2
+    [*] --&gt; Try
+    Try --&gt; Success: OnSuccess
+    Try --&gt; Catch: OnFailure
+    Catch --&gt; Recovery
+    Success --&gt; [*]
+    Recovery --&gt; [*]
+</code></pre>
+<pre><code class="language-markdown">## Actions
+
+- Try: Execute prompt "risky-operation"
+- Catch: Log error "Operation failed: ${error}"
+- Recovery: Execute prompt "cleanup"
+- Success: Log "Operation completed successfully"
+</code></pre>
+<h3 id="retry-pattern"><a class="header" href="#retry-pattern">Retry Pattern</a></h3>
+<pre><code class="language-mermaid">stateDiagram-v2
+    [*] --&gt; Attempt
+    Attempt --&gt; Success: OnSuccess
+    Attempt --&gt; Wait: OnFailure
+    Wait --&gt; Attempt
+    Success --&gt; [*]
+</code></pre>
+<pre><code class="language-markdown">## Actions
+
+- Attempt: Execute prompt "network-call"
+- Wait: Wait 5 seconds
+- Success: Log "Network call succeeded"
+</code></pre>
+<h2 id="best-practices-11"><a class="header" href="#best-practices-11">Best Practices</a></h2>
+<h3 id="1-keep-states-focused"><a class="header" href="#1-keep-states-focused">1. Keep States Focused</a></h3>
+<p>Each state should perform one clear action:</p>
+<pre><code>Good:
+ValidateInput: Execute prompt "validate-json" with file="${input}"
+
+Bad:
+DoEverything: Execute prompt "validate-and-transform-and-save"
+</code></pre>
+<h3 id="2-use-meaningful-state-names"><a class="header" href="#2-use-meaningful-state-names">2. Use Meaningful State Names</a></h3>
+<p>State names should describe what happens:</p>
+<pre><code>Good: ValidateConfiguration, ProcessUserData, GenerateReport
+Bad: Step1, Step2, DoStuff
+</code></pre>
+<h3 id="3-handle-all-paths"><a class="header" href="#3-handle-all-paths">3. Handle All Paths</a></h3>
+<p>Ensure all states have clear exit paths:</p>
+<pre><code class="language-mermaid">stateDiagram-v2
+    [*] --&gt; Process
+    Process --&gt; Success: OnSuccess
+    Process --&gt; Failure: OnFailure
+    Success --&gt; [*]
+    Failure --&gt; Cleanup: Always
+    Cleanup --&gt; [*]
+</code></pre>
+<h3 id="4-use-variables-effectively"><a class="header" href="#4-use-variables-effectively">4. Use Variables Effectively</a></h3>
+<p>Pass data between states using variables:</p>
+<pre><code>ExtractData: Execute prompt "parse-file" with file="${input_file}"
+ProcessData: Execute prompt "transform" with data="${output}"
+SaveResults: Execute prompt "save" with content="${output}" path="${output_file}"
+</code></pre>
+<h3 id="5-document-complex-logic"><a class="header" href="#5-document-complex-logic">5. Document Complex Logic</a></h3>
+<p>Add comments to explain complex workflows:</p>
+<pre><code class="language-mermaid">stateDiagram-v2
+    %% This workflow processes user uploads
+    %% It validates, transforms, and stores the data
+    
+    [*] --&gt; Validate
+    %% Validation ensures file format is correct
+    Validate --&gt; Transform: OnSuccess
+</code></pre>
+<h2 id="complete-example-2"><a class="header" href="#complete-example-2">Complete Example</a></h2>
+<p>Here’s a complete workflow file showing all components including liquid template support:</p>
+<pre><code class="language-markdown">---
+name: data-processor
+title: Data Processing Workflow
+description: Validates and processes incoming data files
+category: user
+tags:
+  - data-processing
+  - validation
+  - automation
+---
+
+# Data Processing Workflow
+
+This workflow validates incoming data files, transforms them to the required format,
+and stores the results. It includes error handling and retry logic.
+
+```mermaid
+stateDiagram-v2
+    [*] --&gt; Initialize
+    Initialize --&gt; ValidateFormat
+    ValidateFormat --&gt; Transform: OnSuccess
+    ValidateFormat --&gt; LogError: OnFailure
+    Transform --&gt; StoreData: OnSuccess
+    Transform --&gt; RetryTransform: OnFailure
+    RetryTransform --&gt; Transform
+    StoreData --&gt; NotifyComplete
+    LogError --&gt; NotifyError
+    NotifyComplete --&gt; [*]
+    NotifyError --&gt; [*]
+</code></pre>
+<h2 id="actions-1"><a class="header" href="#actions-1">Actions</a></h2>
+<ul>
+<li>Initialize: Log “Starting {{ environment | default: ‘development’ }} data processing for file: ${input_file}”</li>
+<li>ValidateFormat: Execute prompt “validate-json-schema” with file=“${input_file}” schema=“{{ schema | default: ‘default-schema.json’ }}”</li>
+<li>Transform: Execute prompt “transform-data” with input=“${output}” format=“{{ format | default: ‘json’ }}”</li>
+<li>StoreData: Execute prompt “store-to-database” with data=“${output}” table=“{{ db_table | default: ‘processed_data’ }}”</li>
+<li>RetryTransform: Wait {{ retry_delay | default: ‘5’ }} seconds</li>
+<li>NotifyComplete: Log “Successfully processed ${input_file} in {{ environment }} environment”</li>
+<li>LogError: Log error “Validation failed for ${input_file}: ${error}”</li>
+<li>NotifyError: Execute prompt “send-notification” with message=“Processing failed: ${error}” channel=“{{ alert_channel | default: ‘errors’ }}”</li>
+</ul>
+<pre><code>
+### Running the Example
+
+```bash
+# Basic run with defaults
+swissarmyhammer flow run data-processor --var input_file=data.json
+
+# Production run with custom settings
+swissarmyhammer flow run data-processor \
+  --var input_file=data.json \
+  --set environment=production \
+  --set schema=production-schema.json \
+  --set db_table=prod_data \
+  --set alert_channel=prod-alerts
+
+# Development run with custom retry
+swissarmyhammer flow run data-processor \
+  --var input_file=test.json \
+  --set environment=development \
+  --set retry_delay=10
+</code></pre>
+<h2 id="running-workflows"><a class="header" href="#running-workflows">Running Workflows</a></h2>
+<p>Execute workflows using the <code>flow</code> command:</p>
+<pre><code class="language-bash"># Run a workflow
+swissarmyhammer flow run workflow-name
+
+# Pass variables
+swissarmyhammer flow run workflow-name --var input_file=data.json --var mode=production
+
+# Resume from failure
+swissarmyhammer flow run workflow-name --resume &lt;run_id&gt;
+</code></pre>
+<h2 id="monitoring-and-debugging"><a class="header" href="#monitoring-and-debugging">Monitoring and Debugging</a></h2>
+<h3 id="view-workflow-runs"><a class="header" href="#view-workflow-runs">View Workflow Runs</a></h3>
+<pre><code class="language-bash"># List recent runs
+swissarmyhammer flow list
+
+# Show run details
+swissarmyhammer flow show &lt;run_id&gt;
+</code></pre>
+<h3 id="debug-output-2"><a class="header" href="#debug-output-2">Debug Output</a></h3>
+<p>Workflows create detailed logs in <code>.swissarmyhammer/workflows/runs/&lt;run_id&gt;.jsonl</code>:</p>
+<ul>
+<li>State entries and exits</li>
+<li>Variable values</li>
+<li>Prompt outputs</li>
+<li>Error messages</li>
+<li>Timing information</li>
+</ul>
+<h3 id="visualization"><a class="header" href="#visualization">Visualization</a></h3>
+<p>Generate workflow diagrams:</p>
+<pre><code class="language-bash"># Visualize workflow structure
+swissarmyhammer flow visualize workflow-name
+
+# Show run path
+swissarmyhammer flow visualize workflow-name --run &lt;run_id&gt;
+</code></pre>
+<h2 id="advanced-features-2"><a class="header" href="#advanced-features-2">Advanced Features</a></h2>
+<h3 id="nested-workflows"><a class="header" href="#nested-workflows">Nested Workflows</a></h3>
+<p>Workflows can call other workflows, enabling modular design:</p>
+<pre><code class="language-mermaid">stateDiagram-v2
+    [*] --&gt; Initialize
+    Initialize --&gt; RunSubWorkflow
+    RunSubWorkflow --&gt; ProcessResults: OnSuccess
+    ProcessResults --&gt; [*]
+</code></pre>
+<pre><code class="language-markdown">## Actions
+
+- Initialize: Log "Starting main workflow"
+- RunSubWorkflow: Run workflow "data-processor" with input="${raw_data}"
+- ProcessResults: Log "Processed ${output}"
+</code></pre>
+<h3 id="dynamic-workflow-selection"><a class="header" href="#dynamic-workflow-selection">Dynamic Workflow Selection</a></h3>
+<p>Choose workflows at runtime:</p>
+<pre><code class="language-mermaid">stateDiagram-v2
+    [*] --&gt; DetermineType
+    DetermineType --&gt; RunTypeA: "type:A"
+    DetermineType --&gt; RunTypeB: "type:B"
+    RunTypeA --&gt; [*]
+    RunTypeB --&gt; [*]
+</code></pre>
+<pre><code class="language-markdown">## Actions
+
+- DetermineType: Execute prompt "detect-type" with data="${input}"
+- RunTypeA: Run workflow "process-type-a" with data="${input}"
+- RunTypeB: Run workflow "process-type-b" with data="${input}"
+</code></pre>
+<h3 id="cel-expression-branching"><a class="header" href="#cel-expression-branching">CEL Expression Branching</a></h3>
+<p>Use CEL expressions for complex conditional logic:</p>
+<pre><code class="language-mermaid">stateDiagram-v2
+    [*] --&gt; BranchDecision
+    BranchDecision --&gt; ProcessNormal: example_var.startsWith('Hello')
+    BranchDecision --&gt; ProcessError: is_error == true
+    BranchDecision --&gt; ProcessSpecial: count &gt; 10 &amp;&amp; status == 'active'
+    BranchDecision --&gt; ProcessDefault: always
+    ProcessNormal --&gt; [*]
+    ProcessError --&gt; [*]
+    ProcessSpecial --&gt; [*]
+    ProcessDefault --&gt; [*]
+</code></pre>
+<pre><code class="language-markdown">## Actions
+
+- BranchDecision: Execute prompt "analyze-data" with input="${data}"
+- ProcessNormal: Log "Processing normal flow for ${example_var}"
+- ProcessError: Execute prompt "handle-error" with error="${error}"
+- ProcessSpecial: Execute prompt "special-handler" with count="${count}"
+- ProcessDefault: Log "No special conditions met"
+</code></pre>
+<p>The choice state (BranchDecision) is automatically detected and will evaluate each condition in order, taking the first matching transition.</p>
+<h3 id="parallel-processing"><a class="header" href="#parallel-processing">Parallel Processing</a></h3>
+<p>Process multiple items concurrently:</p>
+<pre><code class="language-mermaid">stateDiagram-v2
+    [*] --&gt; Split
+    Split --&gt; fork1: Always
+    
+    state fork1 &lt;&lt;fork&gt;&gt;
+    fork1 --&gt; ProcessItem1
+    fork1 --&gt; ProcessItem2
+    fork1 --&gt; ProcessItem3
+    
+    ProcessItem1 --&gt; join1: Always
+    ProcessItem2 --&gt; join1: Always
+    ProcessItem3 --&gt; join1: Always
+    
+    state join1 &lt;&lt;join&gt;&gt;
+    join1 --&gt; Aggregate
+    Aggregate --&gt; [*]
+</code></pre>
+<h2 id="troubleshooting-8"><a class="header" href="#troubleshooting-8">Troubleshooting</a></h2>
+<h3 id="common-issues-2"><a class="header" href="#common-issues-2">Common Issues</a></h3>
+<ol>
+<li><strong>Workflow not found</strong>: Ensure workflow is in <code>.swissarmyhammer/workflows/</code></li>
+<li><strong>Variable undefined</strong>: Check variable names and initialization</li>
+<li><strong>Infinite loops</strong>: Add proper exit conditions</li>
+<li><strong>Prompt not found</strong>: Verify prompt paths and names</li>
+</ol>
+<h3 id="validation"><a class="header" href="#validation">Validation</a></h3>
+<p>Always validate workflows before running:</p>
+<pre><code class="language-bash">swissarmyhammer validate
+</code></pre>
+<p>This checks:</p>
+<ul>
+<li>Mermaid syntax</li>
+<li>State connectivity</li>
+<li>Action syntax</li>
+<li>Variable usage</li>
+<li>Circular dependencies</li>
+</ul>
+<h2 id="next-steps-10"><a class="header" href="#next-steps-10">Next Steps</a></h2>
+<ul>
+<li>Explore <a href="./workflow-examples.html">Example Workflows</a> for practical patterns</li>
+<li>Read about <a href="./workflow-patterns.html">Workflow Patterns</a> for common solutions</li>
+<li>Check the <a href="./cli-reference.html#flow">CLI Reference</a> for all flow commands</li>
+<li>Learn about <a href="./testing-guide.html#workflows">Testing Workflows</a></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="workflow-examples"><a class="header" href="#workflow-examples">Workflow Examples</a></h1>
+<p>This guide showcases practical workflow examples demonstrating various features and patterns available in SwissArmyHammer’s workflow system.</p>
+<h2 id="example-workflows"><a class="header" href="#example-workflows">Example Workflows</a></h2>
+<p>Example workflows are located in both:</p>
+<ul>
+<li><code>builtin/workflows/</code> - Basic example workflows</li>
+<li><code>builtin/prompts/workflows/</code> - Advanced workflow patterns</li>
+</ul>
+<p>All workflows can be run directly or used as templates for your own workflows.</p>
+<h3 id="basic-examples"><a class="header" href="#basic-examples">Basic Examples</a></h3>
+<h4 id="hello-world-workflow"><a class="header" href="#hello-world-workflow">Hello World Workflow</a></h4>
+<p><strong>File</strong>: <code>builtin/workflows/hello-world.md</code><br />
+<strong>Type</strong>: Simple linear workflow</p>
+<p>The simplest possible workflow demonstrating basic functionality:</p>
+<pre><code class="language-bash">swissarmyhammer flow run hello-world
+</code></pre>
+<p><strong>Features demonstrated</strong>:</p>
+<ul>
+<li>Basic state transitions</li>
+<li>Prompt execution with result capture</li>
+<li>Using variables in log messages</li>
+</ul>
+<h4 id="example-actions-workflow"><a class="header" href="#example-actions-workflow">Example Actions Workflow</a></h4>
+<p><strong>File</strong>: <code>builtin/workflows/example-actions.md</code><br />
+<strong>Type</strong>: Action reference workflow</p>
+<p>Demonstrates all available workflow actions:</p>
+<pre><code class="language-bash">swissarmyhammer flow run example-actions
+</code></pre>
+<p><strong>Features demonstrated</strong>:</p>
+<ul>
+<li>All action types (Log, Execute prompt, Set variable, Wait)</li>
+<li>Different log levels (info, warning, error)</li>
+<li>Variable substitution</li>
+<li>Sub-workflow execution</li>
+</ul>
+<h3 id="1-code-review-workflow"><a class="header" href="#1-code-review-workflow">1. Code Review Workflow</a></h3>
+<p><strong>File</strong>: <code>prompts/builtin/workflows/code-review.md</code><br />
+<strong>Type</strong>: Linear workflow</p>
+<p>A straightforward sequential workflow for automated code review:</p>
+<pre><code class="language-bash">swissarmyhammer flow run code-review --var code_path=src/main
+</code></pre>
+<p><strong>Features demonstrated</strong>:</p>
+<ul>
+<li>Linear state progression</li>
+<li>State variables</li>
+<li>Conditional transitions based on quality checks</li>
+<li>Feedback loops for addressing issues</li>
+</ul>
+<p><strong>Use cases</strong>:</p>
+<ul>
+<li>Automated code quality checks</li>
+<li>Pre-commit validations</li>
+<li>Continuous integration pipelines</li>
+</ul>
+<h3 id="2-deployment-pipeline"><a class="header" href="#2-deployment-pipeline">2. Deployment Pipeline</a></h3>
+<p><strong>File</strong>: <code>prompts/builtin/workflows/deployment-pipeline.md</code><br />
+<strong>Type</strong>: Interactive workflow with choices</p>
+<p>An interactive deployment workflow with environment selection and rollback options:</p>
+<pre><code class="language-bash">swissarmyhammer flow run deployment-pipeline --var app_name=myservice
+</code></pre>
+<p><strong>Features demonstrated</strong>:</p>
+<ul>
+<li>User choice actions for environment selection</li>
+<li>Conditional transitions based on build/test results</li>
+<li>Rollback mechanisms</li>
+<li>Different deployment paths for different environments</li>
+<li>Auto-rollback configuration</li>
+</ul>
+<p><strong>Use cases</strong>:</p>
+<ul>
+<li>Application deployments</li>
+<li>Infrastructure provisioning</li>
+<li>Release management</li>
+</ul>
+<h3 id="3-data-processing-pipeline"><a class="header" href="#3-data-processing-pipeline">3. Data Processing Pipeline</a></h3>
+<p><strong>File</strong>: <code>prompts/builtin/workflows/data-processing-pipeline.md</code><br />
+<strong>Type</strong>: Parallel execution workflow</p>
+<p>A high-performance data processing workflow that handles multiple data sources concurrently:</p>
+<pre><code class="language-bash">swissarmyhammer flow run data-processing-pipeline \
+  --var data_sources=logs,metrics,events
+</code></pre>
+<p><strong>Features demonstrated</strong>:</p>
+<ul>
+<li>Parallel state execution</li>
+<li>Synchronization points with <code>wait_for_parallel</code></li>
+<li>Parallel actions within states</li>
+<li>Timeout management for long-running tasks</li>
+<li>Aggregation of parallel results</li>
+</ul>
+<p><strong>Use cases</strong>:</p>
+<ul>
+<li>ETL pipelines</li>
+<li>Data analysis workflows</li>
+<li>Batch processing systems</li>
+<li>Report generation</li>
+</ul>
+<h3 id="4-database-migration"><a class="header" href="#4-database-migration">4. Database Migration</a></h3>
+<p><strong>File</strong>: <code>prompts/builtin/workflows/database-migration.md</code><br />
+<strong>Type</strong>: Error handling workflow</p>
+<p>A robust database migration workflow with comprehensive error handling:</p>
+<pre><code class="language-bash">swissarmyhammer flow run database-migration --var target_version=v2.0
+</code></pre>
+<p><strong>Features demonstrated</strong>:</p>
+<ul>
+<li>Multiple error states for different failure types</li>
+<li>Retry logic with configurable attempts</li>
+<li>Multi-level rollback (migration rollback, backup restore)</li>
+<li>Emergency mode for critical failures</li>
+<li>Validation at every step</li>
+<li>Graceful degradation</li>
+</ul>
+<p><strong>Use cases</strong>:</p>
+<ul>
+<li>Database schema updates</li>
+<li>Data migrations</li>
+<li>System upgrades</li>
+<li>Critical operations requiring rollback capability</li>
+</ul>
+<h3 id="5-multi-step-refactoring"><a class="header" href="#5-multi-step-refactoring">5. Multi-Step Refactoring</a></h3>
+<p><strong>File</strong>: <code>prompts/builtin/workflows/multi-step-refactoring.md</code><br />
+<strong>Type</strong>: Nested workflow orchestration</p>
+<p>A complex refactoring workflow that coordinates multiple sub-workflows:</p>
+<pre><code class="language-bash">swissarmyhammer flow run multi-step-refactoring \
+  --var project_path=src/core \
+  --var refactoring_scope=full
+</code></pre>
+<p><strong>Features demonstrated</strong>:</p>
+<ul>
+<li>Single workflow execution with <code>run_workflow</code></li>
+<li>Sequential workflow execution</li>
+<li>Parallel workflow execution</li>
+<li>Conditional workflow execution</li>
+<li>Data passing between workflows</li>
+<li>Complex orchestration patterns</li>
+</ul>
+<p><strong>Use cases</strong>:</p>
+<ul>
+<li>Large-scale refactoring projects</li>
+<li>Multi-phase deployments</li>
+<li>Complex automation pipelines</li>
+<li>Orchestrating microservices</li>
+</ul>
+<h2 id="running-example-workflows"><a class="header" href="#running-example-workflows">Running Example Workflows</a></h2>
+<h3 id="basic-execution"><a class="header" href="#basic-execution">Basic Execution</a></h3>
+<p>Run any example workflow:</p>
+<pre><code class="language-bash">swissarmyhammer flow run &lt;workflow-name&gt;
+</code></pre>
+<h3 id="with-custom-variables"><a class="header" href="#with-custom-variables">With Custom Variables</a></h3>
+<p>Override default variables:</p>
+<pre><code class="language-bash">swissarmyhammer flow run code-review \
+  --var code_path=lib/ \
+  --var review_depth=security-focused
+</code></pre>
+<h3 id="resume-from-failure"><a class="header" href="#resume-from-failure">Resume from Failure</a></h3>
+<p>If a workflow fails, you can resume from where it left off:</p>
+<pre><code class="language-bash">swissarmyhammer flow run database-migration --resume &lt;run_id&gt;
+</code></pre>
+<h3 id="list-available-workflows"><a class="header" href="#list-available-workflows">List Available Workflows</a></h3>
+<p>See all available workflows:</p>
+<pre><code class="language-bash">swissarmyhammer flow list
+</code></pre>
+<h2 id="learning-from-examples"><a class="header" href="#learning-from-examples">Learning from Examples</a></h2>
+<h3 id="how-to-study-the-examples"><a class="header" href="#how-to-study-the-examples">How to Study the Examples</a></h3>
+<ol>
+<li><strong>Read the workflow definition</strong>: Understand the state flow and transitions</li>
+<li><strong>Examine the actions</strong>: See how different action types are used</li>
+<li><strong>Look at error handling</strong>: Note how errors are caught and handled</li>
+<li><strong>Study variable usage</strong>: See how data flows through the workflow</li>
+<li><strong>Run with debugging</strong>: Use <code>--debug</code> to see detailed execution logs</li>
+</ol>
+<h3 id="adapting-examples"><a class="header" href="#adapting-examples">Adapting Examples</a></h3>
+<p>To create your own workflow based on an example:</p>
+<ol>
+<li>Copy the example workflow to your prompts directory</li>
+<li>Modify the metadata (name, description, tags)</li>
+<li>Adjust the state diagram to match your needs</li>
+<li>Update actions and variables</li>
+<li>Test incrementally with <code>--dry-run</code></li>
+</ol>
+<h3 id="common-modifications"><a class="header" href="#common-modifications">Common Modifications</a></h3>
+<p><strong>Adding error handling</strong> to the code review workflow:</p>
+<pre><code class="language-markdown">## Actions
+
+- AnalyzeCode: Execute prompt "analyze-codebase" with path="${code_path}"
+- HandleError: Log error "Code analysis failed: ${error}"
+- Continue: Log "Continuing with partial results"
+</code></pre>
+<p>And add retry logic in the Mermaid diagram:</p>
+<pre><code class="language-mermaid">AnalyzeCode --&gt; HandleError: OnFailure
+HandleError --&gt; RetryWait
+RetryWait --&gt; AnalyzeCode
+</code></pre>
+<p><strong>Making deployment pipeline fully automated</strong>:</p>
+<p>Pass variables when running the workflow:</p>
+<pre><code class="language-bash">swissarmyhammer flow run deployment-pipeline \
+  --var auto_deploy=true \
+  --var target_env=staging \
+  --var skip_confirmations=true
+</code></pre>
+<p><strong>Adding notifications</strong> to data processing:</p>
+<pre><code class="language-markdown">## Actions
+
+- PublishResults: Execute prompt "send-notification" with channel="#data-team" message="Pipeline completed: ${result_count} records processed"
+</code></pre>
+<p>Or for multiple notifications:</p>
+<pre><code class="language-mermaid">stateDiagram-v2
+    ProcessData --&gt; NotifyStart
+    
+    state NotifyStart &lt;&lt;fork&gt;&gt;
+    NotifyStart --&gt; NotifySlack
+    NotifyStart --&gt; NotifyEmail
+    NotifyStart --&gt; LogMetrics
+    
+    state NotifyEnd &lt;&lt;join&gt;&gt;
+    NotifySlack --&gt; NotifyEnd
+    NotifyEmail --&gt; NotifyEnd
+    LogMetrics --&gt; NotifyEnd
+</code></pre>
+<h2 id="best-practices-from-examples"><a class="header" href="#best-practices-from-examples">Best Practices from Examples</a></h2>
+<h3 id="1-state-naming"><a class="header" href="#1-state-naming">1. State Naming</a></h3>
+<ul>
+<li>Use descriptive, action-oriented names</li>
+<li>Keep names concise but clear</li>
+<li>Use consistent naming patterns</li>
+</ul>
+<h3 id="2-error-handling"><a class="header" href="#2-error-handling">2. Error Handling</a></h3>
+<ul>
+<li>Always include error states for critical operations</li>
+<li>Provide meaningful error messages</li>
+<li>Design rollback paths for reversible operations</li>
+</ul>
+<h3 id="3-variable-management"><a class="header" href="#3-variable-management">3. Variable Management</a></h3>
+<ul>
+<li>Define sensible defaults</li>
+<li>Document variable purposes</li>
+<li>Validate inputs early in the workflow</li>
+</ul>
+<h3 id="4-user-interaction"><a class="header" href="#4-user-interaction">4. User Interaction</a></h3>
+<ul>
+<li>Provide clear choice descriptions</li>
+<li>Include help text for complex decisions</li>
+<li>Allow bypassing interaction for automation</li>
+</ul>
+<h3 id="5-performance"><a class="header" href="#5-performance">5. Performance</a></h3>
+<ul>
+<li>Use parallel execution where possible</li>
+<li>Set appropriate timeouts</li>
+<li>Design for idempotency</li>
+</ul>
+<h2 id="complete-workflow-example"><a class="header" href="#complete-workflow-example">Complete Workflow Example</a></h2>
+<p>Here’s a complete workflow file showing all the components:</p>
+<pre><code class="language-markdown">---
+name: automated-testing
+title: Automated Testing Workflow
+description: Runs tests, analyzes results, and generates reports
+category: user
+tags:
+  - testing
+  - ci
+  - automation
+---
+
+# Automated Testing Workflow
+
+This workflow runs the test suite, analyzes failures, and generates comprehensive reports.
+
+```mermaid
+stateDiagram-v2
+    [*] --&gt; Initialize
+    Initialize --&gt; RunTests
+    RunTests --&gt; AnalyzeResults: OnSuccess
+    RunTests --&gt; HandleFailure: OnFailure
+    AnalyzeResults --&gt; GenerateReport
+    HandleFailure --&gt; RetryTests: "flaky"
+    HandleFailure --&gt; GenerateFailureReport: "real_failure"
+    RetryTests --&gt; RunTests
+    GenerateReport --&gt; NotifySuccess
+    GenerateFailureReport --&gt; NotifyFailure
+    NotifySuccess --&gt; [*]
+    NotifyFailure --&gt; [*]
+</code></pre>
+<h2 id="actions-2"><a class="header" href="#actions-2">Actions</a></h2>
+<ul>
+<li>Initialize: Log “Starting test run for ${branch_name}”</li>
+<li>RunTests: Execute prompt “run-test-suite” with suite=“${test_suite}” parallel=“${parallel_tests}”</li>
+<li>AnalyzeResults: Execute prompt “analyze-test-results” with results=“${output}”</li>
+<li>HandleFailure: Execute prompt “categorize-failures” with failures=“${error}”</li>
+<li>RetryTests: Wait 30 seconds</li>
+<li>GenerateReport: Execute prompt “generate-test-report” with data=“${output}” format=“html”</li>
+<li>GenerateFailureReport: Execute prompt “generate-failure-report” with failures=“${output}”</li>
+<li>NotifySuccess: Execute prompt “send-notification” with status=“success” message=“All tests passed!”</li>
+<li>NotifyFailure: Execute prompt “send-notification” with status=“failure” message=“Tests failed: ${error}”</li>
+</ul>
+<pre><code>
+## Troubleshooting Examples
+
+### Common Issues
+
+1. **Workflow not found**:
+   ```bash
+   swissarmyhammer flow list  # Check available workflows
+</code></pre>
+<ol start="2">
+<li>
+<p><strong>Variable errors</strong>:</p>
+<pre><code class="language-bash">swissarmyhammer flow show code-review  # View workflow details
+</code></pre>
+</li>
+<li>
+<p><strong>State transition failures</strong>:</p>
+<ul>
+<li>Check condition syntax</li>
+<li>Verify variable values</li>
+<li>Use <code>--debug</code> for detailed logs</li>
+</ul>
+</li>
+<li>
+<p><strong>Action failures</strong>:</p>
+<ul>
+<li>Ensure referenced prompts exist</li>
+<li>Check variable interpolation</li>
+<li>Verify action syntax</li>
+</ul>
+</li>
+</ol>
+<h3 id="debugging-tips"><a class="header" href="#debugging-tips">Debugging Tips</a></h3>
+<ol>
+<li>
+<p>Use verbose output:</p>
+<pre><code class="language-bash">swissarmyhammer workflow run deployment-pipeline -v
+</code></pre>
+</li>
+<li>
+<p>Enable debug mode:</p>
+<pre><code class="language-bash">swissarmyhammer workflow run data-processing-pipeline --debug
+</code></pre>
+</li>
+<li>
+<p>Test with minimal data:</p>
+<pre><code class="language-bash">swissarmyhammer workflow run data-processing-pipeline \
+  --set data_sources=logs \
+  --set processing_mode=sequential
+</code></pre>
+</li>
+</ol>
+<h2 id="next-steps-11"><a class="header" href="#next-steps-11">Next Steps</a></h2>
+<ul>
+<li>Explore <a href="./workflow-patterns.html">Workflow Patterns</a> for advanced techniques</li>
+<li>Read the main <a href="./workflows.html">Workflows Documentation</a> for detailed reference</li>
+<li>Create your own workflows based on these examples</li>
+<li>Share your workflows with the community</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="workflow-patterns"><a class="header" href="#workflow-patterns">Workflow Patterns</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="search-and-discovery-guide"><a class="header" href="#search-and-discovery-guide">Search and Discovery Guide</a></h1>
 <p>SwissArmyHammer provides powerful search capabilities to help you discover and find prompts in your collection. This guide covers search strategies, advanced filtering, and integration workflows.</p>
 <h2 id="basic-search-1"><a class="header" href="#basic-search-1">Basic Search</a></h2>
@@ -7794,7 +8898,7 @@ swissarmyhammer search --regex "^exact term$"
 # Search in specific field
 swissarmyhammer search --in description query
 </code></pre>
-<h2 id="best-practices-10"><a class="header" href="#best-practices-10">Best Practices</a></h2>
+<h2 id="best-practices-12"><a class="header" href="#best-practices-12">Best Practices</a></h2>
 <h3 id="effective-search-terms"><a class="header" href="#effective-search-terms">Effective Search Terms</a></h3>
 <ol>
 <li><strong>Use specific terms</strong>: “REST API documentation” vs. “API”</li>
@@ -7983,7 +9087,7 @@ swissarmyhammer test template-name --debug | grep "Performance:"
 /usr/bin/time -v swissarmyhammer test large-template \
   --arg big_data="$(cat massive-dataset.json)"
 </code></pre>
-<h2 id="best-practices-11"><a class="header" href="#best-practices-11">Best Practices</a></h2>
+<h2 id="best-practices-13"><a class="header" href="#best-practices-13">Best Practices</a></h2>
 <h3 id="writing-testable-prompts"><a class="header" href="#writing-testable-prompts">Writing Testable Prompts</a></h3>
 <ol>
 <li><strong>Provide sensible defaults</strong> for optional arguments</li>
@@ -8000,7 +9104,7 @@ swissarmyhammer test template-name --debug | grep "Performance:"
 <li><strong>Validate output</strong>: Ensure rendered content makes sense</li>
 <li><strong>Performance check</strong>: Verify reasonable render times</li>
 </ol>
-<h3 id="debugging-tips"><a class="header" href="#debugging-tips">Debugging Tips</a></h3>
+<h3 id="debugging-tips-1"><a class="header" href="#debugging-tips-1">Debugging Tips</a></h3>
 <ol>
 <li><strong>Use debug mode</strong> for complex templates</li>
 <li><strong>Test filters individually</strong> in simple templates</li>
@@ -8060,7 +9164,7 @@ jobs:
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="sharing-and-collaboration"><a class="header" href="#sharing-and-collaboration">Sharing and Collaboration</a></h1>
 <p>This guide covers how to share SwissArmyHammer prompts with your team, collaborate on prompt development, and manage shared prompt libraries.</p>
-<h2 id="overview-2"><a class="header" href="#overview-2">Overview</a></h2>
+<h2 id="overview-3"><a class="header" href="#overview-3">Overview</a></h2>
 <p>SwissArmyHammer supports multiple collaboration workflows:</p>
 <ul>
 <li><strong>File Sharing</strong> - Share prompt files directly</li>
@@ -8598,7 +9702,7 @@ git pull origin main
 ./scripts/install.sh
 " | mail -s "$SUBJECT" $RECIPIENTS
 </code></pre>
-<h2 id="best-practices-12"><a class="header" href="#best-practices-12">Best Practices</a></h2>
+<h2 id="best-practices-14"><a class="header" href="#best-practices-14">Best Practices</a></h2>
 <h3 id="1-establish-standards"><a class="header" href="#1-establish-standards">1. Establish Standards</a></h3>
 <p>Define clear guidelines:</p>
 <ul>
@@ -8637,7 +9741,7 @@ git pull origin main
 <li>Consolidate duplicates</li>
 <li>Archive deprecated</li>
 </ul>
-<h2 id="examples-8"><a class="header" href="#examples-8">Examples</a></h2>
+<h2 id="examples-10"><a class="header" href="#examples-10">Examples</a></h2>
 <h3 id="team-onboarding"><a class="header" href="#team-onboarding">Team Onboarding</a></h3>
 <p>Create onboarding bundle:</p>
 <pre><code class="language-bash">#!/bin/bash
@@ -8679,7 +9783,7 @@ install_script: |
   mkdir -p ~/.swissarmyhammer/prompts/projects/microservices
   cp prompts/*.md ~/.swissarmyhammer/prompts/projects/microservices/
 </code></pre>
-<h2 id="next-steps-10"><a class="header" href="#next-steps-10">Next Steps</a></h2>
+<h2 id="next-steps-12"><a class="header" href="#next-steps-12">Next Steps</a></h2>
 <ul>
 <li>Read <a href="./prompt-organization.html">Prompt Organization</a> for structure best practices</li>
 <li>See <a href="./contributing.html">Contributing</a> for contribution guidelines</li>
@@ -8688,7 +9792,7 @@ install_script: |
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="mcp-protocol"><a class="header" href="#mcp-protocol">MCP Protocol</a></h1>
 <p>SwissArmyHammer implements the Model Context Protocol (MCP) to provide prompts to AI assistants like Claude. This guide covers the protocol details and implementation specifics.</p>
-<h2 id="overview-3"><a class="header" href="#overview-3">Overview</a></h2>
+<h2 id="overview-4"><a class="header" href="#overview-4">Overview</a></h2>
 <p>The Model Context Protocol (MCP) is a standardized protocol for communication between AI assistants and context providers. SwissArmyHammer acts as an MCP server, providing prompt templates as resources and tools.</p>
 <pre><code>┌─────────────┐         MCP          ┌──────────────────┐
 │   Claude    │◄────────────────────►│ SwissArmyHammer  │
@@ -8910,7 +10014,7 @@ install_script: |
   "params": {}
 }
 </code></pre>
-<h2 id="error-handling-8"><a class="header" href="#error-handling-8">Error Handling</a></h2>
+<h2 id="error-handling-9"><a class="header" href="#error-handling-9">Error Handling</a></h2>
 <p>MCP defines standard error codes:</p>
 <pre><code class="language-json">{
   "jsonrpc": "2.0",
@@ -9160,7 +10264,7 @@ swissarmyhammer mcp-inspector --port 3334
 # Connect through inspector
 export MCP_PROXY=http://localhost:3334
 </code></pre>
-<h2 id="best-practices-13"><a class="header" href="#best-practices-13">Best Practices</a></h2>
+<h2 id="best-practices-15"><a class="header" href="#best-practices-15">Best Practices</a></h2>
 <ol>
 <li><strong>Always validate inputs</strong> - Never trust client data</li>
 <li><strong>Handle errors gracefully</strong> - Return proper error codes</li>
@@ -9170,7 +10274,7 @@ export MCP_PROXY=http://localhost:3334
 <li><strong>Version your changes</strong> - Maintain compatibility</li>
 <li><strong>Document extensions</strong> - Help client implementers</li>
 </ol>
-<h2 id="next-steps-11"><a class="header" href="#next-steps-11">Next Steps</a></h2>
+<h2 id="next-steps-13"><a class="header" href="#next-steps-13">Next Steps</a></h2>
 <ul>
 <li>Implement <a href="./claude-code-integration.html">Claude Code Integration</a></li>
 <li>Review <a href="./api-reference.html">API Reference</a> for details</li>
@@ -9202,7 +10306,7 @@ timeout = 30000  # milliseconds
 [prompts]
 directories = [
     "~/.swissarmyhammer/prompts",
-    "./prompts",
+    "./.swissarmyhammer/prompts",
     "/opt/company/prompts"
 ]
 builtin = true
@@ -9263,7 +10367,7 @@ compression = true
 <li>Nested values use underscores: <code>SECTION_KEY</code></li>
 <li>Arrays use comma separation</li>
 </ul>
-<h3 id="examples-9"><a class="header" href="#examples-9">Examples</a></h3>
+<h3 id="examples-11"><a class="header" href="#examples-11">Examples</a></h3>
 <pre><code class="language-bash"># Server settings
 export SWISSARMYHAMMER_SERVER_HOST=0.0.0.0
 export SWISSARMYHAMMER_SERVER_PORT=9000
@@ -9341,7 +10445,7 @@ metrics = true         # Enable metrics collection
 # Directories to load prompts from
 directories = [
     "~/.swissarmyhammer/prompts",    # User prompts
-    "./prompts",                      # Project prompts
+    "./.swissarmyhammer/prompts",                      # Project prompts
     "/opt/shared/prompts"             # Shared prompts
 ]
 
@@ -9679,7 +10783,7 @@ debug = true
 
 [prompts]
 directories = [
-    "./prompts",
+    "./.swissarmyhammer/prompts",
     "~/.swissarmyhammer/prompts"
 ]
 watch = true
@@ -9781,7 +10885,7 @@ swissarmyhammer config schema &gt; config-schema.json
 # Validate against schema
 swissarmyhammer config validate --schema config-schema.json
 </code></pre>
-<h2 id="best-practices-14"><a class="header" href="#best-practices-14">Best Practices</a></h2>
+<h2 id="best-practices-16"><a class="header" href="#best-practices-16">Best Practices</a></h2>
 <h3 id="1-use-profiles"><a class="header" href="#1-use-profiles">1. Use Profiles</a></h3>
 <p>Separate configurations for different environments:</p>
 <pre><code class="language-toml">[profiles.local]
@@ -9828,7 +10932,7 @@ swissarmyhammer config validate --file new-config.toml
 # Test with dry run
 swissarmyhammer serve --config new-config.toml --dry-run
 </code></pre>
-<h2 id="troubleshooting-7"><a class="header" href="#troubleshooting-7">Troubleshooting</a></h2>
+<h2 id="troubleshooting-9"><a class="header" href="#troubleshooting-9">Troubleshooting</a></h2>
 <h3 id="configuration-not-loading"><a class="header" href="#configuration-not-loading">Configuration Not Loading</a></h3>
 <ol>
 <li>Check file exists and is readable</li>
@@ -9850,7 +10954,7 @@ swissarmyhammer serve --config new-config.toml --dry-run
 <li>Restrict file and network access</li>
 <li>Update allowed domains</li>
 </ol>
-<h2 id="next-steps-12"><a class="header" href="#next-steps-12">Next Steps</a></h2>
+<h2 id="next-steps-14"><a class="header" href="#next-steps-14">Next Steps</a></h2>
 <ul>
 <li>See <a href="./cli-reference.html">CLI Reference</a> for command-line options</li>
 <li>Learn about <a href="./file-watching.html">File Watching</a> configuration</li>
@@ -9992,7 +11096,7 @@ watch:
       enabled: true
       track_moves: true
 </code></pre>
-<h2 id="validation"><a class="header" href="#validation">Validation</a></h2>
+<h2 id="validation-1"><a class="header" href="#validation-1">Validation</a></h2>
 <h3 id="automatic-validation"><a class="header" href="#automatic-validation">Automatic Validation</a></h3>
 <p>Files are validated before reload:</p>
 <pre><code class="language-yaml">watch:
@@ -10059,7 +11163,7 @@ watch:
 <pre><code class="language-yaml">watch:
   # Only watch specific directories
   directories:
-    - ./prompts
+    - ./.swissarmyhammer/prompts
     - ~/.swissarmyhammer/prompts
   # Don't watch subdirectories
   recursive: false
@@ -10090,7 +11194,7 @@ File Watcher Status:
   modules:
     swissarmyhammer::watcher: debug
 </code></pre>
-<h3 id="common-issues-2"><a class="header" href="#common-issues-2">Common Issues</a></h3>
+<h3 id="common-issues-3"><a class="header" href="#common-issues-3">Common Issues</a></h3>
 <ol>
 <li>
 <p><strong>Changes not detected</strong>:</p>
@@ -10200,7 +11304,7 @@ curl http://localhost:3333/api/watcher/events
 # Trigger manual reload
 curl -X POST http://localhost:3333/api/watcher/reload
 </code></pre>
-<h2 id="best-practices-15"><a class="header" href="#best-practices-15">Best Practices</a></h2>
+<h2 id="best-practices-17"><a class="header" href="#best-practices-17">Best Practices</a></h2>
 <h3 id="development"><a class="header" href="#development">Development</a></h3>
 <ol>
 <li><strong>Use aggressive watching</strong> for immediate feedback</li>
@@ -10248,7 +11352,7 @@ export SWISSARMYHAMMER_WATCH_INTERVAL=5000
 # Force polling strategy
 export SWISSARMYHAMMER_WATCH_STRATEGY=polling
 </code></pre>
-<h2 id="troubleshooting-8"><a class="header" href="#troubleshooting-8">Troubleshooting</a></h2>
+<h2 id="troubleshooting-10"><a class="header" href="#troubleshooting-10">Troubleshooting</a></h2>
 <h3 id="diagnostic-commands"><a class="header" href="#diagnostic-commands">Diagnostic Commands</a></h3>
 <pre><code class="language-bash"># Run watcher diagnostics
 swissarmyhammer doctor --watch
@@ -10268,7 +11372,7 @@ swissarmyhammer watch monitor
 <li><strong>All: Check file permissions</strong></li>
 <li><strong>All: Verify ignore patterns</strong></li>
 </ol>
-<h2 id="next-steps-13"><a class="header" href="#next-steps-13">Next Steps</a></h2>
+<h2 id="next-steps-15"><a class="header" href="#next-steps-15">Next Steps</a></h2>
 <ul>
 <li>Configure watching in <a href="./configuration.html">Configuration</a></li>
 <li>Learn about <a href="./prompt-organization.html">Prompt Organization</a></li>
@@ -10595,7 +11699,7 @@ Override chain for 'code-review':
 # Test with override preview
 swissarmyhammer test code-review --preview-overrides
 </code></pre>
-<h2 id="best-practices-16"><a class="header" href="#best-practices-16">Best Practices</a></h2>
+<h2 id="best-practices-18"><a class="header" href="#best-practices-18">Best Practices</a></h2>
 <h3 id="1-minimal-overrides"><a class="header" href="#1-minimal-overrides">1. Minimal Overrides</a></h3>
 <p>Override only what needs to change:</p>
 <pre><code class="language-yaml"># Good: Override specific fields
@@ -10675,8 +11779,8 @@ validation:
       min_length: 50
       pattern: ".*security.*"
 </code></pre>
-<h2 id="troubleshooting-9"><a class="header" href="#troubleshooting-9">Troubleshooting</a></h2>
-<h3 id="common-issues-3"><a class="header" href="#common-issues-3">Common Issues</a></h3>
+<h2 id="troubleshooting-11"><a class="header" href="#troubleshooting-11">Troubleshooting</a></h2>
+<h3 id="common-issues-4"><a class="header" href="#common-issues-4">Common Issues</a></h3>
 <ol>
 <li>
 <p><strong>Override not applying</strong>:</p>
@@ -10700,7 +11804,7 @@ swissarmyhammer validate --overrides
 </code></pre>
 </li>
 </ol>
-<h2 id="next-steps-14"><a class="header" href="#next-steps-14">Next Steps</a></h2>
+<h2 id="next-steps-16"><a class="header" href="#next-steps-16">Next Steps</a></h2>
 <ul>
 <li>Learn about <a href="./prompt-organization.html">Prompt Organization</a></li>
 <li>Understand <a href="./configuration.html">Configuration</a> options</li>
@@ -10709,7 +11813,7 @@ swissarmyhammer validate --overrides
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="built-in-prompts"><a class="header" href="#built-in-prompts">Built-in Prompts</a></h1>
 <p>SwissArmyHammer includes a comprehensive set of built-in prompts designed to assist with various development tasks. These prompts are organized by category and leverage Liquid templating for dynamic, customizable assistance.</p>
-<h2 id="overview-4"><a class="header" href="#overview-4">Overview</a></h2>
+<h2 id="overview-5"><a class="header" href="#overview-5">Overview</a></h2>
 <p>All built-in prompts:</p>
 <ul>
 <li>Support customizable arguments with sensible defaults</li>
@@ -11067,7 +12171,7 @@ swissarmyhammer test test/unit --code "$(cat service.py)" --style "TDD"
 swissarmyhammer test review/security --code "$(cat auth.js)" --severity_threshold "medium" &gt; security.md
 swissarmyhammer test test/unit --code "$(cat auth.js)" --focus "security edge cases"
 </code></pre>
-<h2 id="best-practices-17"><a class="header" href="#best-practices-17">Best Practices</a></h2>
+<h2 id="best-practices-19"><a class="header" href="#best-practices-19">Best Practices</a></h2>
 <ol>
 <li><strong>Choose the Right Prompt</strong> - Select prompts that match your specific task</li>
 <li><strong>Provide Context</strong> - Use optional arguments to give more context</li>
@@ -11085,7 +12189,7 @@ swissarmyhammer test test/unit --code "$(cat auth.js)" --focus "security edge ca
 </ol>
 <p>For more information on creating custom prompts, see <a href="./creating-prompts.html">Creating Prompts</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="custom-filters-reference-1"><a class="header" href="#custom-filters-reference-1">Custom Filters Reference</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="examples-10"><a class="header" href="#examples-10">Examples</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="examples-12"><a class="header" href="#examples-12">Examples</a></h1>
 <p>This page provides real-world examples of using SwissArmyHammer for various development tasks.</p>
 <h2 id="basic-prompt-usage"><a class="header" href="#basic-prompt-usage">Basic Prompt Usage</a></h2>
 <h3 id="simple-code-review"><a class="header" href="#simple-code-review">Simple Code Review</a></h3>
@@ -11695,14 +12799,14 @@ swissarmyhammer test docs/readme \
   --project_name "my-new-app" \
   --project_description "My awesome web app"
 </code></pre>
-<h2 id="next-steps-15"><a class="header" href="#next-steps-15">Next Steps</a></h2>
+<h2 id="next-steps-17"><a class="header" href="#next-steps-17">Next Steps</a></h2>
 <ul>
 <li>Explore <a href="./builtin-prompts.html">Built-in Prompts</a> for more capabilities</li>
 <li>Learn about <a href="./creating-prompts.html">Creating Prompts</a> for custom workflows</li>
 <li>Check <a href="./cli-reference.html">CLI Reference</a> for all available commands</li>
 <li>See <a href="./library-usage.html">Library Usage</a> for programmatic integration</li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="troubleshooting-10"><a class="header" href="#troubleshooting-10">Troubleshooting</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="troubleshooting-12"><a class="header" href="#troubleshooting-12">Troubleshooting</a></h1>
 <p>This guide helps you resolve common issues with SwissArmyHammer. For additional support, check the <a href="https://github.com/wballard/swissarmyhammer/issues">GitHub Issues</a>.</p>
 <h2 id="quick-diagnostics"><a class="header" href="#quick-diagnostics">Quick Diagnostics</a></h2>
 <p>Run the doctor command for automated diagnosis:</p>
@@ -11852,7 +12956,7 @@ swissarmyhammer serve --debug &gt; debug.log 2&gt;&amp;1
 <p><strong>Check directories</strong>:</p>
 <pre><code class="language-bash"># List prompt directories
 ls -la ~/.swissarmyhammer/prompts
-ls -la ./prompts
+ls -la ./.swissarmyhammer/prompts
 </code></pre>
 </li>
 <li>
@@ -12216,7 +13320,7 @@ cat ~/.swissarmyhammer/config.toml 2&gt;/dev/null || echo "No config file"
 echo ""
 echo "=== Prompt Directories ==="
 ls -la ~/.swissarmyhammer/prompts 2&gt;/dev/null || echo "No user prompts"
-ls -la ./prompts 2&gt;/dev/null || echo "No local prompts"
+ls -la ./.swissarmyhammer/prompts 2&gt;/dev/null || echo "No local prompts"
 echo ""
 echo "=== Process Check ==="
 ps aux | grep swissarmyhammer | grep -v grep
@@ -12288,7 +13392,7 @@ swissarmyhammer serve --debug &gt; server.log 2&gt;&amp;1 &amp;
 </ol>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="contributing-1"><a class="header" href="#contributing-1">Contributing</a></h1>
 <p>Thank you for your interest in contributing to SwissArmyHammer! This guide will help you get started with contributing to the project.</p>
-<h2 id="overview-5"><a class="header" href="#overview-5">Overview</a></h2>
+<h2 id="overview-6"><a class="header" href="#overview-6">Overview</a></h2>
 <p>SwissArmyHammer welcomes contributions in many forms:</p>
 <ul>
 <li><strong>Code contributions</strong> - Features, bug fixes, optimizations</li>
@@ -12477,7 +13581,7 @@ bail!("Error");</code></pre>
 <h2 id="contributing-prompts-1"><a class="header" href="#contributing-prompts-1">Contributing Prompts</a></h2>
 <h3 id="built-in-prompt-guidelines"><a class="header" href="#built-in-prompt-guidelines">Built-in Prompt Guidelines</a></h3>
 <ol>
-<li><strong>Location</strong>: <code>src/prompts/builtin/</code></li>
+<li><strong>Location</strong>: <code>builtin/prompts/</code></li>
 <li><strong>Categories</strong>: Place in appropriate subdirectory</li>
 <li><strong>Quality</strong>: Must be generally useful</li>
 <li><strong>Testing</strong>: Include test cases</li>
@@ -12516,7 +13620,7 @@ Clear instructions using the arguments:
 Organize the prompt logically...
 </code></pre>
 <h3 id="testing-prompts"><a class="header" href="#testing-prompts">Testing Prompts</a></h3>
-<p>Add test file <code>src/prompts/builtin/tests/your-prompt.test.md</code>:</p>
+<p>Add test file <code>builtin/prompts/tests/your-prompt.test.md</code>:</p>
 <pre><code class="language-yaml">name: test-your-prompt
 cases:
   - name: basic usage
@@ -12846,7 +13950,6 @@ cargo install mdbook mdbook-linkcheck mdbook-mermaid
 │   └── fixtures/         # Test data
 ├── doc/
 │   └── src/              # Documentation source
-├── examples/             # Example code
 ├── benches/              # Benchmarks
 └── Cargo.toml           # Project manifest
 </code></pre>
@@ -13169,8 +14272,8 @@ cargo update
 # Edit dependency version
 cargo upgrade serde --version 1.0.150
 </code></pre>
-<h2 id="troubleshooting-11"><a class="header" href="#troubleshooting-11">Troubleshooting</a></h2>
-<h3 id="common-issues-4"><a class="header" href="#common-issues-4">Common Issues</a></h3>
+<h2 id="troubleshooting-13"><a class="header" href="#troubleshooting-13">Troubleshooting</a></h2>
+<h3 id="common-issues-5"><a class="header" href="#common-issues-5">Common Issues</a></h3>
 <h4 id="compilation-errors"><a class="header" href="#compilation-errors">Compilation Errors</a></h4>
 <pre><code class="language-bash"># Clean build artifacts
 cargo clean
@@ -13268,7 +14371,7 @@ jobs:
         types: [rust]
         pass_filenames: false
 </code></pre>
-<h2 id="next-steps-16"><a class="header" href="#next-steps-16">Next Steps</a></h2>
+<h2 id="next-steps-18"><a class="header" href="#next-steps-18">Next Steps</a></h2>
 <ul>
 <li>Read <a href="./contributing.html">Contributing</a> for contribution guidelines</li>
 <li>Check <a href="./testing.html">Testing</a> for detailed testing practices</li>
@@ -13277,7 +14380,7 @@ jobs:
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="testing-3"><a class="header" href="#testing-3">Testing</a></h1>
 <p>This guide covers testing practices and strategies for SwissArmyHammer development.</p>
-<h2 id="overview-6"><a class="header" href="#overview-6">Overview</a></h2>
+<h2 id="overview-7"><a class="header" href="#overview-7">Overview</a></h2>
 <p>SwissArmyHammer uses a comprehensive testing approach:</p>
 <ul>
 <li><strong>Unit tests</strong> - Test individual components</li>
@@ -13849,7 +14952,7 @@ fn test_with_env_vars() {
     });
 }</code></pre>
 <h2 id="debugging-tests"><a class="header" href="#debugging-tests">Debugging Tests</a></h2>
-<h3 id="debug-output-2"><a class="header" href="#debug-output-2">Debug Output</a></h3>
+<h3 id="debug-output-3"><a class="header" href="#debug-output-3">Debug Output</a></h3>
 <pre><code class="language-rust">#[test]
 fn test_with_debug_output() {
     init_test_logging();
@@ -13913,7 +15016,7 @@ jobs:
     - name: Doc Tests
       run: cargo test --doc
 </code></pre>
-<h2 id="best-practices-18"><a class="header" href="#best-practices-18">Best Practices</a></h2>
+<h2 id="best-practices-20"><a class="header" href="#best-practices-20">Best Practices</a></h2>
 <h3 id="1-test-organization"><a class="header" href="#1-test-organization">1. Test Organization</a></h3>
 <ul>
 <li>Keep unit tests with the code</li>
@@ -13944,14 +15047,14 @@ fn test_concurrent_access_safety() { } // Clear test scenario</code></pre>
 <li>Test error paths</li>
 <li>Test concurrent scenarios</li>
 </ul>
-<h3 id="5-performance"><a class="header" href="#5-performance">5. Performance</a></h3>
+<h3 id="5-performance-1"><a class="header" href="#5-performance-1">5. Performance</a></h3>
 <ul>
 <li>Keep tests fast (&lt;100ms each)</li>
 <li>Use <code>#[ignore]</code> for slow tests</li>
 <li>Run slow tests in CI only</li>
 <li>Mock expensive operations</li>
 </ul>
-<h2 id="next-steps-17"><a class="header" href="#next-steps-17">Next Steps</a></h2>
+<h2 id="next-steps-19"><a class="header" href="#next-steps-19">Next Steps</a></h2>
 <ul>
 <li>Read <a href="./development.html">Development Setup</a> for environment setup</li>
 <li>See <a href="./contributing.html">Contributing</a> for contribution guidelines</li>
@@ -13960,7 +15063,7 @@ fn test_concurrent_access_safety() { } // Clear test scenario</code></pre>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="release-process-1"><a class="header" href="#release-process-1">Release Process</a></h1>
 <p>This guide documents the release process for SwissArmyHammer, including versioning, testing, building, and publishing.</p>
-<h2 id="overview-7"><a class="header" href="#overview-7">Overview</a></h2>
+<h2 id="overview-8"><a class="header" href="#overview-8">Overview</a></h2>
 <p>SwissArmyHammer follows a structured release process:</p>
 <ol>
 <li><strong>Version Planning</strong> - Determine version number and scope</li>
@@ -14470,7 +15573,7 @@ cargo release patch
 </code></pre>
 </li>
 </ol>
-<h2 id="best-practices-19"><a class="header" href="#best-practices-19">Best Practices</a></h2>
+<h2 id="best-practices-21"><a class="header" href="#best-practices-21">Best Practices</a></h2>
 <ol>
 <li>
 <p><strong>Test Thoroughly</strong></p>
@@ -14505,7 +15608,7 @@ cargo release patch
 </ul>
 </li>
 </ol>
-<h2 id="next-steps-18"><a class="header" href="#next-steps-18">Next Steps</a></h2>
+<h2 id="next-steps-20"><a class="header" href="#next-steps-20">Next Steps</a></h2>
 <ul>
 <li>Review <a href="./contributing.html">Contributing</a> for development workflow</li>
 <li>See <a href="./testing.html">Testing</a> for test requirements</li>

@@ -322,7 +322,7 @@ swissarmyhammer serve --debug &gt; debug.log 2&gt;&amp;1
 <p><strong>Check directories</strong>:</p>
 <pre><code class="language-bash"># List prompt directories
 ls -la ~/.swissarmyhammer/prompts
-ls -la ./prompts
+ls -la ./.swissarmyhammer/prompts
 </code></pre>
 </li>
 <li>
@@ -686,7 +686,7 @@ cat ~/.swissarmyhammer/config.toml 2&gt;/dev/null || echo "No config file"
 echo ""
 echo "=== Prompt Directories ==="
 ls -la ~/.swissarmyhammer/prompts 2&gt;/dev/null || echo "No user prompts"
-ls -la ./prompts 2&gt;/dev/null || echo "No local prompts"
+ls -la ./.swissarmyhammer/prompts 2&gt;/dev/null || echo "No local prompts"
 echo ""
 echo "=== Process Check ==="
 ps aux | grep swissarmyhammer | grep -v grep

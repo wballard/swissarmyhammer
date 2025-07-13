@@ -254,14 +254,18 @@ claude mcp list
 <p>Prompts with arguments become interactive forms in Claude Code:</p>
 <pre><code class="language-markdown">---
 name: code-review
+title: Code Review
+description: Reviews code for best practices, bugs, and improvements
 arguments:
   - name: code
     description: Code to review
     required: true
+    type_hint: string
   - name: language
     description: Programming language
     required: false
     default: auto-detect
+    type_hint: string
 ---
 </code></pre>
 <h4 id="3-live-reloading"><a class="header" href="#3-live-reloading">3. Live Reloading</a></h4>
@@ -311,7 +315,7 @@ arguments:
 </code></pre>
 <h4 id="custom-workflows"><a class="header" href="#custom-workflows">Custom Workflows</a></h4>
 <p>Create project-specific prompt workflows:</p>
-<pre><code class="language-markdown"># Project prompts in ./prompts/
+<pre><code class="language-markdown"># Project prompts in ./.swissarmyhammer/prompts/
 
 ## development/
 - project-setup.md - Initialize new features
@@ -533,8 +537,8 @@ updated: 2024-03-20  # Track changes
 curl -sSL https://raw.githubusercontent.com/wballard/swissarmyhammer/main/install.sh | bash
 
 # 2. Create project prompts
-mkdir -p ./prompts/development
-cat &gt; ./prompts/development/project-review.md &lt;&lt; 'EOF'
+mkdir -p ./.swissarmyhammer/prompts/development
+cat &gt; ./.swissarmyhammer/prompts/development/project-review.md &lt;&lt; 'EOF'
 ---
 name: project-code-review
 title: Project Code Review

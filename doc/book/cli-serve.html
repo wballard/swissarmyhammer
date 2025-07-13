@@ -205,7 +205,7 @@
 <h3 id="--prompts-directory"><a class="header" href="#--prompts-directory"><code>--prompts &lt;DIRECTORY&gt;</code></a></h3>
 <ul>
 <li><strong>Description</strong>: Additional directories to load prompts from</li>
-<li><strong>Default</strong>: Standard locations (<code>~/.swissarmyhammer/prompts</code>, <code>./prompts</code>)</li>
+<li><strong>Default</strong>: Standard locations (<code>~/.swissarmyhammer/prompts</code>, <code>./.swissarmyhammer/prompts</code>)</li>
 <li><strong>Repeatable</strong>: Can be used multiple times</li>
 <li><strong>Example</strong>: <code>--prompts ./custom-prompts</code></li>
 </ul>
@@ -263,7 +263,7 @@ swissarmyhammer serve --watch false
 <ul>
 <li>Built-in prompts</li>
 <li>User prompts from <code>~/.swissarmyhammer/prompts/</code></li>
-<li>Local prompts from <code>./prompts/</code> (if exists)</li>
+<li>Local prompts from <code>./.swissarmyhammer/prompts/</code> (if exists)</li>
 <li>Enables file watching</li>
 </ul>
 <h3 id="development-server"><a class="header" href="#development-server">Development Server</a></h3>
@@ -333,7 +333,7 @@ swissarmyhammer serve --watch false
 <li>
 <p><strong>Local prompts</strong> (always checked)</p>
 <ul>
-<li>Location: <code>./prompts/</code> in current directory</li>
+<li>Location: <code>./.swissarmyhammer/prompts/</code> in current directory</li>
 <li>Project-specific prompts</li>
 </ul>
 </li>
@@ -346,7 +346,7 @@ swissarmyhammer serve --watch false
 <li><strong>Built-in prompts have lowest priority</strong></li>
 </ul>
 <p>Example hierarchy:</p>
-<pre><code>./prompts/code-review.md          (highest priority)
+<pre><code>./.swissarmyhammer/prompts/code-review.md          (highest priority)
 ~/.custom/code-review.md          (from --prompts ~/.custom)
 ~/.swissarmyhammer/prompts/code-review.md  (user prompts)
 built-in:code-review              (lowest priority)
@@ -497,7 +497,7 @@ swissarmyhammer serve --debug
 <p><strong>Verify directories exist:</strong></p>
 <pre><code class="language-bash"># Check default directories
 ls -la ~/.swissarmyhammer/prompts
-ls -la ./prompts
+ls -la ./.swissarmyhammer/prompts
 
 # Check custom directories
 ls -la /path/to/custom/prompts
@@ -553,7 +553,7 @@ builtin = true
 watch = true
 directories = [
     "~/.swissarmyhammer/prompts",
-    "./prompts",
+    "./.swissarmyhammer/prompts",
     "/team/shared-prompts"
 ]
 </code></pre>

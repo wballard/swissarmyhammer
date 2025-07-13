@@ -207,7 +207,7 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     let mut library = PromptLibrary::new();
     
     // Add prompts from a directory
-    library.add_directory("./prompts").await?;
+    library.add_directory("./.swissarmyhammer/prompts").await?;
     
     // List available prompts
     for prompt_id in library.list_prompts() {
@@ -280,7 +280,7 @@ Perform a general code review covering style, bugs, and maintainability.
 let mut library = PromptLibrary::new();
 
 // Add prompts from various sources
-library.add_directory("./prompts").await?;
+library.add_directory("./.swissarmyhammer/prompts").await?;
 library.add_file("./special-prompt.md").await?;
 library.add_builtin_prompts();
 
@@ -296,7 +296,7 @@ let results = library.search("code review")?;</code></pre>
 <pre><code class="language-rust">use swissarmyhammer::Prompt;
 
 // Load from file
-let prompt = Prompt::from_file("./prompts/review.md").await?;
+let prompt = Prompt::from_file("./.swissarmyhammer/prompts/review.md").await?;
 
 // Access metadata
 println!("Title: {}", prompt.title());
@@ -385,7 +385,7 @@ let config = McpConfig {
 };
 
 let mut library = PromptLibrary::new();
-library.add_directory("./prompts").await?;
+library.add_directory("./.swissarmyhammer/prompts").await?;
 
 let server = McpServer::new(config, library);
 
@@ -418,10 +418,10 @@ library.add_event_handler(Box::new(MyEventHandler));</code></pre>
 <pre><code class="language-rust">use swissarmyhammer::watcher::FileWatcher;
 
 let mut library = PromptLibrary::new();
-library.add_directory("./prompts").await?;
+library.add_directory("./.swissarmyhammer/prompts").await?;
 
 // Start watching for file changes
-let _watcher = FileWatcher::new("./prompts", move |event| {
+let _watcher = FileWatcher::new("./.swissarmyhammer/prompts", move |event| {
     match event {
         FileEvent::Created(path) =&gt; {
             if let Err(e) = library.reload_file(&amp;path) {
@@ -469,7 +469,7 @@ async fn get_prompt(
 #[tokio::main]
 async fn main() {
     let mut library = PromptLibrary::new();
-    library.add_directory("./prompts").await.unwrap();
+    library.add_directory("./.swissarmyhammer/prompts").await.unwrap();
     let shared_library = Arc::new(RwLock::new(library));
 
     let app = Router::new()
@@ -506,7 +506,7 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
         .get_matches();
 
     let mut library = PromptLibrary::new();
-    library.add_directory("./prompts").await?;
+    library.add_directory("./.swissarmyhammer/prompts").await?;
 
     let prompt_id = matches.value_of("prompt").unwrap();
     let prompt = library.get(prompt_id)?;
@@ -539,7 +539,7 @@ struct AppConfig {
 impl Default for AppConfig {
     fn default() -&gt; Self {
         Self {
-            prompt_directories: vec!["./prompts".to_string()],
+            prompt_directories: vec!["./.swissarmyhammer/prompts".to_string()],
             default_arguments: std::collections::HashMap::new(),
             search_enabled: true,
         }

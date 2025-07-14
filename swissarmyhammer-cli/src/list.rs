@@ -4,7 +4,7 @@ use is_terminal::IsTerminal;
 use std::io::{self, Write};
 // Tabled import removed - using custom 2-line format instead
 
-use crate::cli::{OutputFormat, PromptSource};
+use crate::cli::{OutputFormat, PromptSource, PromptSourceArg};
 use swissarmyhammer::{PromptFilter, PromptLibrary, PromptResolver};
 
 // PromptRow struct removed - using custom 2-line format instead of table
@@ -30,7 +30,7 @@ struct PromptArgument {
 pub fn run_list_command(
     format: OutputFormat,
     verbose: bool,
-    source_filter: Option<PromptSource>,
+    source_filter: Option<PromptSourceArg>,
     category_filter: Option<String>,
     search_term: Option<String>,
 ) -> Result<()> {
@@ -43,12 +43,7 @@ pub fn run_list_command(
     let mut filter = PromptFilter::new();
 
     if let Some(ref source) = source_filter {
-        let lib_source = match source {
-            PromptSource::Builtin => swissarmyhammer::PromptSource::Builtin,
-            PromptSource::User => swissarmyhammer::PromptSource::User,
-            PromptSource::Local => swissarmyhammer::PromptSource::Local,
-            PromptSource::Dynamic => swissarmyhammer::PromptSource::Dynamic,
-        };
+        let lib_source: PromptSource = source.clone().into();
         filter = filter.with_source(lib_source);
     }
 
@@ -264,7 +259,7 @@ mod tests {
         let result = run_list_command(
             OutputFormat::Table,
             false,
-            Some(PromptSource::Builtin),
+            Some(PromptSourceArg::Builtin),
             None,
             None,
         );

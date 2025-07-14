@@ -1,6 +1,6 @@
 //! Flow command implementation for executing workflows
 
-use crate::cli::{FlowSubcommand, OutputFormat, PromptSource, VisualizationFormat};
+use crate::cli::{FlowSubcommand, OutputFormat, PromptSource, PromptSourceArg, VisualizationFormat};
 use colored::*;
 use is_terminal::IsTerminal;
 use std::collections::{HashMap, HashSet};
@@ -478,7 +478,7 @@ async fn resume_workflow_command(
 async fn list_workflows_command(
     format: OutputFormat,
     verbose: bool,
-    source_filter: Option<PromptSource>,
+    source_filter: Option<PromptSourceArg>,
 ) -> Result<()> {
     // Load all workflows from all sources using resolver (same pattern as prompts)
     let mut storage = MemoryWorkflowStorage::new();
@@ -503,7 +503,8 @@ async fn list_workflows_command(
 
         // Apply source filter
         if let Some(ref filter) = source_filter {
-            if filter != &workflow_source && filter != &PromptSource::Dynamic {
+            let filter_source: PromptSource = filter.clone().into();
+            if filter_source != workflow_source && filter_source != PromptSource::Dynamic {
                 continue;
             }
         }

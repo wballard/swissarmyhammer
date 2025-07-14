@@ -1,5 +1,43 @@
 # Code Review TODO List
 
+## Issue #000145 - Partial Template Validation
+
+### 1. [x] Skip Variable Validation for Partial Templates
+**Location**: `swissarmyhammer-cli/src/validate.rs:208-218`
+**Status**: COMPLETE - The fix correctly skips variable validation for partial templates
+**Implementation**:
+- Partials are identified in prompts.rs:1215-1220 using two methods:
+  - Explicit: Files with `{% partial %}` marker
+  - Implicit: Files detected by `is_likely_partial` heuristics
+- Validation detects partials by checking for description "Partial template for reuse in other prompts"
+- Skips both field validation and variable usage validation for partials
+- Test added at lines 1949-1996 to verify the fix works correctly
+
+### 2. [ ] Consider More Robust Partial Detection
+**Location**: `swissarmyhammer-cli/src/validate.rs:172-176`
+**Issue**: Partial detection relies on a specific description string which is fragile
+**Action**:
+- Consider adding a dedicated `is_partial` field to the Prompt struct
+- Or use a more robust detection method (e.g., checking for {% partial %} marker in content)
+- This would make the code less brittle and more maintainable
+
+### 3. [ ] Add Integration Test for Partial Validation
+**Issue**: While there's a unit test, there's no integration test for the full validation flow
+**Action**:
+- Add an integration test that validates actual .liquid partial files
+- Test both explicit partials (with {% partial %} marker) and implicit partials
+- Ensure the validation command output is correct for partials
+
+## Minor Issues
+
+### 4. [ ] Fix Cargo.toml Warning About Duplicate Binary Targets
+**Location**: `swissarmyhammer-cli/Cargo.toml`
+**Issue**: Warning appears in test output: "file src/main.rs found to be present in multiple build targets"
+**Action**:
+- Review the [[bin]] sections in Cargo.toml
+- Ensure both `sah` and `swissarmyhammer` binaries are correctly configured
+- Consider if they should share the same source file or have separate entry points
+
 ## Business Logic Migration from CLI to Library (Issue #000143)
 
 ### 1. [ ] Create Validation Module in Library

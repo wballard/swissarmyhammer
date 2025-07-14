@@ -9,21 +9,36 @@ pub enum OutputFormat {
     Yaml,
 }
 
-#[derive(ValueEnum, Clone, Debug, PartialEq, serde::Serialize)]
-pub enum PromptSource {
+// Re-export PromptSource from the library
+pub use swissarmyhammer::PromptSource;
+
+// Create a wrapper for CLI argument parsing since the library's PromptSource doesn't derive ValueEnum
+#[derive(ValueEnum, Clone, Debug, PartialEq)]
+pub enum PromptSourceArg {
     Builtin,
     User,
     Local,
     Dynamic,
 }
 
-impl std::fmt::Display for PromptSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PromptSource::Builtin => write!(f, "builtin"),
-            PromptSource::User => write!(f, "user"),
-            PromptSource::Local => write!(f, "local"),
-            PromptSource::Dynamic => write!(f, "dynamic"),
+impl From<PromptSourceArg> for PromptSource {
+    fn from(arg: PromptSourceArg) -> Self {
+        match arg {
+            PromptSourceArg::Builtin => PromptSource::Builtin,
+            PromptSourceArg::User => PromptSource::User,
+            PromptSourceArg::Local => PromptSource::Local,
+            PromptSourceArg::Dynamic => PromptSource::Dynamic,
+        }
+    }
+}
+
+impl From<PromptSource> for PromptSourceArg {
+    fn from(source: PromptSource) -> Self {
+        match source {
+            PromptSource::Builtin => PromptSourceArg::Builtin,
+            PromptSource::User => PromptSourceArg::User,
+            PromptSource::Local => PromptSourceArg::Local,
+            PromptSource::Dynamic => PromptSourceArg::Dynamic,
         }
     }
 }
@@ -256,7 +271,7 @@ Examples:
 
         /// Filter by source
         #[arg(long, value_enum)]
-        source: Option<PromptSource>,
+        source: Option<PromptSourceArg>,
 
         /// Filter by category
         #[arg(long)]
@@ -376,7 +391,7 @@ Examples:
 
         /// Filter by source
         #[arg(long, value_enum)]
-        source: Option<PromptSource>,
+        source: Option<PromptSourceArg>,
 
         /// Find prompts with specific argument name
         #[arg(long)]
@@ -468,7 +483,7 @@ pub enum FlowSubcommand {
 
         /// Filter by source
         #[arg(long, value_enum)]
-        source: Option<PromptSource>,
+        source: Option<PromptSourceArg>,
     },
     /// Check status of a workflow run
     Status {
@@ -996,7 +1011,7 @@ mod tests {
                 assert!(regex);
                 assert!(fuzzy);
                 assert!(case_sensitive);
-                assert!(matches!(source, Some(PromptSource::Builtin)));
+                assert!(matches!(source, Some(PromptSourceArg::Builtin)));
                 assert_eq!(has_arg, Some("language".to_string()));
                 assert!(!no_args);
                 assert!(full);

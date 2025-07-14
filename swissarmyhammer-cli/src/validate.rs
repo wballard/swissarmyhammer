@@ -206,13 +206,16 @@ impl Validator {
         }
 
         // Validate template variables (without liquid syntax validation)
-        self.validate_variable_usage(
-            &prompt.content,
-            &prompt.arguments,
-            &file_path,
-            result,
-            content_title,
-        );
+        // Skip variable validation for partial templates
+        if !is_partial {
+            self.validate_variable_usage(
+                &prompt.content,
+                &prompt.arguments,
+                &file_path,
+                result,
+                content_title,
+            );
+        }
 
         Ok(())
     }
@@ -1940,5 +1943,54 @@ stateDiagram-v2
         // but won't find the test workflows we created in the temp directory.
         // This is the expected behavior - we want to ensure consistent loading from
         // standard locations only.
+    }
+
+    #[test]
+    fn test_partial_template_no_variable_validation_errors() {
+        // Test that partial templates with {% partial %} marker don't generate
+        // variable validation errors for undefined variables
+        let mut validator = Validator::new(false);
+        let mut result = ValidationResult::new();
+
+        // Create a partial template with undefined variables
+        let partial_content = r#"{% partial %}
+
+This is a partial template that uses {{ todo_file }} variable
+and also uses {{ language }} argument.
+
+Neither of these should cause validation errors."#;
+
+        // Create a prompt directly to test validation
+        let partial_prompt = Prompt {
+            name: "test-partial".to_string(),
+            title: None,
+            description: Some("Partial template for reuse in other prompts".to_string()),
+            source_path: "test-partial.liquid".to_string(),
+            content: partial_content.to_string(),
+            arguments: vec![],
+        };
+
+        // Validate the partial prompt
+        validator.validate_prompt_fields_and_variables(&partial_prompt, &mut result, None).unwrap();
+
+        // Should have no errors for undefined variables in partials
+        let variable_errors = result
+            .issues
+            .iter()
+            .filter(|issue| issue.message.contains("Undefined template variable"))
+            .count();
+
+        assert_eq!(variable_errors, 0, 
+            "Partial templates should not have undefined variable errors");
+
+        // Should also not have warnings about template using variables with no arguments
+        let arg_warnings = result
+            .issues
+            .iter()
+            .filter(|issue| issue.message.contains("Template uses variables but no arguments are defined"))
+            .count();
+
+        assert_eq!(arg_warnings, 0,
+            "Partial templates should not have warnings about missing argument definitions");
     }
 }

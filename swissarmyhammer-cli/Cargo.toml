@@ -18,7 +18,7 @@ path = "src/main.rs"
 
 [[bin]]
 name = "sah"
-path = "src/main.rs"
+path = "src/bin/sah.rs"
 
 [dependencies]
 # Library dependency

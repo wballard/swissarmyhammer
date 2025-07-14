@@ -7,10 +7,10 @@ use tabled::{
     Table, Tabled,
 };
 
-use crate::cli::{OutputFormat, PromptSource};
+use crate::cli::{OutputFormat, PromptSource, PromptSourceArg};
 use swissarmyhammer::{
     prelude::{AdvancedSearchEngine, AdvancedSearchOptions},
-    PromptFilter, PromptLibrary, PromptResolver, PromptSource as LibraryPromptSource,
+    PromptFilter, PromptLibrary, PromptResolver,
 };
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -53,7 +53,7 @@ pub fn run_search_command(
     regex: bool,
     fuzzy: bool,
     case_sensitive: bool,
-    source_filter: Option<PromptSource>,
+    source_filter: Option<PromptSourceArg>,
     has_arg: Option<String>,
     no_args: bool,
     full: bool,
@@ -83,12 +83,7 @@ pub fn run_search_command(
 
     // Apply source filter
     if let Some(ref src_filter) = source_filter {
-        let library_source = match src_filter {
-            PromptSource::Builtin => LibraryPromptSource::Builtin,
-            PromptSource::User => LibraryPromptSource::User,
-            PromptSource::Local => LibraryPromptSource::Local,
-            PromptSource::Dynamic => LibraryPromptSource::Dynamic,
-        };
+        let library_source: PromptSource = src_filter.clone().into();
         filter = filter.with_source(library_source);
     }
 
@@ -117,10 +112,10 @@ pub fn run_search_command(
         .map(|result| {
             // Get the source from the resolver
             let prompt_source = match resolver.prompt_sources.get(&result.prompt.name) {
-                Some(LibraryPromptSource::Builtin) => PromptSource::Builtin,
-                Some(LibraryPromptSource::User) => PromptSource::User,
-                Some(LibraryPromptSource::Local) => PromptSource::Local,
-                Some(LibraryPromptSource::Dynamic) => PromptSource::Dynamic,
+                Some(PromptSource::Builtin) => PromptSource::Builtin,
+                Some(PromptSource::User) => PromptSource::User,
+                Some(PromptSource::Local) => PromptSource::Local,
+                Some(PromptSource::Dynamic) => PromptSource::Dynamic,
                 None => PromptSource::Dynamic,
             };
             let source_str = prompt_source.to_string();

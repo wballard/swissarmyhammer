@@ -1,8 +1,8 @@
 use anyhow::Result;
 use std::fs;
 use std::path::Path;
-use swissarmyhammer::PromptLoader;
 use swissarmyhammer::validation::ValidationResult;
+use swissarmyhammer::PromptLoader;
 use walkdir::WalkDir;
 
 #[test]

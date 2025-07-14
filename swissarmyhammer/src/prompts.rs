@@ -349,7 +349,7 @@ impl Prompt {
     /// ```
     pub fn render_with_env(&self, args: &HashMap<String, String>) -> Result<String> {
         let template = Template::new(&self.template)?;
-        
+
         // Validate required arguments
         for arg in &self.arguments {
             if arg.required && !args.contains_key(&arg.name) {
@@ -359,10 +359,10 @@ impl Prompt {
                 )));
             }
         }
-        
+
         // Start with all provided arguments
         let mut render_args = args.clone();
-        
+
         // Add defaults for missing arguments
         for arg in &self.arguments {
             if !render_args.contains_key(&arg.name) {
@@ -371,7 +371,7 @@ impl Prompt {
                 }
             }
         }
-        
+
         template.render_with_env(&render_args)
     }
 
@@ -468,7 +468,7 @@ impl Prompt {
         library: Arc<PromptLibrary>,
     ) -> Result<String> {
         let template = crate::Template::with_partials(&self.template, library)?;
-        
+
         // Validate required arguments
         for arg in &self.arguments {
             if arg.required && !args.contains_key(&arg.name) {
@@ -478,10 +478,10 @@ impl Prompt {
                 )));
             }
         }
-        
+
         // Start with all provided arguments
         let mut render_args = args.clone();
-        
+
         // Add defaults for missing arguments
         for arg in &self.arguments {
             if !render_args.contains_key(&arg.name) {
@@ -490,7 +490,7 @@ impl Prompt {
                 }
             }
         }
-        
+
         template.render_with_env(&render_args)
     }
 
@@ -827,7 +827,11 @@ impl PromptLibrary {
     ///
     /// let result = library.render_prompt_with_env("deploy", &args).unwrap();
     /// ```
-    pub fn render_prompt_with_env(&self, name: &str, args: &HashMap<String, String>) -> Result<String> {
+    pub fn render_prompt_with_env(
+        &self,
+        name: &str,
+        args: &HashMap<String, String>,
+    ) -> Result<String> {
         let prompt = self.get(name)?;
         prompt.render_with_partials_and_env(
             args,

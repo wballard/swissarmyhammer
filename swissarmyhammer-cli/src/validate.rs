@@ -2,15 +2,15 @@ use anyhow::{Context, Result};
 use colored::*;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+use swissarmyhammer::validation::{
+    ContentValidator, EncodingValidator, LineEndingValidator, ValidationConfig, ValidationIssue,
+    ValidationLevel, ValidationResult, YamlTypoValidator,
+};
 #[cfg(test)]
 use swissarmyhammer::workflow::MermaidParser;
 use swissarmyhammer::workflow::{
     MemoryWorkflowStorage, Workflow, WorkflowGraphAnalyzer, WorkflowResolver,
     WorkflowStorageBackend,
-};
-use swissarmyhammer::validation::{
-    ContentValidator, EncodingValidator, LineEndingValidator, ValidationConfig, ValidationIssue,
-    ValidationLevel, ValidationResult, YamlTypoValidator,
 };
 
 use crate::cli::ValidateFormat;
@@ -52,7 +52,6 @@ struct Prompt {
     arguments: Vec<PromptArgument>,
 }
 
-
 #[derive(Debug, Serialize)]
 struct JsonValidationResult {
     files_checked: usize,
@@ -70,7 +69,6 @@ struct JsonValidationIssue {
     message: String,
     suggestion: Option<String>,
 }
-
 
 pub struct Validator {
     quiet: bool,
@@ -942,7 +940,9 @@ impl Validator {
         for (file_path, issues) in issues_by_file {
             if !self.quiet {
                 // Get the prompt title from the first issue (all issues for a file should have the same title)
-                let content_title = issues.first().and_then(|issue| issue.content_title.as_ref());
+                let content_title = issues
+                    .first()
+                    .and_then(|issue| issue.content_title.as_ref());
 
                 if let Some(title) = content_title {
                     // Show the prompt title

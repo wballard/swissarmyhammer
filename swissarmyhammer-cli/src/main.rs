@@ -170,26 +170,31 @@ async fn run_server() -> i32 {
             .await
             .expect("failed to listen for ctrl+c");
 
-        tracing::info!("Shutdown signal received");
+        tracing::info!("Shutdown signal received (Ctrl+C)");
         ct_clone.cancel();
     });
 
+
     // Start the rmcp SDK server with stdio transport
-    match serve_server(server, stdio()).await {
-        Ok(_running_service) => {
+    let _running_service = match serve_server(server, stdio()).await {
+        Ok(service) => {
             tracing::info!("MCP server started successfully");
-
-            // Wait for cancellation
-            ct.cancelled().await;
-
-            tracing::info!("MCP server exited successfully");
-            EXIT_SUCCESS
+            service
         }
         Err(e) => {
             tracing::error!("MCP server error: {}", e);
-            EXIT_WARNING
+            return EXIT_WARNING;
         }
-    }
+    };
+
+    // Wait for cancellation (from Ctrl+C only for now)
+    // Note: The rmcp crate does not currently provide a way to detect when the stdio transport
+    // is closed. The server will continue running until explicitly terminated with Ctrl+C.
+    // A future version of rmcp may provide better transport lifecycle management.
+    ct.cancelled().await;
+
+    tracing::info!("MCP server shutting down gracefully");
+    EXIT_SUCCESS
 }
 
 fn run_doctor() -> i32 {

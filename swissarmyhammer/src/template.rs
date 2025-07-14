@@ -325,10 +325,7 @@ impl Template {
 
         // Add environment variables as template variables
         for (key, value) in std::env::vars() {
-            object.insert(
-                key.into(),
-                liquid::model::Value::scalar(value),
-            );
+            object.insert(key.into(), liquid::model::Value::scalar(value));
         }
 
         // Then override with provided values (args take precedence)
@@ -423,7 +420,11 @@ impl TemplateEngine {
     ///
     /// This method merges the provided arguments with environment variables,
     /// with provided arguments taking precedence over environment variables.
-    pub fn render_with_env(&self, template_str: &str, args: &HashMap<String, String>) -> Result<String> {
+    pub fn render_with_env(
+        &self,
+        template_str: &str,
+        args: &HashMap<String, String>,
+    ) -> Result<String> {
         let template = self.parse(template_str)?;
         template.render_with_env(args)
     }
@@ -694,39 +695,39 @@ mod tests {
     #[test]
     fn test_render_with_env() {
         use std::env;
-        
+
         // Set a test environment variable
         env::set_var("TEST_ENV_VAR", "test_value");
 
         let template = Template::new("Hello {{USER}}, test var is {{TEST_ENV_VAR}}").unwrap();
         let args = HashMap::new();
-        
+
         // Don't provide TEST_ENV_VAR in args, it should come from environment
         let result = template.render_with_env(&args).unwrap();
-        
+
         // Should contain the environment variable value
         assert!(result.contains("test_value"));
-        
+
         // Clean up
         env::remove_var("TEST_ENV_VAR");
     }
-    
+
     #[test]
     fn test_render_with_env_args_override() {
         use std::env;
-        
+
         // Set a test environment variable
         env::set_var("TEST_OVERRIDE", "env_value");
 
         let template = Template::new("Value is {{TEST_OVERRIDE}}").unwrap();
         let mut args = HashMap::new();
         args.insert("TEST_OVERRIDE".to_string(), "arg_value".to_string());
-        
+
         let result = template.render_with_env(&args).unwrap();
-        
+
         // Args should override environment variables
         assert_eq!(result, "Value is arg_value");
-        
+
         // Clean up
         env::remove_var("TEST_OVERRIDE");
     }

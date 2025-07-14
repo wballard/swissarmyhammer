@@ -355,27 +355,17 @@ mod tests {
     fn test_encoding_validator() {
         let validator = EncodingValidator;
         let mut result = ValidationResult::new();
-        
+
         // Test with BOM
         let content_with_bom = "\u{FEFF}Hello World";
-        validator.validate_content(
-            content_with_bom,
-            Path::new("test.txt"),
-            &mut result,
-            None,
-        );
+        validator.validate_content(content_with_bom, Path::new("test.txt"), &mut result, None);
         assert_eq!(result.warnings, 1);
         assert!(result.issues[0].message.contains("BOM"));
 
         // Test without BOM
         let mut result2 = ValidationResult::new();
         let content_no_bom = "Hello World";
-        validator.validate_content(
-            content_no_bom,
-            Path::new("test.txt"),
-            &mut result2,
-            None,
-        );
+        validator.validate_content(content_no_bom, Path::new("test.txt"), &mut result2, None);
         assert_eq!(result2.warnings, 0);
     }
 
@@ -383,15 +373,10 @@ mod tests {
     fn test_line_ending_validator() {
         let validator = LineEndingValidator;
         let mut result = ValidationResult::new();
-        
+
         // Test with mixed line endings
         let mixed_content = "Line 1\r\nLine 2\nLine 3\r\n";
-        validator.validate_content(
-            mixed_content,
-            Path::new("test.txt"),
-            &mut result,
-            None,
-        );
+        validator.validate_content(mixed_content, Path::new("test.txt"), &mut result, None);
         assert_eq!(result.warnings, 1);
         assert!(result.issues[0].message.contains("Mixed line endings"));
 
@@ -411,15 +396,10 @@ mod tests {
     fn test_yaml_typo_validator() {
         let validator = YamlTypoValidator::default();
         let mut result = ValidationResult::new();
-        
+
         // Test with typo
         let yaml_with_typo = "titel: My Title\ndescripton: My description";
-        validator.validate_content(
-            yaml_with_typo,
-            Path::new("test.yaml"),
-            &mut result,
-            None,
-        );
+        validator.validate_content(yaml_with_typo, Path::new("test.yaml"), &mut result, None);
         assert_eq!(result.warnings, 2);
         assert!(result.issues[0].message.contains("titel"));
         assert!(result.issues[1].message.contains("descripton"));
@@ -429,14 +409,14 @@ mod tests {
     fn test_validation_manager() {
         let config = ValidationConfig::default();
         let manager = ValidationManager::new(config);
-        
+
         let content = "\u{FEFF}Line 1\r\nLine 2\ntitel: Test";
         let result = manager.validate_content(
             content,
             Path::new("test.txt"),
             Some("Test Content".to_string()),
         );
-        
+
         // Should have warnings from multiple validators
         assert!(result.warnings > 0);
         assert_eq!(result.files_checked, 1);

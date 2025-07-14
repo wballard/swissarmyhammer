@@ -12,7 +12,7 @@ use test_utils::ProcessGuard;
 async fn test_mcp_server_partial_rendering() {
     // Start the MCP server process
     let child = Command::new("cargo")
-        .args(["run", "--", "serve"])
+        .args(["run", "--bin", "swissarmyhammer", "--", "serve"])
         .current_dir("..") // Run from project root
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

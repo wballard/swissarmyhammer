@@ -1,7 +1,7 @@
 //! Integration tests for CLI command structure and backward compatibility
 
 use anyhow::Result;
-use std::process::Command;
+use assert_cmd::Command;
 use tempfile::TempDir;
 
 mod test_utils;
@@ -10,8 +10,8 @@ use test_utils::create_test_environment;
 /// Test that the new prompt subcommand structure works correctly
 #[test]
 fn test_prompt_subcommand_list() -> Result<()> {
-    let output = Command::new("cargo")
-        .args(["run", "--", "prompt", "list"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["prompt", "list"])
         .output()?;
 
     assert!(
@@ -24,8 +24,8 @@ fn test_prompt_subcommand_list() -> Result<()> {
 /// Test prompt search functionality
 #[test]
 fn test_prompt_subcommand_search() -> Result<()> {
-    let output = Command::new("cargo")
-        .args(["run", "--", "prompt", "search", "test"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["prompt", "search", "test"])
         .output()?;
 
     // Search might not find results but should not error
@@ -41,10 +41,8 @@ fn test_prompt_subcommand_search() -> Result<()> {
 fn test_prompt_subcommand_validate() -> Result<()> {
     let (_temp_dir, prompts_dir) = create_test_environment()?;
 
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "prompt",
             "validate",
             "--workflow-dirs",
@@ -66,8 +64,8 @@ fn test_prompt_subcommand_test() -> Result<()> {
     let (_temp_dir, _prompts_dir) = create_test_environment()?;
 
     // Test with non-existent prompt should fail gracefully
-    let output = Command::new("cargo")
-        .args(["run", "--", "prompt", "test", "non_existent_prompt"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["prompt", "test", "non_existent_prompt"])
         .output()?;
 
     assert!(
@@ -89,8 +87,8 @@ fn test_prompt_subcommand_test() -> Result<()> {
 /// Test help output for prompt subcommands
 #[test]
 fn test_prompt_help() -> Result<()> {
-    let output = Command::new("cargo")
-        .args(["run", "--", "prompt", "--help"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["prompt", "--help"])
         .output()?;
 
     assert!(output.status.success(), "prompt help should succeed");
@@ -120,8 +118,8 @@ fn test_prompt_help() -> Result<()> {
 #[test]
 #[ignore = "doctor command may fail in CI due to environment differences"]
 fn test_doctor_command() -> Result<()> {
-    let output = Command::new("cargo")
-        .args(["run", "--", "doctor"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["doctor"])
         .output()?;
 
     assert!(output.status.success(), "doctor command should succeed");
@@ -134,8 +132,8 @@ fn test_completion_command() -> Result<()> {
     let shells = vec!["bash", "zsh", "fish"];
 
     for shell in shells {
-        let output = Command::new("cargo")
-            .args(["run", "--", "completion", shell])
+        let output = Command::cargo_bin("swissarmyhammer").unwrap()
+            .args(["completion", shell])
             .output()?;
 
         assert!(
@@ -162,10 +160,8 @@ fn test_error_exit_codes() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let invalid_dir = temp_dir.path().join("non_existent");
 
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "prompt",
             "validate",
             "--workflow-dirs",
@@ -182,8 +178,8 @@ fn test_error_exit_codes() -> Result<()> {
 /// Test that verbose flag works
 #[test]
 fn test_verbose_flag() -> Result<()> {
-    let output = Command::new("cargo")
-        .args(["run", "--", "--verbose", "prompt", "list"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["--verbose", "prompt", "list"])
         .output()?;
 
     // Command should still work with verbose flag
@@ -198,8 +194,8 @@ fn test_verbose_flag() -> Result<()> {
 /// Test that quiet flag works
 #[test]
 fn test_quiet_flag() -> Result<()> {
-    let output = Command::new("cargo")
-        .args(["run", "--", "--quiet", "prompt", "list"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["--quiet", "prompt", "list"])
         .output()?;
 
     // Command should still work with quiet flag
@@ -214,8 +210,8 @@ fn test_quiet_flag() -> Result<()> {
 /// Test flow test command with simple workflow
 #[test]
 fn test_flow_test_simple_workflow() -> Result<()> {
-    let output = Command::new("cargo")
-        .args(["run", "--", "flow", "test", "hello-world"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["flow", "test", "hello-world"])
         .output()?;
 
     assert!(
@@ -249,10 +245,8 @@ fn test_flow_test_simple_workflow() -> Result<()> {
 /// Test flow test command with template variables
 #[test]
 fn test_flow_test_with_set_variables() -> Result<()> {
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "flow",
             "test",
             "greeting",
@@ -283,8 +277,8 @@ fn test_flow_test_with_set_variables() -> Result<()> {
 /// Test flow test command with non-existent workflow
 #[test]
 fn test_flow_test_nonexistent_workflow() -> Result<()> {
-    let output = Command::new("cargo")
-        .args(["run", "--", "flow", "test", "nonexistent-workflow"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["flow", "test", "nonexistent-workflow"])
         .output()?;
 
     assert!(
@@ -304,10 +298,8 @@ fn test_flow_test_nonexistent_workflow() -> Result<()> {
 /// Test flow test command with timeout
 #[test]
 fn test_flow_test_with_timeout() -> Result<()> {
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "flow",
             "test",
             "hello-world",
@@ -333,8 +325,8 @@ fn test_flow_test_with_timeout() -> Result<()> {
 /// Test flow test command with quiet flag
 #[test]
 fn test_flow_test_quiet_mode() -> Result<()> {
-    let output = Command::new("cargo")
-        .args(["run", "--", "flow", "test", "hello-world", "--quiet"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["flow", "test", "hello-world", "--quiet"])
         .output()?;
 
     assert!(
@@ -358,8 +350,8 @@ fn test_flow_test_quiet_mode() -> Result<()> {
 fn test_flow_test_interactive_mode() -> Result<()> {
     // This test is ignored by default as it requires user interaction
     // It can be run manually to verify interactive functionality
-    let output = Command::new("cargo")
-        .args(["run", "--", "flow", "test", "hello-world", "--interactive"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["flow", "test", "hello-world", "--interactive"])
         .output()?;
 
     // In a real interactive test, we would need to provide stdin input
@@ -405,10 +397,8 @@ stateDiagram-v2
     )?;
 
     // Run with workflow directory
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "flow",
             "test",
             "test-flow",
@@ -430,10 +420,8 @@ stateDiagram-v2
 /// Test flow test command with invalid set variable format
 #[test]
 fn test_flow_test_invalid_set_format() -> Result<()> {
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "flow",
             "test",
             "greeting",
@@ -459,8 +447,8 @@ fn test_flow_test_invalid_set_format() -> Result<()> {
 /// Test flow test help command
 #[test]
 fn test_flow_test_help() -> Result<()> {
-    let output = Command::new("cargo")
-        .args(["run", "--", "flow", "test", "--help"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["flow", "test", "--help"])
         .output()?;
 
     assert!(output.status.success(), "flow test help should succeed");
@@ -486,8 +474,8 @@ fn test_flow_test_help() -> Result<()> {
 #[test]
 fn test_flow_test_coverage_complete() -> Result<()> {
     // Use a simple workflow that should achieve full coverage
-    let output = Command::new("cargo")
-        .args(["run", "--", "flow", "test", "hello-world"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["flow", "test", "hello-world"])
         .output()?;
 
     assert!(output.status.success(), "flow test should succeed");
@@ -511,10 +499,8 @@ fn test_flow_test_coverage_complete() -> Result<()> {
 /// Test flow test with empty set value
 #[test]
 fn test_flow_test_empty_set_value() -> Result<()> {
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "flow",
             "test",
             "greeting",
@@ -537,10 +523,8 @@ fn test_flow_test_empty_set_value() -> Result<()> {
 /// Test flow test with special characters in set values
 #[test]
 fn test_flow_test_special_chars_in_set() -> Result<()> {
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "flow",
             "test",
             "greeting",
@@ -569,10 +553,8 @@ async fn test_concurrent_flow_test() -> Result<()> {
     // Run multiple flow tests concurrently
     for i in 0..3 {
         tasks.spawn(async move {
-            let output = Command::new("cargo")
+            let output = Command::cargo_bin("swissarmyhammer").unwrap()
                 .args([
-                    "run",
-                    "--",
                     "flow",
                     "test",
                     "hello-world",
@@ -601,8 +583,8 @@ fn test_prompt_list_formats() -> Result<()> {
     let formats = vec!["json", "yaml", "table"];
 
     for format in formats {
-        let output = Command::new("cargo")
-            .args(["run", "--", "prompt", "list", "--format", format])
+        let output = Command::cargo_bin("swissarmyhammer").unwrap()
+            .args(["prompt", "list", "--format", format])
             .output()?;
 
         assert!(
@@ -625,8 +607,8 @@ async fn test_concurrent_commands() -> Result<()> {
     // Run multiple commands concurrently
     for i in 0..3 {
         tasks.spawn(async move {
-            let output = Command::new("cargo")
-                .args(["run", "--", "prompt", "list"])
+            let output = Command::cargo_bin("swissarmyhammer").unwrap()
+                .args(["prompt", "list"])
                 .output()
                 .expect("Failed to run command");
 
@@ -646,8 +628,8 @@ async fn test_concurrent_commands() -> Result<()> {
 /// Test root-level validate command
 #[test]
 fn test_root_validate_command() -> Result<()> {
-    let output = Command::new("cargo")
-        .args(["run", "--", "validate"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["validate"])
         .output()?;
 
     assert!(
@@ -660,8 +642,8 @@ fn test_root_validate_command() -> Result<()> {
 /// Test root validate command with quiet flag
 #[test]
 fn test_root_validate_quiet() -> Result<()> {
-    let output = Command::new("cargo")
-        .args(["run", "--", "validate", "--quiet"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["validate", "--quiet"])
         .output()?;
 
     assert!(
@@ -687,8 +669,8 @@ fn test_root_validate_quiet() -> Result<()> {
 /// Test root validate command with JSON format
 #[test]
 fn test_root_validate_json_format() -> Result<()> {
-    let output = Command::new("cargo")
-        .args(["run", "--", "validate", "--format", "json"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["validate", "--format", "json"])
         .output()?;
 
     assert!(
@@ -744,10 +726,8 @@ fn test_root_validate_with_workflow_dirs() -> Result<()> {
 "#,
     )?;
 
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "validate",
             "--workflow-dir",
             workflow_dir.to_str().unwrap(),
@@ -788,10 +768,8 @@ fn test_root_validate_with_multiple_workflow_dirs() -> Result<()> {
 "#,
     )?;
 
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "validate",
             "--workflow-dir",
             workflow_dir1.to_str().unwrap(),
@@ -825,10 +803,8 @@ fn test_root_validate_error_exit_codes() -> Result<()> {
 "#,
     )?;
 
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "validate",
             "--workflow-dir",
             workflow_dir.to_str().unwrap(),
@@ -849,8 +825,8 @@ fn test_root_validate_error_exit_codes() -> Result<()> {
 /// Test that help output includes the root validate command
 #[test]
 fn test_root_help_includes_validate() -> Result<()> {
-    let output = Command::new("cargo")
-        .args(["run", "--", "--help"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["--help"])
         .output()?;
 
     assert!(output.status.success(), "help should succeed");
@@ -871,8 +847,8 @@ fn test_root_help_includes_validate() -> Result<()> {
 /// Test validate command help
 #[test]
 fn test_root_validate_help() -> Result<()> {
-    let output = Command::new("cargo")
-        .args(["run", "--", "validate", "--help"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["validate", "--help"])
         .output()?;
 
     assert!(output.status.success(), "validate help should succeed");
@@ -916,8 +892,8 @@ arguments:
 Test content"#,
     )?;
 
-    let output = Command::new("cargo")
-        .args(["run", "--", "validate", "--quiet"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["validate", "--quiet"])
         .env("HOME", temp_dir.path())
         .output()?;
 
@@ -951,8 +927,8 @@ arguments:
 Test content"#,
     )?;
 
-    let output = Command::new("cargo")
-        .args(["run", "--", "validate", "--format", "json"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["validate", "--format", "json"])
         .env("HOME", temp_dir.path())
         .output()?;
 
@@ -996,8 +972,8 @@ But this uses {{ undefined_var }} which should error.
 And this uses {{ another_undefined }} too."#,
     )?;
 
-    let output = Command::new("cargo")
-        .args(["run", "--", "validate"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["validate"])
         .env("HOME", temp_dir.path())
         .output()?;
 
@@ -1036,10 +1012,8 @@ fn test_root_validate_malformed_workflow() -> Result<()> {
 "#,
     )?;
 
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "validate",
             "--workflow-dir",
             workflow_dir.to_str().unwrap(),
@@ -1062,10 +1036,8 @@ fn test_root_validate_nonexistent_workflow_dir() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let fake_dir = temp_dir.path().join("does_not_exist");
 
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "validate",
             "--workflow-dir",
             fake_dir.to_str().unwrap(),
@@ -1096,8 +1068,8 @@ fn test_root_validate_nonexistent_workflow_dir() -> Result<()> {
 /// Test validation with invalid format option
 #[test]
 fn test_root_validate_invalid_format() -> Result<()> {
-    let output = Command::new("cargo")
-        .args(["run", "--", "validate", "--format", "invalid_format"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["validate", "--format", "invalid_format"])
         .output()?;
 
     // Should fail to parse arguments
@@ -1119,8 +1091,8 @@ fn test_root_validate_invalid_format() -> Result<()> {
 #[test]
 fn test_root_validate_empty_workflow_dirs() -> Result<()> {
     // When no workflow dirs are specified, it should search from current directory
-    let output = Command::new("cargo")
-        .args(["run", "--", "validate"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["validate"])
         .output()?;
 
     // Should complete successfully (may have warnings/errors based on current dir content)
@@ -1175,8 +1147,8 @@ description: Uses undefined variables
 This uses {{ undefined }} variable."#,
     )?;
 
-    let output = Command::new("cargo")
-        .args(["run", "--", "validate", "--format", "json"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["validate", "--format", "json"])
         .env("HOME", temp_dir.path())
         .output()?;
 
@@ -1240,10 +1212,8 @@ fn test_root_validate_mixed_valid_invalid_workflows() -> Result<()> {
 "#,
     )?;
 
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "validate",
             "--workflow-dir",
             workflow_dir.to_str().unwrap(),
@@ -1277,10 +1247,8 @@ fn test_root_validate_absolute_relative_paths() -> Result<()> {
     )?;
 
     // Test with absolute path
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "validate",
             "--workflow-dir",
             abs_workflow_dir.to_str().unwrap(),
@@ -1302,8 +1270,8 @@ fn test_root_validate_absolute_relative_paths() -> Result<()> {
 "#,
     )?;
 
-    let output = Command::new("cargo")
-        .args(["run", "--", "validate", "--workflow-dir", "rel_workflows"])
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
+        .args(["validate", "--workflow-dir", "rel_workflows"])
         .current_dir(temp_dir.path())
         .output()?;
 
@@ -1338,10 +1306,8 @@ fn test_root_validate_stress_many_files() -> Result<()> {
     }
 
     let start = std::time::Instant::now();
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "validate",
             "--workflow-dir",
             workflow_dir.to_str().unwrap(),
@@ -1380,10 +1346,8 @@ fn test_root_validate_special_chars_in_paths() -> Result<()> {
 "#,
     )?;
 
-    let output = Command::new("cargo")
+    let output = Command::cargo_bin("swissarmyhammer").unwrap()
         .args([
-            "run",
-            "--",
             "validate",
             "--workflow-dir",
             workflow_dir.to_str().unwrap(),

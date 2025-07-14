@@ -21,6 +21,11 @@ fn test_all_doc_example_prompts_are_valid() {
     let mut tested_files = 0;
     let mut failed_files = vec![];
 
+    // Pre-compile regex patterns outside the loop
+    let unclosed_tags_regex = regex::Regex::new(r"\{%\s*(?:if|for|unless|case)\s+[^%]*%\}").unwrap();
+    let closing_tags_regex = regex::Regex::new(r"\{%\s*(?:endif|endfor|endunless|endcase)\s*%\}").unwrap();
+    let malformed_vars_regex = regex::Regex::new(r"\{\{[^}]*\{").unwrap();
+
     // Walk through all .md files in the prompts examples directory
     // Using WalkDir is appropriate here as we're validating documentation files, not runtime prompts
     for entry in WalkDir::new(doc_examples_dir)
@@ -38,7 +43,7 @@ fn test_all_doc_example_prompts_are_valid() {
         tested_files += 1;
 
         // Read the file content
-        let content = match fs::read_to_string(&path) {
+        let content = match fs::read_to_string(path) {
             Ok(content) => content,
             Err(e) => {
                 failed_files.push(format!("{}: Failed to read - {}", path.display(), e));
@@ -106,12 +111,8 @@ fn test_all_doc_example_prompts_are_valid() {
 
         // Basic Liquid syntax check using regex
         // Check for common syntax errors
-        let unclosed_tags = regex::Regex::new(r"\{%\s*(?:if|for|unless|case)\s+[^%]*%\}").unwrap();
-        let closing_tags =
-            regex::Regex::new(r"\{%\s*(?:endif|endfor|endunless|endcase)\s*%\}").unwrap();
-
-        let open_count = unclosed_tags.find_iter(&template_content).count();
-        let close_count = closing_tags.find_iter(&template_content).count();
+        let open_count = unclosed_tags_regex.find_iter(&template_content).count();
+        let close_count = closing_tags_regex.find_iter(&template_content).count();
 
         if open_count != close_count {
             failed_files.push(format!(
@@ -123,8 +124,7 @@ fn test_all_doc_example_prompts_are_valid() {
         }
 
         // Check for malformed variable syntax
-        let malformed_vars = regex::Regex::new(r"\{\{[^}]*\{").unwrap();
-        if malformed_vars.is_match(&template_content) {
+        if malformed_vars_regex.is_match(&template_content) {
             failed_files.push(format!(
                 "{}: Malformed variable syntax detected",
                 path.display()
@@ -188,6 +188,9 @@ fn test_doc_markdown_includes_valid_paths() {
 
     let mut invalid_includes = vec![];
 
+    // Pre-compile regex pattern outside the loop
+    let include_regex = regex::Regex::new(r"\{\{#include\s+([^\}]+)\}\}").unwrap();
+
     // Walk through all .md files in doc/src
     // WalkDir is used here to check documentation includes, not runtime files
     for entry in WalkDir::new(doc_src_dir)
@@ -203,14 +206,12 @@ fn test_doc_markdown_includes_valid_paths() {
         }
 
         // Read file content
-        let content = match fs::read_to_string(&path) {
+        let content = match fs::read_to_string(path) {
             Ok(content) => content,
             Err(_) => continue,
         };
 
         // Find all {{#include ...}} directives
-        let include_regex = regex::Regex::new(r"\{\{#include\s+([^\}]+)\}\}").unwrap();
-
         for captures in include_regex.captures_iter(&content) {
             if let Some(include_path) = captures.get(1) {
                 let include_path_str = include_path.as_str().trim();
@@ -266,7 +267,7 @@ fn test_example_prompts_have_required_fields() {
             continue;
         }
 
-        let content = match fs::read_to_string(&path) {
+        let content = match fs::read_to_string(path) {
             Ok(content) => content,
             Err(_) => continue,
         };

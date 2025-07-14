@@ -526,7 +526,7 @@ stateDiagram-v2
     let mut run = WorkflowRun::new(workflow1);
 
     // Execute the workflow
-    let result = executor.execute_state(&mut run).await;
+    let _result = executor.execute_state(&mut run).await;
 
     // Verify execution reached expected states
     let visited_states: Vec<StateId> = run
@@ -729,7 +729,7 @@ stateDiagram-v2
     let mut run = WorkflowRun::new(workflow);
 
     // Execute the workflow
-    let result = executor.execute_state(&mut run).await;
+    let _result = executor.execute_state(&mut run).await;
 
     // Verify parallel execution setup
     let visited_states: Vec<StateId> = run

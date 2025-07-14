@@ -1077,7 +1077,7 @@ impl Action for SubWorkflowAction {
         let substituted_inputs = self.substitute_variables(context);
 
         // Validate input keys early
-        for (key, _) in &substituted_inputs {
+        for key in substituted_inputs.keys() {
             if !is_valid_argument_key(key) {
                 return Err(ActionError::ParseError(
                     format!("Invalid input variable key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)

@@ -35,7 +35,7 @@ pub fn create_test_context() -> HashMap<String, Value> {
 }
 
 /// Helper function to create a test context with special characters
-pub fn create_context_with_special_chars() -> HashMap<String, Value> {
+pub fn _create_context_with_special_chars() -> HashMap<String, Value> {
     let mut context = HashMap::new();
     context.insert(
         "special_chars".to_string(),

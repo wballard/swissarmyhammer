@@ -8,7 +8,7 @@ use tokio::sync::{RwLock, Semaphore};
 /// Mock resource that tracks acquisition and cleanup
 struct MockResource {
     id: usize,
-    acquired: Arc<AtomicUsize>,
+    _acquired: Arc<AtomicUsize>,
     released: Arc<AtomicUsize>,
 }
 
@@ -17,7 +17,7 @@ impl MockResource {
         acquired.fetch_add(1, Ordering::SeqCst);
         Self {
             id,
-            acquired,
+            _acquired: acquired,
             released,
         }
     }
@@ -75,7 +75,7 @@ async fn test_prompt_action_cleanup_on_timeout() {
     let mut context = create_test_context();
 
     // This should timeout quickly
-    let result = action.execute(&mut context).await;
+    let _result = action.execute(&mut context).await;
 
     // Even if it doesn't actually timeout (no real Claude execution),
     // verify the structure is correct for cleanup
@@ -97,7 +97,7 @@ async fn test_sub_workflow_cleanup_on_circular_dependency() {
 
     // Track resources
     let resources_cleaned = Arc::new(AtomicUsize::new(0));
-    let cleanup_clone = Arc::clone(&resources_cleaned);
+    let _cleanup_clone = Arc::clone(&resources_cleaned);
 
     // Execute action that should fail with circular dependency
     let result = action.execute(&mut context).await;

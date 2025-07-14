@@ -47,7 +47,7 @@ async fn test_concurrent_set_variable_actions() {
 #[tokio::test]
 async fn test_concurrent_log_actions() {
     // Test that multiple LogActions can execute concurrently
-    let mut context = create_test_context();
+    let context = create_test_context();
 
     let actions: Vec<LogAction> = vec![
         LogAction::info("Concurrent log 1".to_string()),

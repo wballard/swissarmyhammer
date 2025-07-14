@@ -55,8 +55,10 @@ pub enum SwissArmyHammerError {
     /// Generic error with context
     #[error("{message}")]
     Context {
+        /// The error message providing context
         message: String,
         #[source]
+        /// The underlying error that caused this error
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 }
@@ -67,35 +69,60 @@ pub enum SwissArmyHammerError {
 pub enum WorkflowError {
     /// Workflow not found
     #[error("Workflow '{name}' not found")]
-    NotFound { name: String },
+    NotFound {
+        /// The name of the workflow that was not found
+        name: String,
+    },
 
     /// Invalid workflow definition
     #[error("Invalid workflow '{name}': {reason}")]
-    Invalid { name: String, reason: String },
+    Invalid {
+        /// The name of the invalid workflow
+        name: String,
+        /// The reason why the workflow is invalid
+        reason: String,
+    },
 
     /// Circular dependency detected
     #[error("Circular dependency detected: {cycle}")]
-    CircularDependency { cycle: String },
+    CircularDependency {
+        /// The string representation of the dependency cycle
+        cycle: String,
+    },
 
     /// State not found in workflow
     #[error("State '{state}' not found in workflow '{workflow}'")]
-    StateNotFound { state: String, workflow: String },
+    StateNotFound {
+        /// The state that was not found
+        state: String,
+        /// The workflow that should contain the state
+        workflow: String,
+    },
 
     /// Invalid transition
     #[error("Invalid transition from '{from}' to '{to}' in workflow '{workflow}'")]
     InvalidTransition {
+        /// The source state of the invalid transition
         from: String,
+        /// The target state of the invalid transition
         to: String,
+        /// The workflow containing the invalid transition
         workflow: String,
     },
 
     /// Workflow execution error
     #[error("Workflow execution failed: {reason}")]
-    ExecutionFailed { reason: String },
+    ExecutionFailed {
+        /// The reason why the workflow execution failed
+        reason: String,
+    },
 
     /// Timeout during workflow execution
     #[error("Workflow execution timed out after {duration:?}")]
-    Timeout { duration: std::time::Duration },
+    Timeout {
+        /// The duration after which the workflow timed out
+        duration: std::time::Duration,
+    },
 }
 
 /// Action-specific errors
@@ -104,34 +131,58 @@ pub enum WorkflowError {
 pub enum ActionError {
     /// Action not found
     #[error("Action '{name}' not found")]
-    NotFound { name: String },
+    NotFound {
+        /// The name of the action that was not found
+        name: String,
+    },
 
     /// Invalid action configuration
     #[error("Invalid action configuration: {reason}")]
-    InvalidConfig { reason: String },
+    InvalidConfig {
+        /// The reason why the configuration is invalid
+        reason: String,
+    },
 
     /// Action execution failed
     #[error("Action '{name}' failed: {reason}")]
-    ExecutionFailed { name: String, reason: String },
+    ExecutionFailed {
+        /// The name of the action that failed
+        name: String,
+        /// The reason why the action failed
+        reason: String,
+    },
 
     /// Variable not found in context
     #[error("Variable '{variable}' not found in context")]
-    VariableNotFound { variable: String },
+    VariableNotFound {
+        /// The name of the variable that was not found
+        variable: String,
+    },
 
     /// Invalid variable name
     #[error("Invalid variable name '{name}': {reason}")]
-    InvalidVariableName { name: String, reason: String },
+    InvalidVariableName {
+        /// The invalid variable name
+        name: String,
+        /// The reason why the variable name is invalid
+        reason: String,
+    },
 
     /// Rate limit exceeded
     #[error("Rate limit exceeded: {message}. Retry after {retry_after:?}")]
     RateLimit {
+        /// The rate limit error message
         message: String,
+        /// The duration to wait before retrying
         retry_after: std::time::Duration,
     },
 
     /// External command failed
     #[error("External command failed: {command}")]
-    CommandFailed { command: String },
+    CommandFailed {
+        /// The command that failed
+        command: String,
+    },
 }
 
 /// Parsing errors
@@ -141,22 +192,36 @@ pub enum ParseError {
     /// Invalid syntax
     #[error("Invalid syntax at line {line}, column {column}: {message}")]
     Syntax {
+        /// The line number where the syntax error occurred
         line: usize,
+        /// The column number where the syntax error occurred
         column: usize,
+        /// The error message describing the syntax error
         message: String,
     },
 
     /// Missing required field
     #[error("Missing required field '{field}'")]
-    MissingField { field: String },
+    MissingField {
+        /// The name of the missing field
+        field: String,
+    },
 
     /// Invalid field value
     #[error("Invalid value for field '{field}': {reason}")]
-    InvalidField { field: String, reason: String },
+    InvalidField {
+        /// The name of the field with invalid value
+        field: String,
+        /// The reason why the field value is invalid
+        reason: String,
+    },
 
     /// Unsupported format
     #[error("Unsupported format: {format}")]
-    UnsupportedFormat { format: String },
+    UnsupportedFormat {
+        /// The format that is not supported
+        format: String,
+    },
 }
 
 /// Validation errors
@@ -165,19 +230,33 @@ pub enum ParseError {
 pub enum ValidationError {
     /// Schema validation failed
     #[error("Schema validation failed: {reason}")]
-    Schema { reason: String },
+    Schema {
+        /// The reason why schema validation failed
+        reason: String,
+    },
 
     /// Content validation failed
     #[error("Content validation failed in {file}: {reason}")]
-    Content { file: PathBuf, reason: String },
+    Content {
+        /// The file that failed content validation
+        file: PathBuf,
+        /// The reason why content validation failed
+        reason: String,
+    },
 
     /// Structure validation failed
     #[error("Structure validation failed: {reason}")]
-    Structure { reason: String },
+    Structure {
+        /// The reason why structure validation failed
+        reason: String,
+    },
 
     /// Security validation failed
     #[error("Security validation failed: {reason}")]
-    Security { reason: String },
+    Security {
+        /// The reason why security validation failed
+        reason: String,
+    },
 }
 
 /// Storage-related errors
@@ -186,19 +265,31 @@ pub enum ValidationError {
 pub enum StorageError {
     /// Storage not found
     #[error("Storage '{name}' not found")]
-    NotFound { name: String },
+    NotFound {
+        /// The name of the storage that was not found
+        name: String,
+    },
 
     /// Storage already exists
     #[error("Storage '{name}' already exists")]
-    AlreadyExists { name: String },
+    AlreadyExists {
+        /// The name of the storage that already exists
+        name: String,
+    },
 
     /// Storage operation failed
     #[error("Storage operation failed: {reason}")]
-    OperationFailed { reason: String },
+    OperationFailed {
+        /// The reason why the storage operation failed
+        reason: String,
+    },
 
     /// Invalid storage path
     #[error("Invalid storage path: {path}")]
-    InvalidPath { path: PathBuf },
+    InvalidPath {
+        /// The invalid storage path
+        path: PathBuf,
+    },
 }
 
 /// MCP (Model Context Protocol) errors
@@ -207,19 +298,33 @@ pub enum StorageError {
 pub enum McpError {
     /// Connection failed
     #[error("MCP connection failed: {reason}")]
-    ConnectionFailed { reason: String },
+    ConnectionFailed {
+        /// The reason why the connection failed
+        reason: String,
+    },
 
     /// Protocol error
     #[error("MCP protocol error: {reason}")]
-    Protocol { reason: String },
+    Protocol {
+        /// The reason for the protocol error
+        reason: String,
+    },
 
     /// Tool execution failed
     #[error("MCP tool '{tool}' failed: {reason}")]
-    ToolFailed { tool: String, reason: String },
+    ToolFailed {
+        /// The name of the tool that failed
+        tool: String,
+        /// The reason why the tool failed
+        reason: String,
+    },
 
     /// Resource not found
     #[error("MCP resource '{resource}' not found")]
-    ResourceNotFound { resource: String },
+    ResourceNotFound {
+        /// The name of the resource that was not found
+        resource: String,
+    },
 }
 
 /// Configuration errors
@@ -228,15 +333,28 @@ pub enum McpError {
 pub enum ConfigError {
     /// Missing configuration
     #[error("Missing configuration: {name}")]
-    Missing { name: String },
+    Missing {
+        /// The name of the missing configuration
+        name: String,
+    },
 
     /// Invalid configuration
     #[error("Invalid configuration '{name}': {reason}")]
-    Invalid { name: String, reason: String },
+    Invalid {
+        /// The name of the invalid configuration
+        name: String,
+        /// The reason why the configuration is invalid
+        reason: String,
+    },
 
     /// Environment variable error
     #[error("Environment variable '{var}' error: {reason}")]
-    EnvVar { var: String, reason: String },
+    EnvVar {
+        /// The name of the environment variable
+        var: String,
+        /// The reason for the environment variable error
+        reason: String,
+    },
 }
 
 /// Result type alias for SwissArmyHammer operations
@@ -280,7 +398,7 @@ where
 /// Error chain formatter for detailed error reporting
 pub struct ErrorChain<'a>(&'a dyn std::error::Error);
 
-impl<'a> fmt::Display for ErrorChain<'a> {
+impl fmt::Display for ErrorChain<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Error: {}", self.0)?;
 

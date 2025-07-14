@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use colored::*;
 use serde::Serialize;
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 #[cfg(test)]
 use swissarmyhammer::workflow::MermaidParser;
@@ -110,32 +109,6 @@ impl ValidationResult {
     }
 }
 
-/// Trait for implementing different validation strategies
-pub trait ValidationRule {
-    /// Get the name of this validation rule
-    fn name(&self) -> &'static str;
-
-    /// Check if this rule should be applied to the given context
-    fn should_validate(&self, _context: &ValidationContext) -> bool {
-        // By default, all rules are applied
-        true
-    }
-
-    /// Perform the validation
-    fn validate(&self, context: &ValidationContext, result: &mut ValidationResult);
-}
-
-/// Context for validation containing all necessary information
-pub struct ValidationContext<'a> {
-    /// The content being validated
-    pub content: &'a str,
-    /// The file path being validated
-    pub file_path: &'a Path,
-    /// Optional prompt title for error reporting
-    pub prompt_title: Option<String>,
-    /// Optional additional metadata
-    pub metadata: HashMap<String, String>,
-}
 
 /// Trait for validators that check content patterns
 pub trait ContentValidator {
@@ -149,16 +122,6 @@ pub trait ContentValidator {
     );
 }
 
-/// Trait for validators that check structural integrity
-pub trait StructureValidator<T> {
-    /// Validate a structure and add issues to the result
-    fn validate_structure(
-        &self,
-        structure: &T,
-        file_path: &Path,
-        result: &mut ValidationResult,
-    ) -> Result<()>;
-}
 
 #[derive(Debug, Serialize)]
 struct JsonValidationResult {
@@ -281,14 +244,6 @@ impl ContentValidator for YamlTypoValidator {
 pub struct ValidationConfig {
     /// Maximum allowed complexity for workflows (states + transitions)
     pub max_workflow_complexity: usize,
-    /// Maximum allowed depth for directories
-    pub max_directory_depth: usize,
-    /// Maximum allowed number of states in a workflow
-    pub max_workflow_states: usize,
-    /// Maximum allowed number of transitions in a workflow
-    pub max_workflow_transitions: usize,
-    /// Maximum allowed line length for files
-    pub max_line_length: usize,
     /// Whether to validate encoding (check for BOM)
     pub check_encoding: bool,
     /// Whether to validate line endings consistency
@@ -304,22 +259,6 @@ impl Default for ValidationConfig {
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(1000),
-            max_directory_depth: std::env::var("SWISSARMYHAMMER_MAX_DIRECTORY_DEPTH")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(10),
-            max_workflow_states: std::env::var("SWISSARMYHAMMER_MAX_WORKFLOW_STATES")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(500),
-            max_workflow_transitions: std::env::var("SWISSARMYHAMMER_MAX_WORKFLOW_TRANSITIONS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(500),
-            max_line_length: std::env::var("SWISSARMYHAMMER_MAX_LINE_LENGTH")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(120),
             check_encoding: std::env::var("SWISSARMYHAMMER_CHECK_ENCODING")
                 .ok()
                 .and_then(|s| s.parse().ok())
@@ -666,12 +605,12 @@ impl Validator {
         if !all_cycles.is_empty() {
             // Normalize cycles to detect duplicates
             let mut unique_cycles = std::collections::HashSet::new();
-            
+
             for cycle in all_cycles {
                 if cycle.is_empty() {
                     continue;
                 }
-                
+
                 // Normalize the cycle by finding the lexicographically smallest state
                 // and rotating the cycle to start from that state
                 let min_pos = cycle
@@ -680,19 +619,20 @@ impl Validator {
                     .min_by_key(|(_, state)| state.as_str())
                     .map(|(pos, _)| pos)
                     .unwrap_or(0);
-                
+
                 // Create normalized cycle starting from the minimum state
                 let mut normalized = Vec::new();
-                for i in 0..cycle.len() - 1 { // -1 because last element is duplicate of first
+                for i in 0..cycle.len() - 1 {
+                    // -1 because last element is duplicate of first
                     let idx = (min_pos + i) % (cycle.len() - 1);
                     normalized.push(cycle[idx].as_str());
                 }
-                
+
                 // Convert to string for HashSet comparison
                 let cycle_key = normalized.join(" -> ");
                 unique_cycles.insert(cycle_key);
             }
-            
+
             // Report only the first unique cycle to avoid clutter
             if let Some(first_cycle) = unique_cycles.iter().next() {
                 result.add_issue(ValidationIssue {
@@ -1578,18 +1518,27 @@ mod tests {
         validator.validate_workflow(&workflow_path, &mut result);
 
         // Count circular dependency warnings
-        let circular_warnings: Vec<_> = result.issues.iter().filter(|issue| {
-            issue.level == ValidationLevel::Warning
-                && issue.message.contains("Circular dependency detected")
-        }).collect();
-        
+        let circular_warnings: Vec<_> = result
+            .issues
+            .iter()
+            .filter(|issue| {
+                issue.level == ValidationLevel::Warning
+                    && issue.message.contains("Circular dependency detected")
+            })
+            .collect();
+
         // Print all warnings for debugging
         for warning in &circular_warnings {
             eprintln!("Warning: {}", warning.message);
         }
 
         // Should only have one circular dependency warning for the same cycle
-        assert_eq!(circular_warnings.len(), 1, "Should only report one circular dependency warning, but got {}", circular_warnings.len());
+        assert_eq!(
+            circular_warnings.len(),
+            1,
+            "Should only report one circular dependency warning, but got {}",
+            circular_warnings.len()
+        );
     }
 
     #[test]

@@ -717,6 +717,48 @@ impl PromptLibrary {
         self.storage.search(query)
     }
 
+    /// Lists prompts filtered by the given criteria.
+    ///
+    /// This method provides a flexible way to filter prompts based on various criteria
+    /// such as source, category, search terms, and argument requirements. It works
+    /// with a PromptResolver to determine prompt sources.
+    ///
+    /// # Arguments
+    ///
+    /// * `filter` - A PromptFilter specifying the filtering criteria
+    /// * `sources` - A HashMap mapping prompt names to their sources
+    ///
+    /// # Returns
+    ///
+    /// A vector of prompts matching all the specified filter criteria.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swissarmyhammer::{PromptLibrary, PromptFilter, PromptSource, Prompt};
+    /// use std::collections::HashMap;
+    ///
+    /// let mut library = PromptLibrary::new();
+    /// library.add(Prompt::new("code-review", "Review code")
+    ///     .with_category("development")).unwrap();
+    /// library.add(Prompt::new("write-essay", "Write essay")
+    ///     .with_category("writing")).unwrap();
+    ///
+    /// let filter = PromptFilter::new().with_category("development");
+    /// let sources = HashMap::new(); // Empty sources for this example
+    /// let results = library.list_filtered(&filter, &sources).unwrap();
+    /// assert_eq!(results.len(), 1);
+    /// assert_eq!(results[0].name, "code-review");
+    /// ```
+    pub fn list_filtered(
+        &self,
+        filter: &crate::prompt_filter::PromptFilter,
+        sources: &HashMap<String, crate::PromptSource>,
+    ) -> Result<Vec<Prompt>> {
+        let all_prompts = self.list()?;
+        Ok(filter.apply(all_prompts, sources))
+    }
+
     /// Adds a single prompt to the library.
     ///
     /// If a prompt with the same name already exists, it will be replaced.

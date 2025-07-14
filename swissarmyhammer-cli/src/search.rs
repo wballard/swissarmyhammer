@@ -1,8 +1,6 @@
 use anyhow::Result;
 use colored::*;
-use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use is_terminal::IsTerminal;
-use regex::Regex;
 use std::io;
 use tabled::{
     settings::{object::Rows, Alignment, Color, Modify, Style},
@@ -10,7 +8,10 @@ use tabled::{
 };
 
 use crate::cli::{OutputFormat, PromptSource};
-use swissarmyhammer::PromptResolver;
+use swissarmyhammer::{
+    PromptFilter, PromptLibrary, PromptResolver, PromptSource as LibraryPromptSource,
+    prelude::{AdvancedSearchEngine, AdvancedSearchOptions},
+};
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SearchResult {
@@ -60,8 +61,6 @@ pub fn run_search_command(
     highlight: bool,
     limit: Option<usize>,
 ) -> Result<()> {
-    use swissarmyhammer::PromptLibrary;
-
     // Load all prompts from all sources
     let mut library = PromptLibrary::new();
     let mut resolver = PromptResolver::new();
@@ -70,102 +69,57 @@ pub fn run_search_command(
     // Get all prompts
     let all_prompts = library.list()?;
 
-    // Search and filter prompts
-    let mut results = Vec::new();
+    // Create advanced search options
+    let search_options = AdvancedSearchOptions {
+        regex,
+        fuzzy,
+        case_sensitive,
+        highlight,
+        limit,
+    };
 
-    for prompt in all_prompts {
-        // Get the source from the resolver
-        let prompt_source = match resolver.prompt_sources.get(&prompt.name) {
-            Some(swissarmyhammer::PromptSource::Builtin) => PromptSource::Builtin,
-            Some(swissarmyhammer::PromptSource::User) => PromptSource::User,
-            Some(swissarmyhammer::PromptSource::Local) => PromptSource::Local,
-            Some(swissarmyhammer::PromptSource::Dynamic) => PromptSource::Dynamic,
-            None => PromptSource::Dynamic,
+    // Create filter based on CLI options
+    let mut filter = PromptFilter::new();
+    
+    // Apply source filter
+    if let Some(ref src_filter) = source_filter {
+        let library_source = match src_filter {
+            PromptSource::Builtin => LibraryPromptSource::Builtin,
+            PromptSource::User => LibraryPromptSource::User,
+            PromptSource::Local => LibraryPromptSource::Local,
+            PromptSource::Dynamic => LibraryPromptSource::Dynamic,
         };
-        let source_str = prompt_source.to_string();
+        filter = filter.with_source(library_source);
+    }
 
-        // Apply source filter
-        if let Some(ref filter) = source_filter {
-            if filter != &prompt_source && filter != &PromptSource::Dynamic {
-                continue;
-            }
-        }
+    // Apply argument filters
+    if let Some(arg_name) = has_arg {
+        filter = filter.with_has_arg(arg_name);
+    }
+    
+    if no_args {
+        filter = filter.with_no_args(true);
+    }
 
-        // Apply argument filters
-        if let Some(ref arg_name) = has_arg {
-            if !prompt.arguments.iter().any(|arg| arg.name == *arg_name) {
-                continue;
-            }
-        }
+    // Perform search using advanced search engine
+    let search_engine = AdvancedSearchEngine::new()?;
+    let search_results = search_engine.search(&query, &all_prompts, &search_options, Some(&filter), &resolver.prompt_sources)?;
 
-        if no_args && !prompt.arguments.is_empty() {
-            continue;
-        }
-
-        // Perform search
-        let mut score = 0.0;
-        let mut matched = false;
-        let query_lower = if case_sensitive {
-            query.clone()
-        } else {
-            query.to_lowercase()
-        };
-
-        if regex {
-            let re = Regex::new(&query)?;
-            matched = re.is_match(&prompt.name)
-                || prompt
-                    .description
-                    .as_ref()
-                    .map(|d| re.is_match(d))
-                    .unwrap_or(false)
-                || prompt.template.contains(&query);
-        } else if fuzzy {
-            let matcher = SkimMatcherV2::default();
-            if let Some(s) = matcher.fuzzy_match(&prompt.name, &query) {
-                score = s as f32;
-                matched = true;
-            }
-            if let Some(desc) = &prompt.description {
-                if let Some(s) = matcher.fuzzy_match(desc, &query) {
-                    score = score.max(s as f32);
-                    matched = true;
-                }
-            }
-        } else {
-            // Simple substring search
-            let name_check = if case_sensitive {
-                &prompt.name
-            } else {
-                &prompt.name.to_lowercase()
+    // Convert results to CLI format
+    let results: Vec<SearchResult> = search_results
+        .into_iter()
+        .map(|result| {
+            // Get the source from the resolver
+            let prompt_source = match resolver.prompt_sources.get(&result.prompt.name) {
+                Some(LibraryPromptSource::Builtin) => PromptSource::Builtin,
+                Some(LibraryPromptSource::User) => PromptSource::User,
+                Some(LibraryPromptSource::Local) => PromptSource::Local,
+                Some(LibraryPromptSource::Dynamic) => PromptSource::Dynamic,
+                None => PromptSource::Dynamic,
             };
-            matched = name_check.contains(&query_lower)
-                || prompt
-                    .description
-                    .as_ref()
-                    .map(|d| {
-                        if case_sensitive {
-                            d.contains(&query)
-                        } else {
-                            d.to_lowercase().contains(&query_lower)
-                        }
-                    })
-                    .unwrap_or(false)
-                || prompt.template.contains(&query);
+            let source_str = prompt_source.to_string();
 
-            if matched {
-                score = 100.0;
-            }
-        }
-
-        if matched {
-            let excerpt = if highlight {
-                generate_excerpt(&prompt.template, &query, highlight)
-            } else {
-                None
-            };
-
-            let arguments = prompt
+            let arguments = result.prompt
                 .arguments
                 .iter()
                 .map(|arg| SearchArgument {
@@ -176,25 +130,17 @@ pub fn run_search_command(
                 })
                 .collect();
 
-            results.push(SearchResult {
-                name: prompt.name.clone(),
+            SearchResult {
+                name: result.prompt.name.clone(),
                 title: None, // No title field in new API
-                description: prompt.description.clone(),
-                source: source_str.to_string(),
-                score,
-                excerpt,
+                description: result.prompt.description.clone(),
+                source: source_str,
+                score: result.score,
+                excerpt: result.excerpt,
                 arguments,
-            });
-        }
-    }
-
-    // Sort by score (highest first)
-    results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
-
-    // Apply limit
-    if let Some(limit) = limit {
-        results.truncate(limit);
-    }
+            }
+        })
+        .collect();
 
     // Output results
     match format {

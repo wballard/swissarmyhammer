@@ -5,8 +5,7 @@ use std::io::{self, Write};
 // Tabled import removed - using custom 2-line format instead
 
 use crate::cli::{OutputFormat, PromptSource};
-use swissarmyhammer::PromptLibrary;
-use swissarmyhammer::PromptResolver;
+use swissarmyhammer::{PromptFilter, PromptLibrary, PromptResolver};
 
 // PromptRow struct removed - using custom 2-line format instead of table
 
@@ -40,13 +39,34 @@ pub fn run_list_command(
     let mut resolver = PromptResolver::new();
     resolver.load_all_prompts(&mut library)?;
 
-    // Get all prompts
-    let all_prompts = library.list()?;
+    // Build the filter
+    let mut filter = PromptFilter::new();
+
+    if let Some(ref source) = source_filter {
+        let lib_source = match source {
+            PromptSource::Builtin => swissarmyhammer::PromptSource::Builtin,
+            PromptSource::User => swissarmyhammer::PromptSource::User,
+            PromptSource::Local => swissarmyhammer::PromptSource::Local,
+            PromptSource::Dynamic => swissarmyhammer::PromptSource::Dynamic,
+        };
+        filter = filter.with_source(lib_source);
+    }
+
+    if let Some(ref category) = category_filter {
+        filter = filter.with_category(category);
+    }
+
+    if let Some(ref search) = search_term {
+        filter = filter.with_search_term(search);
+    }
+
+    // Get filtered prompts
+    let filtered_prompts = library.list_filtered(&filter, &resolver.prompt_sources)?;
 
     // Collect prompt information
     let mut prompt_infos = Vec::new();
 
-    for prompt in all_prompts {
+    for prompt in filtered_prompts {
         // Get the source from the resolver
         let prompt_source = match resolver.prompt_sources.get(&prompt.name) {
             Some(swissarmyhammer::PromptSource::Builtin) => PromptSource::Builtin,
@@ -55,44 +75,6 @@ pub fn run_list_command(
             Some(swissarmyhammer::PromptSource::Dynamic) => PromptSource::Dynamic,
             None => PromptSource::Dynamic,
         };
-
-        // Apply source filter
-        if let Some(ref filter) = source_filter {
-            if filter != &prompt_source && filter != &PromptSource::Dynamic {
-                continue;
-            }
-        }
-
-        // Apply category filter
-        if let Some(ref category) = category_filter {
-            if prompt.category.as_deref() != Some(category) {
-                continue;
-            }
-        }
-
-        // Apply search filter
-        if let Some(ref search) = search_term {
-            let search_lower = search.to_lowercase();
-            let name_matches = prompt.name.to_lowercase().contains(&search_lower);
-            let desc_matches = prompt
-                .description
-                .as_ref()
-                .map(|d| d.to_lowercase().contains(&search_lower))
-                .unwrap_or(false);
-            let category_matches = prompt
-                .category
-                .as_ref()
-                .map(|c| c.to_lowercase().contains(&search_lower))
-                .unwrap_or(false);
-            let tag_matches = prompt
-                .tags
-                .iter()
-                .any(|t| t.to_lowercase().contains(&search_lower));
-
-            if !(name_matches || desc_matches || category_matches || tag_matches) {
-                continue;
-            }
-        }
 
         let arguments = prompt
             .arguments

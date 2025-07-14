@@ -40,6 +40,9 @@
 /// Prompt management and storage
 pub mod prompts;
 
+/// Prompt filtering functionality
+pub mod prompt_filter;
+
 /// Prompt loading and resolution
 pub mod prompt_resolver;
 
@@ -54,6 +57,9 @@ pub mod storage;
 
 /// Search functionality
 pub mod search;
+
+/// Advanced search functionality
+pub mod search_advanced;
 
 /// Plugin system for extensibility
 pub mod plugins;
@@ -80,6 +86,7 @@ pub mod fs_utils;
 pub use file_loader::FileSource;
 pub use fs_utils::{FileSystem, FileSystemUtils};
 pub use plugins::{CustomLiquidFilter, PluginRegistry, SwissArmyHammerPlugin};
+pub use prompt_filter::PromptFilter;
 pub use prompt_resolver::PromptResolver;
 // Re-export FileSource as PromptSource for backward compatibility
 pub use file_loader::FileSource as PromptSource;
@@ -109,6 +116,7 @@ pub mod prelude {
 
     pub use crate::mcp::McpServer;
     pub use crate::search::{SearchEngine, SearchResult};
+    pub use crate::search_advanced::{AdvancedSearchEngine, AdvancedSearchOptions, AdvancedSearchResult, generate_excerpt};
     pub use crate::workflow::{
         State, StateId, Transition, Workflow, WorkflowName, WorkflowRun, WorkflowRunId,
         WorkflowRunStatus,

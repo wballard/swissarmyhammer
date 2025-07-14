@@ -7,10 +7,6 @@ arguments:
     description: Context about the code (e.g., "handles user authentication")
     required: false
     default: "general purpose code"
-  - name: language
-    description: Programming language
-    required: false
-    default: "auto-detect"
   - name: severity_threshold
     description: Minimum severity to report (critical, high, medium, low)
     required: false

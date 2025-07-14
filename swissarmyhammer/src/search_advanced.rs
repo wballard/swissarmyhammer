@@ -3,8 +3,8 @@
 //! This module extends the basic search functionality with additional features
 //! like regex search, case sensitivity options, excerpt generation, and more.
 
-use crate::{Prompt, PromptFilter, Result};
 use crate::search::{SearchEngine, SearchResult};
+use crate::{Prompt, PromptFilter, Result};
 use regex::Regex;
 use std::collections::HashMap;
 
@@ -298,10 +298,10 @@ mod tests {
     fn test_search_with_filter() {
         let engine = AdvancedSearchEngine::new().unwrap();
         let mut prompts = create_test_prompts();
-        
+
         // Add a prompt with an argument
-        let mut prompt_with_arg = Prompt::new("arg_test", "Test {{input}}")
-            .with_description("Has arguments");
+        let mut prompt_with_arg =
+            Prompt::new("arg_test", "Test {{input}}").with_description("Has arguments");
         prompt_with_arg = prompt_with_arg.add_argument(ArgumentSpec {
             name: "input".to_string(),
             description: None,
@@ -344,7 +344,7 @@ mod tests {
     fn test_excerpt_generation() {
         let content = "This is a long text with the keyword somewhere in the middle of it";
         let excerpt = generate_excerpt(content, "keyword", false);
-        
+
         assert!(excerpt.is_some());
         let excerpt_text = excerpt.unwrap();
         assert!(excerpt_text.contains("keyword"));
@@ -356,7 +356,7 @@ mod tests {
     fn test_excerpt_generation_with_highlight() {
         let content = "This is a long text with the keyword somewhere in the middle of it";
         let excerpt = generate_excerpt(content, "keyword", true);
-        
+
         assert!(excerpt.is_some());
         let excerpt_text = excerpt.unwrap();
         assert!(excerpt_text.contains("**keyword**"));

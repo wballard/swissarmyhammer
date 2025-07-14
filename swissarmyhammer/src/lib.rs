@@ -116,7 +116,9 @@ pub mod prelude {
 
     pub use crate::mcp::McpServer;
     pub use crate::search::{SearchEngine, SearchResult};
-    pub use crate::search_advanced::{AdvancedSearchEngine, AdvancedSearchOptions, AdvancedSearchResult, generate_excerpt};
+    pub use crate::search_advanced::{
+        generate_excerpt, AdvancedSearchEngine, AdvancedSearchOptions, AdvancedSearchResult,
+    };
     pub use crate::workflow::{
         State, StateId, Transition, Workflow, WorkflowName, WorkflowRun, WorkflowRunId,
         WorkflowRunStatus,

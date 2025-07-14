@@ -9,8 +9,8 @@ use tabled::{
 
 use crate::cli::{OutputFormat, PromptSource};
 use swissarmyhammer::{
-    PromptFilter, PromptLibrary, PromptResolver, PromptSource as LibraryPromptSource,
     prelude::{AdvancedSearchEngine, AdvancedSearchOptions},
+    PromptFilter, PromptLibrary, PromptResolver, PromptSource as LibraryPromptSource,
 };
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -80,7 +80,7 @@ pub fn run_search_command(
 
     // Create filter based on CLI options
     let mut filter = PromptFilter::new();
-    
+
     // Apply source filter
     if let Some(ref src_filter) = source_filter {
         let library_source = match src_filter {
@@ -96,14 +96,20 @@ pub fn run_search_command(
     if let Some(arg_name) = has_arg {
         filter = filter.with_has_arg(arg_name);
     }
-    
+
     if no_args {
         filter = filter.with_no_args(true);
     }
 
     // Perform search using advanced search engine
     let search_engine = AdvancedSearchEngine::new()?;
-    let search_results = search_engine.search(&query, &all_prompts, &search_options, Some(&filter), &resolver.prompt_sources)?;
+    let search_results = search_engine.search(
+        &query,
+        &all_prompts,
+        &search_options,
+        Some(&filter),
+        &resolver.prompt_sources,
+    )?;
 
     // Convert results to CLI format
     let results: Vec<SearchResult> = search_results
@@ -119,7 +125,8 @@ pub fn run_search_command(
             };
             let source_str = prompt_source.to_string();
 
-            let arguments = result.prompt
+            let arguments = result
+                .prompt
                 .arguments
                 .iter()
                 .map(|arg| SearchArgument {

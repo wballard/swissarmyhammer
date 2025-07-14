@@ -222,7 +222,7 @@ pub fn generate_excerpt(content: &str, query: &str, highlight: bool) -> Option<S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ArgumentSpec, Prompt, PromptSource};
+    use crate::{ArgumentSpec, Prompt};
 
     fn create_test_prompts() -> Vec<Prompt> {
         vec![

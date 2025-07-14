@@ -8,6 +8,10 @@ use swissarmyhammer::workflow::{
     MemoryWorkflowStorage, Workflow, WorkflowGraphAnalyzer, WorkflowResolver,
     WorkflowStorageBackend,
 };
+use swissarmyhammer::validation::{
+    ContentValidator, EncodingValidator, LineEndingValidator, ValidationConfig, ValidationIssue,
+    ValidationLevel, ValidationResult, YamlTypoValidator,
+};
 
 use crate::cli::ValidateFormat;
 use crate::exit_codes::{EXIT_ERROR, EXIT_SUCCESS, EXIT_WARNING};
@@ -48,78 +52,6 @@ struct Prompt {
     arguments: Vec<PromptArgument>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum ValidationLevel {
-    Error,
-    Warning,
-    #[allow(dead_code)] // Available for future use
-    Info,
-}
-
-#[derive(Debug, Clone)]
-pub struct ValidationIssue {
-    pub level: ValidationLevel,
-    pub file_path: PathBuf,
-    pub prompt_title: Option<String>,
-    pub line: Option<usize>,
-    pub column: Option<usize>,
-    pub message: String,
-    pub suggestion: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ValidationResult {
-    pub issues: Vec<ValidationIssue>,
-    pub files_checked: usize,
-    pub errors: usize,
-    pub warnings: usize,
-}
-
-impl Default for ValidationResult {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ValidationResult {
-    pub fn new() -> Self {
-        Self {
-            issues: Vec::new(),
-            files_checked: 0,
-            errors: 0,
-            warnings: 0,
-        }
-    }
-
-    pub fn add_issue(&mut self, issue: ValidationIssue) {
-        match issue.level {
-            ValidationLevel::Error => self.errors += 1,
-            ValidationLevel::Warning => self.warnings += 1,
-            ValidationLevel::Info => {}
-        }
-        self.issues.push(issue);
-    }
-
-    pub fn has_errors(&self) -> bool {
-        self.errors > 0
-    }
-
-    pub fn has_warnings(&self) -> bool {
-        self.warnings > 0
-    }
-}
-
-/// Trait for validators that check content patterns
-pub trait ContentValidator {
-    /// Validate content and add issues to the result
-    fn validate_content(
-        &self,
-        content: &str,
-        file_path: &Path,
-        result: &mut ValidationResult,
-        prompt_title: Option<String>,
-    );
-}
 
 #[derive(Debug, Serialize)]
 struct JsonValidationResult {
@@ -139,139 +71,6 @@ struct JsonValidationIssue {
     suggestion: Option<String>,
 }
 
-/// Validator for UTF-8 encoding issues
-pub struct EncodingValidator;
-
-impl ContentValidator for EncodingValidator {
-    fn validate_content(
-        &self,
-        content: &str,
-        file_path: &Path,
-        result: &mut ValidationResult,
-        prompt_title: Option<String>,
-    ) {
-        // Check for BOM
-        if content.starts_with('\u{FEFF}') {
-            result.add_issue(ValidationIssue {
-                level: ValidationLevel::Warning,
-                file_path: file_path.to_path_buf(),
-                prompt_title,
-                line: Some(1),
-                column: Some(1),
-                message: "File contains UTF-8 BOM".to_string(),
-                suggestion: Some("Remove the BOM for better compatibility".to_string()),
-            });
-        }
-    }
-}
-
-/// Validator for line ending consistency
-pub struct LineEndingValidator;
-
-impl ContentValidator for LineEndingValidator {
-    fn validate_content(
-        &self,
-        content: &str,
-        file_path: &Path,
-        result: &mut ValidationResult,
-        prompt_title: Option<String>,
-    ) {
-        let has_crlf = content.contains("\r\n");
-        let has_lf_only = content.contains('\n') && !content.contains("\r\n");
-
-        if has_crlf && has_lf_only {
-            result.add_issue(ValidationIssue {
-                level: ValidationLevel::Warning,
-                file_path: file_path.to_path_buf(),
-                prompt_title,
-                line: None,
-                column: None,
-                message: "Mixed line endings detected (both CRLF and LF)".to_string(),
-                suggestion: Some("Use consistent line endings throughout the file".to_string()),
-            });
-        }
-    }
-}
-
-/// Validator for common typos in YAML fields
-pub struct YamlTypoValidator {
-    typo_map: Vec<(&'static str, &'static str)>,
-}
-
-impl Default for YamlTypoValidator {
-    fn default() -> Self {
-        Self {
-            typo_map: vec![
-                ("titel", "title"),
-                ("descripton", "description"),
-                ("argumnets", "arguments"),
-                ("requried", "required"),
-            ],
-        }
-    }
-}
-
-impl ContentValidator for YamlTypoValidator {
-    fn validate_content(
-        &self,
-        content: &str,
-        file_path: &Path,
-        result: &mut ValidationResult,
-        prompt_title: Option<String>,
-    ) {
-        for (line_num, line) in content.lines().enumerate() {
-            for (typo, correct) in &self.typo_map {
-                if line.contains(typo) {
-                    result.add_issue(ValidationIssue {
-                        level: ValidationLevel::Warning,
-                        file_path: file_path.to_path_buf(),
-                        prompt_title: prompt_title.clone(),
-                        line: Some(line_num + 1),
-                        column: None,
-                        message: format!("Possible typo: '{}' should be '{}'", typo, correct),
-                        suggestion: Some(format!("Replace '{}' with '{}'", typo, correct)),
-                    });
-                }
-            }
-        }
-    }
-}
-
-/// Configuration for validation limits and thresholds
-#[derive(Debug, Clone)]
-pub struct ValidationConfig {
-    /// Maximum allowed complexity for workflows (states + transitions)
-    pub max_workflow_complexity: usize,
-    /// Whether to validate encoding (check for BOM)
-    pub check_encoding: bool,
-    /// Whether to validate line endings consistency
-    pub check_line_endings: bool,
-    /// Whether to check for YAML typos
-    pub check_yaml_typos: bool,
-}
-
-impl Default for ValidationConfig {
-    fn default() -> Self {
-        Self {
-            max_workflow_complexity: std::env::var("SWISSARMYHAMMER_MAX_WORKFLOW_COMPLEXITY")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(1000),
-            check_encoding: std::env::var("SWISSARMYHAMMER_CHECK_ENCODING")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(true),
-            check_line_endings: std::env::var("SWISSARMYHAMMER_CHECK_LINE_ENDINGS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(true),
-            check_yaml_typos: std::env::var("SWISSARMYHAMMER_CHECK_YAML_TYPOS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(true),
-        }
-    }
-}
 
 pub struct Validator {
     quiet: bool,
@@ -310,7 +109,7 @@ impl Validator {
             result.files_checked += 1;
 
             // Store prompt title for error reporting
-            let prompt_title = prompt
+            let content_title = prompt
                 .metadata
                 .get("title")
                 .and_then(|v| v.as_str())
@@ -323,7 +122,7 @@ impl Validator {
                 &library,
                 prompt.source.as_ref().unwrap_or(&PathBuf::new()),
                 &mut result,
-                prompt_title.clone(),
+                content_title.clone(),
             );
 
             // Create local prompt for field validation
@@ -354,7 +153,7 @@ impl Validator {
             };
 
             // Validate fields and variables (but skip liquid syntax since we did it above)
-            self.validate_prompt_fields_and_variables(&local_prompt, &mut result, prompt_title)?;
+            self.validate_prompt_fields_and_variables(&local_prompt, &mut result, content_title)?;
         }
 
         // Validate workflows using WorkflowResolver for consistent loading
@@ -367,7 +166,7 @@ impl Validator {
         &mut self,
         prompt: &Prompt,
         result: &mut ValidationResult,
-        prompt_title: Option<String>,
+        content_title: Option<String>,
     ) -> Result<()> {
         let file_path = PathBuf::from(&prompt.source_path);
 
@@ -385,7 +184,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,
                     file_path: file_path.clone(),
-                    prompt_title: prompt_title.clone(),
+                    content_title: content_title.clone(),
                     line: None,
                     column: None,
                     message: "Missing required field: title".to_string(),
@@ -397,7 +196,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,
                     file_path: file_path.clone(),
-                    prompt_title: prompt_title.clone(),
+                    content_title: content_title.clone(),
                     line: None,
                     column: None,
                     message: "Missing required field: description".to_string(),
@@ -414,7 +213,7 @@ impl Validator {
             &prompt.arguments,
             &file_path,
             result,
-            prompt_title,
+            content_title,
         );
 
         Ok(())
@@ -491,7 +290,7 @@ impl Validator {
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Error,
                 file_path: workflow_path.to_path_buf(),
-                prompt_title: None,
+                content_title: None,
                 line: None,
                 column: None,
                 message: "Workflow name cannot be empty".to_string(),
@@ -508,7 +307,7 @@ impl Validator {
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Error,
                 file_path: workflow_path.to_path_buf(),
-                prompt_title: None,
+                content_title: None,
                 line: None,
                 column: None,
                 message: format!("Invalid workflow name '{}': only alphanumeric characters, hyphens, and underscores are allowed", workflow_name),
@@ -523,7 +322,7 @@ impl Validator {
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Error,
                 file_path: workflow_path.to_path_buf(),
-                prompt_title: None,
+                content_title: None,
                 line: None,
                 column: None,
                 message: format!(
@@ -547,7 +346,7 @@ impl Validator {
                     result.add_issue(ValidationIssue {
                         level: ValidationLevel::Error,
                         file_path: workflow_path.to_path_buf(),
-                        prompt_title: None,
+                        content_title: None,
                         line: None,
                         column: None,
                         message: format!("Workflow validation failed: {}", error),
@@ -567,7 +366,7 @@ impl Validator {
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Error,
                 file_path: workflow_path.to_path_buf(),
-                prompt_title: None,
+                content_title: None,
                 line: None,
                 column: None,
                 message: format!("State '{}' is unreachable from the initial state", state_id),
@@ -591,7 +390,7 @@ impl Validator {
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Error,
                 file_path: workflow_path.to_path_buf(),
-                prompt_title: None,
+                content_title: None,
                 line: None,
                 column: None,
                 message: "Workflow has no terminal state (no transitions to [*])".to_string(),
@@ -637,7 +436,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Warning,
                     file_path: workflow_path.to_path_buf(),
-                    prompt_title: None,
+                    content_title: None,
                     line: None,
                     column: None,
                     message: format!("Circular dependency detected: {}", first_cycle),
@@ -658,7 +457,7 @@ impl Validator {
                     result.add_issue(ValidationIssue {
                         level: ValidationLevel::Warning,
                         file_path: workflow_path.to_path_buf(),
-                        prompt_title: None,
+                        content_title: None,
                         line: None,
                         column: None,
                         message: format!("Action in transition from '{}' may be incomplete: '{}'", transition.from_state, action_str),
@@ -676,7 +475,7 @@ impl Validator {
                     result.add_issue(ValidationIssue {
                         level: ValidationLevel::Warning,
                         file_path: workflow_path.to_path_buf(),
-                        prompt_title: None,
+                        content_title: None,
                         line: None,
                         column: None,
                         message: format!("Condition in transition from '{}' may reference undefined variable: '{}'", transition.from_state, expression),
@@ -707,7 +506,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,
                     file_path: workflow_path.to_path_buf(),
-                    prompt_title: None,
+                    content_title: None,
                     line: None,
                     column: None,
                     message: format!("Failed to read workflow file: {}", e),
@@ -729,7 +528,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,
                     file_path: workflow_path.to_path_buf(),
-                    prompt_title: None,
+                    content_title: None,
                     line: None,
                     column: None,
                     message: format!("Failed to parse workflow syntax: {}", e),
@@ -786,7 +585,7 @@ impl Validator {
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Error,
                 file_path: file_path.to_path_buf(),
-                prompt_title: None,
+                content_title: None,
                 line: Some(1),
                 column: Some(1),
                 message: "Missing YAML front matter delimiter".to_string(),
@@ -822,7 +621,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,
                     file_path: file_path.to_path_buf(),
-                    prompt_title: None,
+                    content_title: None,
                     line: Some(1),
                     column: Some(1),
                     message: "Missing closing YAML front matter delimiter".to_string(),
@@ -856,7 +655,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,
                     file_path: file_path.to_path_buf(),
-                    prompt_title: None,
+                    content_title: None,
                     line: Some(e.location().map(|l| l.line()).unwrap_or(1)),
                     column: Some(e.location().map(|l| l.column()).unwrap_or(1)),
                     message: format!("YAML syntax error: {}", e),
@@ -915,7 +714,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,
                     file_path: file_path.to_path_buf(),
-                    prompt_title: None,
+                    content_title: None,
                     line: None,
                     column: None,
                     message: format!("Liquid template syntax error: {}", error_msg),
@@ -931,7 +730,7 @@ impl Validator {
         library: &swissarmyhammer::PromptLibrary,
         file_path: &Path,
         result: &mut ValidationResult,
-        prompt_title: Option<String>,
+        content_title: Option<String>,
     ) {
         // Try to render the template with partials support using the same path as test/serve
         let empty_args = std::collections::HashMap::new();
@@ -945,7 +744,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,
                     file_path: file_path.to_path_buf(),
-                    prompt_title,
+                    content_title,
                     line: None,
                     column: None,
                     message: format!("Liquid template syntax error: {}", error_msg),
@@ -963,7 +762,7 @@ impl Validator {
         arguments: &[PromptArgument],
         file_path: &Path,
         result: &mut ValidationResult,
-        prompt_title: Option<String>,
+        content_title: Option<String>,
     ) {
         use regex::Regex;
 
@@ -1062,7 +861,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Error,
                     file_path: file_path.to_path_buf(),
-                    prompt_title: prompt_title.clone(),
+                    content_title: content_title.clone(),
                     line: None,
                     column: None,
                     message: format!("Undefined template variable: '{}'", used_var),
@@ -1080,7 +879,7 @@ impl Validator {
                 result.add_issue(ValidationIssue {
                     level: ValidationLevel::Warning,
                     file_path: file_path.to_path_buf(),
-                    prompt_title: prompt_title.clone(),
+                    content_title: content_title.clone(),
                     line: None,
                     column: None,
                     message: format!("Unused argument: '{}'", arg.name),
@@ -1097,7 +896,7 @@ impl Validator {
             result.add_issue(ValidationIssue {
                 level: ValidationLevel::Warning,
                 file_path: file_path.to_path_buf(),
-                prompt_title,
+                content_title,
                 line: None,
                 column: None,
                 message: "Template uses variables but no arguments are defined".to_string(),
@@ -1143,9 +942,9 @@ impl Validator {
         for (file_path, issues) in issues_by_file {
             if !self.quiet {
                 // Get the prompt title from the first issue (all issues for a file should have the same title)
-                let prompt_title = issues.first().and_then(|issue| issue.prompt_title.as_ref());
+                let content_title = issues.first().and_then(|issue| issue.content_title.as_ref());
 
-                if let Some(title) = prompt_title {
+                if let Some(title) = content_title {
                     // Show the prompt title
                     println!("\n{}", title.bold());
                     // Show the file path in smaller text if it's a user prompt
@@ -1280,7 +1079,7 @@ mod tests {
         let issue = ValidationIssue {
             level: ValidationLevel::Error,
             file_path: PathBuf::from("test.md"),
-            prompt_title: Some("Test Prompt".to_string()),
+            content_title: Some("Test Prompt".to_string()),
             line: Some(1),
             column: Some(1),
             message: "Test error".to_string(),
@@ -1300,7 +1099,7 @@ mod tests {
         let issue = ValidationIssue {
             level: ValidationLevel::Warning,
             file_path: PathBuf::from("test.md"),
-            prompt_title: Some("Test Prompt".to_string()),
+            content_title: Some("Test Prompt".to_string()),
             line: Some(1),
             column: Some(1),
             message: "Test warning".to_string(),

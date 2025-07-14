@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::fs;
 use std::path::Path;
 use swissarmyhammer::PromptLoader;
-use swissarmyhammer_cli::validate::ValidationResult;
+use swissarmyhammer::validation::ValidationResult;
 use walkdir::WalkDir;
 
 #[test]

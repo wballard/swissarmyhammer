@@ -82,6 +82,9 @@ pub mod directory_utils;
 /// Unified file system utilities for better error handling and testing
 pub mod fs_utils;
 
+/// Validation framework for checking content integrity
+pub mod validation;
+
 // Re-export core types
 pub use file_loader::FileSource;
 pub use fs_utils::{FileSystem, FileSystemUtils};

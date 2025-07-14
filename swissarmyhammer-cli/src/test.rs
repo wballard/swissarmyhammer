@@ -257,15 +257,7 @@ impl TestRunner {
         prompt: &Prompt,
         args: &HashMap<String, String>,
     ) -> Result<String> {
-        // Merge environment variables with provided arguments
-        let mut final_args = args.clone();
-
-        // Add environment variables as template variables
-        for (key, value) in std::env::vars() {
-            final_args.entry(key).or_insert(value);
-        }
-
-        Ok(self.library.render_prompt(&prompt.name, &final_args)?)
+        Ok(self.library.render_prompt_with_env(&prompt.name, args)?)
     }
 
     fn output_result(

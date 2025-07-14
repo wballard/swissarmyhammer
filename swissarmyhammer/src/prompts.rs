@@ -323,6 +323,58 @@ impl Prompt {
         template.render(&render_args)
     }
 
+    /// Renders the prompt template with environment variables included
+    ///
+    /// This method merges the provided arguments with environment variables,
+    /// with provided arguments taking precedence over environment variables.
+    /// This is useful for templates that need access to system configuration
+    /// or environment-specific values.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - Template variables as key-value pairs
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swissarmyhammer::Prompt;
+    /// use std::collections::HashMap;
+    ///
+    /// let prompt = Prompt::new("deploy", "Deploying to {{ENV}} by {{USER}}");
+    /// let mut args = HashMap::new();
+    /// args.insert("ENV".to_string(), "production".to_string());
+    /// // The USER env var will be picked up automatically
+    ///
+    /// let result = prompt.render_with_env(&args).unwrap();
+    /// ```
+    pub fn render_with_env(&self, args: &HashMap<String, String>) -> Result<String> {
+        let template = Template::new(&self.template)?;
+        
+        // Validate required arguments
+        for arg in &self.arguments {
+            if arg.required && !args.contains_key(&arg.name) {
+                return Err(SwissArmyHammerError::Template(format!(
+                    "Required argument '{}' not provided",
+                    arg.name
+                )));
+            }
+        }
+        
+        // Start with all provided arguments
+        let mut render_args = args.clone();
+        
+        // Add defaults for missing arguments
+        for arg in &self.arguments {
+            if !render_args.contains_key(&arg.name) {
+                if let Some(default) = &arg.default {
+                    render_args.insert(arg.name.clone(), default.clone());
+                }
+            }
+        }
+        
+        template.render_with_env(&render_args)
+    }
+
     /// Renders the prompt template with partial support
     ///
     /// This method enables the use of `{% render %}` tags within the template
@@ -379,6 +431,67 @@ impl Prompt {
         }
 
         template.render(&render_args)
+    }
+
+    /// Renders the prompt template with partial support and environment variables
+    ///
+    /// This method combines the features of partial rendering and environment variable
+    /// inclusion. It enables the use of `{% render %}` tags within the template
+    /// to include other prompts as partials, while also making environment variables
+    /// available in the template context.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - Template variables as key-value pairs
+    /// * `library` - The prompt library to use for resolving partials
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use swissarmyhammer::{Prompt, PromptLibrary};
+    /// use std::collections::HashMap;
+    /// use std::sync::Arc;
+    ///
+    /// let mut library = PromptLibrary::new();
+    /// // Add partials to library...
+    ///
+    /// let prompt = Prompt::new("deploy", "{% render \"header\" %}\nDeploying to {{ENV}}");
+    /// let mut args = HashMap::new();
+    /// args.insert("app".to_string(), "myapp".to_string());
+    /// // ENV var from environment will be available
+    ///
+    /// let result = prompt.render_with_partials_and_env(&args, Arc::new(library)).unwrap();
+    /// ```
+    pub fn render_with_partials_and_env(
+        &self,
+        args: &HashMap<String, String>,
+        library: Arc<PromptLibrary>,
+    ) -> Result<String> {
+        let template = crate::Template::with_partials(&self.template, library)?;
+        
+        // Validate required arguments
+        for arg in &self.arguments {
+            if arg.required && !args.contains_key(&arg.name) {
+                return Err(SwissArmyHammerError::Template(format!(
+                    "Required argument '{}' not provided",
+                    arg.name
+                )));
+            }
+        }
+        
+        // Start with all provided arguments
+        let mut render_args = args.clone();
+        
+        // Add defaults for missing arguments
+        for arg in &self.arguments {
+            if !render_args.contains_key(&arg.name) {
+                if let Some(default) = &arg.default {
+                    render_args.insert(arg.name.clone(), default.clone());
+                }
+            }
+        }
+        
+        template.render_with_env(&render_args)
     }
 
     /// Adds an argument specification to the prompt.
@@ -678,6 +791,45 @@ impl PromptLibrary {
     pub fn render_prompt(&self, name: &str, args: &HashMap<String, String>) -> Result<String> {
         let prompt = self.get(name)?;
         prompt.render_with_partials(
+            args,
+            Arc::new(PromptLibrary {
+                storage: self.storage.clone_box(),
+            }),
+        )
+    }
+
+    /// Renders a prompt with the given arguments and environment variables.
+    ///
+    /// Retrieves the prompt by name and renders it with both the provided arguments
+    /// and environment variables. The provided arguments take precedence over
+    /// environment variables with the same name.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the prompt to render
+    /// * `args` - Template variables as key-value pairs
+    ///
+    /// # Returns
+    ///
+    /// The rendered template string, or an error if the prompt is not found
+    /// or rendering fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use swissarmyhammer::PromptLibrary;
+    /// use std::collections::HashMap;
+    ///
+    /// let library = PromptLibrary::new();
+    /// let mut args = HashMap::new();
+    /// args.insert("app".to_string(), "myapp".to_string());
+    /// // Environment variables like USER will be available automatically
+    ///
+    /// let result = library.render_prompt_with_env("deploy", &args).unwrap();
+    /// ```
+    pub fn render_prompt_with_env(&self, name: &str, args: &HashMap<String, String>) -> Result<String> {
+        let prompt = self.get(name)?;
+        prompt.render_with_partials_and_env(
             args,
             Arc::new(PromptLibrary {
                 storage: self.storage.clone_box(),

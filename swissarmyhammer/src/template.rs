@@ -305,6 +305,45 @@ impl Template {
             .map_err(|e| SwissArmyHammerError::Template(e.to_string()))
     }
 
+    /// Render the template with given arguments and environment variables
+    ///
+    /// This method merges the provided arguments with environment variables,
+    /// with provided arguments taking precedence over environment variables.
+    pub fn render_with_env(&self, args: &HashMap<String, String>) -> Result<String> {
+        let template = self
+            .parser
+            .parse(&self.template_str)
+            .map_err(|e| SwissArmyHammerError::Template(e.to_string()))?;
+
+        let mut object = Object::new();
+
+        // First, initialize all template variables as nil so filters like | default work
+        let variables = extract_template_variables(&self.template_str);
+        for var in variables {
+            object.insert(var.into(), liquid::model::Value::Nil);
+        }
+
+        // Add environment variables as template variables
+        for (key, value) in std::env::vars() {
+            object.insert(
+                key.into(),
+                liquid::model::Value::scalar(value),
+            );
+        }
+
+        // Then override with provided values (args take precedence)
+        for (key, value) in args {
+            object.insert(
+                key.clone().into(),
+                liquid::model::Value::scalar(value.clone()),
+            );
+        }
+
+        template
+            .render(&object)
+            .map_err(|e| SwissArmyHammerError::Template(e.to_string()))
+    }
+
     /// Get the raw template string
     pub fn raw(&self) -> &str {
         &self.template_str
@@ -378,6 +417,15 @@ impl TemplateEngine {
     pub fn render(&self, template_str: &str, args: &HashMap<String, String>) -> Result<String> {
         let template = self.parse(template_str)?;
         template.render(args)
+    }
+
+    /// Render a template string with arguments and environment variables
+    ///
+    /// This method merges the provided arguments with environment variables,
+    /// with provided arguments taking precedence over environment variables.
+    pub fn render_with_env(&self, template_str: &str, args: &HashMap<String, String>) -> Result<String> {
+        let template = self.parse(template_str)?;
+        template.render_with_env(args)
     }
 
     /// Get a reference to the plugin registry, if any
@@ -641,5 +689,45 @@ mod tests {
         assert!(vars.contains(&"products".to_string()));
         assert!(vars.contains(&"product".to_string()));
         assert_eq!(vars.len(), 4);
+    }
+
+    #[test]
+    fn test_render_with_env() {
+        use std::env;
+        
+        // Set a test environment variable
+        env::set_var("TEST_ENV_VAR", "test_value");
+
+        let template = Template::new("Hello {{USER}}, test var is {{TEST_ENV_VAR}}").unwrap();
+        let args = HashMap::new();
+        
+        // Don't provide TEST_ENV_VAR in args, it should come from environment
+        let result = template.render_with_env(&args).unwrap();
+        
+        // Should contain the environment variable value
+        assert!(result.contains("test_value"));
+        
+        // Clean up
+        env::remove_var("TEST_ENV_VAR");
+    }
+    
+    #[test]
+    fn test_render_with_env_args_override() {
+        use std::env;
+        
+        // Set a test environment variable
+        env::set_var("TEST_OVERRIDE", "env_value");
+
+        let template = Template::new("Value is {{TEST_OVERRIDE}}").unwrap();
+        let mut args = HashMap::new();
+        args.insert("TEST_OVERRIDE".to_string(), "arg_value".to_string());
+        
+        let result = template.render_with_env(&args).unwrap();
+        
+        // Args should override environment variables
+        assert_eq!(result, "Value is arg_value");
+        
+        // Clean up
+        env::remove_var("TEST_OVERRIDE");
     }
 }

@@ -2,18 +2,7 @@
 
 ## Business Logic Migration from CLI to Library (Issue #000143)
 
-### 1. [X] Move Advanced Search Logic from CLI to Library
-**Location**: `swissarmyhammer-cli/src/search.rs:49-189`
-**Issue**: Significant search logic remains in CLI including regex search, case-sensitive search, argument filtering, score calculation, and excerpt generation
-**Action**: 
-- Move regex search implementation to library's `SearchEngine`
-- Move case-sensitive search option to library
-- Move argument filtering logic (has_arg, no_args) to library
-- Move score calculation logic to library
-- Move excerpt generation with highlighting to library
-- Add methods: `regex_search()`, `search_with_options()`, `generate_excerpt()`
-
-### 2. [ ] Create Validation Module in Library
+### 1. [ ] Create Validation Module in Library
 **Location**: `swissarmyhammer-cli/src/validate.rs:113-1107`
 **Issue**: Entire validation framework exists in CLI but should be in library
 **Action**:
@@ -25,7 +14,7 @@
 - Move workflow validation logic
 - Create proper module structure with `mod.rs`, `validators.rs`, `prompt_validator.rs`, `workflow_validator.rs`
 
-### 3. [ ] Move Template Rendering with Environment Variables to Library
+### 2. [ ] Move Template Rendering with Environment Variables to Library
 **Location**: `swissarmyhammer-cli/src/test.rs`
 **Issue**: Environment variable support for template rendering is in CLI
 **Action**:
@@ -33,7 +22,7 @@
 - Move interactive argument collection logic as a utility
 - Support environment variable interpolation in templates
 
-### 4. [ ] Move Workflow Execution Utilities to Library
+### 3. [ ] Move Workflow Execution Utilities to Library
 **Location**: `swissarmyhammer-cli/src/flow.rs`
 **Issue**: Common workflow execution patterns are implemented in CLI
 **Action**:
@@ -45,27 +34,27 @@
 
 ## Code Quality Issues
 
-### 5. [ ] Fix Code Duplication Between CLI and Library
+### 4. [ ] Fix Code Duplication Between CLI and Library
 **Issue**: `PromptSource` enum and conversion logic is duplicated
 **Action**:
 - Remove duplicate `PromptSource` enum from CLI
 - Use library's `PromptSource` directly in CLI
 - Simplify conversion logic between CLI and library types
 
-### 6. [ ] Add Integration Tests
+### 5. [ ] Add Integration Tests
 **Issue**: Missing integration tests between CLI and library
 **Action**:
 - Create integration tests that verify CLI correctly uses library functionality
 - Test end-to-end scenarios for filtering, searching, and validation
 
-### 7. [ ] Enhance Documentation
+### 6. [ ] Enhance Documentation
 **Issue**: Documentation could be more comprehensive
 **Action**:
 - Add module-level documentation for new library modules
 - Add usage examples in documentation
 - Document the separation of concerns between CLI and library
 
-### 8. [ ] Fix Remaining Test Failures
+### 7. [ ] Fix Remaining Test Failures
 **Issue**: Some tests may be failing due to refactoring
 **Action**:
 - Run `cargo test` and fix any failing tests
@@ -74,33 +63,111 @@
 
 ## Architecture Improvements
 
-### 9. [ ] Consider Creating a Facade Pattern for CLI
+### 8. [ ] Consider Creating a Facade Pattern for CLI
 **Issue**: CLI modules directly use multiple library modules
 **Action**:
 - Consider creating a high-level API in the library that simplifies CLI usage
 - Reduce coupling between CLI and library internals
 
-### 10. [ ] Review Error Handling Consistency
+### 9. [ ] Review Error Handling Consistency
 **Issue**: Error handling patterns may differ between CLI and library
 **Action**:
 - Ensure consistent error types and handling
 - Propagate library errors properly to CLI
 - Provide helpful error messages to users
 
-## Linting Issues (2025-07-14)
+## New Code Quality Issues (2025-07-14)
 
-### 11. [X] Fix Rust Formatting Issues
-**Location**: Multiple files need formatting
-**Issue**: cargo fmt check found formatting issues
+### 10. [ ] Extract Common Argument Validation Logic
+**Location**: `test.rs:342-350`, `prompts.rs:298-376`
+**Issue**: Argument validation logic is duplicated across multiple render methods
 **Action**:
-- `swissarmyhammer/src/prompt_filter.rs`: Fix line formatting (lines 58, 131, 138, 142, 162, 178, 246, 270)
-- `swissarmyhammer-cli/src/list.rs`: Remove unnecessary blank lines (lines 41, 51, 58)
-**Status**: FIXED - Ran `cargo fmt` to automatically format all files
+- Create a shared trait or module for argument validation
+- Consolidate validation logic from `render_prompt`, `render_prompt_with_env`, and Prompt methods
+- Reduce code duplication in argument processing
 
-### 12. [X] Fix Duplicate Binary Target Warning
-**Location**: `/Users/wballard/github/swissarmyhammer/swissarmyhammer-cli/Cargo.toml`
-**Issue**: File `src/main.rs` is present in multiple build targets (`sah` and `swissarmyhammer`)
+### 11. [ ] Fix Performance Issues with Regular Expressions
+**Location**: `template.rs:217-224`
+**Issue**: Regular expressions are compiled on every call to `extract_template_variables`
 **Action**:
-- Review Cargo.toml binary target configuration
-- Decide if both binaries are needed or consolidate to one
-**Status**: NO ACTION NEEDED - This is intentional. `sah` is an alias for `swissarmyhammer` (added in commit 01cb414). The warning is harmless.
+- Use `lazy_static` or `once_cell` for compiled regular expressions
+- Cache regex patterns that are used repeatedly
+- Profile template parsing performance after optimization
+
+### 12. [ ] Split Large Validation Module
+**Location**: `validate.rs` (1945 lines)
+**Issue**: The validate.rs file is too large and handles multiple concerns
+**Action**:
+- Split into separate modules: prompt_validator.rs, workflow_validator.rs, content_validator.rs
+- Create clear module boundaries and interfaces
+- Improve code organization and maintainability
+
+### 13. [ ] Add Missing Tests for New Environment Variable Features
+**Location**: `test.rs`, `prompts.rs`, `template.rs`
+**Issue**: New `render_with_env` methods lack test coverage
+**Action**:
+- Add tests for `render_prompt_with_env` in test.rs
+- Add tests for `render_with_partials_and_env` in prompts.rs
+- Add tests for environment variable edge cases and error handling
+- Test environment variable precedence and override behavior
+
+### 14. [ ] Replace Hard-coded Values with Configuration
+**Location**: Multiple files
+**Issue**: Magic numbers and strings are hard-coded throughout
+**Action**:
+- Extract hard-coded emojis (test.rs:131) to constants
+- Make validation thresholds configurable (validate.rs:321)
+- Create named constants for line limits and complexity thresholds
+- Move source location strings to enums or constants
+
+### 15. [ ] Improve Error Context and Messages
+**Location**: Throughout codebase
+**Issue**: Error messages lack context about operations and files
+**Action**:
+- Add file paths to validation error messages
+- Include operation context in error types
+- Make validation suggestions more actionable
+- Provide better error recovery hints
+
+### 16. [ ] Add Input Validation for File Paths
+**Location**: `test.rs:298`
+**Issue**: User-provided file paths are used without validation
+**Action**:
+- Validate file paths before use
+- Check for path traversal attempts
+- Ensure paths are within expected directories
+- Add proper error handling for invalid paths
+
+### 17. [ ] Create Abstraction for Partial Resolution
+**Location**: `template.rs:99-181`
+**Issue**: Partial resolution logic could be more modular
+**Action**:
+- Extract partial resolution into a `PartialResolver` trait
+- Allow custom partial resolution strategies
+- Improve testability of partial resolution logic
+
+### 18. [ ] Optimize Directory Scanning Performance
+**Location**: `prompts.rs:1004`
+**Issue**: WalkDir usage without filtering could be slow
+**Action**:
+- Add file extension filtering to WalkDir
+- Implement parallel directory scanning for large trees
+- Add progress reporting for long operations
+- Consider caching directory scan results
+
+### 19. [ ] Consolidate Metadata Parsing Logic
+**Location**: `prompts.rs:1025-1219`
+**Issue**: Duplicate metadata parsing in `load_file_with_base` and `load_from_string`
+**Action**:
+- Extract metadata parsing into a shared function
+- Reduce code duplication in YAML parsing
+- Improve error handling for malformed metadata
+
+### 20. [ ] Implement Builder Pattern for Validation Configuration
+**Location**: `validation/mod.rs`
+**Issue**: Complex validation pipelines are hard to configure
+**Action**:
+- Create a ValidationConfigBuilder
+- Allow fluent configuration of validators
+- Simplify validation setup for common use cases
+- Add preset configurations for typical scenarios

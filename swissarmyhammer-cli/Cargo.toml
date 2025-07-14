@@ -6,6 +6,7 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Command-line interface for SwissArmyHammer prompt management"
+default-run = "swissarmyhammer"
 
 [lib]
 name = "swissarmyhammer_cli"

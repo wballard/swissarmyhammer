@@ -8,7 +8,6 @@ edition = "2021"
 authors = ["SwissArmyHammer Team"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/swissarmyhammer/swissarmyhammer"
-default-run = "swissarmyhammer"
 
 [workspace.dependencies]
 # Core dependencies
@@ -58,6 +57,7 @@ tempfile = "3.0"
 textwrap = "0.16"
 csv = "1.3"
 rand = "0.8"
+syntect = "5.2"
 
 # Dev dependencies
 assert_cmd = "2.0"

@@ -1331,7 +1331,7 @@ mod tests {
 
         // Note: This test relies on the actual prompt loading mechanism
         // which will load test files from the test environment
-        
+
         // In test environment, validate_all may fail due to missing directories
         // We allow this to fail gracefully as we're testing partial template handling
         let result = match validator.validate_all() {
@@ -1774,7 +1774,7 @@ stateDiagram-v2
         )
         .unwrap();
 
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir = std::env::current_dir().ok();
         std::env::set_current_dir(current_dir).unwrap();
 
         // Run validation
@@ -1787,7 +1787,10 @@ stateDiagram-v2
         let mut resolver = WorkflowResolver::new();
         let flow_res = resolver.load_all_workflows(&mut storage);
 
-        std::env::set_current_dir(original_dir).unwrap();
+        // Restore original directory if it was valid
+        if let Some(original) = original_dir {
+            let _ = std::env::set_current_dir(original);
+        }
 
         // In test environment, loading workflows may fail due to missing directories
         // This is acceptable as we're testing consistency between validate and flow list

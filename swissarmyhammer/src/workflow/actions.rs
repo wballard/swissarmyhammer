@@ -9,6 +9,10 @@ use chrono::{Local, Timelike};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Duration;
+use syntect::easy::HighlightLines;
+use syntect::highlighting::ThemeSet;
+use syntect::parsing::SyntaxSet;
+use syntect::util::as_24_bit_terminal_escaped;
 use thiserror::Error;
 use tokio::process::Command;
 use tokio::time::timeout;
@@ -1229,14 +1233,248 @@ pub(crate) fn format_claude_output_as_yaml(line: &str) -> String {
     // Try to parse as JSON
     match serde_json::from_str::<Value>(trimmed) {
         Ok(json_value) => {
-            // Convert to YAML
-            match serde_yaml::to_string(&json_value) {
-                Ok(yaml) => yaml,
-                Err(_) => trimmed.to_string(), // Fall back to original if YAML conversion fails
-            }
+            // Process the JSON value to handle multiline strings
+            let processed_value = process_json_for_yaml(&json_value);
+
+            // Convert to YAML with custom formatting
+            format_as_yaml(&processed_value)
         }
         Err(_) => trimmed.to_string(), // Return original if not valid JSON
     }
+}
+
+/// Process JSON values to prepare for YAML formatting
+fn process_json_for_yaml(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut new_map = serde_json::Map::new();
+            for (key, val) in map {
+                new_map.insert(key.clone(), process_json_for_yaml(val));
+            }
+            Value::Object(new_map)
+        }
+        Value::Array(arr) => Value::Array(arr.iter().map(process_json_for_yaml).collect()),
+        _ => value.clone(),
+    }
+}
+
+/// Format a JSON value as YAML with proper multiline handling
+fn format_as_yaml(value: &Value) -> String {
+    format_value_as_yaml(value, 0)
+}
+
+/// Recursively format a JSON value as YAML with indentation
+fn format_value_as_yaml(value: &Value, indent_level: usize) -> String {
+    let indent = "  ".repeat(indent_level);
+
+    match value {
+        Value::Null => "null".to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Number(n) => n.to_string(),
+        Value::String(s) => {
+            if s.contains('\n') {
+                // Multiline string - check if it's source code
+                let content_to_format = if let Some(language) = detect_source_code_language(s) {
+                    // Apply syntax highlighting
+                    highlight_source_code(s, language)
+                } else {
+                    s.clone()
+                };
+
+                // Use block scalar notation
+                let lines: Vec<&str> = content_to_format.lines().collect();
+                let mut result = "|-\n".to_string();
+                let content_indent = "  ".repeat(indent_level + 1);
+                for line in lines {
+                    result.push_str(&format!("{}{}\n", content_indent, line));
+                }
+                result.trim_end().to_string()
+            } else {
+                // Single line string - escape if necessary
+                if needs_yaml_quotes(s) {
+                    format!("\"{}\"", s.replace('\"', "\\\""))
+                } else {
+                    s.clone()
+                }
+            }
+        }
+        Value::Array(arr) => {
+            if arr.is_empty() {
+                "[]".to_string()
+            } else {
+                let mut result = String::new();
+                for (i, item) in arr.iter().enumerate() {
+                    if i > 0 {
+                        result.push('\n');
+                        result.push_str(&indent);
+                    }
+                    result.push_str("- ");
+                    let item_str = format_value_as_yaml(item, indent_level + 1);
+                    if item_str.contains('\n') {
+                        // For multiline items, put on next line with proper indent
+                        result.push('\n');
+                        let item_indent = "  ".repeat(indent_level + 1);
+                        for line in item_str.lines() {
+                            result.push_str(&format!("{}{}\n", item_indent, line));
+                        }
+                        result = result.trim_end().to_string();
+                    } else {
+                        result.push_str(&item_str);
+                    }
+                }
+                result
+            }
+        }
+        Value::Object(map) => {
+            let mut result = String::new();
+            let mut first = true;
+            for (key, value) in map {
+                if !first {
+                    result.push('\n');
+                    result.push_str(&indent);
+                }
+                first = false;
+
+                result.push_str(&format!("{}: ", key));
+                let value_str = format_value_as_yaml(value, indent_level + 1);
+
+                if value_str.contains('\n') && !matches!(value, Value::String(_)) {
+                    // For nested objects/arrays, put on next line
+                    result.push('\n');
+                    let value_indent = "  ".repeat(indent_level + 1);
+                    for line in value_str.lines() {
+                        result.push_str(&format!("{}{}\n", value_indent, line));
+                    }
+                    result = result.trim_end().to_string();
+                } else {
+                    result.push_str(&value_str);
+                }
+            }
+            result
+        }
+    }
+}
+
+/// Check if a string needs to be quoted in YAML
+fn needs_yaml_quotes(s: &str) -> bool {
+    // YAML reserved words or special cases that need quotes
+    matches!(
+        s.to_lowercase().as_str(),
+        "true" | "false" | "null" | "yes" | "no" | "on" | "off"
+    ) || s.is_empty()
+        || s.starts_with(|c: char| c.is_whitespace())
+        || s.ends_with(|c: char| c.is_whitespace())
+        || s.contains(':')
+        || s.contains('#')
+        || s.contains('&')
+        || s.contains('*')
+        || s.contains('!')
+        || s.contains('|')
+        || s.contains('>')
+        || s.contains('[')
+        || s.contains(']')
+        || s.contains('{')
+        || s.contains('}')
+        || s.contains(',')
+        || s.contains('?')
+        || s.contains('-')
+        || s.contains('\'')
+        || s.contains('\"')
+        || s.contains('\\')
+        || s.contains('\n')
+        || s.contains('\r')
+        || s.contains('\t')
+        || s.parse::<f64>().is_ok()
+}
+
+/// Detect if a string contains source code and return the detected language
+fn detect_source_code_language(content: &str) -> Option<&'static str> {
+    // Common code patterns and their associated languages
+    let patterns = [
+        // Rust patterns
+        (
+            r#"(fn\s+\w+|impl\s+|trait\s+|use\s+\w+::|pub\s+(fn|struct|enum|trait)|let\s+(mut\s+)?\w+\s*=)"#,
+            "rust",
+        ),
+        // Python patterns
+        (
+            r#"(def\s+\w+\s*\(|class\s+\w+\s*(\(|:)|import\s+\w+|from\s+\w+\s+import)"#,
+            "python",
+        ),
+        // JavaScript/TypeScript patterns
+        (
+            r#"(function\s+\w+\s*\(|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=|export\s+(default\s+)?|import\s+.*from)"#,
+            "javascript",
+        ),
+        // Java patterns
+        (
+            r#"(public\s+class\s+|private\s+|protected\s+|static\s+void\s+|import\s+java\.)"#,
+            "java",
+        ),
+        // C/C++ patterns
+        (
+            r#"(#include\s*<|int\s+main\s*\(|void\s+\w+\s*\(|class\s+\w+\s*\{|namespace\s+\w+)"#,
+            "cpp",
+        ),
+        // Go patterns
+        (
+            r#"(func\s+\w+\s*\(|package\s+\w+|import\s+\(|type\s+\w+\s+struct)"#,
+            "go",
+        ),
+        // Ruby patterns
+        (
+            r#"(def\s+\w+|class\s+\w+\s*<|module\s+\w+|require\s+['\"])"#,
+            "ruby",
+        ),
+        // Shell/Bash patterns
+        (
+            r#"(#!/bin/(bash|sh)|function\s+\w+\s*\(\)|if\s+\[\[|\$\(|export\s+\w+=)"#,
+            "bash",
+        ),
+    ];
+
+    for (pattern, lang) in &patterns {
+        if regex::Regex::new(pattern).ok()?.is_match(content) {
+            return Some(lang);
+        }
+    }
+
+    None
+}
+
+/// Apply syntax highlighting to source code
+fn highlight_source_code(content: &str, language: &str) -> String {
+    // Load syntax and theme sets
+    let syntax_set = SyntaxSet::load_defaults_newlines();
+    let theme_set = ThemeSet::load_defaults();
+
+    // Use a theme that works well in terminals
+    let theme = &theme_set.themes["InspiredGitHub"];
+
+    // Try to find the syntax for the language
+    let syntax = syntax_set
+        .find_syntax_by_token(language)
+        .or_else(|| syntax_set.find_syntax_by_extension(language))
+        .unwrap_or_else(|| syntax_set.find_syntax_plain_text());
+
+    let mut highlighter = HighlightLines::new(syntax, theme);
+    let mut highlighted = String::new();
+
+    for line in content.lines() {
+        if let Ok(highlighted_line) = highlighter.highlight_line(line, &syntax_set) {
+            let escaped = as_24_bit_terminal_escaped(&highlighted_line[..], false);
+            highlighted.push_str(&escaped);
+            highlighted.push('\n');
+        } else {
+            // Fallback to unhighlighted line
+            highlighted.push_str(line);
+            highlighted.push('\n');
+        }
+    }
+
+    // Reset terminal colors at the end
+    highlighted.push_str("\x1b[0m");
+    highlighted.trim_end().to_string()
 }
 
 /// Parse action from state description text with liquid template rendering

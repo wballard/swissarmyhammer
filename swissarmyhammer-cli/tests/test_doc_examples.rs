@@ -22,8 +22,10 @@ fn test_all_doc_example_prompts_are_valid() {
     let mut failed_files = vec![];
 
     // Pre-compile regex patterns outside the loop
-    let unclosed_tags_regex = regex::Regex::new(r"\{%\s*(?:if|for|unless|case)\s+[^%]*%\}").unwrap();
-    let closing_tags_regex = regex::Regex::new(r"\{%\s*(?:endif|endfor|endunless|endcase)\s*%\}").unwrap();
+    let unclosed_tags_regex =
+        regex::Regex::new(r"\{%\s*(?:if|for|unless|case)\s+[^%]*%\}").unwrap();
+    let closing_tags_regex =
+        regex::Regex::new(r"\{%\s*(?:endif|endfor|endunless|endcase)\s*%\}").unwrap();
     let malformed_vars_regex = regex::Regex::new(r"\{\{[^}]*\{").unwrap();
 
     // Walk through all .md files in the prompts examples directory

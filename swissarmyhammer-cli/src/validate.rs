@@ -109,7 +109,6 @@ impl ValidationResult {
     }
 }
 
-
 /// Trait for validators that check content patterns
 pub trait ContentValidator {
     /// Validate content and add issues to the result
@@ -121,7 +120,6 @@ pub trait ContentValidator {
         prompt_title: Option<String>,
     );
 }
-
 
 #[derive(Debug, Serialize)]
 struct JsonValidationResult {

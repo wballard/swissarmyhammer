@@ -15,6 +15,10 @@ path = "src/lib.rs"
 name = "swissarmyhammer"
 path = "src/main.rs"
 
+[[bin]]
+name = "sah"
+path = "src/main.rs"
+
 [dependencies]
 # Library dependency
 swissarmyhammer = { path = "../swissarmyhammer" }

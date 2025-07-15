@@ -933,6 +933,7 @@ fn test_root_validate_missing_fields() -> Result<()> {
     std::fs::create_dir_all(&prompts_dir)?;
 
     // Create a prompt missing required fields
+    // Note: We need more than 5 lines of content or headers to avoid being detected as a partial template
     std::fs::write(
         prompts_dir.join("incomplete.md"),
         r#"---
@@ -942,7 +943,15 @@ arguments:
     required: true
 ---
 
-Test content"#,
+# Test Prompt
+
+This is a test prompt that is missing the required title and description fields.
+
+It uses the {{ test }} variable.
+
+We need more than 5 lines of content to avoid being detected as a partial template.
+
+This is line 6 of content."#,
     )?;
 
     let output = Command::cargo_bin("swissarmyhammer")

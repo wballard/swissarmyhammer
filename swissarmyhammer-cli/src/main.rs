@@ -265,10 +265,7 @@ async fn run_flow(subcommand: cli::FlowSubcommand) -> i32 {
 fn run_validate(quiet: bool, format: cli::ValidateFormat, workflow_dirs: Vec<String>) -> i32 {
     use validate;
 
-    // workflow_dirs parameter is kept for CLI compatibility but is ignored
-    let _ = workflow_dirs;
-
-    match validate::run_validate_command(quiet, format) {
+    match validate::run_validate_command_with_dirs(quiet, format, workflow_dirs) {
         Ok(exit_code) => exit_code,
         Err(e) => {
             tracing::error!("Validate error: {}", e);

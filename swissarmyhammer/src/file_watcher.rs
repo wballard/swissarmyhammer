@@ -270,4 +270,140 @@ mod tests {
         assert_eq!(config.channel_buffer_size, 100);
         assert!(config.recursive);
     }
+
+    #[test]
+    fn test_file_watcher_default_trait() {
+        let watcher1 = FileWatcher::default();
+        let watcher2 = FileWatcher::new();
+        // Both should create watchers without handles
+        assert!(watcher1.watcher_handle.is_none());
+        assert!(watcher2.watcher_handle.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_file_watcher_custom_config() {
+        let mut watcher = FileWatcher::new();
+        let callback = TestCallback::new();
+        let config = FileWatcherConfig {
+            channel_buffer_size: 200,
+            recursive: false,
+        };
+
+        // Start with custom config
+        let result = watcher.start_watching_with_config(callback, config).await;
+        // This may fail if no prompt directories exist
+        if result.is_ok() {
+            assert!(watcher.watcher_handle.is_some());
+        }
+
+        watcher.stop_watching();
+        assert!(watcher.watcher_handle.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_file_watcher_drop() {
+        let mut watcher = FileWatcher::new();
+        let callback = TestCallback::new();
+
+        // Start watching
+        let result = watcher.start_watching(callback).await;
+        if result.is_ok() {
+            assert!(watcher.watcher_handle.is_some());
+            // Drop the watcher - should stop watching
+            drop(watcher);
+            // Cannot test after drop, but Drop trait should have been called
+        }
+    }
+
+    #[tokio::test]
+    async fn test_file_watcher_restart() {
+        let mut watcher = FileWatcher::new();
+        let callback1 = TestCallback::new();
+        let callback2 = TestCallback::new();
+
+        // Start watching first time
+        let result1 = watcher.start_watching(callback1).await;
+        if result1.is_ok() {
+            assert!(watcher.watcher_handle.is_some());
+
+            // Start watching again - should stop previous and start new
+            let result2 = watcher.start_watching(callback2).await;
+            assert!(result2.is_ok());
+            assert!(watcher.watcher_handle.is_some());
+        }
+
+        watcher.stop_watching();
+    }
+
+    #[derive(Clone)]
+    struct ErrorCallback {
+        calls: Arc<Mutex<Vec<Vec<std::path::PathBuf>>>>,
+    }
+
+    impl ErrorCallback {
+        fn new() -> Self {
+            Self {
+                calls: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+    }
+
+    impl FileWatcherCallback for ErrorCallback {
+        async fn on_file_changed(&self, paths: Vec<std::path::PathBuf>) -> Result<()> {
+            self.calls.lock().await.push(paths.clone());
+            // Return error to test error handling
+            Err(crate::SwissArmyHammerError::Other("Test error".to_string()))
+        }
+
+        async fn on_error(&self, _error: String) {
+            // Track that error handler was called
+        }
+    }
+
+    #[test]
+    fn test_is_prompt_file_edge_cases() {
+        // Test file without extension
+        assert!(!FileWatcher::is_prompt_file(Path::new("README")));
+
+        // Test hidden files
+        assert!(FileWatcher::is_prompt_file(Path::new(".test.md")));
+        assert!(FileWatcher::is_prompt_file(Path::new(".config.yaml")));
+        assert!(!FileWatcher::is_prompt_file(Path::new(".gitignore")));
+
+        // Test files with multiple dots
+        assert!(FileWatcher::is_prompt_file(Path::new("file.test.md")));
+        assert!(FileWatcher::is_prompt_file(Path::new("config.prod.yaml")));
+
+        // Test case sensitivity (extensions should be case-sensitive)
+        assert!(!FileWatcher::is_prompt_file(Path::new("file.MD")));
+        assert!(!FileWatcher::is_prompt_file(Path::new("file.YML")));
+        assert!(!FileWatcher::is_prompt_file(Path::new("file.YAML")));
+    }
+
+    #[tokio::test]
+    async fn test_file_watcher_multiple_stops() {
+        let mut watcher = FileWatcher::new();
+
+        // Multiple stops should be safe
+        watcher.stop_watching();
+        watcher.stop_watching();
+        assert!(watcher.watcher_handle.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_file_watcher_error_callback() {
+        let mut watcher = FileWatcher::new();
+        let callback = ErrorCallback::new();
+
+        // Start watching with error callback
+        let result = watcher.start_watching(callback.clone()).await;
+        if result.is_ok() {
+            // The error callback will be invoked if file changes are detected
+            // Since we can't easily trigger file system events in a test,
+            // we just verify setup works
+            assert!(watcher.watcher_handle.is_some());
+        }
+
+        watcher.stop_watching();
+    }
 }

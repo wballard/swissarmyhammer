@@ -82,7 +82,7 @@ async fn test_sub_workflow_action_circular_dependency_detection() {
 
     match result.unwrap_err() {
         ActionError::ExecutionError(msg) => {
-            assert!(msg.contains("Circular dependency detected"));
+            assert!(msg.contains("Circular workflow dependency detected"));
             assert!(msg.contains("workflow-a"));
         }
         _ => panic!("Expected ExecutionError for circular dependency"),

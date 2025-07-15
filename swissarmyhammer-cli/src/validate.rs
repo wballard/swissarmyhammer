@@ -6,10 +6,8 @@ use swissarmyhammer::validation::{
     ContentValidator, EncodingValidator, LineEndingValidator, ValidationConfig, ValidationIssue,
     ValidationLevel, ValidationResult, YamlTypoValidator,
 };
-#[cfg(test)]
-use swissarmyhammer::workflow::MermaidParser;
 use swissarmyhammer::workflow::{
-    MemoryWorkflowStorage, Workflow, WorkflowGraphAnalyzer, WorkflowResolver,
+    MermaidParser, MemoryWorkflowStorage, Workflow, WorkflowGraphAnalyzer, WorkflowResolver,
     WorkflowStorageBackend,
 };
 
@@ -156,6 +154,73 @@ impl Validator {
 
         // Validate workflows using WorkflowResolver for consistent loading
         self.validate_all_workflows(&mut result)?;
+
+        Ok(result)
+    }
+
+    pub fn validate_with_custom_dirs(&mut self, workflow_dirs: Vec<String>) -> Result<ValidationResult> {
+        let mut result = ValidationResult::new();
+
+        // Load all prompts using the centralized PromptResolver
+        let mut library = swissarmyhammer::PromptLibrary::new();
+        let mut resolver = swissarmyhammer::PromptResolver::new();
+        resolver.load_all_prompts(&mut library)?;
+
+        // Validate each loaded prompt
+        let prompts = library.list()?;
+        for prompt in prompts {
+            result.files_checked += 1;
+
+            // Store prompt title for error reporting
+            let content_title = prompt
+                .metadata
+                .get("title")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .or_else(|| Some(prompt.name.clone()));
+
+            // Validate template syntax with partials support
+            self.validate_liquid_syntax_with_partials(
+                &prompt,
+                &library,
+                prompt.source.as_ref().unwrap_or(&PathBuf::new()),
+                &mut result,
+                content_title.clone(),
+            );
+
+            // Create local prompt for field validation
+            let local_prompt = Prompt {
+                name: prompt.name.clone(),
+                title: prompt
+                    .metadata
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                description: prompt.description.clone(),
+                source_path: prompt
+                    .source
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default(),
+                content: prompt.template.clone(),
+                arguments: prompt
+                    .arguments
+                    .iter()
+                    .map(|arg| PromptArgument {
+                        name: arg.name.clone(),
+                        description: arg.description.clone(),
+                        required: arg.required,
+                        default: arg.default.clone(),
+                    })
+                    .collect(),
+            };
+
+            // Validate fields and variables (but skip liquid syntax since we did it above)
+            self.validate_prompt_fields_and_variables(&local_prompt, &mut result, content_title)?;
+        }
+
+        // Validate workflows from custom directories
+        self.validate_workflows_from_dirs(&mut result, workflow_dirs)?;
 
         Ok(result)
     }
@@ -1039,13 +1104,186 @@ impl Validator {
         println!("{}", serde_json::to_string_pretty(&json_result)?);
         Ok(())
     }
+
+    /// Validates workflows from custom directories
+    fn validate_workflows_from_dirs(&mut self, result: &mut ValidationResult, workflow_dirs: Vec<String>) -> Result<()> {
+        use std::fs;
+        
+        for dir in workflow_dirs {
+            let dir_path = PathBuf::from(&dir);
+            
+            // Check if directory exists
+            if !dir_path.exists() {
+                result.add_issue(ValidationIssue {
+                    level: ValidationLevel::Warning,
+                    file_path: dir_path.clone(),
+                    content_title: None,
+                    line: None,
+                    column: None,
+                    message: format!("Workflow directory does not exist: {}", dir),
+                    suggestion: Some("Check that the path is correct".to_string()),
+                });
+                continue;
+            }
+
+            // Find all .mermaid and .md files in the directory
+            let entries = match fs::read_dir(&dir_path) {
+                Ok(entries) => entries,
+                Err(e) => {
+                    result.add_issue(ValidationIssue {
+                        level: ValidationLevel::Error,
+                        file_path: dir_path.clone(),
+                        content_title: None,
+                        line: None,
+                        column: None,
+                        message: format!("Failed to read directory: {}", e),
+                        suggestion: None,
+                    });
+                    continue;
+                }
+            };
+
+            for entry in entries.filter_map(Result::ok) {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(ext) = path.extension() {
+                        if ext == "mermaid" || ext == "md" {
+                            // Read and validate the workflow file
+                            self.validate_workflow_file(&path, result);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validates a single workflow file from a custom directory
+    fn validate_workflow_file(&mut self, workflow_path: &Path, result: &mut ValidationResult) {
+        result.files_checked += 1;
+
+        // Read the workflow file
+        let content = match std::fs::read_to_string(workflow_path) {
+            Ok(content) => content,
+            Err(e) => {
+                result.add_issue(ValidationIssue {
+                    level: ValidationLevel::Error,
+                    file_path: workflow_path.to_path_buf(),
+                    content_title: None,
+                    line: None,
+                    column: None,
+                    message: format!("Failed to read workflow file: {}", e),
+                    suggestion: None,
+                });
+                return;
+            }
+        };
+
+        // Extract workflow name from filename
+        let workflow_name = workflow_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("workflow");
+
+        // Parse the workflow with metadata if the file has YAML front matter
+        let workflow = if content.starts_with("---") {
+            // Extract YAML front matter
+            let lines: Vec<&str> = content.lines().collect();
+            let mut end_line = None;
+            for (i, line) in lines.iter().enumerate().skip(1) {
+                if line.trim() == "---" {
+                    end_line = Some(i);
+                    break;
+                }
+            }
+
+            if let Some(end_idx) = end_line {
+                let yaml_content = lines[1..end_idx].join("\n");
+                let mermaid_content = lines[end_idx + 1..].join("\n");
+                
+                // Parse YAML to get title and description
+                let (title, description) = if let Ok(yaml_value) = serde_yaml::from_str::<serde_yaml::Value>(&yaml_content) {
+                    let title = yaml_value.get("title")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    let description = yaml_value.get("description")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    (title, description)
+                } else {
+                    (None, None)
+                };
+
+                match MermaidParser::parse_with_metadata(&mermaid_content, workflow_name, title, description) {
+                    Ok(wf) => wf,
+                    Err(e) => {
+                        result.add_issue(ValidationIssue {
+                            level: ValidationLevel::Error,
+                            file_path: workflow_path.to_path_buf(),
+                            content_title: None,
+                            line: None,
+                            column: None,
+                            message: format!("Failed to parse workflow: {}", e),
+                            suggestion: Some("Check your Mermaid state diagram syntax".to_string()),
+                        });
+                        return;
+                    }
+                }
+            } else {
+                // No closing delimiter for YAML
+                result.add_issue(ValidationIssue {
+                    level: ValidationLevel::Error,
+                    file_path: workflow_path.to_path_buf(),
+                    content_title: None,
+                    line: None,
+                    column: None,
+                    message: "Missing closing YAML delimiter (---)".to_string(),
+                    suggestion: Some("Add '---' after the YAML front matter".to_string()),
+                });
+                return;
+            }
+        } else {
+            // No YAML front matter, parse as pure Mermaid
+            match MermaidParser::parse(&content, workflow_name) {
+                Ok(wf) => wf,
+                Err(e) => {
+                    result.add_issue(ValidationIssue {
+                        level: ValidationLevel::Error,
+                        file_path: workflow_path.to_path_buf(),
+                        content_title: None,
+                        line: None,
+                        column: None,
+                        message: format!("Failed to parse workflow: {}", e),
+                        suggestion: Some("Check your Mermaid state diagram syntax".to_string()),
+                    });
+                    return;
+                }
+            }
+        };
+
+        // Use the shared validation logic
+        self.validate_workflow_structure(&workflow, workflow_path, result);
+    }
 }
 
 pub fn run_validate_command(quiet: bool, format: ValidateFormat) -> Result<i32> {
+    run_validate_command_with_dirs(quiet, format, Vec::new())
+}
+
+pub fn run_validate_command_with_dirs(
+    quiet: bool,
+    format: ValidateFormat,
+    workflow_dirs: Vec<String>,
+) -> Result<i32> {
     let mut validator = Validator::new(quiet);
 
-    // Always validate all prompts and workflows from standard locations
-    let result = validator.validate_all_with_options()?;
+    // Validate with custom workflow directories if provided
+    let result = if workflow_dirs.is_empty() {
+        validator.validate_all_with_options()?
+    } else {
+        validator.validate_with_custom_dirs(workflow_dirs)?
+    };
 
     validator.print_results(&result, format)?;
 

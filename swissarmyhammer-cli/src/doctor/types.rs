@@ -246,3 +246,155 @@ pub(crate) struct CheckCounts {
     pub warning_count: usize,
     pub error_count: usize,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_workflow_directory_new() {
+        let path = PathBuf::from("/test/workflows");
+        let dir = WorkflowDirectory::new(path.clone());
+        assert_eq!(dir.path(), &path);
+    }
+
+    #[test]
+    fn test_workflow_directory_as_ref() {
+        let path = PathBuf::from("/test/workflows");
+        let dir = WorkflowDirectory::new(path.clone());
+        let path_ref: &Path = dir.as_ref();
+        assert_eq!(path_ref, &path);
+    }
+
+    #[test]
+    fn test_workflow_directory_display() {
+        let path = PathBuf::from("/test/workflows");
+        let dir = WorkflowDirectory::new(path);
+        let display = format!("{}", dir);
+        assert!(display.contains("/test/workflows"));
+    }
+
+    #[test]
+    fn test_workflow_directory_equality() {
+        let dir1 = WorkflowDirectory::new(PathBuf::from("/test"));
+        let dir2 = WorkflowDirectory::new(PathBuf::from("/test"));
+        let dir3 = WorkflowDirectory::new(PathBuf::from("/other"));
+        assert_eq!(dir1, dir2);
+        assert_ne!(dir1, dir3);
+    }
+
+    #[test]
+    fn test_disk_space_from_mb() {
+        let space = DiskSpace::from_mb(100);
+        assert_eq!(space.as_mb(), 100);
+    }
+
+    #[test]
+    fn test_disk_space_is_low() {
+        let space = DiskSpace::from_mb(50);
+        assert!(space.is_low(100));
+        assert!(!space.is_low(50));
+        assert!(!space.is_low(40));
+    }
+
+    #[test]
+    fn test_disk_space_display() {
+        let space = DiskSpace::from_mb(1024);
+        assert_eq!(format!("{}", space), "1024 MB");
+    }
+
+    #[test]
+    fn test_disk_space_ordering() {
+        let space1 = DiskSpace::from_mb(100);
+        let space2 = DiskSpace::from_mb(200);
+        let space3 = DiskSpace::from_mb(100);
+
+        assert!(space1 < space2);
+        assert!(space2 > space1);
+        assert_eq!(space1, space3);
+    }
+
+    #[test]
+    fn test_workflow_directory_info_new() {
+        let dir = WorkflowDirectory::new(PathBuf::from("/test"));
+        let info = WorkflowDirectoryInfo::new(dir.clone(), WorkflowCategory::User);
+        assert_eq!(info.path, dir);
+        assert_eq!(info.category, WorkflowCategory::User);
+    }
+
+    #[test]
+    fn test_workflow_category_display() {
+        assert_eq!(format!("{}", WorkflowCategory::User), "User");
+        assert_eq!(format!("{}", WorkflowCategory::Local), "Local");
+    }
+
+    #[test]
+    fn test_workflow_category_equality() {
+        assert_eq!(WorkflowCategory::User, WorkflowCategory::User);
+        assert_ne!(WorkflowCategory::User, WorkflowCategory::Local);
+    }
+
+    #[test]
+    fn test_check_status_equality() {
+        assert_eq!(CheckStatus::Ok, CheckStatus::Ok);
+        assert_ne!(CheckStatus::Ok, CheckStatus::Warning);
+        assert_ne!(CheckStatus::Warning, CheckStatus::Error);
+    }
+
+    #[test]
+    fn test_exit_code_conversion() {
+        assert_eq!(i32::from(ExitCode::Success), 0);
+        assert_eq!(i32::from(ExitCode::Warning), 1);
+        assert_eq!(i32::from(ExitCode::Error), 2);
+    }
+
+    #[test]
+    fn test_exit_code_equality() {
+        assert_eq!(ExitCode::Success, ExitCode::Success);
+        assert_ne!(ExitCode::Success, ExitCode::Warning);
+    }
+
+    #[test]
+    fn test_check_builder_minimal() {
+        let check = Check::builder("Test Check", CheckStatus::Ok).build();
+        assert_eq!(check.name, "Test Check");
+        assert_eq!(check.status, CheckStatus::Ok);
+        assert_eq!(check.message, "");
+        assert_eq!(check.fix, None);
+    }
+
+    #[test]
+    fn test_check_builder_with_message() {
+        let check = Check::builder("Test Check", CheckStatus::Warning)
+            .with_message("This is a warning")
+            .build();
+        assert_eq!(check.name, "Test Check");
+        assert_eq!(check.status, CheckStatus::Warning);
+        assert_eq!(check.message, "This is a warning");
+        assert_eq!(check.fix, None);
+    }
+
+    #[test]
+    fn test_check_builder_with_fix() {
+        let check = Check::builder("Test Check", CheckStatus::Error)
+            .with_message("Something is wrong")
+            .with_fix("Try this to fix it")
+            .build();
+        assert_eq!(check.name, "Test Check");
+        assert_eq!(check.status, CheckStatus::Error);
+        assert_eq!(check.message, "Something is wrong");
+        assert_eq!(check.fix, Some("Try this to fix it".to_string()));
+    }
+
+    #[test]
+    fn test_check_builder_string_conversion() {
+        let check = Check::builder(String::from("Test"), CheckStatus::Ok)
+            .with_message(String::from("Message"))
+            .with_fix(String::from("Fix"))
+            .build();
+        assert_eq!(check.name, "Test");
+        assert_eq!(check.message, "Message");
+        assert_eq!(check.fix, Some("Fix".to_string()));
+    }
+}

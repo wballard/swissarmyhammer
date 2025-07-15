@@ -1,8 +1,8 @@
 //! Integration tests for abort error mechanism in workflows
 
 use swissarmyhammer::workflow::{
-    ConditionType, State, StateId, StateType, Transition, TransitionCondition, 
-    Workflow, WorkflowExecutor, WorkflowName, WorkflowRunStatus,
+    ConditionType, State, StateId, StateType, Transition, TransitionCondition, Workflow,
+    WorkflowExecutor, WorkflowName, WorkflowRunStatus,
 };
 
 fn create_state(id: &str, description: &str, is_terminal: bool) -> State {
@@ -41,9 +41,21 @@ fn create_basic_workflow_with_error_handling() -> Workflow {
     workflow.add_state(create_state("error", "Error state", true));
     workflow.add_state(create_state("end", "End state", true));
 
-    workflow.add_transition(create_transition("start", "processing", ConditionType::Always));
-    workflow.add_transition(create_transition("processing", "end", ConditionType::OnSuccess));
-    workflow.add_transition(create_transition("processing", "error", ConditionType::OnFailure));
+    workflow.add_transition(create_transition(
+        "start",
+        "processing",
+        ConditionType::Always,
+    ));
+    workflow.add_transition(create_transition(
+        "processing",
+        "end",
+        ConditionType::OnSuccess,
+    ));
+    workflow.add_transition(create_transition(
+        "processing",
+        "error",
+        ConditionType::OnFailure,
+    ));
 
     workflow
 }
@@ -67,7 +79,7 @@ async fn test_abort_error_single_workflow() {
     // Execute workflow
     let mut executor = WorkflowExecutor::new();
     let result = executor.start_and_execute_workflow(workflow).await;
-    
+
     // The workflow should complete with the error state
     assert!(result.is_ok());
     let run = result.unwrap();
@@ -92,7 +104,7 @@ async fn test_workflow_state_transitions() {
 
     let mut executor = WorkflowExecutor::new();
     let result = executor.start_and_execute_workflow(workflow).await;
-    
+
     assert!(result.is_ok());
     let run = result.unwrap();
     assert_eq!(run.status, WorkflowRunStatus::Completed);
@@ -116,7 +128,7 @@ async fn test_workflow_error_state_handling() {
 
     let mut executor = WorkflowExecutor::new();
     let result = executor.start_and_execute_workflow(workflow).await;
-    
+
     assert!(result.is_ok());
     let run = result.unwrap();
     assert_eq!(run.status, WorkflowRunStatus::Completed);
@@ -141,7 +153,7 @@ async fn test_workflow_with_context_data() {
 
     let mut executor = WorkflowExecutor::new();
     let result = executor.start_and_execute_workflow(workflow).await;
-    
+
     assert!(result.is_ok());
     let run = result.unwrap();
     assert_eq!(run.status, WorkflowRunStatus::Completed);

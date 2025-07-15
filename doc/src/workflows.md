@@ -37,15 +37,7 @@ tags:
 
 This workflow processes data through multiple stages.
 
-```mermaid
-stateDiagram-v2
-    [*] --> Start
-    Start --> Process
-    Process --> Success: OnSuccess
-    Process --> Failure: OnFailure
-    Success --> [*]
-    Failure --> [*]
-```
+For a complete example, see: [Simple Workflow](../examples/workflows/simple-workflow.md)
 
 ## Actions
 
@@ -154,22 +146,7 @@ This automatic detection ensures that branching logic works correctly without re
 
 ### Parallel Execution
 
-```mermaid
-stateDiagram-v2
-    [*] --> Setup
-    Setup --> fork1: Always
-    
-    state fork1 <<fork>>
-    fork1 --> TaskA
-    fork1 --> TaskB
-    
-    TaskA --> join1: Always
-    TaskB --> join1: Always
-    
-    state join1 <<join>>
-    join1 --> Finish
-    Finish --> [*]
-```
+See: [Parallel Workflow](../examples/workflows/parallel-workflow.md)
 
 ## Action Reference
 
@@ -348,14 +325,7 @@ stateDiagram-v2
 
 ### Retry Pattern
 
-```mermaid
-stateDiagram-v2
-    [*] --> Attempt
-    Attempt --> Success: OnSuccess
-    Attempt --> Wait: OnFailure
-    Wait --> Attempt
-    Success --> [*]
-```
+See: [Retry Workflow](../examples/workflows/retry-workflow.md)
 
 ```markdown
 ## Actions
@@ -377,14 +347,7 @@ Workflows support immediate termination through abort errors. When a prompt acti
 
 #### Example Usage
 
-```mermaid
-stateDiagram-v2
-    [*] --> UserConfirmation
-    UserConfirmation --> ProcessData: Continue
-    UserConfirmation --> [*]: Abort
-    ProcessData --> Complete
-    Complete --> [*]
-```
+See: [User Confirmation Workflow](../examples/workflows/user-confirmation-workflow.md)
 
 ```markdown
 ## Actions

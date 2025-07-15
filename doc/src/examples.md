@@ -1,6 +1,35 @@
 # Examples
 
-This page provides real-world examples of using SwissArmyHammer for various development tasks.
+This page provides real-world examples of using SwissArmyHammer for various development tasks. Each example demonstrates practical usage patterns and best practices for prompt engineering.
+
+## Overview
+
+SwissArmyHammer excels at organizing and managing prompts for:
+- **Development workflows** - Code review, testing, debugging
+- **Documentation tasks** - API docs, user guides, technical writing
+- **Security analysis** - Code audits, vulnerability assessment
+- **Content creation** - Blog posts, marketing copy, educational materials
+- **Data processing** - Analysis, transformation, reporting
+
+## New Advanced Prompts
+
+### AI Code Assistant
+Intelligent code assistance with context awareness:
+```markdown
+{{#include ../examples/prompts/ai-code-assistant.md}}
+```
+
+### Security Audit
+Comprehensive security analysis following OWASP guidelines:
+```markdown
+{{#include ../examples/prompts/security-audit.md}}
+```
+
+### Technical Writer
+Professional technical documentation generation:
+```markdown
+{{#include ../examples/prompts/technical-writer.md}}
+```
 
 ## Basic Prompt Usage
 

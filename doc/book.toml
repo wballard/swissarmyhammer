@@ -26,7 +26,7 @@ copy-fonts = true
 no-section-label = false
 git-repository-url = "https://github.com/wballard/swissarmyhammer"
 git-repository-icon = "fa-github"
-edit-url-template = "https://github.com/wballard/swissarmyhammer/edit/main/docs/src/{path}"
+edit-url-template = "https://github.com/wballard/swissarmyhammer/edit/main/doc/src/{path}"
 site-url = "/swissarmyhammer/"
 cname = ""
 

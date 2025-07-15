@@ -1,10 +1,10 @@
 # API Reference
 
-This page provides a comprehensive reference for the SwissArmyHammer Rust library API. The library is designed to be used as a dependency in your own Rust projects for managing prompts and templates.
+This is the complete API reference for the SwissArmyHammer Rust library. For getting started, see the [Library Usage Guide](./library-usage.md).
 
-## Getting Started
+📚 **[Full API Documentation on docs.rs](https://docs.rs/swissarmyhammer)** 📚
 
-See [INSTALLATION.md](../../INSTALLATION.md) for installation instructions.
+This page provides a high-level overview of the API. For complete details, see the docs.rs documentation.
 
 ## Core Types
 

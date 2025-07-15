@@ -6,7 +6,9 @@
 
 **The MCP server and Rust library for managing prompts as markdown files**
 
-🌟 **[📚 Complete Documentation & Guides](https://wballard.github.io/swissarmyhammer)** 🌟
+📚 **[Complete Documentation & Guides](https://wballard.github.io/swissarmyhammer)** 📚
+
+🦀 **[Rust API Documentation](https://docs.rs/swissarmyhammer)** 🦀
 
 [![CI](https://github.com/wballard/swissarmyhammer/workflows/CI/badge.svg)](https://github.com/wballard/swissarmyhammer/actions)
 [![Release](https://img.shields.io/github/v/release/wballard/swissarmyhammer)](https://github.com/wballard/swissarmyhammer/releases)
@@ -14,7 +16,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![MCP](https://img.shields.io/badge/MCP-compatible-green.svg)](https://github.com/anthropics/model-context-protocol)
 
-[📖 Documentation](https://wballard.github.io/swissarmyhammer) • [🚀 Quick Start](#quick-start) • [💡 Examples](#examples)
+[📖 Documentation](https://wballard.github.io/swissarmyhammer) • [🦀 API Docs](https://docs.rs/swissarmyhammer) • [🚀 Quick Start](#quick-start) • [💡 Examples](#examples)
 
 </div>
 
@@ -49,12 +51,14 @@ Please review this code for:
 - **📁 File-based Management** - Store prompts as markdown files with YAML front matter
 - **🔄 Live Reloading** - Changes are automatically detected and reloaded
 - **🎨 Liquid Templates** - Use Liquid templating with variables, conditionals, loops, and custom filters
-- **⚡ MCP Integration** - Works seamlessly with Claude Code
-- **🗂️ Organized Hierarchy** - Built-in, user, and local prompt directories
-- **🛠️ Developer Tools** - Rich CLI with diagnostics and completions
-- **📚 Rust Library** - Use as a dependency in your own Rust projects
-- **🔍 Built-in Library** - 20+ ready-to-use prompts for common tasks
+- **⚡ MCP Integration** - Works seamlessly with Claude Code via Model Context Protocol
+- **🗂️ Organized Hierarchy** - Built-in, user, and local prompt directories with override precedence
+- **🛠️ Developer Tools** - Rich CLI with diagnostics, validation, and shell completions
+- **📚 Rust Library** - Use as a dependency in your own Rust projects with comprehensive API
+- **🔍 Built-in Library** - 20+ ready-to-use prompts for common development tasks
 - **🎯 Custom Filters** - Domain-specific Liquid filters for code, text, and data processing
+- **🔧 Workflow Engine** - Advanced state-based workflow execution with Mermaid diagrams
+- **🔍 Advanced Search** - Full-text search with fuzzy matching and relevance scoring
 
 ## 📂 Directory Structure
 

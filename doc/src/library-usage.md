@@ -39,23 +39,25 @@ Available features:
 use swissarmyhammer::{PromptLibrary, ArgumentSpec};
 use std::collections::HashMap;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a new prompt library
     let mut library = PromptLibrary::new();
     
     // Add prompts from a directory
-    library.add_directory("./.swissarmyhammer/prompts").await?;
+    let count = library.add_directory("./.swissarmyhammer/prompts")?;
+    println!("Loaded {} prompts from directory", count);
     
     // List available prompts
-    for prompt_id in library.list_prompts() {
+    for prompt_id in library.list() {
         println!("Available prompt: {}", prompt_id);
     }
     
     // Get a specific prompt
     let prompt = library.get("code-review")?;
-    println!("Title: {}", prompt.title());
-    println!("Description: {}", prompt.description());
+    println!("Name: {}", prompt.name);
+    if let Some(description) = &prompt.description {
+        println!("Description: {}", description);
+    }
     
     // Prepare arguments
     let mut args = HashMap::new();
@@ -73,28 +75,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Custom Prompt Creation
 
 ```rust
-use swissarmyhammer::{Prompt, ArgumentSpec, PromptMetadata};
+use swissarmyhammer::{Prompt, ArgumentSpec};
 
 fn create_custom_prompt() -> Result<Prompt, Box<dyn std::error::Error>> {
-    let metadata = PromptMetadata {
-        title: "Custom Code Review".to_string(),
-        description: "A custom code review prompt".to_string(),
-        arguments: vec![
-            ArgumentSpec {
-                name: "code".to_string(),
-                description: "Code to review".to_string(),
-                required: true,
-                default: None,
-            },
-            ArgumentSpec {
-                name: "focus".to_string(),
-                description: "Review focus area".to_string(),
-                required: false,
-                default: Some("general".to_string()),
-            },
-        ],
-    };
-    
     let template = r#"
 # Code Review: {{ focus | capitalize }}
 
@@ -113,7 +96,25 @@ Perform a general code review covering style, bugs, and maintainability.
 {% endif %}
 "#;
     
-    Prompt::from_parts(metadata, template)
+    let prompt = Prompt::new("custom-code-review", template)
+        .with_description("A custom code review prompt")
+        .with_category("development")
+        .add_argument(ArgumentSpec {
+            name: "code".to_string(),
+            description: Some("Code to review".to_string()),
+            required: true,
+            default: None,
+            type_hint: Some("string".to_string()),
+        })
+        .add_argument(ArgumentSpec {
+            name: "focus".to_string(),
+            description: Some("Review focus area".to_string()),
+            required: false,
+            default: Some("general".to_string()),
+            type_hint: Some("string".to_string()),
+        });
+    
+    Ok(prompt)
 }
 ```
 
@@ -129,17 +130,16 @@ use swissarmyhammer::PromptLibrary;
 let mut library = PromptLibrary::new();
 
 // Add prompts from various sources
-library.add_directory("./.swissarmyhammer/prompts").await?;
-library.add_file("./special-prompt.md").await?;
-library.add_builtin_prompts();
+library.add_directory("./.swissarmyhammer/prompts")?;
+library.add_from_file("./special-prompt.md")?;
 
 // Query prompts
-let prompts = library.list_prompts();
+let prompts = library.list();
 let prompt = library.get("prompt-id")?;
 let filtered = library.filter_by_category("review");
 
-// Search prompts
-let results = library.search("code review")?;
+// Search prompts (if search feature is enabled)
+let results = library.search("code review")?
 ```
 
 ### Prompt
@@ -148,14 +148,18 @@ Individual prompt with metadata and template.
 
 ```rust
 use swissarmyhammer::Prompt;
+use std::collections::HashMap;
 
-// Load from file
-let prompt = Prompt::from_file("./.swissarmyhammer/prompts/review.md").await?;
+// Load from file using PromptLoader
+let loader = swissarmyhammer::PromptLoader::new();
+let prompt = loader.load_file("./.swissarmyhammer/prompts/review.md")?;
 
 // Access metadata
-println!("Title: {}", prompt.title());
-println!("Description: {}", prompt.description());
-for arg in prompt.arguments() {
+println!("Name: {}", prompt.name);
+if let Some(description) = &prompt.description {
+    println!("Description: {}", description);
+}
+for arg in &prompt.arguments {
     println!("Argument: {} (required: {})", arg.name, arg.required);
 }
 
@@ -359,7 +363,8 @@ async fn get_prompt(
 #[tokio::main]
 async fn main() {
     let mut library = PromptLibrary::new();
-    library.add_directory("./.swissarmyhammer/prompts").await.unwrap();
+    library.add_directory("./.swissarmyhammer/prompts").await
+        .expect("Failed to load prompts directory");
     let shared_library = Arc::new(RwLock::new(library));
 
     let app = Router::new()
@@ -372,10 +377,12 @@ async fn main() {
             move |path| get_prompt(path, lib)
         }));
 
-    axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
+    let addr = "0.0.0.0:3000".parse()
+        .expect("Failed to parse server address");
+    axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
-        .unwrap();
+        .expect("Failed to start server");
 }
 ```
 
@@ -402,7 +409,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut library = PromptLibrary::new();
     library.add_directory("./.swissarmyhammer/prompts").await?;
 
-    let prompt_id = matches.value_of("prompt").unwrap();
+    let prompt_id = matches.value_of("prompt")
+        .expect("Prompt ID is required");
     let prompt = library.get(prompt_id)?;
 
     let mut args = std::collections::HashMap::new();
@@ -503,11 +511,13 @@ async fn test_prompt_rendering() {
     
     library.add_test_prompt(test_case);
     
-    let prompt = library.get("test-prompt").unwrap();
+    let prompt = library.get("test-prompt")
+        .expect("Test prompt should exist");
     let mut args = std::collections::HashMap::new();
     args.insert("name".to_string(), "World".to_string());
     
-    let result = prompt.render(&args).unwrap();
+    let result = prompt.render(&args)
+        .expect("Template rendering should succeed");
     assert_eq!(result, "Hello World!");
 }
 ```

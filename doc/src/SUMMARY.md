@@ -29,6 +29,7 @@
 - [Library API Reference](./library-api.md)
 - [Integration Examples](./library-examples.md)
 - [🔗 Rustdoc API Documentation](./api/swissarmyhammer/index.html)
+- [📚 docs.rs API Reference](https://docs.rs/swissarmyhammer)
 
 # Advanced Usage
 

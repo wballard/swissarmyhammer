@@ -91,7 +91,7 @@ sudo chmod +x /usr/local/bin/swissarmyhammer
 
 2. **Debug mode**:
    ```bash
-   swissarmyhammer serve --debug
+   swissarmyhammer --debug serve
    ```
 
 3. **Check permissions**:
@@ -146,12 +146,12 @@ sudo chmod +x /usr/local/bin/swissarmyhammer
 2. **Check logs**:
    ```bash
    # Enable debug logging
-   swissarmyhammer serve --debug > debug.log 2>&1
+   swissarmyhammer --debug serve > debug.log 2>&1
    ```
 
 3. **Validate prompt syntax**:
    ```bash
-   swissarmyhammer doctor --check prompts
+   swissarmyhammer validate
    ```
 
 ## Prompt Issues
@@ -171,8 +171,8 @@ sudo chmod +x /usr/local/bin/swissarmyhammer
 
 2. **Validate prompts**:
    ```bash
-   swissarmyhammer test <prompt-name>
-   swissarmyhammer doctor --check prompts --verbose
+   swissarmyhammer prompt test <prompt-name>
+   swissarmyhammer validate --verbose
    ```
 
 3. **Force reload**:
@@ -261,7 +261,7 @@ sudo chmod +x /usr/local/bin/swissarmyhammer
 
 1. **Check override hierarchy**:
    ```bash
-   swissarmyhammer list --verbose | grep "prompt-name"
+   swissarmyhammer prompt list --verbose | grep "prompt-name"
    ```
 
 2. **Rename conflicts**:
@@ -371,24 +371,24 @@ sudo chmod +x /usr/local/bin/swissarmyhammer
 
 ### Test Command Fails
 
-**Problem**: `swissarmyhammer test` errors
+**Problem**: `swissarmyhammer prompt test` errors
 
 **Solutions**:
 
 1. **Check prompt exists**:
    ```bash
-   swissarmyhammer list | grep "prompt-name"
+   swissarmyhammer prompt list | grep "prompt-name"
    ```
 
 2. **Validate arguments**:
    ```bash
    # Show required arguments
-   swissarmyhammer test prompt-name --help
+   swissarmyhammer prompt test prompt-name --help
    ```
 
 3. **Debug mode**:
    ```bash
-   swissarmyhammer test prompt-name --debug
+   swissarmyhammer prompt test prompt-name --debug
    ```
 
 ### Export/Import Errors
@@ -473,13 +473,13 @@ ldd $(which swissarmyhammer)
 
 ```bash
 # Server debug mode
-swissarmyhammer serve --debug
+swissarmyhammer --debug serve
 
 # Redirect to file
-swissarmyhammer serve --debug > debug.log 2>&1
+swissarmyhammer --debug serve > debug.log 2>&1
 
 # CLI debug
-RUST_LOG=debug swissarmyhammer test prompt-name
+RUST_LOG=debug swissarmyhammer prompt test prompt-name
 ```
 
 ### Check Configuration
@@ -489,7 +489,7 @@ RUST_LOG=debug swissarmyhammer test prompt-name
 swissarmyhammer doctor --verbose
 
 # Check specific areas
-swissarmyhammer doctor --check prompts --check mcp
+swissarmyhammer validate --check mcp
 
 # Auto-fix issues
 swissarmyhammer doctor --fix
@@ -499,10 +499,10 @@ swissarmyhammer doctor --fix
 
 ```bash
 # Save MCP messages
-swissarmyhammer serve --debug | grep MCP > mcp-trace.log
+swissarmyhammer --debug serve | grep MCP > mcp-trace.log
 
 # Monitor in real-time
-swissarmyhammer serve --debug | grep -E "(request|response)"
+swissarmyhammer --debug serve | grep -E "(request|response)"
 ```
 
 ## Getting Help
@@ -584,7 +584,7 @@ bash debug-info.sh > debug-info.txt
 
 ### "Prompt not found"
 - Prompt name doesn't exist
-- Check: `swissarmyhammer list`
+- Check: `swissarmyhammer prompt list`
 
 ### "Connection refused"
 - MCP server not running
@@ -610,12 +610,12 @@ bash debug-info.sh > debug-info.txt
 3. **Test changes**:
    ```bash
    # Before committing
-   swissarmyhammer test new-prompt
-   swissarmyhammer doctor --check prompts
+   swissarmyhammer prompt test new-prompt
+   swissarmyhammer validate
    ```
 
 4. **Monitor logs**:
    ```bash
    # Keep logs for debugging
-   swissarmyhammer serve --debug > server.log 2>&1 &
+   swissarmyhammer --debug serve > server.log 2>&1 &
    ```

@@ -365,6 +365,50 @@ stateDiagram-v2
 - Success: Log "Network call succeeded"
 ```
 
+### Abort Error Handling
+
+Workflows support immediate termination through abort errors. When a prompt action's result begins with `ABORT ERROR:`, the workflow immediately exits all the way back to the root workflow with an error.
+
+#### How Abort Errors Work
+
+1. **Detection**: When a prompt returns a response starting with `ABORT ERROR:`, it triggers immediate termination
+2. **Propagation**: The error bypasses all normal error handling (retries, compensation, transitions)
+3. **Root Exit**: In nested workflows, the abort error propagates through all parent workflows to the root
+
+#### Example Usage
+
+```mermaid
+stateDiagram-v2
+    [*] --> UserConfirmation
+    UserConfirmation --> ProcessData: Continue
+    UserConfirmation --> [*]: Abort
+    ProcessData --> Complete
+    Complete --> [*]
+```
+
+```markdown
+## Actions
+
+- UserConfirmation: Execute prompt "confirm-destructive-action"
+- ProcessData: Execute prompt "process-user-data"
+- Complete: Log "Processing completed"
+```
+
+If the `confirm-destructive-action` prompt returns `ABORT ERROR: User cancelled the operation`, the workflow immediately terminates without executing ProcessData or Complete states.
+
+#### Use Cases
+
+- **User Cancellation**: Allow users to cancel long-running operations
+- **Critical Failures**: Immediately stop on unrecoverable errors
+- **Safety Checks**: Abort when safety conditions are not met
+
+#### Important Notes
+
+- Abort errors only trigger when the response **starts with** `ABORT ERROR:` (case-sensitive)
+- The error message after `ABORT ERROR:` is propagated in the error
+- Abort errors cannot be caught or handled within the workflow
+- In sub-workflows, abort errors bubble up to terminate the parent workflow
+
 ## Best Practices
 
 ### 1. Keep States Focused

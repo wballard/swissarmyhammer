@@ -663,6 +663,19 @@ impl WorkflowExecutor {
         run: &mut WorkflowRun,
         action_error: ActionError,
     ) -> ExecutorResult<()> {
+        // Check if this is an abort error - if so, propagate immediately
+        if matches!(action_error, ActionError::AbortError(_)) {
+            // Log the abort error
+            let error_details = self.format_action_error(&action_error);
+            self.log_event(ExecutionEventType::Failed, error_details);
+
+            // Mark workflow as failed
+            run.status = WorkflowRunStatus::Failed;
+
+            // Propagate the error immediately
+            return Err(ExecutorError::ActionError(action_error));
+        }
+
         // Set standard variables that are available after every action
         run.context
             .insert("success".to_string(), Value::Bool(false));
@@ -762,6 +775,7 @@ impl WorkflowExecutor {
                     message, wait_time
                 )
             }
+            ActionError::AbortError(msg) => format!("ABORT ERROR: {}", msg),
         }
     }
 

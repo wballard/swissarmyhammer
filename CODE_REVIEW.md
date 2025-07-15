@@ -1,116 +1,104 @@
 # Code Review TODO List
 
-## Issue #000146 - State Name Pollution in Nested Workflows
+## Issue #000147 - Abort Error Mechanism for Workflows
 
 ### 1. [ ] Fix Formatting Issues
 **Location**: Multiple files
 **Issue**: Code doesn't pass `cargo fmt --check`
 **Action**:
 - Run `cargo fmt` to fix formatting in:
-  - `swissarmyhammer/src/workflow/actions.rs:1186`
-  - `swissarmyhammer/src/workflow/actions_tests/common.rs:34`
-  - `swissarmyhammer/src/workflow/actions_tests/simple_state_pollution_test.rs:1`
-  - `swissarmyhammer/src/workflow/actions_tests/sub_workflow_action_tests.rs:42`
-  - `swissarmyhammer/src/workflow/actions_tests/sub_workflow_state_pollution_tests.rs:62-182`
-  - `swissarmyhammer-cli/src/validate.rs:1971-1988`
-  - `swissarmyhammer-cli/src/flow.rs:1`
-  - `swissarmyhammer-cli/src/main.rs:174`
-  - `swissarmyhammer-cli/tests/mcp_server_shutdown_test.rs:11-96`
+  - `swissarmyhammer/src/workflow/actions.rs:1228` - Remove trailing whitespace
+  - `swissarmyhammer/src/workflow/actions_tests/prompt_action_tests.rs:25,94,104,114` - Fix line breaks
+  - `swissarmyhammer/src/workflow/executor/core.rs:668` - Remove blank lines
+  - `swissarmyhammer-cli/src/validate.rs` - Multiple formatting issues with imports and function signatures
 
-### 2. [ ] Fix Clippy Warnings
-**Location**: `swissarmyhammer/src/workflow/actions_tests/`
-**Issue**: Unused imports and dead code warnings
+### 2. [ ] Fix Dead Code Warning
+**Location**: `swissarmyhammer-cli/src/validate.rs:1270`
+**Issue**: Function `run_validate_command` is never used
 **Action**:
-- Remove unused import `crate::workflow::actions_tests::common::*` from `sub_workflow_action_tests.rs:4`
-- Remove unused import `WorkflowStorage` from `sub_workflow_state_pollution_tests.rs:6`
-- Either use or mark as `#[allow(dead_code)]` the functions in `common.rs`:
-  - `create_test_context()` at line 7
-  - `create_context_with_special_chars()` at line 27
+- Either remove the unused function or add `#[allow(dead_code)]` if it's intended for future use
+- Investigate why this function exists but isn't called
 
-### 3. [ ] Improve Test Documentation
-**Location**: `swissarmyhammer/src/workflow/actions_tests/sub_workflow_state_pollution_tests.rs`
-**Issue**: Tests have debugging eprintln! statements that should be removed or converted to proper logging
-**Action**:
-- Remove or convert `eprintln!` statements to proper tracing/logging
-- Add more descriptive test documentation explaining what each test validates
-
-### 4. [ ] Add Error Handling for Missing Workflows
-**Location**: `swissarmyhammer/src/workflow/actions_tests/sub_workflow_state_pollution_tests.rs`
-**Issue**: Tests create workflows in temp directories but don't handle potential file I/O errors gracefully
-**Action**:
-- Add proper error handling for file operations
-- Consider using `Result` types in test setup functions
-- Add cleanup in case of test failures
-
-### 5. [ ] Consolidate Test Utilities
-**Location**: `swissarmyhammer/src/workflow/actions_tests/mod.rs` and `common.rs`
-**Issue**: Test utilities are duplicated between mod.rs and common.rs
-**Action**:
-- Consolidate `create_test_context()` functions
-- Remove duplication between files
-- Create a clear separation of concerns
-
-### 6. [ ] Add Integration Test for Actual State Pollution Issue
+### 3. [ ] Add Integration Tests for Abort Error
 **Location**: New test file needed
-**Issue**: While unit tests exist, there's no integration test that demonstrates the actual issue from the bug report
+**Issue**: While unit tests exist, there's no integration test demonstrating the full abort error flow
 **Action**:
-- Create an integration test that reproduces the exact scenario from issue #000146
-- Test should verify that actions are executed on the correct workflow
-- Test should verify that state names don't collide between parent and child workflows
+- Create integration test that shows abort error propagating from prompt to workflow exit
+- Test abort error in single workflow scenario
+- Test abort error in nested workflow scenario (sub-workflow aborts, parent should exit)
+- Test multiple levels of nesting (3+ levels deep)
 
-### 7. [ ] Improve Logging Context
-**Location**: `swissarmyhammer/src/workflow/executor/core.rs`
-**Issue**: While workflow name was added to logs, consider adding more context
+### 4. [ ] Improve SubWorkflow Abort Error Detection
+**Location**: `swissarmyhammer/src/workflow/actions.rs:1216-1229`
+**Issue**: Abort error detection in sub-workflows relies on string matching in context
 **Action**:
-- Consider adding workflow run ID to logs for better traceability
-- Consider adding parent workflow context when executing sub-workflows
-- Ensure consistent logging format across all workflow execution points
+- Consider a more robust mechanism for propagating abort errors from sub-workflows
+- Perhaps use a dedicated field or error type in WorkflowRun
+- Current implementation checks context["result"] for "ABORT ERROR:" prefix which is fragile
 
-### 8. [ ] Add More Comprehensive Sub-workflow Tests
-**Location**: `swissarmyhammer/src/workflow/actions_tests/sub_workflow_state_pollution_tests.rs`
-**Issue**: Tests could be more comprehensive
+### 5. [ ] Add Edge Case Tests for Abort Error Pattern
+**Location**: `swissarmyhammer/src/workflow/actions_tests/prompt_action_tests.rs`
+**Issue**: Tests don't cover all edge cases
 **Action**:
-- Add test for deeply nested workflows (3+ levels)
-- Add test for parallel sub-workflow execution
-- Add test for sub-workflows that fail and ensure parent state is preserved
-- Add test for circular dependency detection
+- Add test for empty message after "ABORT ERROR:"
+- Add test for very long error messages
+- Add test for special characters in error message
+- Add test for Unicode characters in error message
 
-### 9. [ ] Document State Isolation Implementation
-**Location**: `swissarmyhammer/src/workflow/actions.rs`
-**Issue**: The state isolation implementation details are not well documented
+### 6. [ ] Enhance Documentation with More Examples
+**Location**: `doc/src/workflows.md`
+**Issue**: Documentation could be more comprehensive
 **Action**:
-- Add documentation explaining how state isolation works
-- Document the context separation between parent and child workflows
-- Add inline comments explaining the workflow stack mechanism
+- Add example showing nested workflow abort propagation
+- Add example of abort error in a loop or retry scenario
+- Document what happens to workflow state when abort occurs
+- Document interaction with compensation actions
 
-### 10. [ ] Consider Adding State Namespace Support
-**Location**: `swissarmyhammer/src/workflow/`
-**Issue**: Current solution relies on execution context separation
+### 7. [ ] Add Logging Context for Abort Errors
+**Location**: `swissarmyhammer/src/workflow/executor/core.rs:668`
+**Issue**: Abort errors could use more context in logs
 **Action**:
-- Consider implementing explicit namespace support for states
-- This would allow states to be prefixed with workflow names internally
-- Would provide stronger guarantees against state name collisions
+- Log which action triggered the abort
+- Log the current state when abort occurred
+- Consider adding workflow path (parent -> child -> grandchild) in nested scenarios
 
-### 11. [ ] Fix Test Brittleness
-**Location**: `swissarmyhammer/src/workflow/actions_tests/sub_workflow_state_pollution_tests.rs`
-**Issue**: Tests change working directory which could affect other tests if run in parallel
+### 8. [ ] Test Concurrent Sub-Workflows with Abort
+**Location**: New test needed
+**Issue**: No tests for parallel sub-workflows where one aborts
 **Action**:
-- Refactor tests to avoid changing global state (current directory)
-- Use absolute paths instead of changing directories
-- Ensure tests are properly isolated
+- Create test with multiple parallel sub-workflows
+- Test scenario where one sub-workflow aborts while others are running
+- Verify all sub-workflows are properly terminated
 
-### 12. [ ] Add Performance Tests
-**Location**: New test file needed
-**Issue**: No performance tests for nested workflow execution
+### 9. [ ] Add Performance Benchmark
+**Location**: New benchmark needed
+**Issue**: No performance assessment of abort error checking
 **Action**:
-- Add benchmarks for nested workflow execution
-- Test performance impact of the state isolation mechanism
-- Ensure no significant performance regression
+- Add benchmark comparing prompt execution with and without abort check
+- Ensure the string prefix check doesn't significantly impact performance
+- Consider regex pre-compilation if pattern becomes more complex
 
-### 13. [ ] Update Changelog and Documentation
-**Location**: Project documentation
-**Issue**: The fix for state pollution should be documented
+### 10. [ ] Consider Abort Error Configuration
+**Location**: Design consideration
+**Issue**: "ABORT ERROR:" prefix is hardcoded
 **Action**:
-- Update CHANGELOG.md with the fix details
-- Update any workflow documentation to explain state isolation
-- Add examples showing nested workflows with same state names
+- Consider making the abort pattern configurable
+- Could allow different abort patterns for different use cases
+- Maintain backward compatibility with default pattern
+
+### 11. [ ] Validate Error Message Extraction
+**Location**: `swissarmyhammer/src/workflow/actions.rs:745-749`
+**Issue**: Error message extraction could be more robust
+**Action**:
+- Handle case where "ABORT ERROR:" appears multiple times
+- Consider trimming more whitespace variants (tabs, multiple spaces)
+- Add validation that extracted message is not empty
+
+### 12. [ ] Document Abort Error Best Practices
+**Location**: `doc/src/workflows.md`
+**Issue**: Missing guidance on when to use abort errors
+**Action**:
+- Add section on abort error best practices
+- Document anti-patterns (e.g., using abort for normal flow control)
+- Provide guidelines on error message formatting
+- Explain difference between abort errors and regular failures

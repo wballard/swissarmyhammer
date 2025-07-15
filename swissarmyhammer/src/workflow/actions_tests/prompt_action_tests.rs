@@ -1,8 +1,6 @@
 //! Tests for PromptAction
 
 use crate::workflow::actions::*;
-use crate::workflow::actions_tests::common::*;
-use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -27,8 +25,8 @@ fn test_prompt_action_with_arguments() {
 
 #[test]
 fn test_prompt_action_with_result_variable() {
-    let action = PromptAction::new("test-prompt".to_string())
-        .with_result_variable("result_var".to_string());
+    let action =
+        PromptAction::new("test-prompt".to_string()).with_result_variable("result_var".to_string());
 
     assert_eq!(action.result_variable, Some("result_var".to_string()));
 }
@@ -89,5 +87,39 @@ async fn test_prompt_action_execution_with_invalid_argument_key() {
             assert!(msg.contains("Invalid argument key"));
         }
         _ => panic!("Expected ParseError"),
+    }
+}
+
+#[test]
+fn test_abort_error_detection_in_response() {
+    // Test that ABORT ERROR pattern is correctly detected
+    let test_cases = vec![
+        (
+            "ABORT ERROR: User cancelled the operation",
+            true,
+            "User cancelled the operation",
+        ),
+        ("This is a normal response", false, ""),
+        ("Some text before ABORT ERROR: Critical failure", false, ""), // Should only match at start
+        (
+            "ABORT ERROR: Multi-line\nerror description",
+            true,
+            "Multi-line\nerror description",
+        ),
+        ("abort error: lowercase should not match", false, ""),
+    ];
+
+    for (response, should_detect, expected_message) in test_cases {
+        let is_abort = response.starts_with("ABORT ERROR:");
+        assert_eq!(is_abort, should_detect, "Failed for response: {}", response);
+
+        if should_detect {
+            let message = response.trim_start_matches("ABORT ERROR:").trim();
+            assert_eq!(
+                message, expected_message,
+                "Failed to extract message from: {}",
+                response
+            );
+        }
     }
 }

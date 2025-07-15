@@ -77,3 +77,6 @@ mod sub_workflow_state_pollution_tests;
 
 #[cfg(test)]
 mod simple_state_pollution_test;
+
+#[cfg(test)]
+mod prompt_action_tests;

@@ -61,6 +61,9 @@ pub enum ActionError {
         /// How long to wait before retrying
         wait_time: Duration,
     },
+    /// Abort error that should exit workflow immediately
+    #[error("ABORT ERROR: {0}")]
+    AbortError(String),
 }
 
 /// Result type for action operations
@@ -224,6 +227,7 @@ pub trait RetryableAction: Action {
     /// Check if an error is retryable
     fn is_retryable_error(&self, error: &ActionError) -> bool {
         matches!(error, ActionError::RateLimit { .. })
+            && !matches!(error, ActionError::AbortError(_))
     }
 
     /// Calculate wait time based on retry strategy and attempt number
@@ -736,6 +740,16 @@ impl PromptAction {
             );
         }
 
+        // Check for ABORT ERROR pattern in the response
+        if response_text.starts_with("ABORT ERROR:") {
+            let error_message = response_text
+                .trim_start_matches("ABORT ERROR:")
+                .trim()
+                .to_string();
+            tracing::error!("Abort error detected: {}", error_message);
+            return Err(ActionError::AbortError(error_message));
+        }
+
         // Display the output as YAML
         if !quiet && !response_text.is_empty() {
             // Build the YAML output as a single string
@@ -1199,10 +1213,27 @@ impl Action for SubWorkflowAction {
 
                 Ok(result)
             }
-            WorkflowRunStatus::Failed => Err(ActionError::ExecutionError(format!(
-                "Sub-workflow '{}' failed",
-                self.workflow_name
-            ))),
+            WorkflowRunStatus::Failed => {
+                // Check if the sub-workflow failed due to an abort error
+                // Look for abort error indication in the context
+                if let Some(result) = run.context.get("result") {
+                    if let Some(result_str) = result.as_str() {
+                        if result_str.starts_with("ABORT ERROR:") {
+                            // Extract the abort error message and propagate it
+                            let abort_message = result_str
+                                .trim_start_matches("ABORT ERROR:")
+                                .trim()
+                                .to_string();
+                            return Err(ActionError::AbortError(abort_message));
+                        }
+                    }
+                }
+
+                Err(ActionError::ExecutionError(format!(
+                    "Sub-workflow '{}' failed",
+                    self.workflow_name
+                )))
+            }
             WorkflowRunStatus::Cancelled => Err(ActionError::ExecutionError(format!(
                 "Sub-workflow '{}' was cancelled",
                 self.workflow_name

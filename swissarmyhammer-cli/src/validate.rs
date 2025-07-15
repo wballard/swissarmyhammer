@@ -7,7 +7,7 @@ use swissarmyhammer::validation::{
     ValidationLevel, ValidationResult, YamlTypoValidator,
 };
 use swissarmyhammer::workflow::{
-    MermaidParser, MemoryWorkflowStorage, Workflow, WorkflowGraphAnalyzer, WorkflowResolver,
+    MemoryWorkflowStorage, MermaidParser, Workflow, WorkflowGraphAnalyzer, WorkflowResolver,
     WorkflowStorageBackend,
 };
 
@@ -158,7 +158,10 @@ impl Validator {
         Ok(result)
     }
 
-    pub fn validate_with_custom_dirs(&mut self, workflow_dirs: Vec<String>) -> Result<ValidationResult> {
+    pub fn validate_with_custom_dirs(
+        &mut self,
+        workflow_dirs: Vec<String>,
+    ) -> Result<ValidationResult> {
         let mut result = ValidationResult::new();
 
         // Load all prompts using the centralized PromptResolver
@@ -1106,12 +1109,16 @@ impl Validator {
     }
 
     /// Validates workflows from custom directories
-    fn validate_workflows_from_dirs(&mut self, result: &mut ValidationResult, workflow_dirs: Vec<String>) -> Result<()> {
+    fn validate_workflows_from_dirs(
+        &mut self,
+        result: &mut ValidationResult,
+        workflow_dirs: Vec<String>,
+    ) -> Result<()> {
         use std::fs;
-        
+
         for dir in workflow_dirs {
             let dir_path = PathBuf::from(&dir);
-            
+
             // Check if directory exists
             if !dir_path.exists() {
                 result.add_issue(ValidationIssue {
@@ -1201,13 +1208,17 @@ impl Validator {
             if let Some(end_idx) = end_line {
                 let yaml_content = lines[1..end_idx].join("\n");
                 let mermaid_content = lines[end_idx + 1..].join("\n");
-                
+
                 // Parse YAML to get title and description
-                let (title, description) = if let Ok(yaml_value) = serde_yaml::from_str::<serde_yaml::Value>(&yaml_content) {
-                    let title = yaml_value.get("title")
+                let (title, description) = if let Ok(yaml_value) =
+                    serde_yaml::from_str::<serde_yaml::Value>(&yaml_content)
+                {
+                    let title = yaml_value
+                        .get("title")
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string());
-                    let description = yaml_value.get("description")
+                    let description = yaml_value
+                        .get("description")
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string());
                     (title, description)
@@ -1215,7 +1226,12 @@ impl Validator {
                     (None, None)
                 };
 
-                match MermaidParser::parse_with_metadata(&mermaid_content, workflow_name, title, description) {
+                match MermaidParser::parse_with_metadata(
+                    &mermaid_content,
+                    workflow_name,
+                    title,
+                    description,
+                ) {
                     Ok(wf) => wf,
                     Err(e) => {
                         result.add_issue(ValidationIssue {
@@ -1265,10 +1281,6 @@ impl Validator {
         // Use the shared validation logic
         self.validate_workflow_structure(&workflow, workflow_path, result);
     }
-}
-
-pub fn run_validate_command(quiet: bool, format: ValidateFormat) -> Result<i32> {
-    run_validate_command_with_dirs(quiet, format, Vec::new())
 }
 
 pub fn run_validate_command_with_dirs(

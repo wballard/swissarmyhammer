@@ -174,7 +174,6 @@ async fn run_server() -> i32 {
         ct_clone.cancel();
     });
 
-
     // Start the rmcp SDK server with stdio transport
     let _running_service = match serve_server(server, stdio()).await {
         Ok(service) => {

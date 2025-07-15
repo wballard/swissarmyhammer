@@ -11,7 +11,7 @@ fn test_mcp_server_exits_on_client_disconnect() {
     //
     // This is a known limitation tracked in issue #000144.
     // A future version of rmcp may provide better transport lifecycle management.
-    
+
     // Start the MCP server
     let mut server = Command::cargo_bin("swissarmyhammer")
         .unwrap()
@@ -72,8 +72,7 @@ fn test_mcp_server_responds_to_ctrl_c() {
     std::thread::sleep(Duration::from_secs(2));
 
     // Send SIGINT (Ctrl+C) to the server
-    kill(Pid::from_raw(server_pid as i32), Signal::SIGINT)
-        .expect("Failed to send SIGINT");
+    kill(Pid::from_raw(server_pid as i32), Signal::SIGINT).expect("Failed to send SIGINT");
 
     // Give the server time to handle the signal and exit gracefully
     std::thread::sleep(Duration::from_secs(3));

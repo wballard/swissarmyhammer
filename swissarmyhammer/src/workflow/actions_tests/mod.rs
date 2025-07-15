@@ -8,6 +8,10 @@
 //! - `integration_tests` - Integration tests for action execution
 //! - `resource_cleanup_tests` - Tests for resource cleanup and error recovery
 
+// Common test utilities module
+#[cfg(test)]
+mod common;
+
 // Re-export common test utilities from parent module
 use crate::workflow::actions::*;
 use serde_json::Value;
@@ -64,3 +68,12 @@ mod integration_tests;
 
 #[cfg(test)]
 mod resource_cleanup_tests;
+
+#[cfg(test)]
+mod sub_workflow_action_tests;
+
+#[cfg(test)]
+mod sub_workflow_state_pollution_tests;
+
+#[cfg(test)]
+mod simple_state_pollution_test;

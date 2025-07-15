@@ -291,15 +291,16 @@ impl WorkflowExecutor {
         let is_terminal = current_state.is_terminal;
 
         tracing::trace!(
-            "Executing state: {} - {}",
+            "Executing state: {} - {} for workflow {}",
             current_state.id,
-            current_state.description
+            current_state.description,
+            run.workflow.name
         );
         self.log_event(
             ExecutionEventType::StateExecution,
             format!(
-                "Executing state: {} - {}",
-                current_state.id, current_state.description
+                "Executing state: {} - {} for workflow {}",
+                current_state.id, current_state.description, run.workflow.name
             ),
         );
 
@@ -385,10 +386,18 @@ impl WorkflowExecutor {
             }
         }
 
-        tracing::debug!("Transitioning from {} to {}", run.current_state, next_state);
+        tracing::debug!(
+            "Transitioning from {} to {} for workflow {}",
+            run.current_state,
+            next_state,
+            run.workflow.name
+        );
         self.log_event(
             ExecutionEventType::StateTransition,
-            format!("Transitioning from {} to {}", run.current_state, next_state),
+            format!(
+                "Transitioning from {} to {} for workflow {}",
+                run.current_state, next_state, run.workflow.name
+            ),
         );
 
         // Record transition in metrics

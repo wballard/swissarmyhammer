@@ -1,6 +1,8 @@
 //! Flow command implementation for executing workflows
 
-use crate::cli::{FlowSubcommand, OutputFormat, PromptSource, PromptSourceArg, VisualizationFormat};
+use crate::cli::{
+    FlowSubcommand, OutputFormat, PromptSource, PromptSourceArg, VisualizationFormat,
+};
 use colored::*;
 use is_terminal::IsTerminal;
 use std::collections::{HashMap, HashSet};

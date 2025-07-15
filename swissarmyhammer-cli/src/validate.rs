@@ -1971,7 +1971,9 @@ Neither of these should cause validation errors."#;
         };
 
         // Validate the partial prompt
-        validator.validate_prompt_fields_and_variables(&partial_prompt, &mut result, None).unwrap();
+        validator
+            .validate_prompt_fields_and_variables(&partial_prompt, &mut result, None)
+            .unwrap();
 
         // Should have no errors for undefined variables in partials
         let variable_errors = result
@@ -1980,17 +1982,25 @@ Neither of these should cause validation errors."#;
             .filter(|issue| issue.message.contains("Undefined template variable"))
             .count();
 
-        assert_eq!(variable_errors, 0, 
-            "Partial templates should not have undefined variable errors");
+        assert_eq!(
+            variable_errors, 0,
+            "Partial templates should not have undefined variable errors"
+        );
 
         // Should also not have warnings about template using variables with no arguments
         let arg_warnings = result
             .issues
             .iter()
-            .filter(|issue| issue.message.contains("Template uses variables but no arguments are defined"))
+            .filter(|issue| {
+                issue
+                    .message
+                    .contains("Template uses variables but no arguments are defined")
+            })
             .count();
 
-        assert_eq!(arg_warnings, 0,
-            "Partial templates should not have warnings about missing argument definitions");
+        assert_eq!(
+            arg_warnings, 0,
+            "Partial templates should not have warnings about missing argument definitions"
+        );
     }
 }

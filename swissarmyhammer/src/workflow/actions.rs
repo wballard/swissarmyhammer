@@ -1095,6 +1095,7 @@ impl Action for SubWorkflowAction {
 
         // Execute the sub-workflow in-process
         tracing::debug!("Executing sub-workflow '{}' in-process", self.workflow_name);
+        tracing::debug!("Current context before sub-workflow: {:?}", context);
 
         // Create storage and load the workflow
         let storage = WorkflowStorage::file_system().map_err(|e| {
@@ -1185,6 +1186,11 @@ impl Action for SubWorkflowAction {
 
                 // Store result in context if variable name specified
                 if let Some(var_name) = &self.result_variable {
+                    tracing::debug!(
+                        "Storing sub-workflow result in variable '{}': {:?}",
+                        var_name,
+                        result
+                    );
                     context.insert(var_name.clone(), result.clone());
                 }
 

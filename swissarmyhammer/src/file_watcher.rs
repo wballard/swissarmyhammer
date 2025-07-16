@@ -330,8 +330,8 @@ mod tests {
         watcher.stop_watching();
         assert!(watcher.watcher_handle.is_none());
         
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        // Restore original directory before temp_dir is dropped
+        std::env::set_current_dir(&original_dir).unwrap();
     }
 
     #[tokio::test]
@@ -370,6 +370,9 @@ mod tests {
         use tempfile::TempDir;
         use std::fs;
         
+        // Save original directory first
+        let original_dir = std::env::current_dir().unwrap();
+        
         // Create a temporary directory for testing
         let temp_dir = TempDir::new().unwrap();
         let test_prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
@@ -377,8 +380,19 @@ mod tests {
         fs::write(test_prompts_dir.join("test.yml"), "name: test").unwrap();
         
         // Set current directory to temp dir
-        let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
+        
+        struct DirGuard {
+            original_dir: std::path::PathBuf,
+        }
+        
+        impl Drop for DirGuard {
+            fn drop(&mut self) {
+                let _ = std::env::set_current_dir(&self.original_dir);
+            }
+        }
+        
+        let _guard = DirGuard { original_dir: original_dir.clone() };
         
         let mut watcher = FileWatcher::new();
         let callback1 = TestCallback::new();
@@ -395,9 +409,6 @@ mod tests {
         assert!(watcher.watcher_handle.is_some());
 
         watcher.stop_watching();
-        
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[derive(Clone)]
@@ -480,7 +491,7 @@ mod tests {
 
         watcher.stop_watching();
         
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        // Restore original directory before temp_dir is dropped
+        std::env::set_current_dir(&original_dir).unwrap();
     }
 }

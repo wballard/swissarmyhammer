@@ -1208,4 +1208,82 @@ mod tests {
             panic!("Expected Flow command");
         }
     }
+
+    #[test]
+    fn test_parse_args_panics_on_error() {
+        // This test verifies that parse_args would panic on invalid input
+        // We can't easily test the panic itself in unit tests, but we can verify
+        // that the underlying try_parse_from_args returns an error
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "invalid-command"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_prompt_source_arg_conversions() {
+        // Test From<PromptSourceArg> for PromptSource
+        assert!(matches!(
+            PromptSource::from(PromptSourceArg::Builtin),
+            PromptSource::Builtin
+        ));
+        assert!(matches!(
+            PromptSource::from(PromptSourceArg::User),
+            PromptSource::User
+        ));
+        assert!(matches!(
+            PromptSource::from(PromptSourceArg::Local),
+            PromptSource::Local
+        ));
+        assert!(matches!(
+            PromptSource::from(PromptSourceArg::Dynamic),
+            PromptSource::Dynamic
+        ));
+
+        // Test From<PromptSource> for PromptSourceArg
+        assert!(matches!(
+            PromptSourceArg::from(PromptSource::Builtin),
+            PromptSourceArg::Builtin
+        ));
+        assert!(matches!(
+            PromptSourceArg::from(PromptSource::User),
+            PromptSourceArg::User
+        ));
+        assert!(matches!(
+            PromptSourceArg::from(PromptSource::Local),
+            PromptSourceArg::Local
+        ));
+        assert!(matches!(
+            PromptSourceArg::from(PromptSource::Dynamic),
+            PromptSourceArg::Dynamic
+        ));
+    }
+
+    #[test]
+    fn test_prompt_source_arg_equality() {
+        assert_eq!(PromptSourceArg::Builtin, PromptSourceArg::Builtin);
+        assert_ne!(PromptSourceArg::Builtin, PromptSourceArg::User);
+        assert_ne!(PromptSourceArg::User, PromptSourceArg::Local);
+        assert_ne!(PromptSourceArg::Local, PromptSourceArg::Dynamic);
+    }
+
+    #[test]
+    fn test_debug_flag() {
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "--debug"]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        assert!(cli.debug);
+        assert!(!cli.verbose);
+        assert!(!cli.quiet);
+    }
+
+    #[test]
+    fn test_combined_flags() {
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "--debug", "--verbose"]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        assert!(cli.debug);
+        assert!(cli.verbose);
+        assert!(!cli.quiet);
+    }
 }

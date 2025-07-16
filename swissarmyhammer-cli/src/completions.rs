@@ -219,4 +219,14 @@ mod tests {
             "Completion should include quiet flag"
         );
     }
+
+    #[test]
+    fn test_print_completion_function() {
+        // Test the actual print_completion function
+        // We can't easily capture stdout in tests, so we just verify it doesn't panic
+        assert!(print_completion(Shell::Bash).is_ok());
+        assert!(print_completion(Shell::Zsh).is_ok());
+        assert!(print_completion(Shell::Fish).is_ok());
+        assert!(print_completion(Shell::PowerShell).is_ok());
+    }
 }

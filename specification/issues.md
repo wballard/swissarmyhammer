@@ -38,6 +38,6 @@ As an LLM, I want to be able to mark an issue complete using an MCP tool.
 
 As an LLM, I want to be able to record additional context in an issue using an MCP tool.
 
-### Next Up
+### Current
 
-As an LLM, I want to be able to ask what is the next issue to work.
+As an LLM, I want to be able to ask what is the current issue at the head of the line to work using an MCP tool.

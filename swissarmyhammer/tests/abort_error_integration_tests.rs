@@ -29,37 +29,6 @@ fn create_transition(from: &str, to: &str, condition_type: ConditionType) -> Tra
     }
 }
 
-fn create_basic_workflow_with_error_handling() -> Workflow {
-    let mut workflow = Workflow::new(
-        WorkflowName::new("Error Handling Test"),
-        "Test error state transitions".to_string(),
-        StateId::new("start"),
-    );
-
-    workflow.add_state(create_state("start", "Start state", false));
-    workflow.add_state(create_state("processing", "Processing state", false));
-    workflow.add_state(create_state("error", "Error state", true));
-    workflow.add_state(create_state("end", "End state", true));
-
-    workflow.add_transition(create_transition(
-        "start",
-        "processing",
-        ConditionType::Always,
-    ));
-    workflow.add_transition(create_transition(
-        "processing",
-        "end",
-        ConditionType::OnSuccess,
-    ));
-    workflow.add_transition(create_transition(
-        "processing",
-        "error",
-        ConditionType::OnFailure,
-    ));
-
-    workflow
-}
-
 #[tokio::test]
 async fn test_abort_error_single_workflow() {
     // Create a workflow that will abort

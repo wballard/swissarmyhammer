@@ -614,6 +614,17 @@ impl McpServer {
         }
     }
 
+    /// Get completion statistics
+    async fn get_issue_stats(&self) -> crate::Result<(usize, usize)> {
+        let issue_storage = self.issue_storage.read().await;
+        let all_issues = issue_storage.list_issues().await?;
+        
+        let completed = all_issues.iter().filter(|i| i.completed).count();
+        let pending = all_issues.len() - completed;
+        
+        Ok((pending, completed))
+    }
+
     /// Handle the issue_mark_complete tool operation.
     ///
     /// Marks an issue as complete by moving it to the completed issues directory.
@@ -629,17 +640,101 @@ impl McpServer {
         &self,
         request: MarkCompleteRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
-        let issue_storage = self.issue_storage.write().await;
-        match issue_storage.mark_complete(request.number).await {
-            Ok(issue) => Ok(Self::create_success_response(format!(
-                "Marked issue {} as complete",
-                issue.number
-            ))),
-            Err(e) => Ok(Self::create_error_response(format!(
-                "Failed to mark issue complete: {}",
-                e
-            ))),
+        // Validate issue number
+        if request.number == 0 || request.number > 999999 {
+            return Err(McpError::invalid_params(
+                "Invalid issue number (must be 1-999999)".to_string(),
+                None,
+            ));
         }
+        
+        // Get issue storage
+        let issue_storage = self.issue_storage.write().await;
+        
+        // Check if issue exists and get its current state
+        let existing_issue = match issue_storage.get_issue(request.number).await {
+            Ok(issue) => issue,
+            Err(crate::SwissArmyHammerError::IssueNotFound(_)) => {
+                return Err(McpError::invalid_params(
+                    format!("Issue #{:06} not found", request.number),
+                    None,
+                ));
+            }
+            Err(e) => {
+                return Err(McpError::internal_error(
+                    format!("Failed to get issue: {}", e),
+                    None,
+                ));
+            }
+        };
+        
+        // Check if already completed
+        if existing_issue.completed {
+            return Ok(CallToolResult {
+                content: vec![Annotated::new(
+                    RawContent::Text(RawTextContent { 
+                        text: format!(
+                            "Issue #{:06} - {} is already marked as complete",
+                            existing_issue.number,
+                            existing_issue.name
+                        )
+                    }),
+                    None,
+                )],
+                is_error: Some(false),
+            });
+        }
+        
+        // Mark the issue as complete
+        let issue = match issue_storage.mark_complete(request.number).await {
+            Ok(issue) => issue,
+            Err(crate::SwissArmyHammerError::IssueNotFound(_)) => {
+                return Err(McpError::invalid_params(
+                    format!("Issue #{:06} not found", request.number),
+                    None,
+                ));
+            }
+            Err(e) => {
+                return Err(McpError::internal_error(
+                    format!("Failed to mark issue complete: {}", e),
+                    None,
+                ));
+            }
+        };
+        
+        // Get statistics
+        let (pending, completed) = self.get_issue_stats().await
+            .unwrap_or((0, 0));
+        
+        // Format response
+        let response = serde_json::json!({
+            "number": issue.number,
+            "name": issue.name,
+            "file_path": issue.file_path.to_string_lossy(),
+            "completed": issue.completed,
+            "stats": {
+                "pending": pending,
+                "completed": completed,
+                "total": pending + completed,
+            },
+            "message": format!(
+                "Issue #{:06} - {} marked as complete. {} issues pending, {} completed.",
+                issue.number,
+                issue.name,
+                pending,
+                completed
+            )
+        });
+        
+        Ok(CallToolResult {
+            content: vec![Annotated::new(
+                RawContent::Text(RawTextContent { 
+                    text: response["message"].as_str().unwrap().to_string()
+                }),
+                None,
+            )],
+            is_error: Some(false),
+        })
     }
 
     /// Handle the issue_all_complete tool operation.
@@ -1848,7 +1943,7 @@ mod tests {
         ];
 
         for name in valid_names {
-            let result = McpServer::validate_issue_name(name);
+            let result = validate_issue_name(name);
             assert!(
                 result.is_ok(),
                 "Valid name '{}' should pass validation",
@@ -1859,7 +1954,7 @@ mod tests {
 
         // Test maximum length separately
         let max_length_name = "a".repeat(100);
-        let result = McpServer::validate_issue_name(&max_length_name);
+        let result = validate_issue_name(&max_length_name);
         assert!(result.is_ok(), "100 character name should pass validation");
         assert_eq!(result.unwrap(), max_length_name.trim());
     }

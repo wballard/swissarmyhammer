@@ -76,6 +76,7 @@ syntect = { workspace = true }
 tempfile = { workspace = true }
 proptest = { workspace = true }
 criterion = { workspace = true }
+serial_test = { workspace = true }
 
 [lib]
 name = "swissarmyhammer"

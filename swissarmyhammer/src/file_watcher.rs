@@ -205,6 +205,7 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use tokio::sync::Mutex;
+    use serial_test::serial;
 
     #[derive(Clone)]
     struct TestCallback {
@@ -239,6 +240,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_file_watcher_start_stop() {
         use tempfile::TempDir;
         use std::fs;
@@ -298,6 +300,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_file_watcher_custom_config() {
         use tempfile::TempDir;
         use std::fs;
@@ -335,6 +338,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_file_watcher_drop() {
         use tempfile::TempDir;
         use std::fs;
@@ -366,6 +370,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_file_watcher_restart() {
         use tempfile::TempDir;
         use std::fs;
@@ -467,6 +472,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_file_watcher_error_callback() {
         use tempfile::TempDir;
         use std::fs;

@@ -1720,7 +1720,7 @@ mod tests {
         let mut result = ValidationResult::new();
         let _ = validator.validate_all_workflows(&mut result);
 
-        std::env::set_current_dir(original_dir).unwrap();
+        let _ = std::env::set_current_dir(original_dir);
 
         // The test workflow in non-standard location should NOT be validated
         // Only workflows from standard locations (builtin, user, local) should be validated

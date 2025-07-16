@@ -22,11 +22,13 @@ use tokio::time::timeout;
 static TEST_STORAGE_REGISTRY: RwLock<Option<Arc<WorkflowStorage>>> = RwLock::new(None);
 
 /// Set test storage for use in tests
+#[cfg(test)]
 pub fn set_test_storage(storage: Arc<WorkflowStorage>) {
     *TEST_STORAGE_REGISTRY.write().unwrap() = Some(storage);
 }
 
 /// Clear test storage after tests
+#[cfg(test)]
 pub fn clear_test_storage() {
     *TEST_STORAGE_REGISTRY.write().unwrap() = None;
 }

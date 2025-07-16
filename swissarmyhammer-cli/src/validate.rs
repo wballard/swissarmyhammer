@@ -2183,7 +2183,7 @@ stateDiagram-v2
         let mut result = ValidationResult::new();
         let _ = validator.validate_all_workflows(&mut result);
 
-        std::env::set_current_dir(original_dir).unwrap();
+        let _ = std::env::set_current_dir(original_dir);
         // With the new implementation using WorkflowResolver, workflows are only loaded
         // from standard locations (builtin, user ~/.swissarmyhammer/workflows, local ./.swissarmyhammer/workflows)
         // In a temp directory test environment, we might find the local workflow if the resolver

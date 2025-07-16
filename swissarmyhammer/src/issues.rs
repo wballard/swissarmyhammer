@@ -1,6 +1,8 @@
-use crate::error::Result;
+use crate::error::{Result, SwissArmyHammerError};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::fs;
+use std::io::{self, Read};
 
 /// Represents an issue in the tracking system
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

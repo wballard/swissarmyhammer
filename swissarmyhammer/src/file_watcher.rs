@@ -271,7 +271,7 @@ mod tests {
         assert!(watcher.watcher_handle.is_none());
 
         // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        let _ = std::env::set_current_dir(original_dir);
     }
 
     #[test]
@@ -334,7 +334,7 @@ mod tests {
         assert!(watcher.watcher_handle.is_none());
 
         // Restore original directory before temp_dir is dropped
-        std::env::set_current_dir(&original_dir).unwrap();
+        let _ = std::env::set_current_dir(&original_dir);
     }
 
     #[tokio::test]
@@ -366,7 +366,7 @@ mod tests {
         // Cannot test after drop, but Drop trait should have been called
 
         // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        let _ = std::env::set_current_dir(original_dir);
     }
 
     #[tokio::test]
@@ -500,6 +500,6 @@ mod tests {
         watcher.stop_watching();
 
         // Restore original directory before temp_dir is dropped
-        std::env::set_current_dir(&original_dir).unwrap();
+        let _ = std::env::set_current_dir(&original_dir);
     }
 }

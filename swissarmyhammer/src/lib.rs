@@ -70,6 +70,9 @@ pub mod workflow;
 /// Issue tracking and management
 pub mod issues;
 
+/// Git operations for issue management
+pub mod git;
+
 /// Security utilities for path validation and resource limits
 pub mod security;
 

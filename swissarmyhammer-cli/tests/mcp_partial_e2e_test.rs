@@ -8,17 +8,19 @@ mod test_utils;
 use test_utils::ProcessGuard;
 
 /// Wait for the server to be ready by attempting to read from stdout
-async fn wait_for_server_ready(_reader: &mut BufReader<std::process::ChildStdout>) -> Result<(), Box<dyn std::error::Error>> {
+async fn wait_for_server_ready(
+    _reader: &mut BufReader<std::process::ChildStdout>,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Try to read from the server with a timeout
     // A healthy server should respond to input within a reasonable time
     let mut attempts = 0;
     const MAX_ATTEMPTS: u32 = 50; // 5 seconds with 100ms intervals
-    
+
     while attempts < MAX_ATTEMPTS {
         // Check if there's any data available (non-blocking check)
         std::thread::sleep(Duration::from_millis(100));
         attempts += 1;
-        
+
         // Try to peek at the buffer to see if server is responsive
         // We'll use a simple approach: if the server is started, it should be ready to accept input
         if attempts >= 10 {
@@ -26,11 +28,11 @@ async fn wait_for_server_ready(_reader: &mut BufReader<std::process::ChildStdout
             break;
         }
     }
-    
+
     if attempts >= MAX_ATTEMPTS {
         return Err("Server did not become ready within timeout".into());
     }
-    
+
     Ok(())
 }
 
@@ -55,7 +57,9 @@ async fn test_mcp_server_partial_rendering() {
     let mut reader = BufReader::new(stdout);
 
     // Wait for the server to be ready
-    wait_for_server_ready(&mut reader).await.expect("Server failed to start properly");
+    wait_for_server_ready(&mut reader)
+        .await
+        .expect("Server failed to start properly");
 
     // Spawn stderr reader for debugging
     std::thread::spawn(move || {

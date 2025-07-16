@@ -1,7 +1,6 @@
 use crate::error::{Result, SwissArmyHammerError};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use tracing::debug;
 
@@ -272,14 +271,9 @@ impl FileSystemIssueStorage {
     /// The name parameter is sanitized by replacing spaces, forward slashes,
     /// and backslashes with hyphens to ensure filesystem compatibility.
     fn create_issue_file(&self, number: u32, name: &str, content: &str) -> Result<PathBuf> {
-        // Format filename as <nnnnnn>_<name>.md
-        let safe_name = name.replace([' ', '/', '\\'], "-");
-        let filename = format!(
-            "{:0width$}_{}.md",
-            number,
-            safe_name,
-            width = ISSUE_NUMBER_DIGITS
-        );
+        // Format filename as <nnnnnn>_<name>.md using utility functions
+        let safe_name = create_safe_filename(name);
+        let filename = format!("{}_{}.md", format_issue_number(number), safe_name);
         let file_path = self.state.issues_dir.join(&filename);
 
         // Write content to file
@@ -339,6 +333,217 @@ impl IssueStorage for FileSystemIssueStorage {
             completed: false,
             file_path,
         })
+    }
+}
+
+/// Format issue number as 6-digit string with leading zeros
+pub fn format_issue_number(number: u32) -> String {
+    format!("{:06}", number)
+}
+
+/// Parse issue number from string
+pub fn parse_issue_number(s: &str) -> Result<u32> {
+    if s.len() != ISSUE_NUMBER_DIGITS {
+        return Err(SwissArmyHammerError::InvalidIssueNumber(format!(
+            "Issue number must be exactly {} digits, got {}",
+            ISSUE_NUMBER_DIGITS,
+            s.len()
+        )));
+    }
+
+    let number = s
+        .parse::<u32>()
+        .map_err(|_| SwissArmyHammerError::InvalidIssueNumber(s.to_string()))?;
+
+    if number > MAX_ISSUE_NUMBER {
+        return Err(SwissArmyHammerError::InvalidIssueNumber(format!(
+            "Issue number {} exceeds maximum ({})",
+            number, MAX_ISSUE_NUMBER
+        )));
+    }
+
+    Ok(number)
+}
+
+/// Extract issue info from filename
+pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
+    let parts: Vec<&str> = filename.splitn(2, '_').collect();
+    if parts.len() != 2 {
+        return Err(SwissArmyHammerError::Other(format!(
+            "Invalid filename format: expected <nnnnnn>_<name>, got {}",
+            filename
+        )));
+    }
+
+    let number = parse_issue_number(parts[0])?;
+    let name = parts[1].to_string();
+
+    Ok((number, name))
+}
+
+/// Create safe filename from issue name
+pub fn create_safe_filename(name: &str) -> String {
+    if name.is_empty() {
+        return "unnamed".to_string();
+    }
+
+    // Replace spaces with dashes and remove problematic characters
+    let safe_name = name
+        .chars()
+        .map(|c| match c {
+            ' ' => '-',
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '-',
+            c if c.is_control() => '-',
+            c => c,
+        })
+        .collect::<String>();
+
+    // Remove consecutive dashes
+    let mut result = String::new();
+    let mut prev_was_dash = false;
+    for c in safe_name.chars() {
+        if c == '-' {
+            if !prev_was_dash {
+                result.push(c);
+                prev_was_dash = true;
+            }
+        } else {
+            result.push(c);
+            prev_was_dash = false;
+        }
+    }
+
+    // Trim dashes from start and end
+    let result = result.trim_matches('-').to_string();
+
+    // Ensure not empty and limit length
+    if result.is_empty() {
+        "unnamed".to_string()
+    } else if result.len() > 100 {
+        result.chars().take(100).collect()
+    } else {
+        result
+    }
+}
+
+/// Validate issue name
+pub fn validate_issue_name(name: &str) -> Result<()> {
+    if name.is_empty() {
+        return Err(SwissArmyHammerError::Other(
+            "Issue name cannot be empty".to_string(),
+        ));
+    }
+
+    if name.len() > 200 {
+        return Err(SwissArmyHammerError::Other(format!(
+            "Issue name too long: {} characters (max 200)",
+            name.len()
+        )));
+    }
+
+    // Check for problematic characters
+    for c in name.chars() {
+        if c.is_control() {
+            return Err(SwissArmyHammerError::Other(
+                "Issue name contains control characters".to_string(),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+/// Check if file is an issue file
+pub fn is_issue_file(path: &Path) -> bool {
+    // Must be .md file
+    if path.extension() != Some(std::ffi::OsStr::new("md")) {
+        return false;
+    }
+
+    // Get filename without extension
+    let filename = match path.file_stem() {
+        Some(name) => match name.to_str() {
+            Some(s) => s,
+            None => return false,
+        },
+        None => return false,
+    };
+
+    // Check if filename matches pattern
+    parse_issue_filename(filename).is_ok()
+}
+
+impl FileSystemIssueStorage {
+    /// Get the full path for an issue file
+    fn get_issue_path(&self, _number: u32, completed: bool) -> PathBuf {
+        let dir = if completed {
+            &self.state.completed_dir
+        } else {
+            &self.state.issues_dir
+        };
+
+        dir.to_path_buf()
+    }
+
+    /// Find issue file by number in a directory
+    fn find_issue_file(&self, dir: &Path, number: u32) -> Result<Option<PathBuf>> {
+        let number_prefix = format_issue_number(number);
+
+        let entries = fs::read_dir(dir).map_err(SwissArmyHammerError::Io)?;
+
+        for entry in entries {
+            let entry = entry.map_err(SwissArmyHammerError::Io)?;
+            let path = entry.path();
+
+            if !path.is_file() || !is_issue_file(&path) {
+                continue;
+            }
+
+            if let Some(filename) = path.file_name() {
+                if let Some(filename_str) = filename.to_str() {
+                    if filename_str.starts_with(&format!("{}_", number_prefix)) {
+                        return Ok(Some(path));
+                    }
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Get all issue files in a directory
+    fn get_issue_files(&self, dir: &Path) -> Result<Vec<PathBuf>> {
+        let mut issue_files = Vec::new();
+
+        let entries = fs::read_dir(dir).map_err(SwissArmyHammerError::Io)?;
+
+        for entry in entries {
+            let entry = entry.map_err(SwissArmyHammerError::Io)?;
+            let path = entry.path();
+
+            if path.is_file() && is_issue_file(&path) {
+                issue_files.push(path);
+            }
+        }
+
+        // Sort by issue number
+        issue_files.sort_by(|a, b| {
+            let a_num = a
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .and_then(|s| parse_issue_filename(s).ok())
+                .map(|(n, _)| n)
+                .unwrap_or(0);
+            let b_num = b
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .and_then(|s| parse_issue_filename(s).ok())
+                .map(|(n, _)| n)
+                .unwrap_or(0);
+            a_num.cmp(&b_num)
+        });
+
+        Ok(issue_files)
     }
 }
 

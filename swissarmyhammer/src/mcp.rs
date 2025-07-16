@@ -17,6 +17,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
+/// Constants for issue branch management
+const ISSUE_BRANCH_PREFIX: &str = "issue/";
+const ISSUE_NUMBER_WIDTH: usize = 6;
+
 /// Request structure for getting a prompt
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct GetPromptRequest {
@@ -97,7 +101,19 @@ pub struct McpServer {
 }
 
 impl McpServer {
-    /// Create a new MCP server
+    /// Create a new MCP server with the provided prompt library.
+    ///
+    /// # Arguments
+    ///
+    /// * `library` - The prompt library to serve via MCP
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self>` - The MCP server instance or an error if initialization fails
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if workflow storage, issue storage, or git operations fail to initialize.
     pub fn new(library: PromptLibrary) -> Result<Self> {
         // Initialize workflow storage with filesystem backend
         let workflow_backend = Arc::new(FileSystemWorkflowStorage::new().map_err(|e| {
@@ -145,12 +161,27 @@ impl McpServer {
         })
     }
 
-    /// Get the underlying library
+    /// Get a reference to the underlying prompt library.
+    ///
+    /// # Returns
+    ///
+    /// * `&Arc<RwLock<PromptLibrary>>` - Reference to the wrapped prompt library
     pub fn library(&self) -> &Arc<RwLock<PromptLibrary>> {
         &self.library
     }
 
-    /// Initialize the server with prompt directories using PromptResolver
+    /// Initialize the server by loading prompts and workflows from disk.
+    ///
+    /// This method loads all prompts using the PromptResolver and initializes
+    /// workflow storage. It should be called before starting the MCP server.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<()>` - Ok if initialization succeeds, error otherwise
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if prompt loading or workflow initialization fails.
     pub async fn initialize(&self) -> Result<()> {
         let mut library = self.library.write().await;
         let mut resolver = PromptResolver::new();
@@ -170,7 +201,14 @@ impl McpServer {
         Ok(())
     }
 
-    /// List all available prompts (excluding partial templates)
+    /// List all available prompts, excluding partial templates.
+    ///
+    /// Partial templates are filtered out as they are meant for internal use
+    /// and should not be exposed via the MCP interface.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Vec<String>>` - List of prompt names or an error
     pub async fn list_prompts(&self) -> Result<Vec<String>> {
         let library = self.library.read().await;
         let prompts = library.list()?;
@@ -181,14 +219,30 @@ impl McpServer {
             .collect())
     }
 
-    /// List all available workflows
+    /// List all available workflows loaded from the workflow storage.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Vec<String>>` - List of workflow names or an error
     pub async fn list_workflows(&self) -> Result<Vec<String>> {
         let workflow_storage = self.workflow_storage.read().await;
         let workflows = workflow_storage.list_workflows()?;
         Ok(workflows.iter().map(|w| w.name.to_string()).collect())
     }
 
-    /// Check if a prompt is a partial template that should not be exposed over MCP
+    /// Check if a prompt is a partial template that should not be exposed over MCP.
+    ///
+    /// Partial templates are identified by either:
+    /// 1. Starting with the `{% partial %}` marker
+    /// 2. Having a description containing "Partial template for reuse"
+    ///
+    /// # Arguments
+    ///
+    /// * `prompt` - The prompt to check
+    ///
+    /// # Returns
+    ///
+    /// * `bool` - True if the prompt is a partial template
     fn is_partial_template(prompt: &crate::prompts::Prompt) -> bool {
         // Check if the template starts with the partial marker
         if prompt.template.trim().starts_with("{% partial %}") {
@@ -205,7 +259,21 @@ impl McpServer {
         false
     }
 
-    /// Get a specific prompt by name (excluding partial templates)
+    /// Get a specific prompt by name, with optional template argument rendering.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the prompt to retrieve
+    /// * `arguments` - Optional template arguments for rendering
+    ///
+    /// # Returns
+    ///
+    /// * `Result<String>` - The rendered prompt content or an error
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the prompt is not found, is a partial template,
+    /// or if template rendering fails.
     pub async fn get_prompt(
         &self,
         name: &str,
@@ -280,7 +348,22 @@ impl FileWatcherCallback for McpFileWatcherCallback {
 }
 
 impl McpServer {
-    /// Start watching prompt directories for changes
+    /// Start watching prompt directories for file changes.
+    ///
+    /// When files change, the server will automatically reload prompts and
+    /// send notifications to the MCP client.
+    ///
+    /// # Arguments
+    ///
+    /// * `peer` - The MCP peer connection for sending notifications
+    ///
+    /// # Returns
+    ///
+    /// * `Result<()>` - Ok if watching starts successfully, error otherwise
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if file watching cannot be initialized.
     pub async fn start_file_watching(&self, peer: rmcp::Peer<RoleServer>) -> Result<()> {
         const MAX_RETRIES: u32 = 3;
         const INITIAL_BACKOFF_MS: u64 = 100;
@@ -333,7 +416,9 @@ impl McpServer {
         Err(last_error.unwrap())
     }
 
-    /// Stop file watching
+    /// Stop watching prompt directories for file changes.
+    ///
+    /// This should be called when the MCP server is shutting down.
     pub async fn stop_file_watching(&self) {
         let mut watcher = self.file_watcher.lock().await;
         watcher.stop_watching();
@@ -349,7 +434,15 @@ impl McpServer {
             .join("workflow-runs")
     }
 
-    /// Convert internal prompt arguments to MCP PromptArgument structures
+    /// Convert internal prompt arguments to MCP PromptArgument structures.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - The internal argument specifications
+    ///
+    /// # Returns
+    ///
+    /// * `Option<Vec<PromptArgument>>` - The converted MCP arguments or None if empty
     fn convert_prompt_arguments(args: &[crate::ArgumentSpec]) -> Option<Vec<PromptArgument>> {
         if args.is_empty() {
             None
@@ -366,7 +459,18 @@ impl McpServer {
         }
     }
 
-    /// Convert serde_json::Map to HashMap<String, String>
+    /// Convert serde_json::Map to HashMap<String, String> for template rendering.
+    ///
+    /// This helper method converts MCP tool arguments from JSON format to
+    /// the string format expected by the template engine.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - The JSON map of arguments from MCP
+    ///
+    /// # Returns
+    ///
+    /// * `HashMap<String, String>` - The converted arguments
     fn json_map_to_string_map(args: &serde_json::Map<String, Value>) -> HashMap<String, String> {
         let mut template_args = HashMap::new();
         for (key, value) in args {
@@ -379,7 +483,359 @@ impl McpServer {
         template_args
     }
 
-    /// Reload prompts from disk
+    /// Generate input schema for a tool from a request type.
+    ///
+    /// This helper method creates the JSON schema for MCP tool input validation
+    /// using the schemars crate. It handles schema generation errors gracefully
+    /// by returning an empty schema if generation fails.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The request type that implements JsonSchema
+    ///
+    /// # Returns
+    ///
+    /// * `Arc<serde_json::Map<String, Value>>` - The generated schema or empty schema
+    fn generate_tool_schema<T>() -> Arc<serde_json::Map<String, Value>>
+    where
+        T: schemars::JsonSchema,
+    {
+        serde_json::to_value(schemars::schema_for!(T))
+            .ok()
+            .and_then(|v| v.as_object().map(|obj| Arc::new(obj.clone())))
+            .unwrap_or_else(|| Arc::new(serde_json::Map::new()))
+    }
+
+    /// Create a success response for a tool call.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - The success message to include in the response
+    ///
+    /// # Returns
+    ///
+    /// * `CallToolResult` - A successful tool call result with the message
+    fn create_success_response(message: String) -> CallToolResult {
+        CallToolResult {
+            content: vec![Annotated::new(
+                RawContent::Text(RawTextContent { text: message }),
+                None,
+            )],
+            is_error: Some(false),
+        }
+    }
+
+    /// Create an error response for a tool call.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - The error message to include in the response
+    ///
+    /// # Returns
+    ///
+    /// * `CallToolResult` - An error tool call result with the message
+    fn create_error_response(message: String) -> CallToolResult {
+        CallToolResult {
+            content: vec![Annotated::new(
+                RawContent::Text(RawTextContent { text: message }),
+                None,
+            )],
+            is_error: Some(true),
+        }
+    }
+
+    /// Handle the issue_create tool operation.
+    ///
+    /// Creates a new issue with auto-assigned number and stores it in the
+    /// issues directory as a markdown file.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The create issue request containing name and content
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    async fn handle_issue_create(
+        &self,
+        request: CreateIssueRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        tracing::debug!("Creating issue: {}", request.name);
+        let issue_storage = self.issue_storage.write().await;
+        match issue_storage
+            .create_issue(request.name, request.content)
+            .await
+        {
+            Ok(issue) => {
+                tracing::info!("Created issue {} with number {}", issue.name, issue.number);
+                Ok(Self::create_success_response(format!(
+                    "Created issue {} with number {}",
+                    issue.name, issue.number
+                )))
+            }
+            Err(e) => {
+                tracing::error!("Failed to create issue: {}", e);
+                Ok(Self::create_error_response(format!(
+                    "Failed to create issue: {}",
+                    e
+                )))
+            }
+        }
+    }
+
+    /// Handle the issue_mark_complete tool operation.
+    ///
+    /// Marks an issue as complete by moving it to the completed issues directory.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The mark complete request containing the issue number
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    async fn handle_issue_mark_complete(
+        &self,
+        request: MarkCompleteRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        let issue_storage = self.issue_storage.write().await;
+        match issue_storage.mark_complete(request.number).await {
+            Ok(issue) => Ok(Self::create_success_response(format!(
+                "Marked issue {} as complete",
+                issue.number
+            ))),
+            Err(e) => Ok(Self::create_error_response(format!(
+                "Failed to mark issue complete: {}",
+                e
+            ))),
+        }
+    }
+
+    /// Handle the issue_all_complete tool operation.
+    ///
+    /// Checks if all issues are completed by listing pending issues.
+    ///
+    /// # Arguments
+    ///
+    /// * `_request` - The all complete request (no parameters needed)
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result with completion status
+    async fn handle_issue_all_complete(
+        &self,
+        _request: AllCompleteRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        let issue_storage = self.issue_storage.read().await;
+        match issue_storage.list_issues().await {
+            Ok(issues) => {
+                let pending_issues: Vec<_> = issues.iter().filter(|i| !i.completed).collect();
+                let all_complete = pending_issues.is_empty();
+                Ok(Self::create_success_response(format!(
+                    "All issues complete: {}. Pending issues: {}",
+                    all_complete,
+                    pending_issues.len()
+                )))
+            }
+            Err(e) => Ok(Self::create_error_response(format!(
+                "Failed to check issues: {}",
+                e
+            ))),
+        }
+    }
+
+    /// Handle the issue_update tool operation.
+    ///
+    /// Updates the content of an existing issue with new markdown content.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The update request containing issue number and new content
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    async fn handle_issue_update(
+        &self,
+        request: UpdateIssueRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        let issue_storage = self.issue_storage.write().await;
+        match issue_storage
+            .update_issue(request.number, request.content)
+            .await
+        {
+            Ok(issue) => Ok(Self::create_success_response(format!(
+                "Updated issue {} ({})",
+                issue.number, issue.name
+            ))),
+            Err(e) => Ok(Self::create_error_response(format!(
+                "Failed to update issue: {}",
+                e
+            ))),
+        }
+    }
+
+    /// Handle the issue_current tool operation.
+    ///
+    /// Determines the current issue being worked on by checking the git branch name.
+    /// If on an issue branch (starts with 'issue/'), returns the issue name.
+    ///
+    /// # Arguments
+    ///
+    /// * `_request` - The current issue request (no parameters needed)
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result with current issue info
+    async fn handle_issue_current(
+        &self,
+        _request: CurrentIssueRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        let git_ops = self.git_ops.lock().await;
+        match git_ops.as_ref() {
+            Some(ops) => match ops.current_branch() {
+                Ok(branch) => {
+                    if let Some(issue_name) = branch.strip_prefix(ISSUE_BRANCH_PREFIX) {
+                        Ok(Self::create_success_response(format!(
+                            "Currently working on issue: {}",
+                            issue_name
+                        )))
+                    } else {
+                        Ok(Self::create_success_response(format!(
+                            "Not on an issue branch. Current branch: {}",
+                            branch
+                        )))
+                    }
+                }
+                Err(e) => Ok(Self::create_error_response(format!(
+                    "Failed to get current branch: {}",
+                    e
+                ))),
+            },
+            None => Ok(Self::create_error_response(
+                "Git operations not available".to_string(),
+            )),
+        }
+    }
+
+    /// Handle the issue_work tool operation.
+    ///
+    /// Switches to a work branch for the specified issue. Creates a new branch
+    /// with the format 'issue/{issue_number}_{issue_name}' if it doesn't exist.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The work request containing the issue number
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    async fn handle_issue_work(
+        &self,
+        request: WorkIssueRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        // First get the issue to determine its name
+        let issue_storage = self.issue_storage.read().await;
+        let issue = match issue_storage.get_issue(request.number).await {
+            Ok(issue) => issue,
+            Err(e) => {
+                return Ok(Self::create_error_response(format!(
+                    "Failed to get issue {}: {}",
+                    request.number, e
+                )))
+            }
+        };
+        drop(issue_storage);
+
+        // Create work branch
+        let mut git_ops = self.git_ops.lock().await;
+        let issue_name = format!(
+            "{:0width$}_{}",
+            issue.number,
+            issue.name,
+            width = ISSUE_NUMBER_WIDTH
+        );
+
+        match git_ops.as_mut() {
+            Some(ops) => match ops.create_work_branch(&issue_name) {
+                Ok(branch_name) => Ok(Self::create_success_response(format!(
+                    "Switched to work branch: {}",
+                    branch_name
+                ))),
+                Err(e) => Ok(Self::create_error_response(format!(
+                    "Failed to create work branch: {}",
+                    e
+                ))),
+            },
+            None => Ok(Self::create_error_response(
+                "Git operations not available".to_string(),
+            )),
+        }
+    }
+
+    /// Handle the issue_merge tool operation.
+    ///
+    /// Merges the work branch for an issue back to the main branch.
+    /// The branch name is determined from the issue number and name.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The merge request containing the issue number
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    async fn handle_issue_merge(
+        &self,
+        request: MergeIssueRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        // First get the issue to determine its name
+        let issue_storage = self.issue_storage.read().await;
+        let issue = match issue_storage.get_issue(request.number).await {
+            Ok(issue) => issue,
+            Err(e) => {
+                return Ok(Self::create_error_response(format!(
+                    "Failed to get issue {}: {}",
+                    request.number, e
+                )))
+            }
+        };
+        drop(issue_storage);
+
+        // Merge branch
+        let mut git_ops = self.git_ops.lock().await;
+        let issue_name = format!(
+            "{:0width$}_{}",
+            issue.number,
+            issue.name,
+            width = ISSUE_NUMBER_WIDTH
+        );
+
+        match git_ops.as_mut() {
+            Some(ops) => match ops.merge_issue_branch(&issue_name) {
+                Ok(_) => Ok(Self::create_success_response(format!(
+                    "Merged work branch for issue {} to main",
+                    issue_name
+                ))),
+                Err(e) => Ok(Self::create_error_response(format!(
+                    "Failed to merge branch: {}",
+                    e
+                ))),
+            },
+            None => Ok(Self::create_error_response(
+                "Git operations not available".to_string(),
+            )),
+        }
+    }
+
+    /// Reload prompts from disk with retry logic.
+    ///
+    /// This method reloads all prompts from the file system and updates
+    /// the internal library. It includes retry logic for transient errors.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<()>` - Ok if reload succeeds, error otherwise
     async fn reload_prompts(&self) -> Result<()> {
         self.reload_prompts_with_retry().await
     }
@@ -605,64 +1061,43 @@ impl ServerHandler for McpServer {
             Tool {
                 name: "issue_create".into(),
                 description: Some("Create a new issue with auto-assigned number. Issues are markdown files stored in ./issues directory for tracking work items.".into()),
-                input_schema: serde_json::to_value(schemars::schema_for!(CreateIssueRequest))
-                    .ok()
-                    .and_then(|v| v.as_object().map(|obj| Arc::new(obj.clone())))
-                    .unwrap_or_else(|| Arc::new(serde_json::Map::new())),
+                input_schema: Self::generate_tool_schema::<CreateIssueRequest>(),
                 annotations: None,
             },
             Tool {
                 name: "issue_mark_complete".into(),
                 description: Some("Mark an issue as complete by moving it to ./issues/complete directory.".into()),
-                input_schema: serde_json::to_value(schemars::schema_for!(MarkCompleteRequest))
-                    .ok()
-                    .and_then(|v| v.as_object().map(|obj| Arc::new(obj.clone())))
-                    .unwrap_or_else(|| Arc::new(serde_json::Map::new())),
+                input_schema: Self::generate_tool_schema::<MarkCompleteRequest>(),
                 annotations: None,
             },
             Tool {
                 name: "issue_all_complete".into(),
                 description: Some("Check if all issues are completed. Returns true if no pending issues remain.".into()),
-                input_schema: serde_json::to_value(schemars::schema_for!(AllCompleteRequest))
-                    .ok()
-                    .and_then(|v| v.as_object().map(|obj| Arc::new(obj.clone())))
-                    .unwrap_or_else(|| Arc::new(serde_json::Map::new())),
+                input_schema: Self::generate_tool_schema::<AllCompleteRequest>(),
                 annotations: None,
             },
             Tool {
                 name: "issue_update".into(),
                 description: Some("Update the content of an existing issue with additional context or modifications.".into()),
-                input_schema: serde_json::to_value(schemars::schema_for!(UpdateIssueRequest))
-                    .ok()
-                    .and_then(|v| v.as_object().map(|obj| Arc::new(obj.clone())))
-                    .unwrap_or_else(|| Arc::new(serde_json::Map::new())),
+                input_schema: Self::generate_tool_schema::<UpdateIssueRequest>(),
                 annotations: None,
             },
             Tool {
                 name: "issue_current".into(),
                 description: Some("Get the current issue being worked on. Checks branch name to identify active issue.".into()),
-                input_schema: serde_json::to_value(schemars::schema_for!(CurrentIssueRequest))
-                    .ok()
-                    .and_then(|v| v.as_object().map(|obj| Arc::new(obj.clone())))
-                    .unwrap_or_else(|| Arc::new(serde_json::Map::new())),
+                input_schema: Self::generate_tool_schema::<CurrentIssueRequest>(),
                 annotations: None,
             },
             Tool {
                 name: "issue_work".into(),
                 description: Some("Switch to a work branch for the specified issue (creates branch issue/<issue_name> if needed).".into()),
-                input_schema: serde_json::to_value(schemars::schema_for!(WorkIssueRequest))
-                    .ok()
-                    .and_then(|v| v.as_object().map(|obj| Arc::new(obj.clone())))
-                    .unwrap_or_else(|| Arc::new(serde_json::Map::new())),
+                input_schema: Self::generate_tool_schema::<WorkIssueRequest>(),
                 annotations: None,
             },
             Tool {
                 name: "issue_merge".into(),
                 description: Some("Merge the work branch for an issue back to the main branch.".into()),
-                input_schema: serde_json::to_value(schemars::schema_for!(MergeIssueRequest))
-                    .ok()
-                    .and_then(|v| v.as_object().map(|obj| Arc::new(obj.clone())))
-                    .unwrap_or_else(|| Arc::new(serde_json::Map::new())),
+                input_schema: Self::generate_tool_schema::<MergeIssueRequest>(),
                 annotations: None,
             },
         ];
@@ -686,31 +1121,7 @@ impl ServerHandler for McpServer {
                 .map_err(|e| {
                     McpError::invalid_request(format!("Invalid arguments: {}", e), None)
                 })?;
-
-                let issue_storage = self.issue_storage.write().await;
-                match issue_storage.create_issue(req.name, req.content).await {
-                    Ok(issue) => Ok(CallToolResult {
-                        content: vec![Annotated::new(
-                            RawContent::Text(RawTextContent {
-                                text: format!(
-                                    "Created issue {} with number {}",
-                                    issue.name, issue.number
-                                ),
-                            }),
-                            None,
-                        )],
-                        is_error: Some(false),
-                    }),
-                    Err(e) => Ok(CallToolResult {
-                        content: vec![Annotated::new(
-                            RawContent::Text(RawTextContent {
-                                text: format!("Failed to create issue: {}", e),
-                            }),
-                            None,
-                        )],
-                        is_error: Some(true),
-                    }),
-                }
+                self.handle_issue_create(req).await
             }
 
             "issue_mark_complete" => {
@@ -720,61 +1131,17 @@ impl ServerHandler for McpServer {
                 .map_err(|e| {
                     McpError::invalid_request(format!("Invalid arguments: {}", e), None)
                 })?;
-
-                let issue_storage = self.issue_storage.write().await;
-                match issue_storage.mark_complete(req.number).await {
-                    Ok(issue) => Ok(CallToolResult {
-                        content: vec![Annotated::new(
-                            RawContent::Text(RawTextContent {
-                                text: format!("Marked issue {} as complete", issue.number),
-                            }),
-                            None,
-                        )],
-                        is_error: Some(false),
-                    }),
-                    Err(e) => Ok(CallToolResult {
-                        content: vec![Annotated::new(
-                            RawContent::Text(RawTextContent {
-                                text: format!("Failed to mark issue complete: {}", e),
-                            }),
-                            None,
-                        )],
-                        is_error: Some(true),
-                    }),
-                }
+                self.handle_issue_mark_complete(req).await
             }
 
             "issue_all_complete" => {
-                let issue_storage = self.issue_storage.read().await;
-                match issue_storage.list_issues().await {
-                    Ok(issues) => {
-                        let pending_issues: Vec<_> =
-                            issues.iter().filter(|i| !i.completed).collect();
-                        let all_complete = pending_issues.is_empty();
-                        Ok(CallToolResult {
-                            content: vec![Annotated::new(
-                                RawContent::Text(RawTextContent {
-                                    text: format!(
-                                        "All issues complete: {}. Pending issues: {}",
-                                        all_complete,
-                                        pending_issues.len()
-                                    ),
-                                }),
-                                None,
-                            )],
-                            is_error: Some(false),
-                        })
-                    }
-                    Err(e) => Ok(CallToolResult {
-                        content: vec![Annotated::new(
-                            RawContent::Text(RawTextContent {
-                                text: format!("Failed to check issues: {}", e),
-                            }),
-                            None,
-                        )],
-                        is_error: Some(true),
-                    }),
-                }
+                let req: AllCompleteRequest = serde_json::from_value(serde_json::Value::Object(
+                    request.arguments.clone().unwrap_or_default(),
+                ))
+                .map_err(|e| {
+                    McpError::invalid_request(format!("Invalid arguments: {}", e), None)
+                })?;
+                self.handle_issue_all_complete(req).await
             }
 
             "issue_update" => {
@@ -784,91 +1151,17 @@ impl ServerHandler for McpServer {
                 .map_err(|e| {
                     McpError::invalid_request(format!("Invalid arguments: {}", e), None)
                 })?;
-
-                let issue_storage = self.issue_storage.write().await;
-                match issue_storage.update_issue(req.number, req.content).await {
-                    Ok(issue) => Ok(CallToolResult {
-                        content: vec![Annotated::new(
-                            RawContent::Text(RawTextContent {
-                                text: format!("Updated issue {} ({})", issue.number, issue.name),
-                            }),
-                            None,
-                        )],
-                        is_error: Some(false),
-                    }),
-                    Err(e) => Ok(CallToolResult {
-                        content: vec![Annotated::new(
-                            RawContent::Text(RawTextContent {
-                                text: format!("Failed to update issue: {}", e),
-                            }),
-                            None,
-                        )],
-                        is_error: Some(true),
-                    }),
-                }
+                self.handle_issue_update(req).await
             }
 
             "issue_current" => {
-                let _req: CurrentIssueRequest = serde_json::from_value(serde_json::Value::Object(
+                let req: CurrentIssueRequest = serde_json::from_value(serde_json::Value::Object(
                     request.arguments.clone().unwrap_or_default(),
                 ))
                 .map_err(|e| {
                     McpError::invalid_request(format!("Invalid arguments: {}", e), None)
                 })?;
-
-                let git_ops = self.git_ops.lock().await;
-                match git_ops.as_ref() {
-                    Some(ops) => match ops.current_branch() {
-                        Ok(branch) => {
-                            if branch.starts_with("issue/") {
-                                let issue_name = &branch[6..]; // Remove "issue/" prefix
-                                Ok(CallToolResult {
-                                    content: vec![Annotated::new(
-                                        RawContent::Text(RawTextContent {
-                                            text: format!(
-                                                "Currently working on issue: {}",
-                                                issue_name
-                                            ),
-                                        }),
-                                        None,
-                                    )],
-                                    is_error: Some(false),
-                                })
-                            } else {
-                                Ok(CallToolResult {
-                                    content: vec![Annotated::new(
-                                        RawContent::Text(RawTextContent {
-                                            text: format!(
-                                                "Not on an issue branch. Current branch: {}",
-                                                branch
-                                            ),
-                                        }),
-                                        None,
-                                    )],
-                                    is_error: Some(false),
-                                })
-                            }
-                        }
-                        Err(e) => Ok(CallToolResult {
-                            content: vec![Annotated::new(
-                                RawContent::Text(RawTextContent {
-                                    text: format!("Failed to get current branch: {}", e),
-                                }),
-                                None,
-                            )],
-                            is_error: Some(true),
-                        }),
-                    },
-                    None => Ok(CallToolResult {
-                        content: vec![Annotated::new(
-                            RawContent::Text(RawTextContent {
-                                text: "Git operations not available".to_string(),
-                            }),
-                            None,
-                        )],
-                        is_error: Some(true),
-                    }),
-                }
+                self.handle_issue_current(req).await
             }
 
             "issue_work" => {
@@ -878,60 +1171,7 @@ impl ServerHandler for McpServer {
                 .map_err(|e| {
                     McpError::invalid_request(format!("Invalid arguments: {}", e), None)
                 })?;
-
-                // First get the issue to determine its name
-                let issue_storage = self.issue_storage.read().await;
-                let issue = match issue_storage.get_issue(req.number).await {
-                    Ok(issue) => issue,
-                    Err(e) => {
-                        return Ok(CallToolResult {
-                            content: vec![Annotated::new(
-                                RawContent::Text(RawTextContent {
-                                    text: format!("Failed to get issue {}: {}", req.number, e),
-                                }),
-                                None,
-                            )],
-                            is_error: Some(true),
-                        })
-                    }
-                };
-                drop(issue_storage);
-
-                // Create work branch
-                let mut git_ops = self.git_ops.lock().await;
-                let issue_name = format!("{:06}_{}", issue.number, issue.name);
-
-                match git_ops.as_mut() {
-                    Some(ops) => match ops.create_work_branch(&issue_name) {
-                        Ok(branch_name) => Ok(CallToolResult {
-                            content: vec![Annotated::new(
-                                RawContent::Text(RawTextContent {
-                                    text: format!("Switched to work branch: {}", branch_name),
-                                }),
-                                None,
-                            )],
-                            is_error: Some(false),
-                        }),
-                        Err(e) => Ok(CallToolResult {
-                            content: vec![Annotated::new(
-                                RawContent::Text(RawTextContent {
-                                    text: format!("Failed to create work branch: {}", e),
-                                }),
-                                None,
-                            )],
-                            is_error: Some(true),
-                        }),
-                    },
-                    None => Ok(CallToolResult {
-                        content: vec![Annotated::new(
-                            RawContent::Text(RawTextContent {
-                                text: "Git operations not available".to_string(),
-                            }),
-                            None,
-                        )],
-                        is_error: Some(true),
-                    }),
-                }
+                self.handle_issue_work(req).await
             }
 
             "issue_merge" => {
@@ -941,63 +1181,7 @@ impl ServerHandler for McpServer {
                 .map_err(|e| {
                     McpError::invalid_request(format!("Invalid arguments: {}", e), None)
                 })?;
-
-                // First get the issue to determine its name
-                let issue_storage = self.issue_storage.read().await;
-                let issue = match issue_storage.get_issue(req.number).await {
-                    Ok(issue) => issue,
-                    Err(e) => {
-                        return Ok(CallToolResult {
-                            content: vec![Annotated::new(
-                                RawContent::Text(RawTextContent {
-                                    text: format!("Failed to get issue {}: {}", req.number, e),
-                                }),
-                                None,
-                            )],
-                            is_error: Some(true),
-                        })
-                    }
-                };
-                drop(issue_storage);
-
-                // Merge branch
-                let mut git_ops = self.git_ops.lock().await;
-                let issue_name = format!("{:06}_{}", issue.number, issue.name);
-
-                match git_ops.as_mut() {
-                    Some(ops) => match ops.merge_issue_branch(&issue_name) {
-                        Ok(_) => Ok(CallToolResult {
-                            content: vec![Annotated::new(
-                                RawContent::Text(RawTextContent {
-                                    text: format!(
-                                        "Merged work branch for issue {} to main",
-                                        issue_name
-                                    ),
-                                }),
-                                None,
-                            )],
-                            is_error: Some(false),
-                        }),
-                        Err(e) => Ok(CallToolResult {
-                            content: vec![Annotated::new(
-                                RawContent::Text(RawTextContent {
-                                    text: format!("Failed to merge branch: {}", e),
-                                }),
-                                None,
-                            )],
-                            is_error: Some(true),
-                        }),
-                    },
-                    None => Ok(CallToolResult {
-                        content: vec![Annotated::new(
-                            RawContent::Text(RawTextContent {
-                                text: "Git operations not available".to_string(),
-                            }),
-                            None,
-                        )],
-                        is_error: Some(true),
-                    }),
-                }
+                self.handle_issue_merge(req).await
             }
 
             _ => Err(McpError::invalid_request(

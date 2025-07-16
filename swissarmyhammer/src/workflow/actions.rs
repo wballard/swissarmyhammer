@@ -762,12 +762,9 @@ impl PromptAction {
         }
 
         // Check for ABORT ERROR pattern in the response
-        if response_text.starts_with("ABORT ERROR:") {
-            let error_message = response_text
-                .trim_start_matches("ABORT ERROR:")
-                .trim()
-                .to_string();
-            tracing::error!("Abort error detected: {}", error_message);
+        if response_text.contains("ABORT ERROR:") {
+            let error_message = response_text.trim().to_string();
+            tracing::error!(error_message);
             return Err(ActionError::AbortError(error_message));
         }
 
@@ -1129,7 +1126,7 @@ impl Action for SubWorkflowAction {
         new_stack.push(Value::String(self.workflow_name.clone()));
 
         // Execute the sub-workflow in-process
-        tracing::debug!("Executing sub-workflow '{}' in-process", self.workflow_name);
+        tracing::info!("Executing sub-workflow '{}' in-process", self.workflow_name);
         tracing::debug!("Current context before sub-workflow: {:?}", context);
 
         // Create storage and load the workflow
@@ -1196,7 +1193,7 @@ impl Action for SubWorkflowAction {
         let _result = match timeout(self.timeout, execution_future).await {
             Ok(Ok(_)) => {
                 // Workflow executed successfully
-                tracing::debug!(
+                tracing::info!(
                     "Sub-workflow '{}' completed with status: {:?}",
                     self.workflow_name,
                     run.status
@@ -1225,7 +1222,7 @@ impl Action for SubWorkflowAction {
 
                 // Store result in context if variable name specified
                 if let Some(var_name) = &self.result_variable {
-                    tracing::debug!(
+                    tracing::info!(
                         "Storing sub-workflow result in variable '{}': {:?}",
                         var_name,
                         result

@@ -1,6 +1,8 @@
 //! Model Context Protocol (MCP) server support
 
 use crate::file_watcher::{FileWatcher, FileWatcherCallback};
+use crate::git::GitOperations;
+use crate::issues::{FileSystemIssueStorage, IssueStorage};
 use crate::workflow::{
     FileSystemWorkflowRunStorage, FileSystemWorkflowStorage, WorkflowRunStorageBackend,
     WorkflowStorage, WorkflowStorageBackend,
@@ -32,12 +34,66 @@ pub struct ListPromptsRequest {
     pub category: Option<String>,
 }
 
+/// Request to create a new issue
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct CreateIssueRequest {
+    /// Name of the issue (will be used in filename)
+    pub name: String,
+    /// Markdown content of the issue
+    pub content: String,
+}
+
+/// Request to mark an issue as complete
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct MarkCompleteRequest {
+    /// Issue number to mark as complete
+    pub number: u32,
+}
+
+/// Request to check if all issues are complete
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AllCompleteRequest {
+    // No parameters needed
+}
+
+/// Request to update an issue
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct UpdateIssueRequest {
+    /// Issue number to update
+    pub number: u32,
+    /// New markdown content for the issue
+    pub content: String,
+}
+
+/// Request to get current issue
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct CurrentIssueRequest {
+    /// Which branch to check (optional, defaults to current)
+    pub branch: Option<String>,
+}
+
+/// Request to work on an issue
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct WorkIssueRequest {
+    /// Issue number to work on
+    pub number: u32,
+}
+
+/// Request to merge an issue
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct MergeIssueRequest {
+    /// Issue number to merge
+    pub number: u32,
+}
+
 /// MCP server for serving prompts and workflows
 #[derive(Clone)]
 pub struct McpServer {
     library: Arc<RwLock<PromptLibrary>>,
     workflow_storage: Arc<RwLock<WorkflowStorage>>,
     file_watcher: Arc<Mutex<FileWatcher>>,
+    issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
+    git_ops: Arc<Mutex<Option<GitOperations>>>,
 }
 
 impl McpServer {
@@ -59,10 +115,33 @@ impl McpServer {
 
         let workflow_storage = WorkflowStorage::new(workflow_backend, run_backend);
 
+        // Initialize issue storage with default issues directory
+        let issues_dir = std::env::current_dir()
+            .map_err(|e| {
+                SwissArmyHammerError::Other(format!("Failed to get current directory: {}", e))
+            })?
+            .join("issues");
+
+        let issue_storage = Box::new(FileSystemIssueStorage::new(issues_dir).map_err(|e| {
+            tracing::error!("Failed to create issue storage: {}", e);
+            SwissArmyHammerError::Other(format!("Failed to create issue storage: {}", e))
+        })?) as Box<dyn IssueStorage>;
+
+        // Initialize git operations - make it optional for tests
+        let git_ops = match GitOperations::new() {
+            Ok(ops) => Some(ops),
+            Err(e) => {
+                tracing::warn!("Git operations not available: {}", e);
+                None
+            }
+        };
+
         Ok(Self {
             library: Arc::new(RwLock::new(library)),
             workflow_storage: Arc::new(RwLock::new(workflow_storage)),
             file_watcher: Arc::new(Mutex::new(FileWatcher::new())),
+            issue_storage: Arc::new(RwLock::new(issue_storage)),
+            git_ops: Arc::new(Mutex::new(git_ops)),
         })
     }
 
@@ -421,8 +500,7 @@ impl ServerHandler for McpServer {
                 logging: None,
                 completions: None,
                 experimental: None,
-            },
-            instructions: Some("A flexible prompt and workflow management server for AI assistants. Use list_prompts to see available prompts and get_prompt to retrieve and render them. Use workflow tools to execute and manage workflows.".into()),
+            },instructions: Some("A flexible prompt and workflow management server with integrated issue tracking. Use list_prompts to see available prompts and get_prompt to retrieve and render them. Use workflow tools to execute and manage workflows. Use issue_* tools to create and manage work items tracked as markdown files in your repository.".into()),
             server_info: Implementation {
                 name: "SwissArmyHammer".into(),
                 version: crate::VERSION.into(),
@@ -518,6 +596,417 @@ impl ServerHandler for McpServer {
         }
     }
 
+    async fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParam>,
+        _context: RequestContext<RoleServer>,
+    ) -> std::result::Result<ListToolsResult, McpError> {
+        let tools = vec![
+            Tool {
+                name: "issue_create".into(),
+                description: Some("Create a new issue with auto-assigned number. Issues are markdown files stored in ./issues directory for tracking work items.".into()),
+                input_schema: serde_json::to_value(schemars::schema_for!(CreateIssueRequest))
+                    .ok()
+                    .and_then(|v| v.as_object().map(|obj| Arc::new(obj.clone())))
+                    .unwrap_or_else(|| Arc::new(serde_json::Map::new())),
+                annotations: None,
+            },
+            Tool {
+                name: "issue_mark_complete".into(),
+                description: Some("Mark an issue as complete by moving it to ./issues/complete directory.".into()),
+                input_schema: serde_json::to_value(schemars::schema_for!(MarkCompleteRequest))
+                    .ok()
+                    .and_then(|v| v.as_object().map(|obj| Arc::new(obj.clone())))
+                    .unwrap_or_else(|| Arc::new(serde_json::Map::new())),
+                annotations: None,
+            },
+            Tool {
+                name: "issue_all_complete".into(),
+                description: Some("Check if all issues are completed. Returns true if no pending issues remain.".into()),
+                input_schema: serde_json::to_value(schemars::schema_for!(AllCompleteRequest))
+                    .ok()
+                    .and_then(|v| v.as_object().map(|obj| Arc::new(obj.clone())))
+                    .unwrap_or_else(|| Arc::new(serde_json::Map::new())),
+                annotations: None,
+            },
+            Tool {
+                name: "issue_update".into(),
+                description: Some("Update the content of an existing issue with additional context or modifications.".into()),
+                input_schema: serde_json::to_value(schemars::schema_for!(UpdateIssueRequest))
+                    .ok()
+                    .and_then(|v| v.as_object().map(|obj| Arc::new(obj.clone())))
+                    .unwrap_or_else(|| Arc::new(serde_json::Map::new())),
+                annotations: None,
+            },
+            Tool {
+                name: "issue_current".into(),
+                description: Some("Get the current issue being worked on. Checks branch name to identify active issue.".into()),
+                input_schema: serde_json::to_value(schemars::schema_for!(CurrentIssueRequest))
+                    .ok()
+                    .and_then(|v| v.as_object().map(|obj| Arc::new(obj.clone())))
+                    .unwrap_or_else(|| Arc::new(serde_json::Map::new())),
+                annotations: None,
+            },
+            Tool {
+                name: "issue_work".into(),
+                description: Some("Switch to a work branch for the specified issue (creates branch issue/<issue_name> if needed).".into()),
+                input_schema: serde_json::to_value(schemars::schema_for!(WorkIssueRequest))
+                    .ok()
+                    .and_then(|v| v.as_object().map(|obj| Arc::new(obj.clone())))
+                    .unwrap_or_else(|| Arc::new(serde_json::Map::new())),
+                annotations: None,
+            },
+            Tool {
+                name: "issue_merge".into(),
+                description: Some("Merge the work branch for an issue back to the main branch.".into()),
+                input_schema: serde_json::to_value(schemars::schema_for!(MergeIssueRequest))
+                    .ok()
+                    .and_then(|v| v.as_object().map(|obj| Arc::new(obj.clone())))
+                    .unwrap_or_else(|| Arc::new(serde_json::Map::new())),
+                annotations: None,
+            },
+        ];
+
+        Ok(ListToolsResult {
+            tools,
+            next_cursor: None,
+        })
+    }
+
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParam,
+        _context: RequestContext<RoleServer>,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        match request.name.as_ref() {
+            "issue_create" => {
+                let req: CreateIssueRequest = serde_json::from_value(serde_json::Value::Object(
+                    request.arguments.clone().unwrap_or_default(),
+                ))
+                .map_err(|e| {
+                    McpError::invalid_request(format!("Invalid arguments: {}", e), None)
+                })?;
+
+                let issue_storage = self.issue_storage.write().await;
+                match issue_storage.create_issue(req.name, req.content).await {
+                    Ok(issue) => Ok(CallToolResult {
+                        content: vec![Annotated::new(
+                            RawContent::Text(RawTextContent {
+                                text: format!(
+                                    "Created issue {} with number {}",
+                                    issue.name, issue.number
+                                ),
+                            }),
+                            None,
+                        )],
+                        is_error: Some(false),
+                    }),
+                    Err(e) => Ok(CallToolResult {
+                        content: vec![Annotated::new(
+                            RawContent::Text(RawTextContent {
+                                text: format!("Failed to create issue: {}", e),
+                            }),
+                            None,
+                        )],
+                        is_error: Some(true),
+                    }),
+                }
+            }
+
+            "issue_mark_complete" => {
+                let req: MarkCompleteRequest = serde_json::from_value(serde_json::Value::Object(
+                    request.arguments.clone().unwrap_or_default(),
+                ))
+                .map_err(|e| {
+                    McpError::invalid_request(format!("Invalid arguments: {}", e), None)
+                })?;
+
+                let issue_storage = self.issue_storage.write().await;
+                match issue_storage.mark_complete(req.number).await {
+                    Ok(issue) => Ok(CallToolResult {
+                        content: vec![Annotated::new(
+                            RawContent::Text(RawTextContent {
+                                text: format!("Marked issue {} as complete", issue.number),
+                            }),
+                            None,
+                        )],
+                        is_error: Some(false),
+                    }),
+                    Err(e) => Ok(CallToolResult {
+                        content: vec![Annotated::new(
+                            RawContent::Text(RawTextContent {
+                                text: format!("Failed to mark issue complete: {}", e),
+                            }),
+                            None,
+                        )],
+                        is_error: Some(true),
+                    }),
+                }
+            }
+
+            "issue_all_complete" => {
+                let issue_storage = self.issue_storage.read().await;
+                match issue_storage.list_issues().await {
+                    Ok(issues) => {
+                        let pending_issues: Vec<_> =
+                            issues.iter().filter(|i| !i.completed).collect();
+                        let all_complete = pending_issues.is_empty();
+                        Ok(CallToolResult {
+                            content: vec![Annotated::new(
+                                RawContent::Text(RawTextContent {
+                                    text: format!(
+                                        "All issues complete: {}. Pending issues: {}",
+                                        all_complete,
+                                        pending_issues.len()
+                                    ),
+                                }),
+                                None,
+                            )],
+                            is_error: Some(false),
+                        })
+                    }
+                    Err(e) => Ok(CallToolResult {
+                        content: vec![Annotated::new(
+                            RawContent::Text(RawTextContent {
+                                text: format!("Failed to check issues: {}", e),
+                            }),
+                            None,
+                        )],
+                        is_error: Some(true),
+                    }),
+                }
+            }
+
+            "issue_update" => {
+                let req: UpdateIssueRequest = serde_json::from_value(serde_json::Value::Object(
+                    request.arguments.clone().unwrap_or_default(),
+                ))
+                .map_err(|e| {
+                    McpError::invalid_request(format!("Invalid arguments: {}", e), None)
+                })?;
+
+                let issue_storage = self.issue_storage.write().await;
+                match issue_storage.update_issue(req.number, req.content).await {
+                    Ok(issue) => Ok(CallToolResult {
+                        content: vec![Annotated::new(
+                            RawContent::Text(RawTextContent {
+                                text: format!("Updated issue {} ({})", issue.number, issue.name),
+                            }),
+                            None,
+                        )],
+                        is_error: Some(false),
+                    }),
+                    Err(e) => Ok(CallToolResult {
+                        content: vec![Annotated::new(
+                            RawContent::Text(RawTextContent {
+                                text: format!("Failed to update issue: {}", e),
+                            }),
+                            None,
+                        )],
+                        is_error: Some(true),
+                    }),
+                }
+            }
+
+            "issue_current" => {
+                let _req: CurrentIssueRequest = serde_json::from_value(serde_json::Value::Object(
+                    request.arguments.clone().unwrap_or_default(),
+                ))
+                .map_err(|e| {
+                    McpError::invalid_request(format!("Invalid arguments: {}", e), None)
+                })?;
+
+                let git_ops = self.git_ops.lock().await;
+                match git_ops.as_ref() {
+                    Some(ops) => match ops.current_branch() {
+                        Ok(branch) => {
+                            if branch.starts_with("issue/") {
+                                let issue_name = &branch[6..]; // Remove "issue/" prefix
+                                Ok(CallToolResult {
+                                    content: vec![Annotated::new(
+                                        RawContent::Text(RawTextContent {
+                                            text: format!(
+                                                "Currently working on issue: {}",
+                                                issue_name
+                                            ),
+                                        }),
+                                        None,
+                                    )],
+                                    is_error: Some(false),
+                                })
+                            } else {
+                                Ok(CallToolResult {
+                                    content: vec![Annotated::new(
+                                        RawContent::Text(RawTextContent {
+                                            text: format!(
+                                                "Not on an issue branch. Current branch: {}",
+                                                branch
+                                            ),
+                                        }),
+                                        None,
+                                    )],
+                                    is_error: Some(false),
+                                })
+                            }
+                        }
+                        Err(e) => Ok(CallToolResult {
+                            content: vec![Annotated::new(
+                                RawContent::Text(RawTextContent {
+                                    text: format!("Failed to get current branch: {}", e),
+                                }),
+                                None,
+                            )],
+                            is_error: Some(true),
+                        }),
+                    },
+                    None => Ok(CallToolResult {
+                        content: vec![Annotated::new(
+                            RawContent::Text(RawTextContent {
+                                text: "Git operations not available".to_string(),
+                            }),
+                            None,
+                        )],
+                        is_error: Some(true),
+                    }),
+                }
+            }
+
+            "issue_work" => {
+                let req: WorkIssueRequest = serde_json::from_value(serde_json::Value::Object(
+                    request.arguments.clone().unwrap_or_default(),
+                ))
+                .map_err(|e| {
+                    McpError::invalid_request(format!("Invalid arguments: {}", e), None)
+                })?;
+
+                // First get the issue to determine its name
+                let issue_storage = self.issue_storage.read().await;
+                let issue = match issue_storage.get_issue(req.number).await {
+                    Ok(issue) => issue,
+                    Err(e) => {
+                        return Ok(CallToolResult {
+                            content: vec![Annotated::new(
+                                RawContent::Text(RawTextContent {
+                                    text: format!("Failed to get issue {}: {}", req.number, e),
+                                }),
+                                None,
+                            )],
+                            is_error: Some(true),
+                        })
+                    }
+                };
+                drop(issue_storage);
+
+                // Create work branch
+                let mut git_ops = self.git_ops.lock().await;
+                let issue_name = format!("{:06}_{}", issue.number, issue.name);
+
+                match git_ops.as_mut() {
+                    Some(ops) => match ops.create_work_branch(&issue_name) {
+                        Ok(branch_name) => Ok(CallToolResult {
+                            content: vec![Annotated::new(
+                                RawContent::Text(RawTextContent {
+                                    text: format!("Switched to work branch: {}", branch_name),
+                                }),
+                                None,
+                            )],
+                            is_error: Some(false),
+                        }),
+                        Err(e) => Ok(CallToolResult {
+                            content: vec![Annotated::new(
+                                RawContent::Text(RawTextContent {
+                                    text: format!("Failed to create work branch: {}", e),
+                                }),
+                                None,
+                            )],
+                            is_error: Some(true),
+                        }),
+                    },
+                    None => Ok(CallToolResult {
+                        content: vec![Annotated::new(
+                            RawContent::Text(RawTextContent {
+                                text: "Git operations not available".to_string(),
+                            }),
+                            None,
+                        )],
+                        is_error: Some(true),
+                    }),
+                }
+            }
+
+            "issue_merge" => {
+                let req: MergeIssueRequest = serde_json::from_value(serde_json::Value::Object(
+                    request.arguments.clone().unwrap_or_default(),
+                ))
+                .map_err(|e| {
+                    McpError::invalid_request(format!("Invalid arguments: {}", e), None)
+                })?;
+
+                // First get the issue to determine its name
+                let issue_storage = self.issue_storage.read().await;
+                let issue = match issue_storage.get_issue(req.number).await {
+                    Ok(issue) => issue,
+                    Err(e) => {
+                        return Ok(CallToolResult {
+                            content: vec![Annotated::new(
+                                RawContent::Text(RawTextContent {
+                                    text: format!("Failed to get issue {}: {}", req.number, e),
+                                }),
+                                None,
+                            )],
+                            is_error: Some(true),
+                        })
+                    }
+                };
+                drop(issue_storage);
+
+                // Merge branch
+                let mut git_ops = self.git_ops.lock().await;
+                let issue_name = format!("{:06}_{}", issue.number, issue.name);
+
+                match git_ops.as_mut() {
+                    Some(ops) => match ops.merge_issue_branch(&issue_name) {
+                        Ok(_) => Ok(CallToolResult {
+                            content: vec![Annotated::new(
+                                RawContent::Text(RawTextContent {
+                                    text: format!(
+                                        "Merged work branch for issue {} to main",
+                                        issue_name
+                                    ),
+                                }),
+                                None,
+                            )],
+                            is_error: Some(false),
+                        }),
+                        Err(e) => Ok(CallToolResult {
+                            content: vec![Annotated::new(
+                                RawContent::Text(RawTextContent {
+                                    text: format!("Failed to merge branch: {}", e),
+                                }),
+                                None,
+                            )],
+                            is_error: Some(true),
+                        }),
+                    },
+                    None => Ok(CallToolResult {
+                        content: vec![Annotated::new(
+                            RawContent::Text(RawTextContent {
+                                text: "Git operations not available".to_string(),
+                            }),
+                            None,
+                        )],
+                        is_error: Some(true),
+                    }),
+                }
+            }
+
+            _ => Err(McpError::invalid_request(
+                format!("Unknown tool: {}", request.name),
+                None,
+            )),
+        }
+    }
+
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             protocol_version: ProtocolVersion::default(),
@@ -532,12 +1021,10 @@ impl ServerHandler for McpServer {
                 logging: None,
                 completions: None,
                 experimental: None,
-            },
-            server_info: Implementation {
+            },server_info: Implementation {
                 name: "SwissArmyHammer".into(),
                 version: crate::VERSION.into(),
-            },
-            instructions: Some("A flexible prompt and workflow management server for AI assistants. Use list_prompts to see available prompts and get_prompt to retrieve and render them. Use workflow tools to execute and manage workflows.".into()),
+            },instructions: Some("A flexible prompt and workflow management server with integrated issue tracking. Use list_prompts to see available prompts and get_prompt to retrieve and render them. Use workflow tools to execute and manage workflows. Use issue_* tools to create and manage work items tracked as markdown files in your repository.".into()),
         }
     }
 }
@@ -800,5 +1287,111 @@ mod tests {
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
         assert!(error_msg.contains("partial template"));
+    }
+
+    #[tokio::test]
+    async fn test_mcp_server_exposes_issue_tools() {
+        // Create a test library and server
+        let library = PromptLibrary::new();
+        let server = McpServer::new(library).unwrap();
+
+        // Test that server info includes issue tracking capabilities
+        let info = server.get_info();
+        assert!(
+            info.capabilities.tools.is_some(),
+            "Server should expose tools capability"
+        );
+
+        let tools_cap = info.capabilities.tools.unwrap();
+        assert_eq!(
+            tools_cap.list_changed,
+            Some(true),
+            "Tools capability should support list_changed"
+        );
+
+        // Verify server info includes issue tracking in instructions
+        assert!(
+            info.instructions.is_some(),
+            "Server should have instructions"
+        );
+        let instructions = info.instructions.unwrap();
+        assert!(
+            instructions.contains("issue tracking"),
+            "Instructions should mention issue tracking"
+        );
+        assert!(
+            instructions.contains("issue_*"),
+            "Instructions should mention issue_* tools"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_mcp_server_tool_schemas_are_valid() {
+        // Test that all request schemas can be generated without error
+        let create_schema = serde_json::to_value(schemars::schema_for!(CreateIssueRequest));
+        assert!(
+            create_schema.is_ok(),
+            "CreateIssueRequest schema should be valid"
+        );
+
+        let mark_complete_schema = serde_json::to_value(schemars::schema_for!(MarkCompleteRequest));
+        assert!(
+            mark_complete_schema.is_ok(),
+            "MarkCompleteRequest schema should be valid"
+        );
+
+        let all_complete_schema = serde_json::to_value(schemars::schema_for!(AllCompleteRequest));
+        assert!(
+            all_complete_schema.is_ok(),
+            "AllCompleteRequest schema should be valid"
+        );
+
+        let update_schema = serde_json::to_value(schemars::schema_for!(UpdateIssueRequest));
+        assert!(
+            update_schema.is_ok(),
+            "UpdateIssueRequest schema should be valid"
+        );
+
+        let current_schema = serde_json::to_value(schemars::schema_for!(CurrentIssueRequest));
+        assert!(
+            current_schema.is_ok(),
+            "CurrentIssueRequest schema should be valid"
+        );
+
+        let work_schema = serde_json::to_value(schemars::schema_for!(WorkIssueRequest));
+        assert!(
+            work_schema.is_ok(),
+            "WorkIssueRequest schema should be valid"
+        );
+
+        let merge_schema = serde_json::to_value(schemars::schema_for!(MergeIssueRequest));
+        assert!(
+            merge_schema.is_ok(),
+            "MergeIssueRequest schema should be valid"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_mcp_server_initializes_with_issue_storage() {
+        // Test that server can be created and includes issue storage
+        let library = PromptLibrary::new();
+        let server = McpServer::new(library).unwrap();
+
+        // Verify server info includes issue tracking in instructions
+        let info = server.get_info();
+        assert!(
+            info.instructions.is_some(),
+            "Server should have instructions"
+        );
+
+        let instructions = info.instructions.unwrap();
+        assert!(
+            instructions.contains("issue tracking"),
+            "Instructions should mention issue tracking"
+        );
+        assert!(
+            instructions.contains("issue_*"),
+            "Instructions should mention issue_* tools"
+        );
     }
 }

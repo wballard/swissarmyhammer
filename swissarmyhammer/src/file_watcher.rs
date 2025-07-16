@@ -240,19 +240,36 @@ mod tests {
 
     #[tokio::test]
     async fn test_file_watcher_start_stop() {
+        use tempfile::TempDir;
+        use std::fs;
+        
+        // Create a temporary directory for testing
+        let temp_dir = TempDir::new().unwrap();
+        let test_prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
+        fs::create_dir_all(&test_prompts_dir).unwrap();
+        
+        // Create a test prompt file so directory isn't empty
+        let test_file = test_prompts_dir.join("test.md");
+        fs::write(&test_file, "test prompt").unwrap();
+        
+        // Set current directory to temp dir so it finds our test directory
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+        
         let mut watcher = FileWatcher::new();
         let callback = TestCallback::new();
 
-        // Start watching
+        // Start watching - should now succeed
         let result = watcher.start_watching(callback).await;
-        // This may fail if no prompt directories exist, which is fine for testing
-        if result.is_ok() {
-            assert!(watcher.watcher_handle.is_some());
-        }
+        assert!(result.is_ok());
+        assert!(watcher.watcher_handle.is_some());
 
         // Stop watching
         watcher.stop_watching();
         assert!(watcher.watcher_handle.is_none());
+        
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
@@ -282,6 +299,22 @@ mod tests {
 
     #[tokio::test]
     async fn test_file_watcher_custom_config() {
+        use tempfile::TempDir;
+        use std::fs;
+        
+        // Create a temporary directory for testing
+        let temp_dir = TempDir::new().unwrap();
+        let test_prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
+        fs::create_dir_all(&test_prompts_dir).unwrap();
+        
+        // Create a test prompt file
+        let test_file = test_prompts_dir.join("test.yaml");
+        fs::write(&test_file, "name: test\ndescription: test prompt").unwrap();
+        
+        // Set current directory to temp dir
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+        
         let mut watcher = FileWatcher::new();
         let callback = TestCallback::new();
         let config = FileWatcherConfig {
@@ -289,50 +322,82 @@ mod tests {
             recursive: false,
         };
 
-        // Start with custom config
+        // Start with custom config - should now succeed
         let result = watcher.start_watching_with_config(callback, config).await;
-        // This may fail if no prompt directories exist
-        if result.is_ok() {
-            assert!(watcher.watcher_handle.is_some());
-        }
+        assert!(result.is_ok());
+        assert!(watcher.watcher_handle.is_some());
 
         watcher.stop_watching();
         assert!(watcher.watcher_handle.is_none());
+        
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[tokio::test]
     async fn test_file_watcher_drop() {
+        use tempfile::TempDir;
+        use std::fs;
+        
+        // Create a temporary directory for testing
+        let temp_dir = TempDir::new().unwrap();
+        let test_prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
+        fs::create_dir_all(&test_prompts_dir).unwrap();
+        fs::write(test_prompts_dir.join("test.md"), "test").unwrap();
+        
+        // Set current directory to temp dir
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+        
         let mut watcher = FileWatcher::new();
         let callback = TestCallback::new();
 
         // Start watching
         let result = watcher.start_watching(callback).await;
-        if result.is_ok() {
-            assert!(watcher.watcher_handle.is_some());
-            // Drop the watcher - should stop watching
-            drop(watcher);
-            // Cannot test after drop, but Drop trait should have been called
-        }
+        assert!(result.is_ok());
+        assert!(watcher.watcher_handle.is_some());
+        
+        // Drop the watcher - should stop watching
+        drop(watcher);
+        // Cannot test after drop, but Drop trait should have been called
+        
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[tokio::test]
     async fn test_file_watcher_restart() {
+        use tempfile::TempDir;
+        use std::fs;
+        
+        // Create a temporary directory for testing
+        let temp_dir = TempDir::new().unwrap();
+        let test_prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
+        fs::create_dir_all(&test_prompts_dir).unwrap();
+        fs::write(test_prompts_dir.join("test.yml"), "name: test").unwrap();
+        
+        // Set current directory to temp dir
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+        
         let mut watcher = FileWatcher::new();
         let callback1 = TestCallback::new();
         let callback2 = TestCallback::new();
 
         // Start watching first time
         let result1 = watcher.start_watching(callback1).await;
-        if result1.is_ok() {
-            assert!(watcher.watcher_handle.is_some());
+        assert!(result1.is_ok());
+        assert!(watcher.watcher_handle.is_some());
 
-            // Start watching again - should stop previous and start new
-            let result2 = watcher.start_watching(callback2).await;
-            assert!(result2.is_ok());
-            assert!(watcher.watcher_handle.is_some());
-        }
+        // Start watching again - should stop previous and start new
+        let result2 = watcher.start_watching(callback2).await;
+        assert!(result2.is_ok());
+        assert!(watcher.watcher_handle.is_some());
 
         watcher.stop_watching();
+        
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[derive(Clone)]
@@ -392,18 +457,30 @@ mod tests {
 
     #[tokio::test]
     async fn test_file_watcher_error_callback() {
+        use tempfile::TempDir;
+        use std::fs;
+        
+        // Create a temporary directory for testing
+        let temp_dir = TempDir::new().unwrap();
+        let test_prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
+        fs::create_dir_all(&test_prompts_dir).unwrap();
+        fs::write(test_prompts_dir.join("test.yaml"), "name: test").unwrap();
+        
+        // Set current directory to temp dir
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+        
         let mut watcher = FileWatcher::new();
         let callback = ErrorCallback::new();
 
         // Start watching with error callback
         let result = watcher.start_watching(callback.clone()).await;
-        if result.is_ok() {
-            // The error callback will be invoked if file changes are detected
-            // Since we can't easily trigger file system events in a test,
-            // we just verify setup works
-            assert!(watcher.watcher_handle.is_some());
-        }
+        assert!(result.is_ok());
+        assert!(watcher.watcher_handle.is_some());
 
         watcher.stop_watching();
+        
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 }

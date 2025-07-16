@@ -17,6 +17,19 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
+/// MCP module structure
+pub mod constants;
+pub mod error_handling;
+pub mod file_watcher;
+pub mod responses;
+pub mod tool_handlers;
+pub mod types;
+pub mod utils;
+
+// Re-export commonly used items from submodules
+use utils::validate_issue_name;
+use responses::create_issue_response;
+
 /// Constants for issue branch management
 const ISSUE_BRANCH_PREFIX: &str = "issue/";
 const ISSUE_NUMBER_WIDTH: usize = 6;
@@ -544,6 +557,16 @@ impl McpServer {
         }
     }
 
+    /// Validate and sanitize issue name for MCP tool calls.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The issue name to validate
+    ///
+    /// # Returns
+    ///
+    /// * `Result<String, McpError>` - The validated name or MCP error
+
     /// Handle the issue_create tool operation.
     ///
     /// Creates a new issue with auto-assigned number and stores it in the
@@ -561,24 +584,32 @@ impl McpServer {
         request: CreateIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         tracing::debug!("Creating issue: {}", request.name);
+
+        // Validate issue name using shared validation logic
+        let validated_name = validate_issue_name(&request.name)?;
+
         let issue_storage = self.issue_storage.write().await;
         match issue_storage
-            .create_issue(request.name, request.content)
+            .create_issue(validated_name, request.content)
             .await
         {
             Ok(issue) => {
                 tracing::info!("Created issue {} with number {}", issue.name, issue.number);
-                Ok(Self::create_success_response(format!(
-                    "Created issue {} with number {}",
-                    issue.name, issue.number
-                )))
+                Ok(create_issue_response(&issue))
+            }
+            Err(SwissArmyHammerError::IssueAlreadyExists(num)) => {
+                tracing::warn!("Issue #{:06} already exists", num);
+                Err(McpError::invalid_params(
+                    format!("Issue #{:06} already exists", num),
+                    None,
+                ))
             }
             Err(e) => {
                 tracing::error!("Failed to create issue: {}", e);
-                Ok(Self::create_error_response(format!(
-                    "Failed to create issue: {}",
-                    e
-                )))
+                Err(McpError::internal_error(
+                    format!("Failed to create issue: {}", e),
+                    None,
+                ))
             }
         }
     }
@@ -1577,5 +1608,312 @@ mod tests {
             instructions.contains("issue_*"),
             "Instructions should mention issue_* tools"
         );
+    }
+
+    #[tokio::test]
+    async fn test_handle_issue_create_success() {
+        // Test successful issue creation
+        let library = PromptLibrary::new();
+        let server = McpServer::new(library).unwrap();
+
+        let request = CreateIssueRequest {
+            name: "test_issue".to_string(),
+            content: "# Test Issue\n\nThis is a test issue content.".to_string(),
+        };
+
+        let result = server.handle_issue_create(request).await;
+        assert!(result.is_ok(), "Issue creation should succeed");
+
+        let call_result = result.unwrap();
+        assert_eq!(call_result.is_error, Some(false));
+        assert!(!call_result.content.is_empty());
+
+        // Check that the response contains expected information
+        let text_content = &call_result.content[0];
+        if let RawContent::Text(text) = &text_content.raw {
+            assert!(text.text.contains("Created issue #"));
+            assert!(text.text.contains("test_issue"));
+            assert!(text.text.contains(" at "));
+        } else {
+            panic!("Expected text content");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_issue_create_empty_name() {
+        // Test validation failure with empty name
+        let library = PromptLibrary::new();
+        let server = McpServer::new(library).unwrap();
+
+        let request = CreateIssueRequest {
+            name: "".to_string(),
+            content: "Some content".to_string(),
+        };
+
+        let result = server.handle_issue_create(request).await;
+        assert!(result.is_err(), "Empty name should fail validation");
+
+        let error = result.unwrap_err();
+        assert!(
+            error.to_string().contains("Issue name cannot be empty"),
+            "Error should mention empty name: {}",
+            error
+        );
+    }
+
+    #[tokio::test]
+    async fn test_handle_issue_create_whitespace_name() {
+        // Test validation failure with whitespace-only name
+        let library = PromptLibrary::new();
+        let server = McpServer::new(library).unwrap();
+
+        let request = CreateIssueRequest {
+            name: "   ".to_string(),
+            content: "Some content".to_string(),
+        };
+
+        let result = server.handle_issue_create(request).await;
+        assert!(
+            result.is_err(),
+            "Whitespace-only name should fail validation"
+        );
+
+        let error = result.unwrap_err();
+        assert!(
+            error.to_string().contains("Issue name cannot be empty"),
+            "Error should mention empty name: {}",
+            error
+        );
+    }
+
+    #[tokio::test]
+    async fn test_handle_issue_create_long_name() {
+        // Test validation failure with too long name
+        let library = PromptLibrary::new();
+        let server = McpServer::new(library).unwrap();
+
+        let long_name = "a".repeat(101); // 101 characters, over the limit
+        let request = CreateIssueRequest {
+            name: long_name,
+            content: "Some content".to_string(),
+        };
+
+        let result = server.handle_issue_create(request).await;
+        assert!(result.is_err(), "Long name should fail validation");
+
+        let error = result.unwrap_err();
+        assert!(
+            error.to_string().contains("too long"),
+            "Error should mention name too long: {}",
+            error
+        );
+    }
+
+    #[tokio::test]
+    async fn test_handle_issue_create_invalid_characters() {
+        // Test validation failure with invalid characters
+        let library = PromptLibrary::new();
+        let server = McpServer::new(library).unwrap();
+
+        let invalid_names = vec![
+            "issue/with/slashes",
+            "issue\\with\\backslashes",
+            "issue:with:colons",
+            "issue*with*asterisks",
+            "issue?with?questions",
+            "issue\"with\"quotes",
+            "issue<with>brackets",
+            "issue|with|pipes",
+        ];
+
+        for invalid_name in invalid_names {
+            let request = CreateIssueRequest {
+                name: invalid_name.to_string(),
+                content: "Some content".to_string(),
+            };
+
+            let result = server.handle_issue_create(request).await;
+            assert!(
+                result.is_err(),
+                "Invalid name '{}' should fail validation",
+                invalid_name
+            );
+
+            let error = result.unwrap_err();
+            assert!(
+                error.to_string().contains("invalid characters"),
+                "Error should mention invalid characters for '{}': {}",
+                invalid_name,
+                error
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_issue_create_trimmed_name() {
+        // Test that names are properly trimmed
+        let library = PromptLibrary::new();
+        let server = McpServer::new(library).unwrap();
+
+        let request = CreateIssueRequest {
+            name: "  test_issue  ".to_string(),
+            content: "Some content".to_string(),
+        };
+
+        let result = server.handle_issue_create(request).await;
+        assert!(result.is_ok(), "Trimmed name should succeed");
+
+        let call_result = result.unwrap();
+        assert_eq!(call_result.is_error, Some(false));
+
+        // Check that the response contains the trimmed name
+        let text_content = &call_result.content[0];
+        if let RawContent::Text(text) = &text_content.raw {
+            assert!(text.text.contains("test_issue"));
+            assert!(!text.text.contains("  test_issue  "));
+        } else {
+            panic!("Expected text content");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_issue_create_sequential_numbering() {
+        // Test that multiple issues get sequential numbers
+        let library = PromptLibrary::new();
+        let server = McpServer::new(library).unwrap();
+
+        // Create first issue
+        let request1 = CreateIssueRequest {
+            name: "first_issue".to_string(),
+            content: "First issue content".to_string(),
+        };
+
+        let result1 = server.handle_issue_create(request1).await;
+        assert!(result1.is_ok(), "First issue creation should succeed");
+
+        let call_result1 = result1.unwrap();
+        let text_content1 = &call_result1.content[0];
+        let first_issue_number = if let RawContent::Text(text) = &text_content1.raw {
+            // Extract the issue number from the text
+            let start = text.text.find("Created issue #").unwrap() + "Created issue #".len();
+            let end = text.text[start..].find(' ').unwrap() + start;
+            let number_str = &text.text[start..end];
+            number_str.parse::<u32>().unwrap()
+        } else {
+            panic!("Expected text content");
+        };
+
+        // Create second issue
+        let request2 = CreateIssueRequest {
+            name: "second_issue".to_string(),
+            content: "Second issue content".to_string(),
+        };
+
+        let result2 = server.handle_issue_create(request2).await;
+        assert!(result2.is_ok(), "Second issue creation should succeed");
+
+        let call_result2 = result2.unwrap();
+        let text_content2 = &call_result2.content[0];
+        let second_issue_number = if let RawContent::Text(text) = &text_content2.raw {
+            // Extract the issue number from the text
+            let start = text.text.find("Created issue #").unwrap() + "Created issue #".len();
+            let end = text.text[start..].find(' ').unwrap() + start;
+            let number_str = &text.text[start..end];
+            number_str.parse::<u32>().unwrap()
+        } else {
+            panic!("Expected text content");
+        };
+
+        // Verify the second issue has a higher number than the first
+        assert!(
+            second_issue_number > first_issue_number,
+            "Second issue number ({}) should be greater than first issue number ({})",
+            second_issue_number,
+            first_issue_number
+        );
+    }
+
+    #[test]
+    fn test_validate_issue_name_success() {
+        // Test successful validation
+        let valid_names = vec![
+            "simple_name",
+            "name with spaces",
+            "name-with-dashes",
+            "name_with_underscores",
+            "123_numeric_start",
+            "UPPERCASE_NAME",
+            "MixedCase_Name",
+            "a", // Minimum length
+        ];
+
+        for name in valid_names {
+            let result = McpServer::validate_issue_name(name);
+            assert!(
+                result.is_ok(),
+                "Valid name '{}' should pass validation",
+                name
+            );
+            assert_eq!(result.unwrap(), name.trim());
+        }
+
+        // Test maximum length separately
+        let max_length_name = "a".repeat(100);
+        let result = McpServer::validate_issue_name(&max_length_name);
+        assert!(result.is_ok(), "100 character name should pass validation");
+        assert_eq!(result.unwrap(), max_length_name.trim());
+    }
+
+    #[test]
+    fn test_validate_issue_name_failure() {
+        // Test validation failures
+        let invalid_names = vec![
+            ("", "empty"),
+            ("   ", "whitespace only"),
+            ("name/with/slashes", "invalid characters"),
+            ("name\\with\\backslashes", "invalid characters"),
+            ("name:with:colons", "invalid characters"),
+            ("name*with*asterisks", "invalid characters"),
+            ("name?with?questions", "invalid characters"),
+            ("name\"with\"quotes", "invalid characters"),
+            ("name<with>brackets", "invalid characters"),
+            ("name|with|pipes", "invalid characters"),
+        ];
+
+        for (name, reason) in invalid_names {
+            let result = validate_issue_name(name);
+            assert!(
+                result.is_err(),
+                "Invalid name '{}' should fail validation ({})",
+                name,
+                reason
+            );
+        }
+
+        // Test too long name separately
+        let too_long_name = "a".repeat(101);
+        let result = validate_issue_name(&too_long_name);
+        assert!(result.is_err(), "101 character name should fail validation");
+    }
+
+    #[test]
+    fn test_validate_issue_name_trimming() {
+        // Test that names are properly trimmed
+        let names_with_whitespace = vec![
+            ("  test  ", "test"),
+            ("\ttest\t", "test"),
+            ("  test_name  ", "test_name"),
+            ("   multiple   spaces   ", "multiple   spaces"),
+        ];
+
+        for (input, expected) in names_with_whitespace {
+            let result = validate_issue_name(input);
+            assert!(
+                result.is_ok(),
+                "Name with whitespace '{}' should be valid",
+                input
+            );
+            assert_eq!(result.unwrap(), expected);
+        }
     }
 }

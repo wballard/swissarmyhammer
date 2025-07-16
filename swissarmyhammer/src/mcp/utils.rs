@@ -1,5 +1,6 @@
 //! Utility functions for MCP operations
 
+use rmcp::Error as McpError;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -45,4 +46,50 @@ where
         .ok()
         .and_then(|v| v.as_object().map(|obj| Arc::new(obj.clone())))
         .unwrap_or_else(|| Arc::new(serde_json::Map::new()))
+}
+
+/// Validate and normalize an issue name according to MCP standards
+/// 
+/// This function performs comprehensive validation including:
+/// - Empty/whitespace checks
+/// - Length limits (max 100 characters)
+/// - Invalid filesystem character checks
+/// - Additional validation using the existing issues module
+/// 
+/// # Arguments
+/// 
+/// * `name` - The raw issue name to validate
+/// 
+/// # Returns
+/// 
+/// * `Result<String, McpError>` - The validated and trimmed name, or an error
+pub fn validate_issue_name(name: &str) -> std::result::Result<String, McpError> {
+    use crate::issues::validate_issue_name as validate_issue_name_internal;
+
+    let trimmed = name.trim();
+
+    if trimmed.is_empty() {
+        return Err(McpError::invalid_params("Issue name cannot be empty", None));
+    }
+
+    if trimmed.len() > 100 {
+        return Err(McpError::invalid_params(
+            "Issue name too long (max 100 characters)",
+            None,
+        ));
+    }
+
+    // Check for invalid characters
+    if trimmed.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|']) {
+        return Err(McpError::invalid_params(
+            "Issue name contains invalid characters",
+            None,
+        ));
+    }
+
+    // Use the existing validation function for additional checks
+    validate_issue_name_internal(trimmed)
+        .map_err(|e| McpError::invalid_params(format!("Invalid issue name: {}", e), None))?;
+
+    Ok(trimmed.to_string())
 }

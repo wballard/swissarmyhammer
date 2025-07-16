@@ -3,8 +3,13 @@
 use crate::git::GitOperations;
 use crate::issues::IssueStorage;
 use super::constants::{ISSUE_BRANCH_PREFIX, ISSUE_NUMBER_WIDTH};
-use super::responses::{create_success_response, create_error_response};
+use super::responses::{
+    create_success_response, create_error_response, create_issue_response,
+    create_mark_complete_response, create_update_response, create_all_complete_response,
+    create_current_issue_response, create_work_response
+};
 use super::types::*;
+use super::utils::validate_issue_name;
 use rmcp::model::*;
 use rmcp::Error as McpError;
 use std::sync::Arc;
@@ -44,24 +49,29 @@ impl ToolHandlers {
         request: CreateIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         tracing::debug!("Creating issue: {}", request.name);
+
+        // Validate issue name using shared validation logic
+        let validated_name = validate_issue_name(&request.name)?;
+
         let issue_storage = self.issue_storage.write().await;
         match issue_storage
-            .create_issue(request.name, request.content)
+            .create_issue(validated_name, request.content)
             .await
         {
             Ok(issue) => {
                 tracing::info!("Created issue {} with number {}", issue.name, issue.number);
-                Ok(create_success_response(format!(
-                    "Created issue {} with number {}",
-                    issue.name, issue.number
-                )))
+                Ok(create_issue_response(&issue))
+            }
+            Err(crate::SwissArmyHammerError::IssueAlreadyExists(num)) => {
+                tracing::warn!("Issue #{:06} already exists", num);
+                Err(McpError::invalid_params(
+                    format!("Issue #{:06} already exists", num),
+                    None,
+                ))
             }
             Err(e) => {
                 tracing::error!("Failed to create issue: {}", e);
-                Ok(create_error_response(format!(
-                    "Failed to create issue: {}",
-                    e
-                )))
+                Err(McpError::internal_error(format!("Failed to create issue: {}", e), None))
             }
         }
     }
@@ -83,14 +93,16 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         let issue_storage = self.issue_storage.write().await;
         match issue_storage.mark_complete(request.number).await {
-            Ok(issue) => Ok(create_success_response(format!(
-                "Marked issue {} as complete",
-                issue.number
-            ))),
-            Err(e) => Ok(create_error_response(format!(
-                "Failed to mark issue complete: {}",
-                e
-            ))),
+            Ok(issue) => Ok(create_mark_complete_response(&issue)),
+            Err(crate::SwissArmyHammerError::IssueNotFound(num)) => {
+                Err(McpError::invalid_params(
+                    format!("Issue #{:06} not found", num),
+                    None,
+                ))
+            }
+            Err(e) => {
+                Err(McpError::internal_error(format!("Failed to mark issue complete: {}", e), None))
+            }
         }
     }
 
@@ -112,18 +124,12 @@ impl ToolHandlers {
         let issue_storage = self.issue_storage.read().await;
         match issue_storage.list_issues().await {
             Ok(issues) => {
-                let pending_issues: Vec<_> = issues.iter().filter(|i| !i.completed).collect();
-                let all_complete = pending_issues.is_empty();
-                Ok(create_success_response(format!(
-                    "All issues complete: {}. Pending issues: {}",
-                    all_complete,
-                    pending_issues.len()
-                )))
+                let pending_count = issues.iter().filter(|i| !i.completed).count();
+                Ok(create_all_complete_response(issues.len(), pending_count))
             }
-            Err(e) => Ok(create_error_response(format!(
-                "Failed to check issues: {}",
-                e
-            ))),
+            Err(e) => {
+                Err(McpError::internal_error(format!("Failed to check issues: {}", e), None))
+            }
         }
     }
 

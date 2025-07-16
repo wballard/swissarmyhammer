@@ -45,6 +45,12 @@ pub trait IssueStorage: Send + Sync {
 
     /// Create a new issue with auto-assigned number
     async fn create_issue(&self, name: String, content: String) -> Result<Issue>;
+
+    /// Update an existing issue's content
+    async fn update_issue(&self, number: u32, content: String) -> Result<Issue>;
+
+    /// Mark an issue as complete (move to complete directory)
+    async fn mark_complete(&self, number: u32) -> Result<Issue>;
 }
 
 /// File system implementation of issue storage
@@ -281,6 +287,65 @@ impl FileSystemIssueStorage {
 
         Ok(file_path)
     }
+
+    /// Update issue content
+    async fn update_issue_impl(&self, number: u32, content: String) -> Result<Issue> {
+        // Find the issue file (check both directories)
+        let issue = self.get_issue(number).await?;
+        let path = &issue.file_path;
+
+        // Atomic write using temp file and rename
+        let temp_path = path.with_extension("tmp");
+        std::fs::write(&temp_path, &content).map_err(SwissArmyHammerError::Io)?;
+        std::fs::rename(&temp_path, path).map_err(SwissArmyHammerError::Io)?;
+
+        Ok(Issue { content, ..issue })
+    }
+
+    /// Move issue between directories
+    async fn move_issue(&self, number: u32, to_completed: bool) -> Result<Issue> {
+        // Find current issue
+        let mut issue = self.get_issue(number).await?;
+
+        // Check if already in target state
+        if issue.completed == to_completed {
+            return Ok(issue);
+        }
+
+        // Determine source and target paths
+        let target_dir = if to_completed {
+            &self.state.completed_dir
+        } else {
+            &self.state.issues_dir
+        };
+
+        // Create target path with same filename
+        let filename = issue
+            .file_path
+            .file_name()
+            .ok_or_else(|| SwissArmyHammerError::Other("Invalid file path".to_string()))?;
+        let target_path = target_dir.join(filename);
+
+        // Move file atomically
+        std::fs::rename(&issue.file_path, &target_path).map_err(SwissArmyHammerError::Io)?;
+
+        // Update issue struct
+        issue.file_path = target_path;
+        issue.completed = to_completed;
+
+        Ok(issue)
+    }
+
+    /// Check if all issues are completed
+    pub async fn all_complete(&self) -> Result<bool> {
+        let pending_issues = self.list_issues_in_dir(&self.state.issues_dir)?;
+        let pending_count = pending_issues
+            .into_iter()
+            .filter(|issue| !issue.completed)
+            .count();
+
+        Ok(pending_count == 0)
+    }
 }
 
 #[async_trait::async_trait]
@@ -334,6 +399,14 @@ impl IssueStorage for FileSystemIssueStorage {
             file_path,
         })
     }
+
+    async fn update_issue(&self, number: u32, content: String) -> Result<Issue> {
+        self.update_issue_impl(number, content).await
+    }
+
+    async fn mark_complete(&self, number: u32) -> Result<Issue> {
+        self.move_issue(number, true).await
+    }
 }
 
 /// Format issue number as 6-digit string with leading zeros
@@ -352,12 +425,12 @@ pub fn parse_issue_number(s: &str) -> Result<u32> {
         )));
     }
 
-    let number = s
-        .parse::<u32>()
-        .map_err(|_| SwissArmyHammerError::InvalidIssueNumber(format!(
+    let number = s.parse::<u32>().map_err(|_| {
+        SwissArmyHammerError::InvalidIssueNumber(format!(
             "Issue number must contain only digits (e.g., '000123'), got: '{}'",
             s
-        )))?;
+        ))
+    })?;
 
     if number > MAX_ISSUE_NUMBER {
         return Err(SwissArmyHammerError::InvalidIssueNumber(format!(
@@ -568,7 +641,8 @@ pub fn create_safe_filename(name: &str) -> String {
 pub fn validate_issue_name(name: &str) -> Result<()> {
     if name.is_empty() {
         return Err(SwissArmyHammerError::Other(
-            "Issue name cannot be empty. Provide a descriptive name (e.g., 'fix_login_bug')".to_string(),
+            "Issue name cannot be empty. Provide a descriptive name (e.g., 'fix_login_bug')"
+                .to_string(),
         ));
     }
 
@@ -620,8 +694,7 @@ pub fn is_issue_file(path: &Path) -> bool {
     }
 }
 
-impl FileSystemIssueStorage {
-}
+impl FileSystemIssueStorage {}
 
 #[cfg(test)]
 mod tests {
@@ -1227,6 +1300,160 @@ mod tests {
         assert_eq!(all_issues.len(), 12);
     }
 
+    #[tokio::test]
+    async fn test_update_issue() {
+        let temp_dir = TempDir::new().unwrap();
+        let issues_dir = temp_dir.path().to_path_buf();
+        let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
+
+        // Create initial issue
+        let issue = storage
+            .create_issue("test_issue".to_string(), "Original content".to_string())
+            .await
+            .unwrap();
+
+        // Update the issue
+        let updated_content = "Updated content with new information";
+        let updated_issue = storage
+            .update_issue(issue.number, updated_content.to_string())
+            .await
+            .unwrap();
+
+        assert_eq!(updated_issue.number, issue.number);
+        assert_eq!(updated_issue.name, issue.name);
+        assert_eq!(updated_issue.content, updated_content);
+        assert_eq!(updated_issue.file_path, issue.file_path);
+        assert_eq!(updated_issue.completed, issue.completed);
+
+        // Verify file was updated
+        let file_content = std::fs::read_to_string(&updated_issue.file_path).unwrap();
+        assert_eq!(file_content, updated_content);
+    }
+
+    #[tokio::test]
+    async fn test_update_issue_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let issues_dir = temp_dir.path().to_path_buf();
+        let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
+
+        let result = storage.update_issue(999, "New content".to_string()).await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_mark_complete() {
+        let temp_dir = TempDir::new().unwrap();
+        let issues_dir = temp_dir.path().to_path_buf();
+        let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
+
+        // Create initial issue
+        let issue = storage
+            .create_issue("test_issue".to_string(), "Test content".to_string())
+            .await
+            .unwrap();
+
+        assert!(!issue.completed);
+
+        // Mark as complete
+        let completed_issue = storage.mark_complete(issue.number).await.unwrap();
+
+        assert_eq!(completed_issue.number, issue.number);
+        assert_eq!(completed_issue.name, issue.name);
+        assert_eq!(completed_issue.content, issue.content);
+        assert!(completed_issue.completed);
+
+        // Verify file was moved to completed directory
+        let expected_path = issues_dir.join("complete").join("000001_test_issue.md");
+        assert_eq!(completed_issue.file_path, expected_path);
+        assert!(expected_path.exists());
+        assert!(!issue.file_path.exists());
+    }
+
+    #[tokio::test]
+    async fn test_mark_complete_already_completed() {
+        let temp_dir = TempDir::new().unwrap();
+        let issues_dir = temp_dir.path().to_path_buf();
+        let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
+
+        // Create and complete an issue
+        let issue = storage
+            .create_issue("test_issue".to_string(), "Test content".to_string())
+            .await
+            .unwrap();
+
+        let completed_issue = storage.mark_complete(issue.number).await.unwrap();
+
+        // Try to mark as complete again - should be no-op
+        let completed_again = storage.mark_complete(issue.number).await.unwrap();
+
+        assert_eq!(completed_issue.file_path, completed_again.file_path);
+        assert!(completed_again.completed);
+    }
+
+    #[tokio::test]
+    async fn test_mark_complete_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let issues_dir = temp_dir.path().to_path_buf();
+        let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
+
+        let result = storage.mark_complete(999).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_all_complete_empty() {
+        let temp_dir = TempDir::new().unwrap();
+        let issues_dir = temp_dir.path().to_path_buf();
+        let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
+
+        let result = storage.all_complete().await.unwrap();
+        assert!(result); // No issues means all are complete
+    }
+
+    #[tokio::test]
+    async fn test_all_complete_with_pending() {
+        let temp_dir = TempDir::new().unwrap();
+        let issues_dir = temp_dir.path().to_path_buf();
+        let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
+
+        // Create some issues
+        storage
+            .create_issue("issue1".to_string(), "Content 1".to_string())
+            .await
+            .unwrap();
+        storage
+            .create_issue("issue2".to_string(), "Content 2".to_string())
+            .await
+            .unwrap();
+
+        let result = storage.all_complete().await.unwrap();
+        assert!(!result); // Has pending issues
+    }
+
+    #[tokio::test]
+    async fn test_all_complete_all_completed() {
+        let temp_dir = TempDir::new().unwrap();
+        let issues_dir = temp_dir.path().to_path_buf();
+        let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
+
+        // Create and complete all issues
+        let issue1 = storage
+            .create_issue("issue1".to_string(), "Content 1".to_string())
+            .await
+            .unwrap();
+        let issue2 = storage
+            .create_issue("issue2".to_string(), "Content 2".to_string())
+            .await
+            .unwrap();
+
+        storage.mark_complete(issue1.number).await.unwrap();
+        storage.mark_complete(issue2.number).await.unwrap();
+
+        let result = storage.all_complete().await.unwrap();
+        assert!(result); // All issues are complete
+    }
+
     #[test]
     fn test_format_issue_number() {
         assert_eq!(format_issue_number(1), "000001");
@@ -1249,11 +1476,11 @@ mod tests {
         assert!(parse_issue_number("123").is_err());
         assert!(parse_issue_number("0000123").is_err());
         assert!(parse_issue_number("").is_err());
-        
+
         // Non-numeric
         assert!(parse_issue_number("abc123").is_err());
         assert!(parse_issue_number("00abc1").is_err());
-        
+
         // Too large
         assert!(parse_issue_number("1000000").is_err());
     }
@@ -1263,15 +1490,15 @@ mod tests {
         let (number, name) = parse_issue_filename("000123_test_issue").unwrap();
         assert_eq!(number, 123);
         assert_eq!(name, "test_issue");
-        
+
         let (number, name) = parse_issue_filename("000001_simple").unwrap();
         assert_eq!(number, 1);
         assert_eq!(name, "simple");
-        
+
         let (number, name) = parse_issue_filename("000456_name_with_underscores").unwrap();
         assert_eq!(number, 456);
         assert_eq!(name, "name_with_underscores");
-        
+
         let (number, name) = parse_issue_filename("000789_").unwrap();
         assert_eq!(number, 789);
         assert_eq!(name, "");
@@ -1281,11 +1508,11 @@ mod tests {
     fn test_parse_issue_filename_invalid() {
         // No underscore
         assert!(parse_issue_filename("000123test").is_err());
-        
+
         // Invalid number
         assert!(parse_issue_filename("abc123_test").is_err());
         assert!(parse_issue_filename("123_test").is_err());
-        
+
         // Empty
         assert!(parse_issue_filename("").is_err());
         assert!(parse_issue_filename("_test").is_err());
@@ -1296,27 +1523,33 @@ mod tests {
         assert_eq!(create_safe_filename("simple"), "simple");
         assert_eq!(create_safe_filename("with spaces"), "with-spaces");
         assert_eq!(create_safe_filename("with/slashes"), "with-slashes");
-        assert_eq!(create_safe_filename("with\\backslashes"), "with-backslashes");
+        assert_eq!(
+            create_safe_filename("with\\backslashes"),
+            "with-backslashes"
+        );
         assert_eq!(create_safe_filename("with:colons"), "with-colons");
         assert_eq!(create_safe_filename("with*asterisks"), "with-asterisks");
         assert_eq!(create_safe_filename("with?questions"), "with-questions");
         assert_eq!(create_safe_filename("with\"quotes"), "with-quotes");
         assert_eq!(create_safe_filename("with<brackets>"), "with-brackets");
         assert_eq!(create_safe_filename("with|pipes"), "with-pipes");
-        
+
         // Multiple consecutive spaces/chars become single dash
-        assert_eq!(create_safe_filename("with   multiple   spaces"), "with-multiple-spaces");
+        assert_eq!(
+            create_safe_filename("with   multiple   spaces"),
+            "with-multiple-spaces"
+        );
         assert_eq!(create_safe_filename("with///slashes"), "with-slashes");
-        
+
         // Trim dashes from start and end
         assert_eq!(create_safe_filename("/start/and/end/"), "start-and-end");
         assert_eq!(create_safe_filename("   spaces   "), "spaces");
-        
+
         // Empty or only problematic chars
         assert_eq!(create_safe_filename(""), "unnamed");
         assert_eq!(create_safe_filename("///"), "unnamed");
         assert_eq!(create_safe_filename("   "), "unnamed");
-        
+
         // Length limiting
         let long_name = "a".repeat(150);
         let safe_name = create_safe_filename(&long_name);
@@ -1336,7 +1569,7 @@ mod tests {
         assert!(validate_issue_name("with-dashes").is_ok());
         assert!(validate_issue_name("with.dots").is_ok());
         assert!(validate_issue_name("with@symbols").is_ok());
-        
+
         // 200 characters exactly
         let max_length = "a".repeat(200);
         assert!(validate_issue_name(&max_length).is_ok());
@@ -1346,11 +1579,11 @@ mod tests {
     fn test_validate_issue_name_invalid() {
         // Empty
         assert!(validate_issue_name("").is_err());
-        
+
         // Too long
         let too_long = "a".repeat(201);
         assert!(validate_issue_name(&too_long).is_err());
-        
+
         // Control characters
         assert!(validate_issue_name("with\tcontrol").is_err());
         assert!(validate_issue_name("with\ncontrol").is_err());
@@ -1366,7 +1599,7 @@ mod tests {
         assert!(is_issue_file(Path::new("999999_max.md")));
         assert!(is_issue_file(Path::new("000000_zero.md")));
         assert!(is_issue_file(Path::new("000456_name_with_underscores.md")));
-        
+
         // Invalid files
         assert!(!is_issue_file(Path::new("123_test.md"))); // Wrong number format
         assert!(!is_issue_file(Path::new("000123test.md"))); // Missing underscore
@@ -1375,7 +1608,7 @@ mod tests {
         assert!(!is_issue_file(Path::new("abc123_test.md"))); // Invalid number
         assert!(!is_issue_file(Path::new("README.md"))); // Not issue format
         assert!(!is_issue_file(Path::new("000123_.md"))); // Valid but edge case
-        
+
         // Path with directory
         assert!(is_issue_file(Path::new("./issues/000123_test.md")));
         assert!(is_issue_file(Path::new("/path/to/000123_test.md")));

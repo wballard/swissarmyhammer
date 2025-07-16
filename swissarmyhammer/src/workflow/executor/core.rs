@@ -12,6 +12,7 @@ use crate::workflow::{
 };
 use cel_interpreter::Program;
 use serde_json::Value;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Configuration for retry behavior
@@ -48,6 +49,8 @@ pub struct WorkflowExecutor {
     metrics: WorkflowMetrics,
     /// Cache manager for performance optimizations
     cache_manager: WorkflowCacheManager,
+    /// Optional workflow storage for test mode
+    test_storage: Option<Arc<crate::workflow::storage::WorkflowStorage>>,
 }
 
 impl WorkflowExecutor {
@@ -58,6 +61,27 @@ impl WorkflowExecutor {
             max_history_size: DEFAULT_MAX_HISTORY_SIZE,
             metrics: WorkflowMetrics::new(),
             cache_manager: WorkflowCacheManager::new(),
+            test_storage: None,
+        }
+    }
+
+    /// Create a new workflow executor with test storage
+    pub fn with_test_storage(storage: Arc<crate::workflow::storage::WorkflowStorage>) -> Self {
+        Self {
+            execution_history: Vec::new(),
+            max_history_size: DEFAULT_MAX_HISTORY_SIZE,
+            metrics: WorkflowMetrics::new(),
+            cache_manager: WorkflowCacheManager::new(),
+            test_storage: Some(storage),
+        }
+    }
+
+    /// Get the workflow storage (test storage if available, otherwise create file system storage)
+    pub fn get_storage(&self) -> crate::Result<Arc<crate::workflow::storage::WorkflowStorage>> {
+        if let Some(storage) = &self.test_storage {
+            Ok(storage.clone())
+        } else {
+            Ok(Arc::new(crate::workflow::storage::WorkflowStorage::file_system()?))
         }
     }
 

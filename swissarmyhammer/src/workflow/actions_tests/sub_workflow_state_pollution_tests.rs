@@ -3,16 +3,36 @@
 //! This module tests that nested workflows with the same state names
 //! don't interfere with each other during execution.
 
-use crate::workflow::{MermaidParser, WorkflowExecutor};
+use crate::workflow::{MermaidParser, WorkflowExecutor, WorkflowStorage};
+use crate::workflow::actions::{set_test_storage, clear_test_storage};
+use crate::workflow::storage::{MemoryWorkflowStorage, MemoryWorkflowRunStorage, WorkflowStorageBackend};
 use serde_json::Value;
-use std::fs;
-use tempfile::TempDir;
+use std::sync::Arc;
 
+/// Helper function to set up test storage with workflows
+fn setup_test_storage_with_workflows(workflows: &[(&str, &str)]) -> Arc<WorkflowStorage> {
+    let mut workflow_storage = MemoryWorkflowStorage::new();
+    let run_storage = MemoryWorkflowRunStorage::new();
+    
+    // Parse and store workflows
+    for (name, content) in workflows {
+        let workflow = MermaidParser::parse(content, *name).unwrap();
+        workflow_storage.store_workflow(workflow).unwrap();
+    }
+    
+    Arc::new(WorkflowStorage::new(
+        Arc::new(workflow_storage),
+        Arc::new(run_storage),
+    ))
+}
+
+#[serial_test::serial]
 #[tokio::test]
 async fn test_nested_workflow_state_name_pollution() {
     // This test verifies that when a parent workflow calls a sub-workflow,
     // and both workflows have states with the same names (1, 2, 3),
     // the sub-workflow's state transitions don't interfere with the parent's state management.
+    
     // Create a parent workflow with states 1, 2, 3
     let parent_workflow_content = r#"---
 name: workflow-a
@@ -61,33 +81,12 @@ stateDiagram-v2
 - 3: Set child_state="child_3"
 "#;
 
-    // Create a temporary directory for workflow storage
-    let temp_dir = TempDir::new().unwrap();
-    let workflows_dir = temp_dir.path().join(".swissarmyhammer").join("workflows");
-    fs::create_dir_all(&workflows_dir).unwrap();
-
-    // Save workflow files
-    fs::write(workflows_dir.join("workflow-a.md"), parent_workflow_content).unwrap();
-    fs::write(workflows_dir.join("workflow-b.md"), child_workflow_content).unwrap();
-
-    // Change to the temp directory so FileSystemWorkflowStorage finds our workflows
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(&temp_dir).unwrap();
-
-    // Ensure we restore directory on panic or normal exit
-    struct DirGuard {
-        original_dir: std::path::PathBuf,
-    }
-
-    impl Drop for DirGuard {
-        fn drop(&mut self) {
-            let _ = std::env::set_current_dir(&self.original_dir);
-        }
-    }
-
-    let _guard = DirGuard {
-        original_dir: original_dir.clone(),
-    };
+    // Set up test storage with workflows
+    let storage = setup_test_storage_with_workflows(&[
+        ("workflow-a", parent_workflow_content),
+        ("workflow-b", child_workflow_content),
+    ]);
+    set_test_storage(storage);
 
     // Parse workflows
     let parent_workflow = MermaidParser::parse(parent_workflow_content, "workflow-a").unwrap();
@@ -132,8 +131,12 @@ stateDiagram-v2
     } else {
         panic!("sub_result not found in context");
     }
+    
+    // Clean up test storage
+    clear_test_storage();
 }
 
+#[serial_test::serial]
 #[tokio::test]
 async fn test_nested_workflow_correct_action_execution() {
     // Create a more complex test where both workflows have conflicting state names
@@ -186,41 +189,12 @@ stateDiagram-v2
 - Complete: Set child_log="${child_log},child:Complete"
 "#;
 
-    // Create a temporary directory for workflow storage
-    let temp_dir = TempDir::new().unwrap();
-    let workflows_dir = temp_dir.path().join(".swissarmyhammer").join("workflows");
-    fs::create_dir_all(&workflows_dir).unwrap();
-
-    // Save workflow files
-    fs::write(
-        workflows_dir.join("workflow-parent.md"),
-        parent_workflow_content,
-    )
-    .unwrap();
-    fs::write(
-        workflows_dir.join("workflow-child.md"),
-        child_workflow_content,
-    )
-    .unwrap();
-
-    // Change to the temp directory so FileSystemWorkflowStorage finds our workflows
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(&temp_dir).unwrap();
-
-    // Ensure we restore directory on panic or normal exit
-    struct DirGuard {
-        original_dir: std::path::PathBuf,
-    }
-
-    impl Drop for DirGuard {
-        fn drop(&mut self) {
-            let _ = std::env::set_current_dir(&self.original_dir);
-        }
-    }
-
-    let _guard = DirGuard {
-        original_dir: original_dir.clone(),
-    };
+    // Set up test storage with workflows
+    let storage = setup_test_storage_with_workflows(&[
+        ("workflow-parent", parent_workflow_content),
+        ("workflow-child", child_workflow_content),
+    ]);
+    set_test_storage(storage);
 
     // Parse workflows
     let parent_workflow = MermaidParser::parse(parent_workflow_content, "workflow-parent").unwrap();
@@ -260,8 +234,12 @@ stateDiagram-v2
     } else {
         panic!("child_result not found in context");
     }
+    
+    // Clean up test storage
+    clear_test_storage();
 }
 
+#[serial_test::serial]
 #[tokio::test]
 async fn test_deeply_nested_workflows_state_isolation() {
     // Test with 3 levels of nesting to ensure state isolation works at depth
@@ -332,46 +310,13 @@ stateDiagram-v2
 - FinalC: Set final_c="${level_c_data}"
 "#;
 
-    // Create a temporary directory for workflow storage
-    let temp_dir = TempDir::new().unwrap();
-    let workflows_dir = temp_dir.path().join(".swissarmyhammer").join("workflows");
-    fs::create_dir_all(&workflows_dir).unwrap();
-
-    // Save workflow files
-    fs::write(
-        workflows_dir.join("workflow-level-a.md"),
-        workflow_a_content,
-    )
-    .unwrap();
-    fs::write(
-        workflows_dir.join("workflow-level-b.md"),
-        workflow_b_content,
-    )
-    .unwrap();
-    fs::write(
-        workflows_dir.join("workflow-level-c.md"),
-        workflow_c_content,
-    )
-    .unwrap();
-
-    // Change to the temp directory so FileSystemWorkflowStorage finds our workflows
-    let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(&temp_dir).unwrap();
-
-    // Ensure we restore directory on panic or normal exit
-    struct DirGuard {
-        original_dir: std::path::PathBuf,
-    }
-
-    impl Drop for DirGuard {
-        fn drop(&mut self) {
-            let _ = std::env::set_current_dir(&self.original_dir);
-        }
-    }
-
-    let _guard = DirGuard {
-        original_dir: original_dir.clone(),
-    };
+    // Set up test storage with workflows
+    let storage = setup_test_storage_with_workflows(&[
+        ("workflow-level-a", workflow_a_content),
+        ("workflow-level-b", workflow_b_content),
+        ("workflow-level-c", workflow_c_content),
+    ]);
+    set_test_storage(storage);
 
     // Parse workflows
     let workflow_a = MermaidParser::parse(workflow_a_content, "workflow-level-a").unwrap();
@@ -418,4 +363,7 @@ stateDiagram-v2
             }
         }
     }
+    
+    // Clean up test storage
+    clear_test_storage();
 }

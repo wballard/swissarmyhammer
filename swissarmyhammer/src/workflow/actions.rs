@@ -8,6 +8,7 @@ use crate::workflow::{WorkflowExecutor, WorkflowName, WorkflowRunStatus, Workflo
 use chrono::{Local, Timelike};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::ThemeSet;
@@ -16,6 +17,24 @@ use syntect::util::as_24_bit_terminal_escaped;
 use thiserror::Error;
 use tokio::process::Command;
 use tokio::time::timeout;
+
+/// Global test storage registry for tests
+static TEST_STORAGE_REGISTRY: RwLock<Option<Arc<WorkflowStorage>>> = RwLock::new(None);
+
+/// Set test storage for use in tests
+pub fn set_test_storage(storage: Arc<WorkflowStorage>) {
+    *TEST_STORAGE_REGISTRY.write().unwrap() = Some(storage);
+}
+
+/// Clear test storage after tests
+pub fn clear_test_storage() {
+    *TEST_STORAGE_REGISTRY.write().unwrap() = None;
+}
+
+/// Get test storage if available
+fn get_test_storage() -> Option<Arc<WorkflowStorage>> {
+    TEST_STORAGE_REGISTRY.read().unwrap().clone()
+}
 
 /// Macro to implement the as_any() method for Action trait implementations
 macro_rules! impl_as_any {
@@ -1112,9 +1131,13 @@ impl Action for SubWorkflowAction {
         tracing::debug!("Current context before sub-workflow: {:?}", context);
 
         // Create storage and load the workflow
-        let storage = WorkflowStorage::file_system().map_err(|e| {
-            ActionError::ExecutionError(format!("Failed to create workflow storage: {}", e))
-        })?;
+        let storage = if let Some(test_storage) = get_test_storage() {
+            test_storage
+        } else {
+            Arc::new(WorkflowStorage::file_system().map_err(|e| {
+                ActionError::ExecutionError(format!("Failed to create workflow storage: {}", e))
+            })?)
+        };
 
         let workflow_name_typed = WorkflowName::new(&self.workflow_name);
         let workflow = storage.get_workflow(&workflow_name_typed).map_err(|e| {

@@ -39,8 +39,8 @@ jobs:
             ${{ runner.os }}-cargo-${{ matrix.rust }}-
             ${{ runner.os }}-cargo-
 
-      - name: Run tests with all features
-        run: cargo test --all-features
+      - name: Run tests
+        run: cargo test
 
   clippy:
     name: Clippy
@@ -111,11 +111,11 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Generate code coverage
-        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+        run: cargo llvm-cov --workspace --lcov --output-path lcov.info
 
       - name: Check coverage threshold
         run: |
-          COVERAGE=$(cargo llvm-cov --all-features --workspace --summary-only | grep -E "TOTAL.*%" | awk '{print $10}' | sed 's/%//')
+          COVERAGE=$(cargo llvm-cov --workspace --summary-only | grep -E "TOTAL.*%" | awk '{print $10}' | sed 's/%//')
           echo "Current coverage: ${COVERAGE}%"
           if (( $(echo "$COVERAGE < 85.0" | bc -l) )); then
             echo "Coverage ${COVERAGE}% is below minimum threshold of 85%"

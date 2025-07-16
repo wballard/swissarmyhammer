@@ -37,7 +37,7 @@ impl GitOperations {
     fn verify_git_repo(path: &Path) -> Result<()> {
         let output = Command::new("git")
             .current_dir(path)
-            .args(&["rev-parse", "--git-dir"])
+            .args(["rev-parse", "--git-dir"])
             .output()?;
 
         if !output.status.success() {
@@ -53,7 +53,7 @@ impl GitOperations {
     pub fn current_branch(&self) -> Result<String> {
         let output = Command::new("git")
             .current_dir(&self.work_dir)
-            .args(&["rev-parse", "--abbrev-ref", "HEAD"])
+            .args(["rev-parse", "--abbrev-ref", "HEAD"])
             .output()?;
 
         if !output.status.success() {
@@ -95,7 +95,7 @@ impl GitOperations {
     fn branch_exists(&self, branch: &str) -> Result<bool> {
         let output = Command::new("git")
             .current_dir(&self.work_dir)
-            .args(&[
+            .args([
                 "show-ref",
                 "--verify",
                 "--quiet",
@@ -118,7 +118,7 @@ impl GitOperations {
             // Create and switch to new branch
             let output = Command::new("git")
                 .current_dir(&self.work_dir)
-                .args(&["checkout", "-b", &branch_name])
+                .args(["checkout", "-b", &branch_name])
                 .output()?;
 
             if !output.status.success() {
@@ -137,7 +137,7 @@ impl GitOperations {
     pub fn checkout_branch(&self, branch: &str) -> Result<()> {
         let output = Command::new("git")
             .current_dir(&self.work_dir)
-            .args(&["checkout", branch])
+            .args(["checkout", branch])
             .output()?;
 
         if !output.status.success() {
@@ -170,7 +170,7 @@ impl GitOperations {
         // Merge the issue branch
         let output = Command::new("git")
             .current_dir(&self.work_dir)
-            .args(&[
+            .args([
                 "merge",
                 "--no-ff",
                 &branch_name,
@@ -205,7 +205,7 @@ mod tests {
         // Initialize git repo
         let output = Command::new("git")
             .current_dir(repo_path)
-            .args(&["init"])
+            .args(["init"])
             .output()?;
 
         if !output.status.success() {
@@ -217,12 +217,12 @@ mod tests {
         // Set up user config for tests
         Command::new("git")
             .current_dir(repo_path)
-            .args(&["config", "user.name", "Test User"])
+            .args(["config", "user.name", "Test User"])
             .output()?;
 
         Command::new("git")
             .current_dir(repo_path)
-            .args(&["config", "user.email", "test@example.com"])
+            .args(["config", "user.email", "test@example.com"])
             .output()?;
 
         // Create initial commit
@@ -230,12 +230,12 @@ mod tests {
 
         Command::new("git")
             .current_dir(repo_path)
-            .args(&["add", "README.md"])
+            .args(["add", "README.md"])
             .output()?;
 
         Command::new("git")
             .current_dir(repo_path)
-            .args(&["commit", "-m", "Initial commit"])
+            .args(["commit", "-m", "Initial commit"])
             .output()?;
 
         Ok(temp_dir)
@@ -383,12 +383,12 @@ mod tests {
         fs::write(temp_dir.path().join("test.txt"), "test content").unwrap();
         Command::new("git")
             .current_dir(temp_dir.path())
-            .args(&["add", "test.txt"])
+            .args(["add", "test.txt"])
             .output()
             .unwrap();
         Command::new("git")
             .current_dir(temp_dir.path())
-            .args(&["commit", "-m", "Add test file"])
+            .args(["commit", "-m", "Add test file"])
             .output()
             .unwrap();
 

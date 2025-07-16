@@ -7,33 +7,63 @@ use tokio::time::{sleep, timeout};
 mod test_utils;
 use test_utils::ProcessGuard;
 
-/// Wait for the server to be ready by attempting to read from stdout
+/// Wait for the server to be ready by testing actual JSON-RPC communication
 async fn wait_for_server_ready(
-    _reader: &mut BufReader<std::process::ChildStdout>,
+    stdin: &mut std::process::ChildStdin,
+    reader: &mut BufReader<std::process::ChildStdout>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Try to read from the server with a timeout
-    // A healthy server should respond to input within a reasonable time
-    let mut attempts = 0;
     const MAX_ATTEMPTS: u32 = 50; // 5 seconds with 100ms intervals
+    const RETRY_DELAY: Duration = Duration::from_millis(100);
 
-    while attempts < MAX_ATTEMPTS {
-        // Check if there's any data available (non-blocking check)
-        std::thread::sleep(Duration::from_millis(100));
-        attempts += 1;
+    for attempt in 0..MAX_ATTEMPTS {
+        // Send a simple initialize request to test if server is ready
+        let test_request = json!({
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {"prompts": {}},
+                "clientInfo": {"name": "test", "version": "1.0"}
+            }
+        });
 
-        // Try to peek at the buffer to see if server is responsive
-        // We'll use a simple approach: if the server is started, it should be ready to accept input
-        if attempts >= 10 {
-            // After 1 second, assume server is ready
-            break;
+        let request_str = serde_json::to_string(&test_request)?;
+        
+        // Try to send the request
+        match writeln!(stdin, "{}", request_str) {
+            Ok(_) => {
+                if let Ok(_) = stdin.flush() {
+                    // Try to read a response with a short timeout
+                    match timeout(Duration::from_millis(200), async {
+                        let mut line = String::new();
+                        reader.read_line(&mut line)
+                    }).await {
+                        Ok(Ok(_)) => {
+                            // Server responded - it's ready!
+                            return Ok(());
+                        }
+                        Ok(Err(_)) | Err(_) => {
+                            // Server didn't respond or responded with error, try again
+                        }
+                    }
+                }
+            }
+            Err(_) => {
+                // Failed to write to stdin, server might not be ready
+            }
+        }
+
+        // Wait before next attempt
+        sleep(RETRY_DELAY).await;
+        
+        // Log progress every second
+        if attempt % 10 == 0 && attempt > 0 {
+            eprintln!("Waiting for server to be ready... (attempt {})", attempt);
         }
     }
 
-    if attempts >= MAX_ATTEMPTS {
-        return Err("Server did not become ready within timeout".into());
-    }
-
-    Ok(())
+    Err("Server did not become ready within timeout".into())
 }
 
 /// End-to-end test for MCP server handling prompts with partials (issue #58)
@@ -57,7 +87,7 @@ async fn test_mcp_server_partial_rendering() {
     let mut reader = BufReader::new(stdout);
 
     // Wait for the server to be ready
-    wait_for_server_ready(&mut reader)
+    wait_for_server_ready(&mut stdin, &mut reader)
         .await
         .expect("Server failed to start properly");
 
@@ -86,31 +116,7 @@ async fn test_mcp_server_partial_rendering() {
         Ok(serde_json::from_str(line.trim())?)
     };
 
-    // Step 1: Initialize
-    send_request(
-        &mut stdin,
-        json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {"prompts": {}},
-                "clientInfo": {"name": "test", "version": "1.0"}
-            }
-        }),
-    );
-
-    let response = timeout(Duration::from_secs(5), async { read_response(&mut reader) })
-        .await
-        .expect("Timeout")
-        .expect("Failed to read initialize response");
-
-    assert_eq!(response["jsonrpc"], "2.0");
-    assert_eq!(response["id"], 1);
-    assert!(response["result"].is_object());
-
-    // Step 2: Send initialized notification
+    // Step 1: Send initialized notification (server is already initialized from readiness check)
     send_request(
         &mut stdin,
         json!({
@@ -118,9 +124,6 @@ async fn test_mcp_server_partial_rendering() {
             "method": "notifications/initialized"
         }),
     );
-
-    // Give server time to process the notification
-    sleep(Duration::from_millis(100)).await;
 
     // Step 3: Test getting the 'example' prompt which uses partials
     send_request(

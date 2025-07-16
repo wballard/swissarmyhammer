@@ -345,20 +345,24 @@ pub fn format_issue_number(number: u32) -> String {
 pub fn parse_issue_number(s: &str) -> Result<u32> {
     if s.len() != ISSUE_NUMBER_DIGITS {
         return Err(SwissArmyHammerError::InvalidIssueNumber(format!(
-            "Issue number must be exactly {} digits, got {}",
+            "Issue number must be exactly {} digits (e.g., '000123'), got {} digits: '{}'",
             ISSUE_NUMBER_DIGITS,
-            s.len()
+            s.len(),
+            s
         )));
     }
 
     let number = s
         .parse::<u32>()
-        .map_err(|_| SwissArmyHammerError::InvalidIssueNumber(s.to_string()))?;
+        .map_err(|_| SwissArmyHammerError::InvalidIssueNumber(format!(
+            "Issue number must contain only digits (e.g., '000123'), got: '{}'",
+            s
+        )))?;
 
     if number > MAX_ISSUE_NUMBER {
         return Err(SwissArmyHammerError::InvalidIssueNumber(format!(
-            "Issue number {} exceeds maximum ({})",
-            number, MAX_ISSUE_NUMBER
+            "Issue number {} exceeds maximum allowed value ({}). Use 6-digit format: 000001-{}",
+            number, MAX_ISSUE_NUMBER, MAX_ISSUE_NUMBER
         )));
     }
 
@@ -366,11 +370,74 @@ pub fn parse_issue_number(s: &str) -> Result<u32> {
 }
 
 /// Extract issue info from filename
+///
+/// Parses an issue filename in the format `<nnnnnn>_<name>` and returns the issue number
+/// and name as a tuple. The filename must follow the strict 6-digit format where the number
+/// is zero-padded and separated from the name by an underscore.
+///
+/// # Arguments
+///
+/// * `filename` - The filename to parse (without extension)
+///
+/// # Returns
+///
+/// Returns `Ok((number, name))` if the filename is valid, or an error if:
+/// - The filename doesn't contain exactly one underscore
+/// - The number part is not exactly 6 digits
+/// - The number part contains non-numeric characters
+/// - The number exceeds the maximum allowed value (999999)
+///
+/// # Examples
+///
+/// ```
+/// # use swissarmyhammer::issues::parse_issue_filename;
+/// // Basic usage
+/// let (number, name) = parse_issue_filename("000123_bug_fix").unwrap();
+/// assert_eq!(number, 123);
+/// assert_eq!(name, "bug_fix");
+///
+/// // With underscores in the name (only first underscore is used as separator)
+/// let (number, name) = parse_issue_filename("000456_feature_with_underscores").unwrap();
+/// assert_eq!(number, 456);
+/// assert_eq!(name, "feature_with_underscores");
+///
+/// // Edge case: empty name
+/// let (number, name) = parse_issue_filename("000789_").unwrap();
+/// assert_eq!(number, 789);
+/// assert_eq!(name, "");
+///
+/// // Edge case: number zero
+/// let (number, name) = parse_issue_filename("000000_zero_issue").unwrap();
+/// assert_eq!(number, 0);
+/// assert_eq!(name, "zero_issue");
+///
+/// // Maximum number
+/// let (number, name) = parse_issue_filename("999999_max_issue").unwrap();
+/// assert_eq!(number, 999999);
+/// assert_eq!(name, "max_issue");
+/// ```
+///
+/// # Errors
+///
+/// ```should_panic
+/// # use swissarmyhammer::issues::parse_issue_filename;
+/// // Invalid: no underscore
+/// parse_issue_filename("000123test").unwrap();
+///
+/// // Invalid: wrong number format
+/// parse_issue_filename("123_test").unwrap();
+///
+/// // Invalid: non-numeric characters
+/// parse_issue_filename("abc123_test").unwrap();
+///
+/// // Invalid: number too large
+/// parse_issue_filename("1000000_test").unwrap();
+/// ```
 pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
     let parts: Vec<&str> = filename.splitn(2, '_').collect();
     if parts.len() != 2 {
         return Err(SwissArmyHammerError::Other(format!(
-            "Invalid filename format: expected <nnnnnn>_<name>, got {}",
+            "Invalid filename format: expected <nnnnnn>_<name> (e.g., '000123_bug_fix'), got: '{}'",
             filename
         )));
     }
@@ -382,6 +449,77 @@ pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
 }
 
 /// Create safe filename from issue name
+///
+/// Converts an issue name into a filesystem-safe filename by replacing problematic
+/// characters with dashes and applying various normalization rules. This function
+/// ensures the resulting filename is safe to use across different operating systems
+/// and filesystems.
+///
+/// # Rules Applied
+///
+/// - Spaces are replaced with dashes
+/// - File path separators (`/`, `\`) are replaced with dashes
+/// - Special characters (`:`, `*`, `?`, `"`, `<`, `>`, `|`) are replaced with dashes
+/// - Control characters (tabs, newlines, etc.) are replaced with dashes
+/// - Consecutive dashes are collapsed into a single dash
+/// - Leading and trailing dashes are removed
+/// - Empty input or input with only problematic characters becomes "unnamed"
+/// - Length is limited to 100 characters
+///
+/// # Arguments
+///
+/// * `name` - The issue name to convert to a safe filename
+///
+/// # Returns
+///
+/// Returns a safe filename string that can be used in file paths across different
+/// operating systems. The result will always be a valid filename or "unnamed" if
+/// the input cannot be safely converted.
+///
+/// # Examples
+///
+/// ```
+/// # use swissarmyhammer::issues::create_safe_filename;
+/// // Basic usage
+/// assert_eq!(create_safe_filename("simple"), "simple");
+/// assert_eq!(create_safe_filename("with spaces"), "with-spaces");
+///
+/// // File path characters
+/// assert_eq!(create_safe_filename("path/to/file"), "path-to-file");
+/// assert_eq!(create_safe_filename("path\\to\\file"), "path-to-file");
+///
+/// // Special characters
+/// assert_eq!(create_safe_filename("file:name"), "file-name");
+/// assert_eq!(create_safe_filename("file*name"), "file-name");
+/// assert_eq!(create_safe_filename("file?name"), "file-name");
+/// assert_eq!(create_safe_filename("file\"name"), "file-name");
+/// assert_eq!(create_safe_filename("file<name>"), "file-name");
+/// assert_eq!(create_safe_filename("file|name"), "file-name");
+///
+/// // Multiple consecutive problematic characters
+/// assert_eq!(create_safe_filename("file   with   spaces"), "file-with-spaces");
+/// assert_eq!(create_safe_filename("file///name"), "file-name");
+///
+/// // Edge cases: trimming
+/// assert_eq!(create_safe_filename("/start/and/end/"), "start-and-end");
+/// assert_eq!(create_safe_filename("   spaces   "), "spaces");
+///
+/// // Edge cases: empty or only problematic characters
+/// assert_eq!(create_safe_filename(""), "unnamed");
+/// assert_eq!(create_safe_filename("///"), "unnamed");
+/// assert_eq!(create_safe_filename("   "), "unnamed");
+/// assert_eq!(create_safe_filename("***"), "unnamed");
+///
+/// // Length limiting
+/// let long_name = "a".repeat(150);
+/// let safe_name = create_safe_filename(&long_name);
+/// assert_eq!(safe_name.len(), 100);
+/// assert_eq!(safe_name, "a".repeat(100));
+///
+/// // Mixed characters
+/// assert_eq!(create_safe_filename("Fix: login/logout* issue"), "Fix-login-logout-issue");
+/// assert_eq!(create_safe_filename("Update \"config.json\" file"), "Update-config.json-file");
+/// ```
 pub fn create_safe_filename(name: &str) -> String {
     if name.is_empty() {
         return "unnamed".to_string();
@@ -430,23 +568,29 @@ pub fn create_safe_filename(name: &str) -> String {
 pub fn validate_issue_name(name: &str) -> Result<()> {
     if name.is_empty() {
         return Err(SwissArmyHammerError::Other(
-            "Issue name cannot be empty".to_string(),
+            "Issue name cannot be empty. Provide a descriptive name (e.g., 'fix_login_bug')".to_string(),
         ));
     }
 
     if name.len() > 200 {
         return Err(SwissArmyHammerError::Other(format!(
-            "Issue name too long: {} characters (max 200)",
-            name.len()
+            "Issue name too long: {} characters (max 200). Consider shortening: '{}'",
+            name.len(),
+            if name.len() > 50 {
+                format!("{}...", &name[..50])
+            } else {
+                name.to_string()
+            }
         )));
     }
 
     // Check for problematic characters
     for c in name.chars() {
         if c.is_control() {
-            return Err(SwissArmyHammerError::Other(
-                "Issue name contains control characters".to_string(),
-            ));
+            return Err(SwissArmyHammerError::Other(format!(
+                "Issue name contains control characters (e.g., tabs, newlines). Use only printable characters: '{}'",
+                name.chars().map(|c| if c.is_control() { '�' } else { c }).collect::<String>()
+            )));
         }
     }
 
@@ -474,78 +618,6 @@ pub fn is_issue_file(path: &Path) -> bool {
 }
 
 impl FileSystemIssueStorage {
-    /// Get the full path for an issue file
-    fn get_issue_path(&self, _number: u32, completed: bool) -> PathBuf {
-        let dir = if completed {
-            &self.state.completed_dir
-        } else {
-            &self.state.issues_dir
-        };
-
-        dir.to_path_buf()
-    }
-
-    /// Find issue file by number in a directory
-    fn find_issue_file(&self, dir: &Path, number: u32) -> Result<Option<PathBuf>> {
-        let number_prefix = format_issue_number(number);
-
-        let entries = fs::read_dir(dir).map_err(SwissArmyHammerError::Io)?;
-
-        for entry in entries {
-            let entry = entry.map_err(SwissArmyHammerError::Io)?;
-            let path = entry.path();
-
-            if !path.is_file() || !is_issue_file(&path) {
-                continue;
-            }
-
-            if let Some(filename) = path.file_name() {
-                if let Some(filename_str) = filename.to_str() {
-                    if filename_str.starts_with(&format!("{}_", number_prefix)) {
-                        return Ok(Some(path));
-                    }
-                }
-            }
-        }
-
-        Ok(None)
-    }
-
-    /// Get all issue files in a directory
-    fn get_issue_files(&self, dir: &Path) -> Result<Vec<PathBuf>> {
-        let mut issue_files = Vec::new();
-
-        let entries = fs::read_dir(dir).map_err(SwissArmyHammerError::Io)?;
-
-        for entry in entries {
-            let entry = entry.map_err(SwissArmyHammerError::Io)?;
-            let path = entry.path();
-
-            if path.is_file() && is_issue_file(&path) {
-                issue_files.push(path);
-            }
-        }
-
-        // Sort by issue number
-        issue_files.sort_by(|a, b| {
-            let a_num = a
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .and_then(|s| parse_issue_filename(s).ok())
-                .map(|(n, _)| n)
-                .unwrap_or(0);
-            let b_num = b
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .and_then(|s| parse_issue_filename(s).ok())
-                .map(|(n, _)| n)
-                .unwrap_or(0);
-            a_num.cmp(&b_num)
-        });
-
-        Ok(issue_files)
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -1149,5 +1221,159 @@ mod tests {
         // Verify all issues were created
         let all_issues = storage.list_issues().await.unwrap();
         assert_eq!(all_issues.len(), 12);
+    }
+
+    #[test]
+    fn test_format_issue_number() {
+        assert_eq!(format_issue_number(1), "000001");
+        assert_eq!(format_issue_number(123), "000123");
+        assert_eq!(format_issue_number(999999), "999999");
+        assert_eq!(format_issue_number(0), "000000");
+    }
+
+    #[test]
+    fn test_parse_issue_number_valid() {
+        assert_eq!(parse_issue_number("000001").unwrap(), 1);
+        assert_eq!(parse_issue_number("000123").unwrap(), 123);
+        assert_eq!(parse_issue_number("999999").unwrap(), 999999);
+        assert_eq!(parse_issue_number("000000").unwrap(), 0);
+    }
+
+    #[test]
+    fn test_parse_issue_number_invalid() {
+        // Wrong length
+        assert!(parse_issue_number("123").is_err());
+        assert!(parse_issue_number("0000123").is_err());
+        assert!(parse_issue_number("").is_err());
+        
+        // Non-numeric
+        assert!(parse_issue_number("abc123").is_err());
+        assert!(parse_issue_number("00abc1").is_err());
+        
+        // Too large
+        assert!(parse_issue_number("1000000").is_err());
+    }
+
+    #[test]
+    fn test_parse_issue_filename_valid() {
+        let (number, name) = parse_issue_filename("000123_test_issue").unwrap();
+        assert_eq!(number, 123);
+        assert_eq!(name, "test_issue");
+        
+        let (number, name) = parse_issue_filename("000001_simple").unwrap();
+        assert_eq!(number, 1);
+        assert_eq!(name, "simple");
+        
+        let (number, name) = parse_issue_filename("000456_name_with_underscores").unwrap();
+        assert_eq!(number, 456);
+        assert_eq!(name, "name_with_underscores");
+        
+        let (number, name) = parse_issue_filename("000789_").unwrap();
+        assert_eq!(number, 789);
+        assert_eq!(name, "");
+    }
+
+    #[test]
+    fn test_parse_issue_filename_invalid() {
+        // No underscore
+        assert!(parse_issue_filename("000123test").is_err());
+        
+        // Invalid number
+        assert!(parse_issue_filename("abc123_test").is_err());
+        assert!(parse_issue_filename("123_test").is_err());
+        
+        // Empty
+        assert!(parse_issue_filename("").is_err());
+        assert!(parse_issue_filename("_test").is_err());
+    }
+
+    #[test]
+    fn test_create_safe_filename() {
+        assert_eq!(create_safe_filename("simple"), "simple");
+        assert_eq!(create_safe_filename("with spaces"), "with-spaces");
+        assert_eq!(create_safe_filename("with/slashes"), "with-slashes");
+        assert_eq!(create_safe_filename("with\\backslashes"), "with-backslashes");
+        assert_eq!(create_safe_filename("with:colons"), "with-colons");
+        assert_eq!(create_safe_filename("with*asterisks"), "with-asterisks");
+        assert_eq!(create_safe_filename("with?questions"), "with-questions");
+        assert_eq!(create_safe_filename("with\"quotes"), "with-quotes");
+        assert_eq!(create_safe_filename("with<brackets>"), "with-brackets");
+        assert_eq!(create_safe_filename("with|pipes"), "with-pipes");
+        
+        // Multiple consecutive spaces/chars become single dash
+        assert_eq!(create_safe_filename("with   multiple   spaces"), "with-multiple-spaces");
+        assert_eq!(create_safe_filename("with///slashes"), "with-slashes");
+        
+        // Trim dashes from start and end
+        assert_eq!(create_safe_filename("/start/and/end/"), "start-and-end");
+        assert_eq!(create_safe_filename("   spaces   "), "spaces");
+        
+        // Empty or only problematic chars
+        assert_eq!(create_safe_filename(""), "unnamed");
+        assert_eq!(create_safe_filename("///"), "unnamed");
+        assert_eq!(create_safe_filename("   "), "unnamed");
+        
+        // Length limiting
+        let long_name = "a".repeat(150);
+        let safe_name = create_safe_filename(&long_name);
+        assert_eq!(safe_name.len(), 100);
+        assert_eq!(safe_name, "a".repeat(100));
+    }
+
+    #[test]
+    fn test_validate_issue_name_valid() {
+        assert!(validate_issue_name("simple").is_ok());
+        assert!(validate_issue_name("with spaces").is_ok());
+        assert!(validate_issue_name("with/slashes").is_ok());
+        assert!(validate_issue_name("with_underscores").is_ok());
+        assert!(validate_issue_name("123numbers").is_ok());
+        assert!(validate_issue_name("UPPERCASE").is_ok());
+        assert!(validate_issue_name("MiXeD cAsE").is_ok());
+        assert!(validate_issue_name("with-dashes").is_ok());
+        assert!(validate_issue_name("with.dots").is_ok());
+        assert!(validate_issue_name("with@symbols").is_ok());
+        
+        // 200 characters exactly
+        let max_length = "a".repeat(200);
+        assert!(validate_issue_name(&max_length).is_ok());
+    }
+
+    #[test]
+    fn test_validate_issue_name_invalid() {
+        // Empty
+        assert!(validate_issue_name("").is_err());
+        
+        // Too long
+        let too_long = "a".repeat(201);
+        assert!(validate_issue_name(&too_long).is_err());
+        
+        // Control characters
+        assert!(validate_issue_name("with\tcontrol").is_err());
+        assert!(validate_issue_name("with\ncontrol").is_err());
+        assert!(validate_issue_name("with\rcontrol").is_err());
+        assert!(validate_issue_name("with\x00control").is_err());
+    }
+
+    #[test]
+    fn test_is_issue_file() {
+        // Valid issue files
+        assert!(is_issue_file(Path::new("000123_test.md")));
+        assert!(is_issue_file(Path::new("000001_simple.md")));
+        assert!(is_issue_file(Path::new("999999_max.md")));
+        assert!(is_issue_file(Path::new("000000_zero.md")));
+        assert!(is_issue_file(Path::new("000456_name_with_underscores.md")));
+        
+        // Invalid files
+        assert!(!is_issue_file(Path::new("123_test.md"))); // Wrong number format
+        assert!(!is_issue_file(Path::new("000123test.md"))); // Missing underscore
+        assert!(!is_issue_file(Path::new("000123_test.txt"))); // Wrong extension
+        assert!(!is_issue_file(Path::new("000123_test"))); // No extension
+        assert!(!is_issue_file(Path::new("abc123_test.md"))); // Invalid number
+        assert!(!is_issue_file(Path::new("README.md"))); // Not issue format
+        assert!(!is_issue_file(Path::new("000123_.md"))); // Valid but edge case
+        
+        // Path with directory
+        assert!(is_issue_file(Path::new("./issues/000123_test.md")));
+        assert!(is_issue_file(Path::new("/path/to/000123_test.md")));
     }
 }

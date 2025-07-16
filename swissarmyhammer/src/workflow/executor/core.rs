@@ -334,7 +334,7 @@ impl WorkflowExecutor {
         let state_start_time = Instant::now();
 
         // Execute state action if one can be parsed from the description
-        tracing::debug!(
+        tracing::info!(
             "About to execute action for state {} with description: {}",
             current_state_id,
             state_description
@@ -412,7 +412,7 @@ impl WorkflowExecutor {
             }
         }
 
-        tracing::debug!(
+        tracing::info!(
             "Transitioning from {} to {} for workflow {}",
             run.current_state,
             next_state,

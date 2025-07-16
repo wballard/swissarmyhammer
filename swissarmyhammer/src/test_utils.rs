@@ -64,10 +64,62 @@ use tempfile::TempDir;
 /// ```
 pub struct ProcessGuard(pub std::process::Child);
 
+impl ProcessGuard {
+    /// Create a new ProcessGuard from a child process
+    pub fn new(child: std::process::Child) -> Self {
+        Self(child)
+    }
+
+    /// Check if the process is still running
+    pub fn is_running(&mut self) -> bool {
+        match self.0.try_wait() {
+            Ok(None) => true,     // Process is still running
+            Ok(Some(_)) => false, // Process has exited
+            Err(_) => false,      // Error occurred, assume process is dead
+        }
+    }
+
+    /// Attempt to gracefully terminate the process with a timeout
+    pub fn terminate_gracefully(
+        &mut self,
+        timeout: std::time::Duration,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use std::time::Instant;
+
+        // For now, we'll use a simple approach - just wait a bit then force kill
+        // This could be enhanced later with proper signal handling if needed
+        let start = Instant::now();
+        while start.elapsed() < timeout {
+            match self.0.try_wait() {
+                Ok(Some(_)) => return Ok(()), // Process exited
+                Ok(None) => std::thread::sleep(std::time::Duration::from_millis(10)),
+                Err(e) => return Err(e.into()),
+            }
+        }
+
+        // If the process didn't exit gracefully, force kill it
+        self.0.kill()?;
+        self.0.wait()?;
+        Ok(())
+    }
+
+    /// Force kill the process immediately
+    pub fn force_kill(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.0.kill()?;
+        self.0.wait()?;
+        Ok(())
+    }
+}
+
 impl Drop for ProcessGuard {
     fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
+        // First try graceful termination with a short timeout
+        let _ = self.terminate_gracefully(std::time::Duration::from_millis(500));
+
+        // If graceful termination failed, try force kill as fallback
+        if self.is_running() {
+            let _ = self.force_kill();
+        }
     }
 }
 

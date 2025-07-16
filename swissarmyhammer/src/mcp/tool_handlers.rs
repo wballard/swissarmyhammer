@@ -1,0 +1,313 @@
+//! Tool handlers for MCP operations
+
+use crate::git::GitOperations;
+use crate::issues::IssueStorage;
+use super::constants::{ISSUE_BRANCH_PREFIX, ISSUE_NUMBER_WIDTH};
+use super::responses::{create_success_response, create_error_response};
+use super::types::*;
+use rmcp::model::*;
+use rmcp::Error as McpError;
+use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock};
+
+/// Tool handlers for MCP server operations
+pub struct ToolHandlers {
+    issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
+    git_ops: Arc<Mutex<Option<GitOperations>>>,
+}
+
+impl ToolHandlers {
+    pub fn new(
+        issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
+        git_ops: Arc<Mutex<Option<GitOperations>>>,
+    ) -> Self {
+        Self {
+            issue_storage,
+            git_ops,
+        }
+    }
+
+    /// Handle the issue_create tool operation.
+    ///
+    /// Creates a new issue with auto-assigned number and stores it in the
+    /// issues directory as a markdown file.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The create issue request containing name and content
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    pub async fn handle_issue_create(
+        &self,
+        request: CreateIssueRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        tracing::debug!("Creating issue: {}", request.name);
+        let issue_storage = self.issue_storage.write().await;
+        match issue_storage
+            .create_issue(request.name, request.content)
+            .await
+        {
+            Ok(issue) => {
+                tracing::info!("Created issue {} with number {}", issue.name, issue.number);
+                Ok(create_success_response(format!(
+                    "Created issue {} with number {}",
+                    issue.name, issue.number
+                )))
+            }
+            Err(e) => {
+                tracing::error!("Failed to create issue: {}", e);
+                Ok(create_error_response(format!(
+                    "Failed to create issue: {}",
+                    e
+                )))
+            }
+        }
+    }
+
+    /// Handle the issue_mark_complete tool operation.
+    ///
+    /// Marks an issue as complete by moving it to the completed issues directory.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The mark complete request containing the issue number
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    pub async fn handle_issue_mark_complete(
+        &self,
+        request: MarkCompleteRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        let issue_storage = self.issue_storage.write().await;
+        match issue_storage.mark_complete(request.number).await {
+            Ok(issue) => Ok(create_success_response(format!(
+                "Marked issue {} as complete",
+                issue.number
+            ))),
+            Err(e) => Ok(create_error_response(format!(
+                "Failed to mark issue complete: {}",
+                e
+            ))),
+        }
+    }
+
+    /// Handle the issue_all_complete tool operation.
+    ///
+    /// Checks if all issues are completed by listing pending issues.
+    ///
+    /// # Arguments
+    ///
+    /// * `_request` - The all complete request (no parameters needed)
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result with completion status
+    pub async fn handle_issue_all_complete(
+        &self,
+        _request: AllCompleteRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        let issue_storage = self.issue_storage.read().await;
+        match issue_storage.list_issues().await {
+            Ok(issues) => {
+                let pending_issues: Vec<_> = issues.iter().filter(|i| !i.completed).collect();
+                let all_complete = pending_issues.is_empty();
+                Ok(create_success_response(format!(
+                    "All issues complete: {}. Pending issues: {}",
+                    all_complete,
+                    pending_issues.len()
+                )))
+            }
+            Err(e) => Ok(create_error_response(format!(
+                "Failed to check issues: {}",
+                e
+            ))),
+        }
+    }
+
+    /// Handle the issue_update tool operation.
+    ///
+    /// Updates the content of an existing issue with new markdown content.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The update request containing issue number and new content
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    pub async fn handle_issue_update(
+        &self,
+        request: UpdateIssueRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        let issue_storage = self.issue_storage.write().await;
+        match issue_storage
+            .update_issue(request.number, request.content)
+            .await
+        {
+            Ok(issue) => Ok(create_success_response(format!(
+                "Updated issue {} ({})",
+                issue.number, issue.name
+            ))),
+            Err(e) => Ok(create_error_response(format!(
+                "Failed to update issue: {}",
+                e
+            ))),
+        }
+    }
+
+    /// Handle the issue_current tool operation.
+    ///
+    /// Determines the current issue being worked on by checking the git branch name.
+    /// If on an issue branch (starts with 'issue/'), returns the issue name.
+    ///
+    /// # Arguments
+    ///
+    /// * `_request` - The current issue request (no parameters needed)
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result with current issue info
+    pub async fn handle_issue_current(
+        &self,
+        _request: CurrentIssueRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        let git_ops = self.git_ops.lock().await;
+        match git_ops.as_ref() {
+            Some(ops) => match ops.current_branch() {
+                Ok(branch) => {
+                    if let Some(issue_name) = branch.strip_prefix(ISSUE_BRANCH_PREFIX) {
+                        Ok(create_success_response(format!(
+                            "Currently working on issue: {}",
+                            issue_name
+                        )))
+                    } else {
+                        Ok(create_success_response(format!(
+                            "Not on an issue branch. Current branch: {}",
+                            branch
+                        )))
+                    }
+                }
+                Err(e) => Ok(create_error_response(format!(
+                    "Failed to get current branch: {}",
+                    e
+                ))),
+            },
+            None => Ok(create_error_response(
+                "Git operations not available".to_string(),
+            )),
+        }
+    }
+
+    /// Handle the issue_work tool operation.
+    ///
+    /// Switches to a work branch for the specified issue. Creates a new branch
+    /// with the format 'issue/{issue_number}_{issue_name}' if it doesn't exist.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The work request containing the issue number
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    pub async fn handle_issue_work(
+        &self,
+        request: WorkIssueRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        // First get the issue to determine its name
+        let issue_storage = self.issue_storage.read().await;
+        let issue = match issue_storage.get_issue(request.number).await {
+            Ok(issue) => issue,
+            Err(e) => {
+                return Ok(create_error_response(format!(
+                    "Failed to get issue {}: {}",
+                    request.number, e
+                )))
+            }
+        };
+        drop(issue_storage);
+
+        // Create work branch
+        let mut git_ops = self.git_ops.lock().await;
+        let issue_name = format!(
+            "{:0width$}_{}",
+            issue.number,
+            issue.name,
+            width = ISSUE_NUMBER_WIDTH
+        );
+
+        match git_ops.as_mut() {
+            Some(ops) => match ops.create_work_branch(&issue_name) {
+                Ok(branch_name) => Ok(create_success_response(format!(
+                    "Switched to work branch: {}",
+                    branch_name
+                ))),
+                Err(e) => Ok(create_error_response(format!(
+                    "Failed to create work branch: {}",
+                    e
+                ))),
+            },
+            None => Ok(create_error_response(
+                "Git operations not available".to_string(),
+            )),
+        }
+    }
+
+    /// Handle the issue_merge tool operation.
+    ///
+    /// Merges the work branch for an issue back to the main branch.
+    /// The branch name is determined from the issue number and name.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The merge request containing the issue number
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    pub async fn handle_issue_merge(
+        &self,
+        request: MergeIssueRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        // First get the issue to determine its name
+        let issue_storage = self.issue_storage.read().await;
+        let issue = match issue_storage.get_issue(request.number).await {
+            Ok(issue) => issue,
+            Err(e) => {
+                return Ok(create_error_response(format!(
+                    "Failed to get issue {}: {}",
+                    request.number, e
+                )))
+            }
+        };
+        drop(issue_storage);
+
+        // Merge branch
+        let mut git_ops = self.git_ops.lock().await;
+        let issue_name = format!(
+            "{:0width$}_{}",
+            issue.number,
+            issue.name,
+            width = ISSUE_NUMBER_WIDTH
+        );
+
+        match git_ops.as_mut() {
+            Some(ops) => match ops.merge_issue_branch(&issue_name) {
+                Ok(_) => Ok(create_success_response(format!(
+                    "Merged work branch for issue {} to main",
+                    issue_name
+                ))),
+                Err(e) => Ok(create_error_response(format!(
+                    "Failed to merge branch: {}",
+                    e
+                ))),
+            },
+            None => Ok(create_error_response(
+                "Git operations not available".to_string(),
+            )),
+        }
+    }
+}

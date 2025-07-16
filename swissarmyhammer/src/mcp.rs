@@ -754,22 +754,110 @@ impl McpServer {
         &self,
         _request: AllCompleteRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
+        // Get all issues
         let issue_storage = self.issue_storage.read().await;
-        match issue_storage.list_issues().await {
-            Ok(issues) => {
-                let pending_issues: Vec<_> = issues.iter().filter(|i| !i.completed).collect();
-                let all_complete = pending_issues.is_empty();
-                Ok(Self::create_success_response(format!(
-                    "All issues complete: {}. Pending issues: {}",
-                    all_complete,
-                    pending_issues.len()
-                )))
+        let all_issues = issue_storage
+            .list_issues()
+            .await
+            .map_err(|e| McpError::internal_error(
+                format!("Failed to list issues: {}", e),
+                None,
+            ))?;
+        
+        // Count pending and completed
+        let completed_count = all_issues.iter().filter(|i| i.completed).count();
+        let pending_count = all_issues.len() - completed_count;
+        let all_complete = pending_count == 0;
+        
+        // Create detailed response
+        let mut response = serde_json::json!({
+            "all_complete": all_complete,
+            "stats": {
+                "total": all_issues.len(),
+                "completed": completed_count,
+                "pending": pending_count,
+            },
+            "message": if all_complete {
+                if all_issues.is_empty() {
+                    "No issues found. Issue list is empty.".to_string()
+                } else {
+                    format!("Yes, all {} issues are complete!", all_issues.len())
+                }
+            } else {
+                format!(
+                    "No, {} of {} issues are still pending.",
+                    pending_count,
+                    all_issues.len()
+                )
             }
-            Err(e) => Ok(Self::create_error_response(format!(
-                "Failed to check issues: {}",
-                e
-            ))),
+        });
+        
+        // If there are pending issues, list them
+        if !all_complete && pending_count > 0 {
+            let pending_issues: Vec<_> = all_issues
+                .iter()
+                .filter(|i| !i.completed)
+                .map(|i| {
+                    serde_json::json!({
+                        "number": i.number,
+                        "name": i.name,
+                    })
+                })
+                .collect();
+            
+            response.as_object_mut().unwrap().insert(
+                "pending_issues".to_string(),
+                serde_json::Value::Array(pending_issues),
+            );
         }
+        
+        // Add summary for text response
+        let summary = if !all_complete {
+            Self::format_issue_summary(&all_issues, 5)
+        } else {
+            String::new()
+        };
+        
+        let text_response = format!("{}{}", response["message"].as_str().unwrap(), summary);
+        
+        Ok(CallToolResult {
+            content: vec![Annotated::new(
+                RawContent::Text(RawTextContent { text: text_response }),
+                None,
+            )],
+            is_error: Some(false),
+        })
+    }
+
+    /// Format issue summary for display
+    fn format_issue_summary(issues: &[crate::issues::Issue], max_items: usize) -> String {
+        let pending_issues: Vec<_> = issues
+            .iter()
+            .filter(|i| !i.completed)
+            .take(max_items)
+            .collect();
+        
+        if pending_issues.is_empty() {
+            return String::new();
+        }
+        
+        let mut summary = String::from("\nPending issues:\n");
+        for issue in &pending_issues {
+            summary.push_str(&format!(
+                "  - #{:06}: {}\n",
+                issue.number,
+                issue.name
+            ));
+        }
+        
+        if issues.iter().filter(|i| !i.completed).count() > max_items {
+            summary.push_str(&format!(
+                "  ... and {} more\n",
+                issues.iter().filter(|i| !i.completed).count() - max_items
+            ));
+        }
+        
+        summary
     }
 
     /// Handle the issue_update tool operation.

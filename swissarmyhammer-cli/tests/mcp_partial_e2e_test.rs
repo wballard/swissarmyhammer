@@ -29,16 +29,18 @@ async fn wait_for_server_ready(
         });
 
         let request_str = serde_json::to_string(&test_request)?;
-        
+
         // Try to send the request
         match writeln!(stdin, "{}", request_str) {
             Ok(_) => {
-                if let Ok(_) = stdin.flush() {
+                if stdin.flush().is_ok() {
                     // Try to read a response with a short timeout
                     match timeout(Duration::from_millis(200), async {
                         let mut line = String::new();
                         reader.read_line(&mut line)
-                    }).await {
+                    })
+                    .await
+                    {
                         Ok(Ok(_)) => {
                             // Server responded - it's ready!
                             return Ok(());
@@ -56,7 +58,7 @@ async fn wait_for_server_ready(
 
         // Wait before next attempt
         sleep(RETRY_DELAY).await;
-        
+
         // Log progress every second
         if attempt % 10 == 0 && attempt > 0 {
             eprintln!("Waiting for server to be ready... (attempt {})", attempt);

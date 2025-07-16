@@ -290,6 +290,8 @@ impl FileSystemIssueStorage {
 
     /// Update issue content
     async fn update_issue_impl(&self, number: u32, content: String) -> Result<Issue> {
+        debug!("Updating issue {}", number);
+
         // Find the issue file (check both directories)
         let issue = self.get_issue(number).await?;
         let path = &issue.file_path;
@@ -299,16 +301,28 @@ impl FileSystemIssueStorage {
         std::fs::write(&temp_path, &content).map_err(SwissArmyHammerError::Io)?;
         std::fs::rename(&temp_path, path).map_err(SwissArmyHammerError::Io)?;
 
+        debug!(
+            "Successfully updated issue {} at path {}",
+            number,
+            path.display()
+        );
         Ok(Issue { content, ..issue })
     }
 
     /// Move issue between directories
     async fn move_issue(&self, number: u32, to_completed: bool) -> Result<Issue> {
+        debug!(
+            "Moving issue {} to {}",
+            number,
+            if to_completed { "completed" } else { "pending" }
+        );
+
         // Find current issue
         let mut issue = self.get_issue(number).await?;
 
         // Check if already in target state
         if issue.completed == to_completed {
+            debug!("Issue {} already in target state", number);
             return Ok(issue);
         }
 
@@ -330,9 +344,14 @@ impl FileSystemIssueStorage {
         std::fs::rename(&issue.file_path, &target_path).map_err(SwissArmyHammerError::Io)?;
 
         // Update issue struct
-        issue.file_path = target_path;
+        issue.file_path = target_path.clone();
         issue.completed = to_completed;
 
+        debug!(
+            "Successfully moved issue {} to {}",
+            number,
+            target_path.display()
+        );
         Ok(issue)
     }
 

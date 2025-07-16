@@ -81,7 +81,9 @@ impl WorkflowExecutor {
         if let Some(storage) = &self.test_storage {
             Ok(storage.clone())
         } else {
-            Ok(Arc::new(crate::workflow::storage::WorkflowStorage::file_system()?))
+            Ok(Arc::new(
+                crate::workflow::storage::WorkflowStorage::file_system()?,
+            ))
         }
     }
 

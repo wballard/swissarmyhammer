@@ -3,9 +3,11 @@
 //! This module tests that nested workflows with the same state names
 //! don't interfere with each other during execution.
 
+use crate::workflow::actions::{clear_test_storage, set_test_storage};
+use crate::workflow::storage::{
+    MemoryWorkflowRunStorage, MemoryWorkflowStorage, WorkflowStorageBackend,
+};
 use crate::workflow::{MermaidParser, WorkflowExecutor, WorkflowStorage};
-use crate::workflow::actions::{set_test_storage, clear_test_storage};
-use crate::workflow::storage::{MemoryWorkflowStorage, MemoryWorkflowRunStorage, WorkflowStorageBackend};
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -13,13 +15,13 @@ use std::sync::Arc;
 fn setup_test_storage_with_workflows(workflows: &[(&str, &str)]) -> Arc<WorkflowStorage> {
     let mut workflow_storage = MemoryWorkflowStorage::new();
     let run_storage = MemoryWorkflowRunStorage::new();
-    
+
     // Parse and store workflows
     for (name, content) in workflows {
         let workflow = MermaidParser::parse(content, *name).unwrap();
         workflow_storage.store_workflow(workflow).unwrap();
     }
-    
+
     Arc::new(WorkflowStorage::new(
         Arc::new(workflow_storage),
         Arc::new(run_storage),
@@ -32,7 +34,7 @@ async fn test_nested_workflow_state_name_pollution() {
     // This test verifies that when a parent workflow calls a sub-workflow,
     // and both workflows have states with the same names (1, 2, 3),
     // the sub-workflow's state transitions don't interfere with the parent's state management.
-    
+
     // Create a parent workflow with states 1, 2, 3
     let parent_workflow_content = r#"---
 name: workflow-a
@@ -131,7 +133,7 @@ stateDiagram-v2
     } else {
         panic!("sub_result not found in context");
     }
-    
+
     // Clean up test storage
     clear_test_storage();
 }
@@ -234,7 +236,7 @@ stateDiagram-v2
     } else {
         panic!("child_result not found in context");
     }
-    
+
     // Clean up test storage
     clear_test_storage();
 }
@@ -363,7 +365,7 @@ stateDiagram-v2
             }
         }
     }
-    
+
     // Clean up test storage
     clear_test_storage();
 }

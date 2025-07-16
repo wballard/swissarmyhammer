@@ -346,9 +346,10 @@ async fn test_all_branches_are_reachable() -> Result<()> {
     // Test scenario 1: Branch1 (example_var contains "Hello")
     {
         let mut run = WorkflowRun::new(workflow.clone());
-        
+
         // Set up context directly without running the full workflow
-        run.context.insert("example_var".to_string(), json!("Hello from workflow"));
+        run.context
+            .insert("example_var".to_string(), json!("Hello from workflow"));
         run.context.insert("is_error".to_string(), json!(false));
         run.current_state = StateId::new("BranchDecision");
 
@@ -369,10 +370,11 @@ async fn test_all_branches_are_reachable() -> Result<()> {
     // Test scenario 2: Branch2 (is_error == true)
     {
         let mut run = WorkflowRun::new(workflow.clone());
-        
+
         // Set up context directly without running the full workflow
         run.context.insert("is_error".to_string(), json!(true));
-        run.context.insert("example_var".to_string(), json!("No Hello here"));
+        run.context
+            .insert("example_var".to_string(), json!("No Hello here"));
         run.current_state = StateId::new("BranchDecision");
 
         let result = executor.execute_single_cycle(&mut run).await;
@@ -392,10 +394,11 @@ async fn test_all_branches_are_reachable() -> Result<()> {
     // Test scenario 3: DefaultBranch (no conditions match)
     {
         let mut run = WorkflowRun::new(workflow.clone());
-        
+
         // Set up context directly without running the full workflow
         run.context.insert("is_error".to_string(), json!(false));
-        run.context.insert("example_var".to_string(), json!("No Hello here"));
+        run.context
+            .insert("example_var".to_string(), json!("No Hello here"));
         run.current_state = StateId::new("BranchDecision");
 
         let result = executor.execute_single_cycle(&mut run).await;

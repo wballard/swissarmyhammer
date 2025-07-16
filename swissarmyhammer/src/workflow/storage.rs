@@ -1298,7 +1298,10 @@ stateDiagram-v2
                 if e.to_string().contains("No such file or directory") {
                     // This is OK in CI - builtin workflows are embedded in the binary
                     // and don't require filesystem access
-                    println!("Warning: Could not load workflows from filesystem in CI: {}", e);
+                    println!(
+                        "Warning: Could not load workflows from filesystem in CI: {}",
+                        e
+                    );
                     return;
                 } else {
                     panic!("Unexpected error loading workflows: {}", e);

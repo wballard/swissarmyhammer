@@ -73,19 +73,21 @@ stateDiagram-v2
     // Change to the temp directory so FileSystemWorkflowStorage finds our workflows
     let original_dir = std::env::current_dir().unwrap();
     std::env::set_current_dir(&temp_dir).unwrap();
-    
+
     // Ensure we restore directory on panic or normal exit
     struct DirGuard {
         original_dir: std::path::PathBuf,
     }
-    
+
     impl Drop for DirGuard {
         fn drop(&mut self) {
             let _ = std::env::set_current_dir(&self.original_dir);
         }
     }
-    
-    let _guard = DirGuard { original_dir: original_dir.clone() };
+
+    let _guard = DirGuard {
+        original_dir: original_dir.clone(),
+    };
 
     // Parse workflows
     let parent_workflow = MermaidParser::parse(parent_workflow_content, "workflow-a").unwrap();
@@ -204,19 +206,21 @@ stateDiagram-v2
     // Change to the temp directory so FileSystemWorkflowStorage finds our workflows
     let original_dir = std::env::current_dir().unwrap();
     std::env::set_current_dir(&temp_dir).unwrap();
-    
+
     // Ensure we restore directory on panic or normal exit
     struct DirGuard {
         original_dir: std::path::PathBuf,
     }
-    
+
     impl Drop for DirGuard {
         fn drop(&mut self) {
             let _ = std::env::set_current_dir(&self.original_dir);
         }
     }
-    
-    let _guard = DirGuard { original_dir: original_dir.clone() };
+
+    let _guard = DirGuard {
+        original_dir: original_dir.clone(),
+    };
 
     // Parse workflows
     let parent_workflow = MermaidParser::parse(parent_workflow_content, "workflow-parent").unwrap();
@@ -353,19 +357,21 @@ stateDiagram-v2
     // Change to the temp directory so FileSystemWorkflowStorage finds our workflows
     let original_dir = std::env::current_dir().unwrap();
     std::env::set_current_dir(&temp_dir).unwrap();
-    
+
     // Ensure we restore directory on panic or normal exit
     struct DirGuard {
         original_dir: std::path::PathBuf,
     }
-    
+
     impl Drop for DirGuard {
         fn drop(&mut self) {
             let _ = std::env::set_current_dir(&self.original_dir);
         }
     }
-    
-    let _guard = DirGuard { original_dir: original_dir.clone() };
+
+    let _guard = DirGuard {
+        original_dir: original_dir.clone(),
+    };
 
     // Parse workflows
     let workflow_a = MermaidParser::parse(workflow_a_content, "workflow-level-a").unwrap();

@@ -138,7 +138,6 @@ async fn run_server() -> i32 {
     use rmcp::serve_server;
     use rmcp::transport::io::stdio;
     use swissarmyhammer::{mcp::McpServer, PromptLibrary};
-    use tokio_util::sync::CancellationToken;
 
     // Create library and server
     let library = PromptLibrary::new();
@@ -160,22 +159,8 @@ async fn run_server() -> i32 {
     // File watching is started in the ServerHandler::initialize method
     tracing::info!("MCP server initialized, file watching will start when client connects");
 
-    // Set up cancellation token
-    let ct = CancellationToken::new();
-    let ct_clone = ct.clone();
-
-    // Set up signal handlers
-    tokio::spawn(async move {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("failed to listen for ctrl+c");
-
-        tracing::info!("Shutdown signal received (Ctrl+C)");
-        ct_clone.cancel();
-    });
-
     // Start the rmcp SDK server with stdio transport
-    let _running_service = match serve_server(server, stdio()).await {
+    let running_service = match serve_server(server, stdio()).await {
         Ok(service) => {
             tracing::info!("MCP server started successfully");
             service
@@ -186,11 +171,20 @@ async fn run_server() -> i32 {
         }
     };
 
-    // Wait for cancellation (from Ctrl+C only for now)
-    // Note: The rmcp crate does not currently provide a way to detect when the stdio transport
-    // is closed. The server will continue running until explicitly terminated with Ctrl+C.
-    // A future version of rmcp may provide better transport lifecycle management.
-    ct.cancelled().await;
+    // Wait for the service to complete - this will return when:
+    // - The client disconnects (transport closed)
+    // - The server is cancelled
+    // - A serious error occurs
+    match running_service.waiting().await {
+        Ok(quit_reason) => {
+            // The QuitReason enum is not exported by rmcp, so we'll just log it
+            tracing::info!("MCP server stopped: {:?}", quit_reason);
+        }
+        Err(e) => {
+            tracing::error!("MCP server task error: {}", e);
+            return EXIT_WARNING;
+        }
+    }
 
     tracing::info!("MCP server shutting down gracefully");
     EXIT_SUCCESS

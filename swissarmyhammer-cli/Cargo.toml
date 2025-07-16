@@ -88,4 +88,5 @@ fuzzy-matcher = { workspace = true }
 assert_cmd = { workspace = true }
 predicates = { workspace = true }
 tempfile = { workspace = true }
+serial_test = { workspace = true }
 nix = { version = "0.27", features = ["signal"] }

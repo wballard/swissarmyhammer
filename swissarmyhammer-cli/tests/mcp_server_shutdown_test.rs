@@ -3,14 +3,12 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 #[test]
-#[ignore = "rmcp crate does not currently support detecting stdio transport closure"]
 fn test_mcp_server_exits_on_client_disconnect() {
-    // NOTE: This test is currently ignored because the rmcp crate (v0.2.1) does not
-    // provide a way to detect when the stdio transport is closed. The server will
-    // continue running even after the client disconnects.
-    //
-    // This is a known limitation tracked in issue #000144.
-    // A future version of rmcp may provide better transport lifecycle management.
+    use std::io::Write;
+
+    // This test verifies that the MCP server properly exits when the client disconnects.
+    // The server uses the waiting() method from rmcp's RunningService to detect when
+    // the stdio transport is closed.
 
     // Start the MCP server
     let mut server = Command::cargo_bin("swissarmyhammer")
@@ -25,29 +23,40 @@ fn test_mcp_server_exits_on_client_disconnect() {
     // Give the server a moment to start
     std::thread::sleep(Duration::from_millis(500));
 
+    // Send MCP initialization to establish connection
+    let stdin = server.stdin.as_mut().expect("Failed to get stdin");
+    let init_msg = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{"roots":{"listChanged":true}},"clientInfo":{"name":"test","version":"1.0.0"}}}"#;
+    writeln!(stdin, "{}", init_msg).expect("Failed to write initialization");
+    stdin.flush().expect("Failed to flush stdin");
+
+    // Give the server time to process initialization
+    std::thread::sleep(Duration::from_millis(500));
+
+    // Send initialized notification to complete handshake
+    let initialized_msg = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
+    writeln!(stdin, "{}", initialized_msg).expect("Failed to write initialized notification");
+    stdin.flush().expect("Failed to flush stdin");
+
+    // Give the server time to fully establish connection
+    std::thread::sleep(Duration::from_millis(500));
+
     // Close stdin to simulate client disconnect
     drop(server.stdin.take());
 
-    // Give the server time to detect disconnect and exit
-    std::thread::sleep(Duration::from_secs(2));
+    // Wait for the server to exit and capture output
+    let output = server.wait_with_output().unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
 
-    // Check if the server process has exited
-    match server.try_wait() {
-        Ok(Some(status)) => {
-            assert!(
-                status.success(),
-                "Server should exit with success code when client disconnects"
-            );
-        }
-        Ok(None) => {
-            // Server is still running, kill it and fail the test
-            server.kill().ok();
-            panic!("Server did not exit when client disconnected - this is expected with current rmcp version");
-        }
-        Err(e) => {
-            panic!("Failed to check server status: {}", e);
-        }
-    }
+    println!("Server stdout: {}", stdout);
+    println!("Server stderr: {}", stderr);
+    println!("Server exit status: {:?}", output.status);
+
+    assert!(
+        output.status.success(),
+        "Server should exit with success code when client disconnects. Exit code: {:?}",
+        output.status.code()
+    );
 }
 
 #[test]

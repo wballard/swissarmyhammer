@@ -1139,18 +1139,18 @@ stateDiagram-v2
         // Change to the temp directory to simulate local workflows
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(&temp_dir).unwrap();
-        
+
         // Ensure we restore directory on panic or normal exit
         struct DirGuard {
             original_dir: std::path::PathBuf,
         }
-        
+
         impl Drop for DirGuard {
             fn drop(&mut self) {
                 let _ = std::env::set_current_dir(&self.original_dir);
             }
         }
-        
+
         let _guard = DirGuard { original_dir };
 
         resolver.load_all_workflows(&mut storage).unwrap();

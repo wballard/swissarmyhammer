@@ -2131,6 +2131,7 @@ stateDiagram-v2
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_validate_all_workflows_integration() {
         let mut validator = Validator::new(false);
         let temp_dir = tempfile::TempDir::new().unwrap();

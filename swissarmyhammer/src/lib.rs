@@ -67,6 +67,9 @@ pub mod plugins;
 /// Workflow system for state-based execution
 pub mod workflow;
 
+/// Issue tracking and management
+pub mod issues;
+
 /// Security utilities for path validation and resource limits
 pub mod security;
 

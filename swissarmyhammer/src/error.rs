@@ -48,6 +48,18 @@ pub enum SwissArmyHammerError {
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
+    /// Issue not found
+    #[error("Issue not found: {0}")]
+    IssueNotFound(String),
+
+    /// Invalid issue number format
+    #[error("Invalid issue number: {0}")]
+    InvalidIssueNumber(String),
+
+    /// Issue already exists
+    #[error("Issue already exists: {0}")]
+    IssueAlreadyExists(u32),
+
     /// Other errors
     #[error("{0}")]
     Other(String),

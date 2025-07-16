@@ -19,3 +19,8 @@ Thumbs.db
 
 # Debug
 *.pdb
+
+# Logs
+*.log
+coverage_output.log
+test_output.log

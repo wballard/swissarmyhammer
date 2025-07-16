@@ -10,6 +10,7 @@ pub struct ErrorHandler {
 }
 
 impl ErrorHandler {
+    /// Create a new error handler with the given prompt library
     pub fn new(library: Arc<RwLock<PromptLibrary>>) -> Self {
         Self { library }
     }

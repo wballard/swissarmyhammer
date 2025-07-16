@@ -17,6 +17,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
+use self::constants::{MIN_ISSUE_NUMBER, MAX_ISSUE_NUMBER};
+
 /// MCP module structure
 pub mod constants;
 pub mod error_handling;
@@ -566,7 +568,7 @@ impl McpServer {
     /// # Returns
     ///
     /// * `Result<String, McpError>` - The validated name or MCP error
-
+    ///
     /// Handle the issue_create tool operation.
     ///
     /// Creates a new issue with auto-assigned number and stores it in the
@@ -641,9 +643,9 @@ impl McpServer {
         request: MarkCompleteRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         // Validate issue number
-        if request.number == 0 || request.number > 999999 {
+        if request.number < MIN_ISSUE_NUMBER || request.number > MAX_ISSUE_NUMBER {
             return Err(McpError::invalid_params(
-                "Invalid issue number (must be 1-999999)".to_string(),
+                format!("Invalid issue number (must be {}-{})", MIN_ISSUE_NUMBER, MAX_ISSUE_NUMBER),
                 None,
             ));
         }

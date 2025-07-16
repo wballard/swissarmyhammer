@@ -2,7 +2,6 @@
 
 use crate::file_watcher::{FileWatcher, FileWatcherCallback};
 use crate::{Result, SwissArmyHammerError};
-use rmcp::model::*;
 use rmcp::RoleServer;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -15,6 +14,7 @@ pub struct McpFileWatcherCallback {
 }
 
 impl McpFileWatcherCallback {
+    /// Create a new file watcher callback with the given server and peer
     pub fn new(server: super::McpServer, peer: rmcp::Peer<RoleServer>) -> Self {
         Self { server, peer }
     }
@@ -59,6 +59,7 @@ pub struct McpFileWatcher {
 }
 
 impl McpFileWatcher {
+    /// Create a new MCP file watcher with the given file watcher instance
     pub fn new(file_watcher: Arc<Mutex<FileWatcher>>) -> Self {
         Self { file_watcher }
     }

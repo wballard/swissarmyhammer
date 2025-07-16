@@ -5,8 +5,7 @@ use crate::issues::IssueStorage;
 use super::constants::{ISSUE_BRANCH_PREFIX, ISSUE_NUMBER_WIDTH};
 use super::responses::{
     create_success_response, create_error_response, create_issue_response,
-    create_mark_complete_response, create_update_response, create_all_complete_response,
-    create_current_issue_response, create_work_response
+    create_mark_complete_response, create_all_complete_response
 };
 use super::types::*;
 use super::utils::validate_issue_name;
@@ -22,6 +21,7 @@ pub struct ToolHandlers {
 }
 
 impl ToolHandlers {
+    /// Create a new tool handlers instance with the given issue storage and git operations
     pub fn new(
         issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
         git_ops: Arc<Mutex<Option<GitOperations>>>,

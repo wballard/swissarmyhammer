@@ -613,11 +613,15 @@ pub fn is_issue_file(path: &Path) -> bool {
         None => return false,
     };
 
-    // Check if filename matches pattern
-    parse_issue_filename(filename).is_ok()
+    // Check if filename matches pattern and name is not empty
+    match parse_issue_filename(filename) {
+        Ok((_, name)) => !name.is_empty(),
+        Err(_) => false,
+    }
 }
 
 impl FileSystemIssueStorage {
+}
 
 #[cfg(test)]
 mod tests {

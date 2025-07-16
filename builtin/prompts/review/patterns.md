@@ -6,10 +6,6 @@ arguments:
     description: Context about the code (e.g., "handles user authentication")
     required: false
     default: "general purpose code"
-  - name: severity_threshold
-    description: Minimum severity to report (critical, high, medium, low)
-    required: false
-    default: "low"
 ---
 
 ## Code Under Review

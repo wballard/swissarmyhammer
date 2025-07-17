@@ -76,6 +76,7 @@ impl FileSystemIssueStorage {
         })
     }
 
+
     /// Parse issue from file path
     ///
     /// Parses an issue from a file path, extracting the issue number and name from the filename
@@ -719,6 +720,15 @@ impl FileSystemIssueStorage {}
 mod tests {
     use super::*;
     use tempfile::TempDir;
+    
+    /// Create a test issue storage with temporary directory
+    fn create_test_storage() -> (FileSystemIssueStorage, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+        let issues_dir = temp_dir.path().join("issues");
+        
+        let storage = FileSystemIssueStorage::new(issues_dir).unwrap();
+        (storage, temp_dir)
+    }
 
     #[test]
     fn test_issue_serialization() {
@@ -1631,5 +1641,223 @@ mod tests {
         // Path with directory
         assert!(is_issue_file(Path::new("./issues/000123_test.md")));
         assert!(is_issue_file(Path::new("/path/to/000123_test.md")));
+    }
+
+    // Comprehensive tests for issue operations as specified in the issue
+    #[tokio::test]
+    async fn test_create_issue_comprehensive() {
+        let (storage, _temp) = create_test_storage();
+        
+        // Create first issue
+        let issue1 = storage
+            .create_issue("test_issue".to_string(), "Test content".to_string())
+            .await
+            .unwrap();
+        
+        assert_eq!(issue1.number, 1);
+        assert_eq!(issue1.name, "test_issue");
+        assert_eq!(issue1.content, "Test content");
+        assert!(!issue1.completed);
+        
+        // Create second issue - should auto-increment
+        let issue2 = storage
+            .create_issue("another_issue".to_string(), "More content".to_string())
+            .await
+            .unwrap();
+        
+        assert_eq!(issue2.number, 2);
+    }
+
+    #[tokio::test]
+    async fn test_list_issues_comprehensive() {
+        let (storage, _temp) = create_test_storage();
+        
+        // Initially empty
+        let issues = storage.list_issues().await.unwrap();
+        assert!(issues.is_empty());
+        
+        // Create some issues
+        storage.create_issue("issue1".to_string(), "Content 1".to_string()).await.unwrap();
+        storage.create_issue("issue2".to_string(), "Content 2".to_string()).await.unwrap();
+        
+        let issues = storage.list_issues().await.unwrap();
+        assert_eq!(issues.len(), 2);
+        assert_eq!(issues[0].number, 1);
+        assert_eq!(issues[1].number, 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_issue_comprehensive() {
+        let (storage, _temp) = create_test_storage();
+        
+        // Create an issue
+        let created = storage
+            .create_issue("test_issue".to_string(), "Test content".to_string())
+            .await
+            .unwrap();
+        
+        // Get it back
+        let retrieved = storage.get_issue(created.number).await.unwrap();
+        assert_eq!(retrieved.number, created.number);
+        assert_eq!(retrieved.name, created.name);
+        assert_eq!(retrieved.content, created.content);
+        
+        // Try to get non-existent issue
+        let result = storage.get_issue(999).await;
+        assert!(matches!(result, Err(SwissArmyHammerError::IssueNotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_update_issue_comprehensive() {
+        let (storage, _temp) = create_test_storage();
+        
+        // Create an issue
+        let issue = storage
+            .create_issue("test_issue".to_string(), "Original content".to_string())
+            .await
+            .unwrap();
+        
+        // Update it
+        let updated = storage
+            .update_issue(issue.number, "Updated content".to_string())
+            .await
+            .unwrap();
+        
+        assert_eq!(updated.number, issue.number);
+        assert_eq!(updated.content, "Updated content");
+        
+        // Verify it's persisted
+        let retrieved = storage.get_issue(issue.number).await.unwrap();
+        assert_eq!(retrieved.content, "Updated content");
+    }
+
+    #[tokio::test]
+    async fn test_update_nonexistent_issue_comprehensive() {
+        let (storage, _temp) = create_test_storage();
+        
+        let result = storage.update_issue(999, "Content".to_string()).await;
+        assert!(matches!(result, Err(SwissArmyHammerError::IssueNotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_mark_complete_comprehensive() {
+        let (storage, _temp) = create_test_storage();
+        
+        // Create an issue
+        let issue = storage
+            .create_issue("test_issue".to_string(), "Content".to_string())
+            .await
+            .unwrap();
+        
+        assert!(!issue.completed);
+        
+        // Mark it complete
+        let completed = storage.mark_complete(issue.number).await.unwrap();
+        assert!(completed.completed);
+        
+        // Verify file was moved
+        assert!(completed.file_path.to_string_lossy().contains("complete"));
+        
+        // Verify it appears in completed list
+        let all_issues = storage.list_issues().await.unwrap();
+        let completed_issues: Vec<_> = all_issues
+            .iter()
+            .filter(|i| i.completed)
+            .collect();
+        assert_eq!(completed_issues.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_mark_complete_idempotent_comprehensive() {
+        let (storage, _temp) = create_test_storage();
+        
+        // Create and complete an issue
+        let issue = storage
+            .create_issue("test_issue".to_string(), "Content".to_string())
+            .await
+            .unwrap();
+        
+        storage.mark_complete(issue.number).await.unwrap();
+        
+        // Mark complete again - should be idempotent
+        let result = storage.mark_complete(issue.number).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().completed);
+    }
+
+    #[tokio::test]
+    async fn test_all_complete_comprehensive() {
+        let (storage, _temp) = create_test_storage();
+        
+        // Initially true (no issues)
+        assert!(storage.all_complete().await.unwrap());
+        
+        // Create issues
+        let issue1 = storage
+            .create_issue("issue1".to_string(), "Content".to_string())
+            .await
+            .unwrap();
+        let issue2 = storage
+            .create_issue("issue2".to_string(), "Content".to_string())
+            .await
+            .unwrap();
+        
+        // Now false
+        assert!(!storage.all_complete().await.unwrap());
+        
+        // Complete one
+        storage.mark_complete(issue1.number).await.unwrap();
+        assert!(!storage.all_complete().await.unwrap());
+        
+        // Complete both
+        storage.mark_complete(issue2.number).await.unwrap();
+        assert!(storage.all_complete().await.unwrap());
+    }
+
+    #[test]
+    fn test_format_issue_number_comprehensive() {
+        assert_eq!(format_issue_number(1), "000001");
+        assert_eq!(format_issue_number(999999), "999999");
+        assert_eq!(format_issue_number(42), "000042");
+    }
+
+    #[test]
+    fn test_parse_issue_number_comprehensive() {
+        assert_eq!(parse_issue_number("000001").unwrap(), 1);
+        assert_eq!(parse_issue_number("999999").unwrap(), 999999);
+        assert_eq!(parse_issue_number("000042").unwrap(), 42);
+        
+        // Invalid cases
+        assert!(parse_issue_number("").is_err());
+        assert!(parse_issue_number("abc").is_err());
+        assert!(parse_issue_number("12345").is_err()); // Not 6 digits
+    }
+
+    #[test]
+    fn test_parse_issue_filename_comprehensive() {
+        let (num, name) = parse_issue_filename("000001_test_issue").unwrap();
+        assert_eq!(num, 1);
+        assert_eq!(name, "test_issue");
+        
+        let (num, name) = parse_issue_filename("000042_complex_name_with_underscores").unwrap();
+        assert_eq!(num, 42);
+        assert_eq!(name, "complex_name_with_underscores");
+        
+        // Invalid cases
+        assert!(parse_issue_filename("no_number").is_err());
+        assert!(parse_issue_filename("123_short").is_err());
+    }
+
+    #[test]
+    fn test_create_safe_filename_comprehensive() {
+        assert_eq!(create_safe_filename("simple"), "simple");
+        assert_eq!(create_safe_filename("with spaces"), "with-spaces");
+        assert_eq!(create_safe_filename("special/chars*removed"), "special-chars-removed");
+        assert_eq!(create_safe_filename("   trimmed   "), "trimmed");
+        
+        // Long names should be truncated
+        let long_name = "a".repeat(200);
+        let safe_name = create_safe_filename(&long_name);
+        assert!(safe_name.len() <= 100);
     }
 }

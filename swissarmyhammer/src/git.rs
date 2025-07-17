@@ -260,7 +260,7 @@ impl GitOperations {
 
         let status = String::from_utf8_lossy(&output.stdout);
         let mut changes = Vec::new();
-        
+
         if !status.trim().is_empty() {
             // Parse the changes to provide helpful message
             for line in status.lines() {

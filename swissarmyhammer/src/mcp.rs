@@ -2494,27 +2494,27 @@ mod tests {
 
             // Initialize git repo for testing
             Command::new("git")
-                .args(&["init"])
+                .args(["init"])
                 .current_dir(&temp_path)
                 .output()
                 .expect("Failed to init git repo");
 
             // Set up git config for testing
             Command::new("git")
-                .args(&["config", "user.email", "test@example.com"])
+                .args(["config", "user.email", "test@example.com"])
                 .current_dir(&temp_path)
                 .output()
                 .expect("Failed to set git email");
 
             Command::new("git")
-                .args(&["config", "user.name", "Test User"])
+                .args(["config", "user.name", "Test User"])
                 .current_dir(&temp_path)
                 .output()
                 .expect("Failed to set git name");
 
             // Create initial commit
             Command::new("git")
-                .args(&["commit", "--allow-empty", "-m", "Initial commit"])
+                .args(["commit", "--allow-empty", "-m", "Initial commit"])
                 .current_dir(&temp_path)
                 .output()
                 .expect("Failed to create initial commit");
@@ -2532,17 +2532,29 @@ mod tests {
         async fn commit_changes(temp_path: &std::path::Path) {
             // Add all changes
             Command::new("git")
-                .args(&["add", "."])
+                .args(["add", "."])
                 .current_dir(temp_path)
                 .output()
                 .expect("Failed to add changes");
 
             // Commit changes if there are any
-            Command::new("git")
-                .args(&["commit", "-m", "Test changes"])
+            match Command::new("git")
+                .args(["commit", "-m", "Test changes"])
                 .current_dir(temp_path)
                 .output()
-                .ok(); // Don't fail if there are no changes to commit
+            {
+                Ok(output) => {
+                    if !output.status.success() {
+                        tracing::debug!(
+                            "Git commit failed (possibly no changes to commit): {}",
+                            String::from_utf8_lossy(&output.stderr)
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to execute git commit: {}", e);
+                }
+            }
         }
 
         #[tokio::test]
@@ -2640,37 +2652,37 @@ mod tests {
                 append: false,
             };
 
-            println!("About to update issue...");
+            tracing::debug!("About to update issue...");
             let update_result = server.handle_issue_update(update_request).await.unwrap();
             assert!(!update_result.is_error.unwrap_or(false));
-            println!("Update completed");
+            tracing::debug!("Update completed");
 
             // 3. Mark it complete
             let complete_request = MarkCompleteRequest {
                 number: issue_number,
             };
 
-            println!("About to mark complete...");
+            tracing::debug!("About to mark complete...");
             let complete_result = server
                 .handle_issue_mark_complete(complete_request)
                 .await
                 .unwrap();
             assert!(!complete_result.is_error.unwrap_or(false));
-            println!("Mark complete finished");
+            tracing::debug!("Mark complete finished");
 
             // 4. Check all complete
             let all_complete_request = AllCompleteRequest {};
-            println!("About to check all complete...");
+            tracing::debug!("About to check all complete...");
             let all_complete_result = server
                 .handle_issue_all_complete(all_complete_request)
                 .await
                 .unwrap();
             assert!(!all_complete_result.is_error.unwrap_or(false));
-            println!("All complete check finished");
+            tracing::debug!("All complete check finished");
 
             // Don't check file system for now since there might be an issue with the complete directory
             // The test passes if the MCP operations succeed
-            println!("Workflow test completed successfully");
+            tracing::debug!("Workflow test completed successfully");
         }
 
         #[tokio::test]
@@ -2717,7 +2729,7 @@ mod tests {
 
             // Verify git branch was created
             let branch_output = Command::new("git")
-                .args(&["branch", "--show-current"])
+                .args(["branch", "--show-current"])
                 .current_dir(_temp.path())
                 .output()
                 .expect("Failed to get current branch");
@@ -2848,13 +2860,13 @@ mod tests {
             // Make a dummy commit on the issue branch
             fs::write(_temp.path().join("test_file.txt"), "test content").unwrap();
             Command::new("git")
-                .args(&["add", "test_file.txt"])
+                .args(["add", "test_file.txt"])
                 .current_dir(_temp.path())
                 .output()
                 .expect("Failed to add file");
 
             Command::new("git")
-                .args(&["commit", "-m", "Test commit"])
+                .args(["commit", "-m", "Test commit"])
                 .current_dir(_temp.path())
                 .output()
                 .expect("Failed to commit");

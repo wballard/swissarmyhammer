@@ -60,6 +60,47 @@ Please review this code for:
 - **🔧 Workflow Engine** - Advanced state-based workflow execution with Mermaid diagrams
 - **🔍 Advanced Search** - Full-text search with fuzzy matching and relevance scoring
 
+## 📝 Issue Tracking
+
+SwissArmyHammer includes built-in issue tracking that stores issues as markdown files directly in your repository. This allows you to track work items alongside your code, with full version control.
+
+### Features
+
+- **Git-based Storage**: Issues are stored as markdown files in `./issues` directory
+- **Automatic Numbering**: Issues are automatically assigned sequential 6-digit numbers
+- **Branch Integration**: Each issue can have its own work branch (`issue/<number>_<name>`)
+- **MCP Tools**: Full integration with Model Context Protocol for AI assistants
+
+### Quick Start
+
+1. Create an issue:
+   ```bash
+   # Via MCP tool
+   issue_create name="fix_bug" content="Fix the parsing bug in module X"
+   ```
+
+2. Work on an issue:
+   ```bash
+   # Switch to issue branch
+   issue_work number=1
+   ```
+
+3. Mark complete:
+   ```bash
+   # Move to completed directory
+   issue_mark_complete number=1
+   ```
+
+### Directory Structure
+
+```
+./issues/
+├── 000001_fix_bug.md          # Active issue
+├── 000002_add_feature.md      # Active issue
+└── complete/
+    └── 000003_refactor.md     # Completed issue
+```
+
 ## 📂 Directory Structure
 
 SwissArmyHammer uses a hierarchical system for organizing prompts and workflows. Files are loaded from three standard locations, with later sources overriding earlier ones:

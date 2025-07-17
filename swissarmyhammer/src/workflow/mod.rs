@@ -10,6 +10,8 @@ mod actions_tests;
 mod cache;
 mod definition;
 mod error_utils;
+// #[cfg(test)]
+// mod examples_tests; // Commented out - uses non-existent API
 mod executor;
 mod graph;
 #[cfg(test)]

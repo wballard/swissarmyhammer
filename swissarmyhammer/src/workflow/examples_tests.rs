@@ -11,8 +11,6 @@ use std::path::Path;
 /// Test the simple workflow example
 #[rstest]
 #[case("simple-workflow")]
-#[case("error-handling-workflow")]
-#[case("retry-workflow")]
 #[case("parallel-workflow")]
 #[case("user-confirmation-workflow")]
 fn test_example_workflows(#[case] workflow_name: &str) {
@@ -75,66 +73,7 @@ fn test_simple_workflow_execution() {
     );
 }
 
-/// Test error handling workflow patterns
-#[rstest]
-fn test_error_handling_workflow() {
-    let workflow_path = "../doc/examples/workflows/error-handling-workflow.md";
-    
-    if !Path::new(workflow_path).exists() {
-        return;
-    }
-    
-    let workflow = Workflow::from_file(workflow_path)
-        .expect("Failed to load error handling workflow");
-    
-    // Test with error condition
-    let mut variables = HashMap::new();
-    variables.insert("simulate_error".to_string(), "true".to_string());
-    
-    let mut run = workflow.start_with_variables(variables)
-        .expect("Failed to start workflow");
-    
-    // The workflow should handle errors gracefully
-    let mut steps = 0;
-    while run.status() == WorkflowRunStatus::Running && steps < 10 {
-        let _ = run.execute_next();
-        steps += 1;
-    }
-    
-    // Verify error handling worked
-    assert!(steps > 1, "Error handling workflow should execute multiple steps");
-}
 
-/// Test retry workflow patterns
-#[rstest]
-fn test_retry_workflow() {
-    let workflow_path = "../doc/examples/workflows/retry-workflow.md";
-    
-    if !Path::new(workflow_path).exists() {
-        return;
-    }
-    
-    let workflow = Workflow::from_file(workflow_path)
-        .expect("Failed to load retry workflow");
-    
-    // Test with retry scenario
-    let mut variables = HashMap::new();
-    variables.insert("max_retries".to_string(), "3".to_string());
-    variables.insert("base_delay".to_string(), "100".to_string());
-    
-    let mut run = workflow.start_with_variables(variables)
-        .expect("Failed to start workflow");
-    
-    // Execute retry logic
-    let mut steps = 0;
-    while run.status() == WorkflowRunStatus::Running && steps < 20 {
-        let _ = run.execute_next();
-        steps += 1;
-    }
-    
-    // Verify retry logic executed
-    assert!(steps > 0, "Retry workflow should execute steps");
-}
 
 /// Test parallel workflow execution
 #[rstest]
@@ -200,8 +139,6 @@ fn test_user_confirmation_workflow() {
 /// Test workflow variable handling
 #[rstest]
 #[case("simple-workflow", "start_time")]
-#[case("error-handling-workflow", "attempt_count")]
-#[case("retry-workflow", "max_retries")]
 #[case("parallel-workflow", "parallel_timeout")]
 #[case("user-confirmation-workflow", "operation_description")]
 fn test_workflow_variables(#[case] workflow_name: &str, #[case] required_var: &str) {

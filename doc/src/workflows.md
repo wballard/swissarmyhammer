@@ -323,17 +323,6 @@ stateDiagram-v2
 - Success: Log "Operation completed successfully"
 ```
 
-### Retry Pattern
-
-See: [Retry Workflow](../examples/workflows/retry-workflow.md)
-
-```markdown
-## Actions
-
-- Attempt: Execute prompt "network-call"
-- Wait: Wait 5 seconds
-- Success: Log "Network call succeeded"
-```
 
 ### Abort Error Handling
 

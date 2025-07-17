@@ -71,9 +71,6 @@ stateDiagram-v2
     Initialize: name: step_count
     Initialize: value: "0"
     Initialize: metadata:
-    Initialize:   retry_max_attempts: "{{ max_retries }}"
-    Initialize:   retry_backoff_ms: "100"
-    Initialize:   retry_backoff_multiplier: "2"
     
     Step1: Execute Step 1
     Step1: action: execute_prompt

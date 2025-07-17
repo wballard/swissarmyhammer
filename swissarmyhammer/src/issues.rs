@@ -226,23 +226,18 @@ impl FileSystemIssueStorage {
     /// This method reads both directories sequentially, which could be optimized
     /// for better performance with large numbers of issues.
     fn get_next_issue_number(&self) -> Result<u32> {
-        let mut max_number = 0;
-
         // Check pending issues
         let pending_issues = self.list_issues_in_dir(&self.state.issues_dir)?;
-        for issue in pending_issues {
-            if issue.number > max_number {
-                max_number = issue.number;
-            }
-        }
-
         // Check completed issues
         let completed_issues = self.list_issues_in_dir(&self.state.completed_dir)?;
-        for issue in completed_issues {
-            if issue.number > max_number {
-                max_number = issue.number;
-            }
-        }
+        
+        // Combine both iterators and find the maximum issue number
+        let max_number = pending_issues
+            .iter()
+            .chain(completed_issues.iter())
+            .max_by_key(|issue| issue.number)
+            .map(|issue| issue.number)
+            .unwrap_or(0);
 
         Ok(max_number + 1)
     }
@@ -387,23 +382,13 @@ impl IssueStorage for FileSystemIssueStorage {
     }
 
     async fn get_issue(&self, number: u32) -> Result<Issue> {
-        // Check pending directory first
-        let pending_issues = self.list_issues_in_dir(&self.state.issues_dir)?;
-        for issue in pending_issues {
-            if issue.number == number {
-                return Ok(issue);
-            }
-        }
-
-        // Then check completed directory
-        let completed_issues = self.list_issues_in_dir(&self.state.completed_dir)?;
-        for issue in completed_issues {
-            if issue.number == number {
-                return Ok(issue);
-            }
-        }
-
-        Err(SwissArmyHammerError::IssueNotFound(number.to_string()))
+        // Use existing list_issues() method to avoid duplicating search logic
+        let all_issues = self.list_issues().await?;
+        
+        all_issues
+            .into_iter()
+            .find(|issue| issue.number == number)
+            .ok_or_else(|| SwissArmyHammerError::IssueNotFound(number.to_string()))
     }
 
     async fn create_issue(&self, name: String, content: String) -> Result<Issue> {

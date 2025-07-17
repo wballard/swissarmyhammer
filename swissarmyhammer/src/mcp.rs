@@ -437,13 +437,13 @@ impl McpServer {
                     last_error = Some(e);
 
                     if attempt < MAX_RETRIES
-                        && Self::is_retryable_fs_error(last_error.as_ref().unwrap())
+                        && last_error.as_ref().map_or(false, |e| Self::is_retryable_fs_error(e))
                     {
                         tracing::warn!(
                             "⚠️ File watcher initialization attempt {} failed, retrying in {}ms: {}",
                             attempt,
                             backoff_ms,
-                            last_error.as_ref().unwrap()
+                            last_error.as_ref().map_or("Unknown error".to_string(), |e| e.to_string())
                         );
 
                         tokio::time::sleep(tokio::time::Duration::from_millis(backoff_ms)).await;
@@ -455,7 +455,7 @@ impl McpServer {
             }
         }
 
-        Err(last_error.unwrap())
+        Err(last_error.unwrap_or_else(|| SwissArmyHammerError::Other("File watcher initialization failed".to_string())))
     }
 
     /// Stop watching prompt directories for file changes.
@@ -762,7 +762,7 @@ impl McpServer {
         Ok(CallToolResult {
             content: vec![Annotated::new(
                 RawContent::Text(RawTextContent {
-                    text: response["message"].as_str().unwrap().to_string(),
+                    text: response["message"].as_str().unwrap_or("Issue marked as complete").to_string(),
                 }),
                 None,
             )],
@@ -907,9 +907,12 @@ impl McpServer {
         request: UpdateIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         // Validate issue number
-        if request.number == 0 || request.number > 999999 {
+        if request.number < MIN_ISSUE_NUMBER || request.number > MAX_ISSUE_NUMBER {
             return Err(McpError::invalid_params(
-                "Invalid issue number (must be 1-999999)",
+                format!(
+                    "Invalid issue number (must be {}-{})",
+                    MIN_ISSUE_NUMBER, MAX_ISSUE_NUMBER
+                ),
                 None,
             ));
         }
@@ -994,7 +997,7 @@ impl McpServer {
         Ok(CallToolResult {
             content: vec![Annotated::new(
                 RawContent::Text(RawTextContent {
-                    text: response["message"].as_str().unwrap().to_string(),
+                    text: response["message"].as_str().unwrap_or("Issue updated").to_string(),
                 }),
                 None,
             )],
@@ -1187,9 +1190,12 @@ impl McpServer {
         request: WorkIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         // Validate issue number
-        if request.number == 0 || request.number > 999999 {
+        if request.number < MIN_ISSUE_NUMBER || request.number > MAX_ISSUE_NUMBER {
             return Err(McpError::invalid_params(
-                "Invalid issue number (must be 1-999999)",
+                format!(
+                    "Invalid issue number (must be {}-{})",
+                    MIN_ISSUE_NUMBER, MAX_ISSUE_NUMBER
+                ),
                 None,
             ));
         }
@@ -1227,7 +1233,7 @@ impl McpServer {
         let mut git_ops = git_ops;
         let branch_name = git_ops
             .as_mut()
-            .unwrap()
+            .ok_or_else(|| McpError::internal_error("Git operations not available".to_string(), None))?
             .create_work_branch(&issue_name)
             .map_err(|e| {
                 McpError::internal_error(
@@ -1239,7 +1245,7 @@ impl McpServer {
         // Get current branch to confirm switch
         let current_branch = git_ops
             .as_ref()
-            .unwrap()
+            .ok_or_else(|| McpError::internal_error("Git operations not available".to_string(), None))?
             .current_branch()
             .unwrap_or_else(|_| branch_name.clone());
 
@@ -1264,7 +1270,7 @@ impl McpServer {
         Ok(CallToolResult {
             content: vec![Annotated::new(
                 RawContent::Text(RawTextContent {
-                    text: response["message"].as_str().unwrap().to_string(),
+                    text: response["message"].as_str().unwrap_or("Working on issue").to_string(),
                 }),
                 None,
             )],
@@ -1407,13 +1413,13 @@ impl McpServer {
 
                     // Check if this is a retryable error
                     if attempt < MAX_RETRIES
-                        && Self::is_retryable_fs_error(last_error.as_ref().unwrap())
+                        && last_error.as_ref().map_or(false, |e| Self::is_retryable_fs_error(e))
                     {
                         tracing::warn!(
                             "⚠️ Reload attempt {} failed, retrying in {}ms: {}",
                             attempt,
                             backoff_ms,
-                            last_error.as_ref().unwrap()
+                            last_error.as_ref().map_or("Unknown error".to_string(), |e| e.to_string())
                         );
 
                         tokio::time::sleep(tokio::time::Duration::from_millis(backoff_ms)).await;
@@ -1425,7 +1431,7 @@ impl McpServer {
             }
         }
 
-        Err(last_error.unwrap())
+        Err(last_error.unwrap_or_else(|| SwissArmyHammerError::Other("Prompt reload failed".to_string())))
     }
 
     /// Check if an error is a retryable file system error
@@ -1768,6 +1774,19 @@ impl ServerHandler for McpServer {
 mod tests {
     use super::*;
     use crate::prompts::Prompt;
+
+    /// Extract issue number from a CallToolResult response
+    fn extract_issue_number_from_response(call_result: &CallToolResult) -> u32 {
+        let text_content = &call_result.content[0];
+        if let RawContent::Text(text) = &text_content.raw {
+            let start = text.text.find("Created issue #").unwrap() + "Created issue #".len();
+            let end = text.text[start..].find(' ').unwrap() + start;
+            let number_str = &text.text[start..end];
+            number_str.parse::<u32>().unwrap()
+        } else {
+            panic!("Expected text content, got: {:?}", text_content.raw);
+        }
+    }
 
     #[tokio::test]
     async fn test_mcp_server_creation() {
@@ -2155,7 +2174,7 @@ mod tests {
             assert!(text.text.contains("test_issue"));
             assert!(text.text.contains(" at "));
         } else {
-            panic!("Expected text content");
+            panic!("Expected text content, got: {:?}", text_content.raw);
         }
     }
 
@@ -2292,7 +2311,7 @@ mod tests {
             assert!(text.text.contains("test_issue"));
             assert!(!text.text.contains("  test_issue  "));
         } else {
-            panic!("Expected text content");
+            panic!("Expected text content, got: {:?}", text_content.raw);
         }
     }
 
@@ -2312,16 +2331,7 @@ mod tests {
         assert!(result1.is_ok(), "First issue creation should succeed");
 
         let call_result1 = result1.unwrap();
-        let text_content1 = &call_result1.content[0];
-        let first_issue_number = if let RawContent::Text(text) = &text_content1.raw {
-            // Extract the issue number from the text
-            let start = text.text.find("Created issue #").unwrap() + "Created issue #".len();
-            let end = text.text[start..].find(' ').unwrap() + start;
-            let number_str = &text.text[start..end];
-            number_str.parse::<u32>().unwrap()
-        } else {
-            panic!("Expected text content");
-        };
+        let first_issue_number = extract_issue_number_from_response(&call_result1);
 
         // Create second issue
         let request2 = CreateIssueRequest {
@@ -2333,16 +2343,7 @@ mod tests {
         assert!(result2.is_ok(), "Second issue creation should succeed");
 
         let call_result2 = result2.unwrap();
-        let text_content2 = &call_result2.content[0];
-        let second_issue_number = if let RawContent::Text(text) = &text_content2.raw {
-            // Extract the issue number from the text
-            let start = text.text.find("Created issue #").unwrap() + "Created issue #".len();
-            let end = text.text[start..].find(' ').unwrap() + start;
-            let number_str = &text.text[start..end];
-            number_str.parse::<u32>().unwrap()
-        } else {
-            panic!("Expected text content");
-        };
+        let second_issue_number = extract_issue_number_from_response(&call_result2);
 
         // Verify the second issue has a higher number than the first
         assert!(
@@ -2636,13 +2637,7 @@ mod tests {
             assert!(!create_result.is_error.unwrap_or(false));
 
             // Extract issue number from response
-            let issue_number = if let RawContent::Text(text) = &create_result.content[0].raw {
-                let start = text.text.find("Created issue #").unwrap() + "Created issue #".len();
-                let end = text.text[start..].find(' ').unwrap() + start;
-                text.text[start..end].parse::<u32>().unwrap()
-            } else {
-                panic!("Expected text content");
-            };
+            let issue_number = extract_issue_number_from_response(&create_result);
 
             // 2. Update the issue
             let update_request = UpdateIssueRequest {
@@ -2697,13 +2692,7 @@ mod tests {
             let create_result = server.handle_issue_create(create_request).await.unwrap();
 
             // Extract issue number
-            let issue_number = if let RawContent::Text(text) = &create_result.content[0].raw {
-                let start = text.text.find("Created issue #").unwrap() + "Created issue #".len();
-                let end = text.text[start..].find(' ').unwrap() + start;
-                text.text[start..end].parse::<u32>().unwrap()
-            } else {
-                panic!("Expected text content");
-            };
+            let issue_number = extract_issue_number_from_response(&create_result);
 
             // Commit the issue file to keep git clean
             commit_changes(_temp.path()).await;
@@ -2755,13 +2744,7 @@ mod tests {
             let create_result = server.handle_issue_create(create_request).await.unwrap();
 
             // Extract issue number
-            let issue_number = if let RawContent::Text(text) = &create_result.content[0].raw {
-                let start = text.text.find("Created issue #").unwrap() + "Created issue #".len();
-                let end = text.text[start..].find(' ').unwrap() + start;
-                text.text[start..end].parse::<u32>().unwrap()
-            } else {
-                panic!("Expected text content");
-            };
+            let issue_number = extract_issue_number_from_response(&create_result);
 
             // Commit the issue file to keep git clean
             commit_changes(_temp.path()).await;
@@ -2840,13 +2823,7 @@ mod tests {
             let create_result = server.handle_issue_create(create_request).await.unwrap();
 
             // Extract issue number
-            let issue_number = if let RawContent::Text(text) = &create_result.content[0].raw {
-                let start = text.text.find("Created issue #").unwrap() + "Created issue #".len();
-                let end = text.text[start..].find(' ').unwrap() + start;
-                text.text[start..end].parse::<u32>().unwrap()
-            } else {
-                panic!("Expected text content");
-            };
+            let issue_number = extract_issue_number_from_response(&create_result);
 
             // Commit the issue file to keep git clean
             commit_changes(_temp.path()).await;
@@ -2899,13 +2876,7 @@ mod tests {
             let create_result = server.handle_issue_create(create_request).await.unwrap();
 
             // Extract issue number
-            let issue_number = if let RawContent::Text(text) = &create_result.content[0].raw {
-                let start = text.text.find("Created issue #").unwrap() + "Created issue #".len();
-                let end = text.text[start..].find(' ').unwrap() + start;
-                text.text[start..end].parse::<u32>().unwrap()
-            } else {
-                panic!("Expected text content");
-            };
+            let issue_number = extract_issue_number_from_response(&create_result);
 
             // Update in append mode
             let update_request = UpdateIssueRequest {

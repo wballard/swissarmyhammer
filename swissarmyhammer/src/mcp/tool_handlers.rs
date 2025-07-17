@@ -1,14 +1,15 @@
 //! Tool handlers for MCP operations
 
-use crate::git::GitOperations;
-use crate::issues::IssueStorage;
 use super::constants::{ISSUE_BRANCH_PREFIX, ISSUE_NUMBER_WIDTH};
 use super::responses::{
-    create_success_response, create_error_response, create_issue_response,
-    create_mark_complete_response, create_all_complete_response
+    create_all_complete_response, create_error_response, create_issue_response,
+    create_mark_complete_response, create_success_response,
 };
 use super::types::*;
 use super::utils::validate_issue_name;
+use crate::git::GitOperations;
+use crate::issues::IssueStorage;
+use crate::Result;
 use rmcp::model::*;
 use rmcp::Error as McpError;
 use std::sync::Arc;
@@ -71,7 +72,10 @@ impl ToolHandlers {
             }
             Err(e) => {
                 tracing::error!("Failed to create issue: {}", e);
-                Err(McpError::internal_error(format!("Failed to create issue: {}", e), None))
+                Err(McpError::internal_error(
+                    format!("Failed to create issue: {}", e),
+                    None,
+                ))
             }
         }
     }
@@ -94,15 +98,14 @@ impl ToolHandlers {
         let issue_storage = self.issue_storage.write().await;
         match issue_storage.mark_complete(request.number).await {
             Ok(issue) => Ok(create_mark_complete_response(&issue)),
-            Err(crate::SwissArmyHammerError::IssueNotFound(num)) => {
-                Err(McpError::invalid_params(
-                    format!("Issue #{:06} not found", num),
-                    None,
-                ))
-            }
-            Err(e) => {
-                Err(McpError::internal_error(format!("Failed to mark issue complete: {}", e), None))
-            }
+            Err(crate::SwissArmyHammerError::IssueNotFound(num)) => Err(McpError::invalid_params(
+                format!("Issue #{:06} not found", num),
+                None,
+            )),
+            Err(e) => Err(McpError::internal_error(
+                format!("Failed to mark issue complete: {}", e),
+                None,
+            )),
         }
     }
 
@@ -127,9 +130,10 @@ impl ToolHandlers {
                 let pending_count = issues.iter().filter(|i| !i.completed).count();
                 Ok(create_all_complete_response(issues.len(), pending_count))
             }
-            Err(e) => {
-                Err(McpError::internal_error(format!("Failed to check issues: {}", e), None))
-            }
+            Err(e) => Err(McpError::internal_error(
+                format!("Failed to check issues: {}", e),
+                None,
+            )),
         }
     }
 
@@ -291,6 +295,26 @@ impl ToolHandlers {
         };
         drop(issue_storage);
 
+        // Validate that the issue is completed before allowing merge
+        if !issue.completed {
+            return Ok(create_error_response(format!(
+                "Issue {} is not completed. Only completed issues can be merged.",
+                request.number
+            )));
+        }
+
+        // Check working directory is clean before merge
+        let git_ops_guard = self.git_ops.lock().await;
+        if let Some(git_ops) = git_ops_guard.as_ref() {
+            if let Err(e) = self.check_working_directory_clean(git_ops).await {
+                return Ok(create_error_response(format!(
+                    "Working directory is not clean. Please commit or stash changes before merging: {}",
+                    e
+                )));
+            }
+        }
+        drop(git_ops_guard);
+
         // Merge branch
         let mut git_ops = self.git_ops.lock().await;
         let issue_name = format!(
@@ -301,19 +325,85 @@ impl ToolHandlers {
         );
 
         match git_ops.as_mut() {
-            Some(ops) => match ops.merge_issue_branch(&issue_name) {
-                Ok(_) => Ok(create_success_response(format!(
-                    "Merged work branch for issue {} to main",
-                    issue_name
-                ))),
-                Err(e) => Ok(create_error_response(format!(
-                    "Failed to merge branch: {}",
-                    e
-                ))),
-            },
+            Some(ops) => {
+                // First merge the branch
+                match ops.merge_issue_branch(&issue_name) {
+                    Ok(_) => {
+                        let mut success_message = format!(
+                            "Merged work branch for issue {} to main",
+                            issue_name
+                        );
+                        
+                        // Get commit information after successful merge
+                        let commit_info = match ops.get_last_commit_info() {
+                            Ok(info) => {
+                                let parts: Vec<&str> = info.split('|').collect();
+                                if parts.len() >= 4 {
+                                    format!(
+                                        "\n\nMerge commit: {}\nMessage: {}\nAuthor: {}\nDate: {}",
+                                        &parts[0][..8], // First 8 chars of hash
+                                        parts[1],
+                                        parts[2],
+                                        parts[3]
+                                    )
+                                } else {
+                                    format!("\n\nMerge commit: {}", info)
+                                }
+                            }
+                            Err(_) => String::new(),
+                        };
+                        
+                        // If delete_branch is true, delete the branch after successful merge
+                        if request.delete_branch {
+                            let branch_name = format!("issue/{}", issue_name);
+                            match ops.delete_branch(&branch_name) {
+                                Ok(_) => {
+                                    success_message.push_str(&format!(
+                                        " and deleted branch {}",
+                                        branch_name
+                                    ));
+                                }
+                                Err(e) => {
+                                    success_message.push_str(&format!(
+                                        " but failed to delete branch: {}",
+                                        e
+                                    ));
+                                }
+                            }
+                        }
+                        
+                        success_message.push_str(&commit_info);
+                        Ok(create_success_response(success_message))
+                    }
+                    Err(e) => Ok(create_error_response(format!(
+                        "Failed to merge branch: {}",
+                        e
+                    ))),
+                }
+            }
             None => Ok(create_error_response(
                 "Git operations not available".to_string(),
             )),
         }
+    }
+
+    /// Check if working directory is clean
+    async fn check_working_directory_clean(&self, _git_ops: &GitOperations) -> Result<()> {
+        use std::process::Command;
+        
+        let output = Command::new("git")
+            .args(["status", "--porcelain"])
+            .output()
+            .map_err(|e| crate::SwissArmyHammerError::Other(format!("Failed to check git status: {}", e)))?;
+
+        let status = String::from_utf8_lossy(&output.stdout);
+
+        if !status.trim().is_empty() {
+            return Err(crate::SwissArmyHammerError::Other(
+                "Working directory is not clean - there are uncommitted changes".to_string(),
+            ));
+        }
+
+        Ok(())
     }
 }

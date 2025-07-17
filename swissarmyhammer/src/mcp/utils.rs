@@ -6,9 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Convert a JSON map to a string map for template arguments
-pub fn convert_prompt_arguments(
-    arguments: &HashMap<String, Value>,
-) -> HashMap<String, String> {
+pub fn convert_prompt_arguments(arguments: &HashMap<String, Value>) -> HashMap<String, String> {
     arguments
         .iter()
         .map(|(k, v)| {
@@ -49,19 +47,19 @@ where
 }
 
 /// Validate and normalize an issue name according to MCP standards
-/// 
+///
 /// This function performs comprehensive validation including:
 /// - Empty/whitespace checks
 /// - Length limits (max 100 characters)
 /// - Invalid filesystem character checks
 /// - Additional validation using the existing issues module
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `name` - The raw issue name to validate
-/// 
+///
 /// # Returns
-/// 
+///
 /// * `Result<String, McpError>` - The validated and trimmed name, or an error
 pub fn validate_issue_name(name: &str) -> std::result::Result<String, McpError> {
     use crate::issues::validate_issue_name as validate_issue_name_internal;
@@ -92,4 +90,47 @@ pub fn validate_issue_name(name: &str) -> std::result::Result<String, McpError> 
         .map_err(|e| McpError::invalid_params(format!("Invalid issue name: {}", e), None))?;
 
     Ok(trimmed.to_string())
+}
+
+/// Validate issue content size according to MCP standards
+///
+/// This function validates that issue content doesn't exceed size limits
+/// to prevent memory issues and ensure reasonable issue sizes.
+///
+/// # Arguments
+///
+/// * `content` - The issue content to validate
+///
+/// # Returns
+///
+/// * `Result<(), McpError>` - Success or validation error
+pub fn validate_issue_content_size(content: &str) -> std::result::Result<(), McpError> {
+    const MAX_CONTENT_SIZE: usize = 1024 * 1024; // 1MB limit
+    const MAX_CONTENT_LINES: usize = 10000; // 10k lines limit
+
+    // Check content size in bytes
+    if content.len() > MAX_CONTENT_SIZE {
+        return Err(McpError::invalid_params(
+            format!(
+                "Issue content too large: {} bytes (max {} bytes / 1MB)",
+                content.len(),
+                MAX_CONTENT_SIZE
+            ),
+            None,
+        ));
+    }
+
+    // Check line count
+    let line_count = content.lines().count();
+    if line_count > MAX_CONTENT_LINES {
+        return Err(McpError::invalid_params(
+            format!(
+                "Issue content has too many lines: {} lines (max {} lines)",
+                line_count, MAX_CONTENT_LINES
+            ),
+            None,
+        ));
+    }
+
+    Ok(())
 }

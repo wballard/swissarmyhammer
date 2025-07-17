@@ -10,7 +10,7 @@ fn test_prompt_action_creation() {
     assert_eq!(action.prompt_name, "test-prompt");
     assert!(action.arguments.is_empty());
     assert!(action.result_variable.is_none());
-    assert_eq!(action.timeout, Duration::from_secs(300));
+    assert_eq!(action.timeout, Duration::from_secs(3600));
 }
 
 #[test]

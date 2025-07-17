@@ -334,7 +334,7 @@ impl WorkflowExecutor {
         let state_start_time = Instant::now();
 
         // Execute state action if one can be parsed from the description
-        tracing::info!(
+        tracing::debug!(
             "About to execute action for state {} with description: {}",
             current_state_id,
             state_description
@@ -892,12 +892,12 @@ impl WorkflowExecutor {
 
     /// Log an execution event
     pub fn log_event(&mut self, event_type: ExecutionEventType, details: String) {
+        tracing::info!("{}: {}", event_type, &details);
         let event = ExecutionEvent {
             timestamp: chrono::Utc::now(),
             event_type,
             details,
         };
-        // Could add logging here when log crate is available
         self.execution_history.push(event);
 
         // Trim history if it exceeds max size

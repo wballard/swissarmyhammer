@@ -26,16 +26,16 @@ pub fn create_error_response(message: String) -> CallToolResult {
 }
 
 /// Create a standardized response for issue creation
-/// 
+///
 /// This function creates a consistent response format with structured JSON
 /// information and artifact support for issue creation operations.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `issue` - The created issue object
-/// 
+///
 /// # Returns
-/// 
+///
 /// * `CallToolResult` - Standardized response with artifact support
 pub fn create_issue_response(issue: &Issue) -> CallToolResult {
     let response = serde_json::json!({
@@ -127,7 +127,10 @@ pub fn create_all_complete_response(total_issues: usize, pending_count: usize) -
 }
 
 /// Create a standardized response for current issue check
-pub fn create_current_issue_response(current_branch: &str, issue_name: Option<&str>) -> CallToolResult {
+pub fn create_current_issue_response(
+    current_branch: &str,
+    issue_name: Option<&str>,
+) -> CallToolResult {
     let response = if let Some(name) = issue_name {
         serde_json::json!({
             "current_branch": current_branch,

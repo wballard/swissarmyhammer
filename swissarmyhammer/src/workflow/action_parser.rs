@@ -1,7 +1,7 @@
 //! Action parsing utilities for workflow state descriptions
 
 use crate::workflow::actions::{
-    ActionError, ActionResult, LogAction, LogLevel, PromptAction, SetVariableAction,
+    AbortAction, ActionError, ActionResult, LogAction, LogLevel, PromptAction, SetVariableAction,
     SubWorkflowAction, WaitAction,
 };
 use chumsky::prelude::*;
@@ -247,6 +247,32 @@ impl ActionParser {
 
                 Ok(Some(SetVariableAction::new(var_name, value)))
             }
+            Err(_) => Ok(None),
+        }
+    }
+
+    /// Parse an abort action from description
+    /// Format: Abort "error message" OR Abort with message "error message"
+    pub fn parse_abort_action(&self, description: &str) -> ActionResult<Option<AbortAction>> {
+        // Parser for simple "Abort" followed by quoted message
+        let simple_abort = Self::case_insensitive("abort")
+            .then_ignore(Self::whitespace())
+            .ignore_then(Self::quoted_string());
+
+        // Parser for "Abort with message" format
+        let abort_with_message = Self::case_insensitive("abort")
+            .then_ignore(Self::whitespace())
+            .then_ignore(Self::case_insensitive("with"))
+            .then_ignore(Self::whitespace())
+            .then_ignore(Self::case_insensitive("message"))
+            .then_ignore(Self::whitespace())
+            .ignore_then(Self::quoted_string());
+
+        // Try both formats
+        let parser = choice((abort_with_message, simple_abort));
+
+        match parser.parse(description.trim()).into_result() {
+            Ok(message) => Ok(Some(AbortAction::new(message))),
             Err(_) => Ok(None),
         }
     }
@@ -579,6 +605,36 @@ mod tests {
 
         // Test invalid format
         let result = parser.parse_sub_workflow_action("Run workflow test-workflow");
+        assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn test_parse_abort_action() {
+        let parser = ActionParser::new().unwrap();
+
+        // Test simple abort format
+        let action = parser
+            .parse_abort_action("Abort \"Test error message\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.message, "Test error message");
+
+        // Test abort with message format
+        let action = parser
+            .parse_abort_action("Abort with message \"Critical error occurred\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.message, "Critical error occurred");
+
+        // Test case insensitive
+        let action = parser
+            .parse_abort_action("abort \"test error\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.message, "test error");
+
+        // Test invalid format
+        let result = parser.parse_abort_action("Abort test error");
         assert!(result.unwrap().is_none());
     }
 }

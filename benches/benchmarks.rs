@@ -1,11 +1,11 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::collections::HashMap;
+use swissarmyhammer::issues::Issue;
+use swissarmyhammer::mcp::McpServer;
 use swissarmyhammer::workflow::{
     ConditionType, MermaidParser, State, StateId, StateType, Transition, TransitionCondition,
     Workflow, WorkflowCacheManager, WorkflowExecutor, WorkflowName, WorkflowRun, WorkflowStorage,
 };
-use swissarmyhammer::issues::Issue;
-use swissarmyhammer::mcp::McpServer;
 
 // Workflow performance benchmarks
 fn create_simple_workflow() -> Workflow {
@@ -352,7 +352,7 @@ fn benchmark_workflow_scalability(c: &mut Criterion) {
 fn create_test_issues(count: usize, completed_ratio: f64) -> Vec<Issue> {
     let mut issues = Vec::new();
     let completed_count = (count as f64 * completed_ratio) as usize;
-    
+
     for i in 0..count {
         issues.push(Issue {
             number: i as u32,
@@ -361,43 +361,39 @@ fn create_test_issues(count: usize, completed_ratio: f64) -> Vec<Issue> {
             completed: i < completed_count,
         });
     }
-    
+
     issues
 }
 
 fn benchmark_get_pending_issues(c: &mut Criterion) {
     let issue_counts = vec![10, 100, 1000, 10000];
     let mut group = c.benchmark_group("get_pending_issues");
-    
+
     for count in issue_counts {
         // Test with 50% completed issues
         let issues = create_test_issues(count, 0.5);
-        
+
         group.bench_function(format!("get_pending_issues_{}", count), |b| {
-            b.iter(|| {
-                McpServer::get_pending_issues(black_box(&issues))
-            });
+            b.iter(|| McpServer::get_pending_issues(black_box(&issues)));
         });
     }
-    
+
     group.finish();
 }
 
 fn benchmark_format_issue_summary(c: &mut Criterion) {
     let issue_counts = vec![10, 100, 1000, 10000];
     let mut group = c.benchmark_group("format_issue_summary");
-    
+
     for count in issue_counts {
         // Test with 50% completed issues (so half will be pending)
         let issues = create_test_issues(count, 0.5);
-        
+
         group.bench_function(format!("format_issue_summary_{}", count), |b| {
-            b.iter(|| {
-                McpServer::format_issue_summary(black_box(&issues), black_box(5))
-            });
+            b.iter(|| McpServer::format_issue_summary(black_box(&issues), black_box(5)));
         });
     }
-    
+
     group.finish();
 }
 
@@ -405,25 +401,26 @@ fn benchmark_issue_filtering_scalability(c: &mut Criterion) {
     let issue_counts = vec![100, 1000, 10000];
     let completion_ratios = vec![0.1, 0.5, 0.9]; // 10%, 50%, 90% completed
     let mut group = c.benchmark_group("issue_filtering_scalability");
-    
+
     for count in issue_counts {
         for ratio in &completion_ratios {
             let issues = create_test_issues(count, *ratio);
             let pending_ratio = (1.0 - ratio) * 100.0;
-            
+
             group.bench_function(
                 format!("filter_{}issues_{}pct_pending", count, pending_ratio as u32),
                 |b| {
                     b.iter(|| {
                         let pending_issues = McpServer::get_pending_issues(black_box(&issues));
-                        let _summary = McpServer::format_issue_summary(black_box(&issues), black_box(5));
+                        let _summary =
+                            McpServer::format_issue_summary(black_box(&issues), black_box(5));
                         pending_issues.len()
                     });
-                }
+                },
             );
         }
     }
-    
+
     group.finish();
 }
 

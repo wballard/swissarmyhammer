@@ -84,5 +84,20 @@ pub enum ExecutionEventType {
     Failed,
 }
 
+// Implement Display for ExecutionEventType
+impl std::fmt::Display for ExecutionEventType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            ExecutionEventType::Started => "Started",
+            ExecutionEventType::StateTransition => "StateTransition",
+            ExecutionEventType::StateExecution => "StateExecution",
+            ExecutionEventType::ConditionEvaluated => "ConditionEvaluated",
+            ExecutionEventType::Completed => "Completed",
+            ExecutionEventType::Failed => "Failed",
+        };
+        write!(f, "{}", s)
+    }
+}
+
 // Re-export main types
 pub use core::WorkflowExecutor;

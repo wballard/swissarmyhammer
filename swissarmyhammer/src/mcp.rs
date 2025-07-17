@@ -8,16 +8,18 @@ use crate::workflow::{
     WorkflowStorage, WorkflowStorageBackend,
 };
 use crate::{PromptLibrary, PromptResolver, Result, SwissArmyHammerError};
+use chrono::Local;
 use rmcp::model::*;
 use rmcp::service::RequestContext;
 use rmcp::{Error as McpError, RoleServer, ServerHandler};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::process::Command;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
-use self::constants::{MIN_ISSUE_NUMBER, MAX_ISSUE_NUMBER};
+use self::constants::{MAX_ISSUE_NUMBER, MIN_ISSUE_NUMBER};
 
 /// MCP module structure
 pub mod constants;
@@ -29,8 +31,8 @@ pub mod types;
 pub mod utils;
 
 // Re-export commonly used items from submodules
-use utils::validate_issue_name;
 use responses::create_issue_response;
+use utils::{validate_issue_content_size, validate_issue_name};
 
 /// Constants for issue branch management
 const ISSUE_BRANCH_PREFIX: &str = "issue/";
@@ -85,6 +87,9 @@ pub struct UpdateIssueRequest {
     pub number: u32,
     /// New markdown content for the issue
     pub content: String,
+    /// If true, append to existing content instead of replacing
+    #[serde(default)]
+    pub append: bool,
 }
 
 /// Request to get current issue
@@ -625,10 +630,10 @@ impl McpServer {
     async fn get_issue_stats(&self) -> crate::Result<(usize, usize)> {
         let issue_storage = self.issue_storage.read().await;
         let all_issues = issue_storage.list_issues().await?;
-        
+
         let completed = all_issues.iter().filter(|i| i.completed).count();
         let pending = all_issues.len() - completed;
-        
+
         Ok((pending, completed))
     }
 
@@ -650,14 +655,17 @@ impl McpServer {
         // Validate issue number
         if request.number < MIN_ISSUE_NUMBER || request.number > MAX_ISSUE_NUMBER {
             return Err(McpError::invalid_params(
-                format!("Invalid issue number (must be {}-{})", MIN_ISSUE_NUMBER, MAX_ISSUE_NUMBER),
+                format!(
+                    "Invalid issue number (must be {}-{})",
+                    MIN_ISSUE_NUMBER, MAX_ISSUE_NUMBER
+                ),
                 None,
             ));
         }
-        
+
         // Get issue storage
         let issue_storage = self.issue_storage.write().await;
-        
+
         // Check if issue exists and get its current state
         let existing_issue = match issue_storage.get_issue(request.number).await {
             Ok(issue) => issue,
@@ -674,24 +682,23 @@ impl McpServer {
                 ));
             }
         };
-        
+
         // Check if already completed
         if existing_issue.completed {
             return Ok(CallToolResult {
                 content: vec![Annotated::new(
-                    RawContent::Text(RawTextContent { 
+                    RawContent::Text(RawTextContent {
                         text: format!(
                             "Issue #{:06} - {} is already marked as complete",
-                            existing_issue.number,
-                            existing_issue.name
-                        )
+                            existing_issue.number, existing_issue.name
+                        ),
                     }),
                     None,
                 )],
                 is_error: Some(false),
             });
         }
-        
+
         // Mark the issue as complete
         let issue = match issue_storage.mark_complete(request.number).await {
             Ok(issue) => issue,
@@ -708,11 +715,10 @@ impl McpServer {
                 ));
             }
         };
-        
+
         // Get statistics
-        let (pending, completed) = self.get_issue_stats().await
-            .unwrap_or((0, 0));
-        
+        let (pending, completed) = self.get_issue_stats().await.unwrap_or((0, 0));
+
         // Format response
         let response = serde_json::json!({
             "number": issue.number,
@@ -732,11 +738,11 @@ impl McpServer {
                 completed
             )
         });
-        
+
         Ok(CallToolResult {
             content: vec![Annotated::new(
-                RawContent::Text(RawTextContent { 
-                    text: response["message"].as_str().unwrap().to_string()
+                RawContent::Text(RawTextContent {
+                    text: response["message"].as_str().unwrap().to_string(),
                 }),
                 None,
             )],
@@ -764,16 +770,13 @@ impl McpServer {
         let all_issues = issue_storage
             .list_issues()
             .await
-            .map_err(|e| McpError::internal_error(
-                format!("Failed to list issues: {}", e),
-                None,
-            ))?;
-        
+            .map_err(|e| McpError::internal_error(format!("Failed to list issues: {}", e), None))?;
+
         // Count pending and completed
         let completed_count = all_issues.iter().filter(|i| i.completed).count();
         let pending_count = all_issues.len() - completed_count;
         let all_complete = pending_count == 0;
-        
+
         // Create detailed response
         let mut response = serde_json::json!({
             "all_complete": all_complete,
@@ -796,7 +799,7 @@ impl McpServer {
                 )
             }
         });
-        
+
         // If there are pending issues, list them
         if !all_complete && pending_count > 0 {
             let pending_issues: Vec<_> = Self::get_pending_issues(&all_issues)
@@ -808,7 +811,7 @@ impl McpServer {
                     })
                 })
                 .collect();
-            
+
             if let Some(obj) = response.as_object_mut() {
                 obj.insert(
                     "pending_issues".to_string(),
@@ -816,20 +819,24 @@ impl McpServer {
                 );
             }
         }
-        
+
         // Add summary for text response
         let summary = if !all_complete {
             Self::format_issue_summary(&all_issues, self.max_pending_issues_display)
         } else {
             String::new()
         };
-        
-        let message = response["message"].as_str().unwrap_or("Status check complete");
+
+        let message = response["message"]
+            .as_str()
+            .unwrap_or("Status check complete");
         let text_response = format!("{}{}", message, summary);
-        
+
         Ok(CallToolResult {
             content: vec![Annotated::new(
-                RawContent::Text(RawTextContent { text: text_response }),
+                RawContent::Text(RawTextContent {
+                    text: text_response,
+                }),
                 None,
             )],
             is_error: Some(false),
@@ -845,32 +852,22 @@ impl McpServer {
     fn format_issue_summary(issues: &[crate::issues::Issue], max_items: usize) -> String {
         let pending_issues = Self::get_pending_issues(issues);
         let pending_count = pending_issues.len();
-        
+
         if pending_count == 0 {
             return String::new();
         }
-        
-        let displayed_issues: Vec<_> = pending_issues
-            .into_iter()
-            .take(max_items)
-            .collect();
-        
+
+        let displayed_issues: Vec<_> = pending_issues.into_iter().take(max_items).collect();
+
         let mut summary = String::from("\nPending issues:\n");
         for issue in &displayed_issues {
-            summary.push_str(&format!(
-                "  - #{:06}: {}\n",
-                issue.number,
-                issue.name
-            ));
+            summary.push_str(&format!("  - #{:06}: {}\n", issue.number, issue.name));
         }
-        
+
         if pending_count > max_items {
-            summary.push_str(&format!(
-                "  ... and {} more\n",
-                pending_count - max_items
-            ));
+            summary.push_str(&format!("  ... and {} more\n", pending_count - max_items));
         }
-        
+
         summary
     }
 
@@ -889,63 +886,260 @@ impl McpServer {
         &self,
         request: UpdateIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
-        let issue_storage = self.issue_storage.write().await;
-        match issue_storage
-            .update_issue(request.number, request.content)
-            .await
-        {
-            Ok(issue) => Ok(Self::create_success_response(format!(
-                "Updated issue {} ({})",
-                issue.number, issue.name
-            ))),
-            Err(e) => Ok(Self::create_error_response(format!(
-                "Failed to update issue: {}",
-                e
-            ))),
+        // Validate issue number
+        if request.number == 0 || request.number > 999999 {
+            return Err(McpError::invalid_params(
+                "Invalid issue number (must be 1-999999)",
+                None,
+            ));
         }
+
+        // Validate content size
+        validate_issue_content_size(&request.content)?;
+
+        // Get current issue first to check it exists
+        let issue_storage = self.issue_storage.write().await;
+        let current_issue = issue_storage
+            .get_issue(request.number)
+            .await
+            .map_err(|e| match e {
+                SwissArmyHammerError::IssueNotFound(_) => McpError::invalid_params(
+                    format!("Issue #{:06} not found", request.number),
+                    None,
+                ),
+                _ => McpError::internal_error(format!("Failed to get issue: {}", e), None),
+            })?;
+
+        // Determine final content based on append mode
+        let final_content = if request.append {
+            // Append with separator and timestamp
+            format!(
+                "{}\n\n---\n\n## Update: {}\n\n{}",
+                current_issue.content,
+                Local::now().format("%Y-%m-%d %H:%M:%S"),
+                request.content
+            )
+        } else {
+            request.content.clone()
+        };
+
+        // Update the issue
+        let updated_issue = issue_storage
+            .update_issue(request.number, final_content)
+            .await
+            .map_err(|e| {
+                McpError::internal_error(format!("Failed to update issue: {}", e), None)
+            })?;
+
+        // Calculate content change statistics
+        let old_lines = current_issue.content.lines().count();
+        let new_lines = updated_issue.content.lines().count();
+        let lines_changed = (new_lines as i32 - old_lines as i32).abs();
+
+        // Format response with detailed statistics
+        let response = serde_json::json!({
+            "number": updated_issue.number,
+            "name": updated_issue.name,
+            "file_path": updated_issue.file_path.to_string_lossy(),
+            "completed": updated_issue.completed,
+            "append_mode": request.append,
+            "content_stats": {
+                "old_lines": old_lines,
+                "new_lines": new_lines,
+                "lines_changed": lines_changed,
+                "old_size_bytes": current_issue.content.len(),
+                "new_size_bytes": updated_issue.content.len(),
+            },
+            "message": format!(
+                "Updated issue #{:06} - {}. Content changed: {} lines ({} mode)",
+                updated_issue.number,
+                updated_issue.name,
+                match new_lines.cmp(&old_lines) {
+                    std::cmp::Ordering::Greater => format!("+{}", new_lines - old_lines),
+                    std::cmp::Ordering::Less => format!("-{}", old_lines - new_lines),
+                    std::cmp::Ordering::Equal => "0".to_string(),
+                },
+                if request.append { "append" } else { "replace" }
+            )
+        });
+
+        Ok(CallToolResult {
+            content: vec![Annotated::new(
+                RawContent::Text(RawTextContent {
+                    text: response["message"].as_str().unwrap().to_string(),
+                }),
+                None,
+            )],
+            is_error: Some(false),
+        })
     }
 
     /// Handle the issue_current tool operation.
     ///
-    /// Determines the current issue being worked on by checking the git branch name.
-    /// If on an issue branch (starts with 'issue/'), returns the issue name.
+    /// Gets the current issue based on the git branch name, supporting both active work branches
+    /// and main branch queries. Returns detailed issue information if on an issue branch.
     ///
     /// # Arguments
     ///
-    /// * `_request` - The current issue request (no parameters needed)
+    /// * `request` - The current issue request with optional branch parameter
     ///
     /// # Returns
     ///
     /// * `Result<CallToolResult, McpError>` - The tool call result with current issue info
     async fn handle_issue_current(
         &self,
-        _request: CurrentIssueRequest,
+        request: CurrentIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
+        let branch = self.get_current_or_specified_branch(request.branch).await?;
+        let issue_info = self.parse_issue_branch(&branch)?;
+
+        match issue_info {
+            Some((issue_number, _issue_name)) => {
+                self.create_issue_branch_response(issue_number, &branch)
+                    .await
+            }
+            None => self.create_non_issue_branch_response(&branch).await,
+        }
+    }
+
+    /// Get the current branch or use specified branch from request.
+    ///
+    /// # Arguments
+    ///
+    /// * `specified_branch` - Optional branch name from request
+    ///
+    /// # Returns
+    ///
+    /// * `Result<String, McpError>` - The branch name
+    async fn get_current_or_specified_branch(
+        &self,
+        specified_branch: Option<String>,
+    ) -> std::result::Result<String, McpError> {
+        if let Some(branch) = specified_branch {
+            return Ok(branch);
+        }
+
         let git_ops = self.git_ops.lock().await;
         match git_ops.as_ref() {
             Some(ops) => match ops.current_branch() {
-                Ok(branch) => {
-                    if let Some(issue_name) = branch.strip_prefix(ISSUE_BRANCH_PREFIX) {
-                        Ok(Self::create_success_response(format!(
-                            "Currently working on issue: {}",
-                            issue_name
-                        )))
-                    } else {
-                        Ok(Self::create_success_response(format!(
-                            "Not on an issue branch. Current branch: {}",
-                            branch
-                        )))
-                    }
-                }
-                Err(e) => Ok(Self::create_error_response(format!(
-                    "Failed to get current branch: {}",
-                    e
-                ))),
+                Ok(branch) => Ok(branch),
+                Err(e) => Err(McpError::internal_error(
+                    format!("Failed to get current branch: {}", e),
+                    None,
+                )),
             },
-            None => Ok(Self::create_error_response(
+            None => Err(McpError::internal_error(
                 "Git operations not available".to_string(),
+                None,
             )),
         }
+    }
+
+    /// Create response for when current branch is an issue branch.
+    ///
+    /// # Arguments
+    ///
+    /// * `issue_number` - The issue number parsed from branch name
+    /// * `branch` - The current branch name
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    async fn create_issue_branch_response(
+        &self,
+        issue_number: u32,
+        branch: &str,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        let issue_storage = self.issue_storage.read().await;
+        let issue = issue_storage
+            .get_issue(issue_number)
+            .await
+            .map_err(|e| match e {
+                SwissArmyHammerError::IssueNotFound(_) => McpError::internal_error(
+                    format!(
+                        "Issue #{:06} referenced by branch '{}' not found",
+                        issue_number, branch
+                    ),
+                    None,
+                ),
+                _ => McpError::internal_error(format!("Failed to get issue: {}", e), None),
+            })?;
+
+        let response = serde_json::json!({
+            "current_issue": {
+                "number": issue.number,
+                "name": issue.name,
+                "completed": issue.completed,
+                "file_path": issue.file_path.to_string_lossy(),
+            },
+            "branch": branch,
+            "message": format!(
+                "Current issue: #{:06} - {} (branch: {})",
+                issue.number,
+                issue.name,
+                branch
+            )
+        });
+
+        Ok(CallToolResult {
+            content: vec![Annotated::new(
+                RawContent::Text(RawTextContent {
+                    text: response["message"]
+                        .as_str()
+                        .unwrap_or("Current issue status")
+                        .to_string(),
+                }),
+                None,
+            )],
+            is_error: Some(false),
+        })
+    }
+
+    /// Create response for when current branch is not an issue branch.
+    ///
+    /// # Arguments
+    ///
+    /// * `branch` - The current branch name
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    async fn create_non_issue_branch_response(
+        &self,
+        branch: &str,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        let git_ops = self.git_ops.lock().await;
+        let main_branch = match git_ops.as_ref() {
+            Some(ops) => match ops.main_branch() {
+                Ok(main) => main,
+                Err(_) => "main".to_string(),
+            },
+            None => "main".to_string(),
+        };
+
+        let response = serde_json::json!({
+            "current_issue": null,
+            "branch": branch,
+            "is_main": branch == main_branch,
+            "message": if branch == main_branch {
+                format!("On main branch '{}', no specific issue selected", branch)
+            } else {
+                format!("On branch '{}' which is not an issue branch", branch)
+            }
+        });
+
+        Ok(CallToolResult {
+            content: vec![Annotated::new(
+                RawContent::Text(RawTextContent {
+                    text: response["message"]
+                        .as_str()
+                        .unwrap_or("Branch status")
+                        .to_string(),
+                }),
+                None,
+            )],
+            is_error: Some(false),
+        })
     }
 
     /// Handle the issue_work tool operation.
@@ -964,43 +1158,90 @@ impl McpServer {
         &self,
         request: WorkIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
-        // First get the issue to determine its name
+        // Validate issue number
+        if request.number == 0 || request.number > 999999 {
+            return Err(McpError::invalid_params(
+                "Invalid issue number (must be 1-999999)",
+                None,
+            ));
+        }
+
+        // Get the issue to ensure it exists and get its name
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue(request.number).await {
-            Ok(issue) => issue,
-            Err(e) => {
-                return Ok(Self::create_error_response(format!(
-                    "Failed to get issue {}: {}",
-                    request.number, e
-                )))
-            }
-        };
+        let issue = issue_storage
+            .get_issue(request.number)
+            .await
+            .map_err(|e| match e {
+                SwissArmyHammerError::IssueNotFound(_) => McpError::invalid_params(
+                    format!("Issue #{:06} not found", request.number),
+                    None,
+                ),
+                _ => McpError::internal_error(format!("Failed to get issue: {}", e), None),
+            })?;
         drop(issue_storage);
 
-        // Create work branch
-        let mut git_ops = self.git_ops.lock().await;
-        let issue_name = format!(
-            "{:0width$}_{}",
-            issue.number,
-            issue.name,
-            width = ISSUE_NUMBER_WIDTH
-        );
+        // Check for uncommitted changes before switching
+        let git_ops = self.git_ops.lock().await;
+        let git_ops_ref = git_ops.as_ref().ok_or_else(|| {
+            McpError::internal_error("Git operations not available".to_string(), None)
+        })?;
 
-        match git_ops.as_mut() {
-            Some(ops) => match ops.create_work_branch(&issue_name) {
-                Ok(branch_name) => Ok(Self::create_success_response(format!(
-                    "Switched to work branch: {}",
-                    branch_name
-                ))),
-                Err(e) => Ok(Self::create_error_response(format!(
-                    "Failed to create work branch: {}",
-                    e
-                ))),
-            },
-            None => Ok(Self::create_error_response(
-                "Git operations not available".to_string(),
-            )),
+        if let Err(e) = self.check_working_directory_clean(git_ops_ref).await {
+            let suggestion = self.get_stash_suggestion();
+            return Err(McpError::invalid_params(
+                format!("{}\n\n{}", e, suggestion),
+                None,
+            ));
         }
+
+        // Create the issue branch name
+        let issue_name = format!("{:06}_{}", issue.number, issue.name);
+        let mut git_ops = git_ops;
+        let branch_name = git_ops
+            .as_mut()
+            .unwrap()
+            .create_work_branch(&issue_name)
+            .map_err(|e| {
+                McpError::internal_error(
+                    format!("Failed to create/switch to work branch: {}", e),
+                    None,
+                )
+            })?;
+
+        // Get current branch to confirm switch
+        let current_branch = git_ops
+            .as_ref()
+            .unwrap()
+            .current_branch()
+            .unwrap_or_else(|_| branch_name.clone());
+
+        let response = serde_json::json!({
+            "issue": {
+                "number": issue.number,
+                "name": issue.name,
+                "completed": issue.completed,
+            },
+            "branch": {
+                "name": current_branch,
+                "created": !branch_name.contains("already exists"),
+            },
+            "message": format!(
+                "Switched to branch '{}' for issue #{:06} - {}",
+                current_branch,
+                issue.number,
+                issue.name
+            )
+        });
+
+        Ok(CallToolResult {
+            content: vec![Annotated::new(
+                RawContent::Text(RawTextContent {
+                    text: response["message"].as_str().unwrap().to_string(),
+                }),
+                None,
+            )],
+            is_error: Some(false),
+        })
     }
 
     /// Handle the issue_merge tool operation.
@@ -1056,6 +1297,70 @@ impl McpServer {
                 "Git operations not available".to_string(),
             )),
         }
+    }
+
+    /// Check if working directory is clean
+    async fn check_working_directory_clean(&self, _git_ops: &GitOperations) -> Result<()> {
+        let output = Command::new("git")
+            .args(["status", "--porcelain"])
+            .output()?;
+
+        let status = String::from_utf8_lossy(&output.stdout);
+
+        if !status.trim().is_empty() {
+            // Parse the changes to provide helpful message
+            let mut changes = Vec::new();
+            for line in status.lines() {
+                if let Some(file) = line.get(3..) {
+                    changes.push(file.to_string());
+                }
+            }
+
+            return Err(SwissArmyHammerError::Other(format!(
+                "You have uncommitted changes in: {}. Please commit or stash them first.",
+                changes.join(", ")
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Get stash suggestion for uncommitted changes
+    fn get_stash_suggestion(&self) -> String {
+        "Tip: You can stash your changes with 'git stash', \
+         switch branches, and then 'git stash pop' to restore them."
+            .to_string()
+    }
+
+    /// Parse issue information from branch name
+    fn parse_issue_branch(
+        &self,
+        branch: &str,
+    ) -> std::result::Result<Option<(u32, String)>, McpError> {
+        // Expected format: issue/<issue_name>
+        // Where issue_name is <nnnnnn>_<name>
+
+        if !branch.starts_with(ISSUE_BRANCH_PREFIX) {
+            return Ok(None);
+        }
+
+        let issue_part = &branch[ISSUE_BRANCH_PREFIX.len()..]; // Skip "issue/"
+
+        // Try to parse the issue number from the beginning
+        // Handle both formats: issue/000001_name and issue/name_000001
+
+        // First try: <nnnnnn>_<name> format
+        if let Some(underscore_pos) = issue_part.find('_') {
+            let number_part = &issue_part[..underscore_pos];
+            if let Ok(number) = number_part.parse::<u32>() {
+                let name_part = &issue_part[underscore_pos + 1..];
+                return Ok(Some((number, name_part.to_string())));
+            }
+        }
+
+        // If we can't parse it, maybe it's just issue/<name>
+        // In this case, we need to search for an issue with this name
+        Ok(None)
     }
 
     /// Reload prompts from disk with retry logic.
@@ -2114,5 +2419,46 @@ mod tests {
             );
             assert_eq!(result.unwrap(), expected);
         }
+    }
+
+    #[tokio::test]
+    async fn test_parse_issue_branch() {
+        // Test parsing issue branch names
+        let library = PromptLibrary::new();
+        let server = McpServer::new(library).unwrap();
+
+        // Test valid issue branch format
+        let result = server
+            .parse_issue_branch("issue/000123_test_issue")
+            .unwrap();
+        assert!(result.is_some());
+        let (number, name) = result.unwrap();
+        assert_eq!(number, 123);
+        assert_eq!(name, "test_issue");
+
+        // Test another valid format
+        let result = server
+            .parse_issue_branch("issue/000001_my_feature")
+            .unwrap();
+        assert!(result.is_some());
+        let (number, name) = result.unwrap();
+        assert_eq!(number, 1);
+        assert_eq!(name, "my_feature");
+
+        // Test non-issue branch
+        let result = server.parse_issue_branch("main").unwrap();
+        assert!(result.is_none());
+
+        // Test feature branch
+        let result = server.parse_issue_branch("feature/something").unwrap();
+        assert!(result.is_none());
+
+        // Test invalid issue branch (no underscore)
+        let result = server.parse_issue_branch("issue/nounderscorehere").unwrap();
+        assert!(result.is_none());
+
+        // Test invalid issue branch (non-numeric prefix)
+        let result = server.parse_issue_branch("issue/abcdef_test").unwrap();
+        assert!(result.is_none());
     }
 }

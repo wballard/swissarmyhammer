@@ -181,13 +181,73 @@ impl GitOperations {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            
+            // Check for merge conflicts
+            if stderr.contains("CONFLICT") || stdout.contains("CONFLICT") {
+                return Err(SwissArmyHammerError::Other(format!(
+                    "Merge conflict detected while merging branch '{}'. Please resolve conflicts manually:\n{}",
+                    branch_name, stderr
+                )));
+            }
+            
+            // Check for other merge issues
+            if stderr.contains("Automatic merge failed") {
+                return Err(SwissArmyHammerError::Other(format!(
+                    "Automatic merge failed for branch '{}'. Manual intervention required:\n{}",
+                    branch_name, stderr
+                )));
+            }
+            
             return Err(SwissArmyHammerError::Other(format!(
-                "Failed to merge: {}",
-                stderr
+                "Failed to merge branch '{}': {}",
+                branch_name, stderr
             )));
         }
 
         Ok(())
+    }
+
+    /// Delete a branch
+    pub fn delete_branch(&self, branch_name: &str) -> Result<()> {
+        let output = Command::new("git")
+            .current_dir(&self.work_dir)
+            .args(["branch", "-D", branch_name])
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SwissArmyHammerError::Other(format!(
+                "Failed to delete branch '{}': {}",
+                branch_name, stderr
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Get information about the last commit
+    pub fn get_last_commit_info(&self) -> Result<String> {
+        let output = Command::new("git")
+            .current_dir(&self.work_dir)
+            .args([
+                "log",
+                "-1",
+                "--pretty=format:%H|%s|%an|%ad",
+                "--date=iso",
+            ])
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SwissArmyHammerError::Other(format!(
+                "Failed to get last commit info: {}",
+                stderr
+            )));
+        }
+
+        let commit_info = String::from_utf8_lossy(&output.stdout);
+        Ok(commit_info.trim().to_string())
     }
 }
 

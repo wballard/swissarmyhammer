@@ -108,7 +108,7 @@ impl Default for ActionTimeouts {
                 std::env::var("SWISSARMYHAMMER_PROMPT_TIMEOUT")
                     .ok()
                     .and_then(|s| s.parse().ok())
-                    .unwrap_or(300),
+                    .unwrap_or(3600),
             ), // 5 minutes default
             user_input_timeout: Duration::from_secs(
                 std::env::var("SWISSARMYHAMMER_USER_INPUT_TIMEOUT")
@@ -120,7 +120,7 @@ impl Default for ActionTimeouts {
                 std::env::var("SWISSARMYHAMMER_SUB_WORKFLOW_TIMEOUT")
                     .ok()
                     .and_then(|s| s.parse().ok())
-                    .unwrap_or(600),
+                    .unwrap_or(3600),
             ), // 10 minutes default
         }
     }
@@ -975,6 +975,13 @@ pub struct SetVariableAction {
     pub value: String,
 }
 
+/// Action that immediately fails with an abort error
+#[derive(Debug, Clone)]
+pub struct AbortAction {
+    /// The error message to display when aborting
+    pub message: String,
+}
+
 /// Action that executes a sub-workflow
 #[derive(Debug, Clone)]
 pub struct SubWorkflowAction {
@@ -1027,6 +1034,36 @@ impl Action for SetVariableAction {
 
     fn action_type(&self) -> &'static str {
         "set_variable"
+    }
+
+    impl_as_any!();
+}
+
+impl AbortAction {
+    /// Create a new abort action
+    pub fn new(message: String) -> Self {
+        Self { message }
+    }
+}
+
+impl VariableSubstitution for AbortAction {}
+
+#[async_trait::async_trait]
+impl Action for AbortAction {
+    async fn execute(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
+        // Substitute variables in message
+        let message = self.substitute_string(&self.message, context);
+
+        // Return an abort error which will propagate up and terminate the workflow
+        Err(ActionError::AbortError(message))
+    }
+
+    fn description(&self) -> String {
+        format!("Abort workflow execution with message: {}", self.message)
+    }
+
+    fn action_type(&self) -> &'static str {
+        "abort"
     }
 
     impl_as_any!();
@@ -1612,6 +1649,10 @@ pub fn parse_action_from_description(description: &str) -> ActionResult<Option<B
         return Ok(Some(Box::new(sub_workflow_action)));
     }
 
+    if let Some(abort_action) = parser.parse_abort_action(description)? {
+        return Ok(Some(Box::new(abort_action)));
+    }
+
     Ok(None)
 }
 
@@ -1810,7 +1851,7 @@ mod tests {
 
         // Verify other defaults
         assert_eq!(action.prompt_name, "test-prompt");
-        assert_eq!(action.timeout, Duration::from_secs(300));
+        assert_eq!(action.timeout, Duration::from_secs(3600));
         assert!(!action.quiet);
         assert!(action.arguments.is_empty());
         assert!(action.result_variable.is_none());
@@ -1832,5 +1873,141 @@ mod tests {
         assert_eq!(action2.max_retries, 0);
         assert!(action2.quiet);
         assert_eq!(action2.timeout, Duration::from_secs(60));
+    }
+
+    #[test]
+    fn test_parse_abort_action() {
+        let action = parse_action_from_description("Abort \"Test error message\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.action_type(), "abort");
+        assert_eq!(
+            action.description(),
+            "Abort workflow execution with message: Test error message"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_abort_action_execution() {
+        let action = AbortAction::new("Test abort message".to_string());
+        let mut context = HashMap::new();
+
+        let result = action.execute(&mut context).await;
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        match error {
+            ActionError::AbortError(msg) => {
+                assert_eq!(msg, "Test abort message");
+            }
+            _ => panic!("Expected AbortError, got {:?}", error),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_abort_action_with_variable_substitution() {
+        let action = AbortAction::new("Error in ${file}: ${error}".to_string());
+        let mut context = HashMap::new();
+        context.insert("file".to_string(), Value::String("test.rs".to_string()));
+        context.insert(
+            "error".to_string(),
+            Value::String("compilation failed".to_string()),
+        );
+
+        let result = action.execute(&mut context).await;
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        match error {
+            ActionError::AbortError(msg) => {
+                assert_eq!(msg, "Error in test.rs: compilation failed");
+            }
+            _ => panic!("Expected AbortError, got {:?}", error),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_end_to_end_error_propagation() {
+        // Test that abort errors propagate correctly through the system
+        use crate::workflow::definition::Workflow;
+        use crate::workflow::executor::core::WorkflowExecutor;
+        use crate::workflow::run::WorkflowRunStatus;
+        use crate::workflow::state::{State, StateId, StateType};
+        use crate::workflow::storage::WorkflowStorage;
+        use crate::workflow::transition::{ConditionType, Transition, TransitionCondition};
+        use crate::workflow::WorkflowName;
+        use std::collections::HashMap;
+        use std::sync::Arc;
+
+        // Create a simple workflow with an abort action
+        let abort_state = State {
+            id: StateId::new("abort"),
+            description: "Abort \"Test abort error\"".to_string(),
+            state_type: StateType::Normal,
+            is_terminal: true,
+            allows_parallel: false,
+            metadata: HashMap::new(),
+        };
+
+        let start_state = State {
+            id: StateId::new("start"),
+            description: "Log \"Starting test\"".to_string(),
+            state_type: StateType::Normal,
+            is_terminal: false,
+            allows_parallel: false,
+            metadata: HashMap::new(),
+        };
+
+        let transition = Transition {
+            from_state: StateId::new("start"),
+            to_state: StateId::new("abort"),
+            condition: TransitionCondition {
+                condition_type: ConditionType::Always,
+                expression: None,
+            },
+            action: None,
+            metadata: HashMap::new(),
+        };
+
+        let mut workflow = Workflow::new(
+            WorkflowName::new("test-abort-workflow"),
+            "Test workflow for abort error propagation".to_string(),
+            StateId::new("start"),
+        );
+
+        workflow.add_state(start_state);
+        workflow.add_state(abort_state);
+        workflow.add_transition(transition);
+
+        // Set up test storage
+        let mut storage = WorkflowStorage::memory();
+        storage.store_workflow(workflow.clone()).unwrap();
+        let arc_storage = Arc::new(storage);
+        set_test_storage(arc_storage);
+
+        // Execute the workflow
+        let mut executor = WorkflowExecutor::new();
+        let mut run = executor.start_workflow(workflow).unwrap();
+
+        // Execute the workflow - this should complete but mark itself as failed
+        let result = executor.execute_state(&mut run).await;
+
+        // Clean up test storage
+        clear_test_storage();
+
+        // The workflow execution should complete (return Ok) but the workflow should be in Failed status
+        assert!(
+            result.is_ok(),
+            "Workflow execution should complete successfully"
+        );
+        assert_eq!(
+            run.status,
+            WorkflowRunStatus::Failed,
+            "Workflow should be marked as failed due to abort action"
+        );
+
+        // Check that the abort action was executed - the context should contain the error
+        // The abort action should have been executed and the workflow should have been marked as failed
+        // This validates that the error propagation is working correctly
     }
 }

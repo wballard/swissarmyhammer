@@ -70,4 +70,7 @@ pub struct WorkIssueRequest {
 pub struct MergeIssueRequest {
     /// Issue number to merge
     pub number: u32,
+    /// Whether to delete the branch after merging (default: false)
+    #[serde(default)]
+    pub delete_branch: bool,
 }

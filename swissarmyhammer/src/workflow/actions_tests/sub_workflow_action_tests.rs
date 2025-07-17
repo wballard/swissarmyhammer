@@ -11,7 +11,7 @@ fn test_sub_workflow_action_creation() {
     assert_eq!(action.workflow_name, "test-workflow");
     assert!(action.input_variables.is_empty());
     assert!(action.result_variable.is_none());
-    assert_eq!(action.timeout, Duration::from_secs(600));
+    assert_eq!(action.timeout, Duration::from_secs(3600));
 }
 
 #[test]

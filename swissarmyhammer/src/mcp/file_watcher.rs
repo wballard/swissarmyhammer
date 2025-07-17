@@ -81,7 +81,11 @@ impl McpFileWatcher {
     /// # Errors
     ///
     /// Returns an error if file watching cannot be initialized.
-    pub async fn start_file_watching(&self, server: super::McpServer, peer: rmcp::Peer<RoleServer>) -> Result<()> {
+    pub async fn start_file_watching(
+        &self,
+        server: super::McpServer,
+        peer: rmcp::Peer<RoleServer>,
+    ) -> Result<()> {
         const MAX_RETRIES: u32 = 3;
         const INITIAL_BACKOFF_MS: u64 = 100;
 

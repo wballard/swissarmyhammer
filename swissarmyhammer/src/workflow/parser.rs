@@ -604,7 +604,7 @@ impl MermaidParser {
             if Self::should_be_choice_state(&transitions) {
                 // Update the state to be a choice state
                 if let Some(state) = workflow.states.get_mut(&state_id) {
-                    tracing::info!(
+                    tracing::debug!(
                         "Detected choice state: {} with {} transitions",
                         state_id,
                         transitions.len()

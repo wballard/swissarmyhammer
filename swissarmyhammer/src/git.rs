@@ -244,6 +244,34 @@ impl GitOperations {
         let commit_info = String::from_utf8_lossy(&output.stdout);
         Ok(commit_info.trim().to_string())
     }
+
+    /// Check if working directory is clean (no uncommitted changes)
+    pub fn is_working_directory_clean(&self) -> Result<Vec<String>> {
+        let output = Command::new("git")
+            .current_dir(&self.work_dir)
+            .args(["status", "--porcelain"])
+            .output()?;
+
+        if !output.status.success() {
+            return Err(SwissArmyHammerError::Other(
+                "Failed to check git status".to_string(),
+            ));
+        }
+
+        let status = String::from_utf8_lossy(&output.stdout);
+        let mut changes = Vec::new();
+        
+        if !status.trim().is_empty() {
+            // Parse the changes to provide helpful message
+            for line in status.lines() {
+                if let Some(file) = line.get(3..) {
+                    changes.push(file.to_string());
+                }
+            }
+        }
+
+        Ok(changes)
+    }
 }
 
 #[cfg(test)]

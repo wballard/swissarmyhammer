@@ -41,8 +41,9 @@ impl GitOperations {
             .output()?;
 
         if !output.status.success() {
-            return Err(SwissArmyHammerError::Other(
-                "Not in a git repository".to_string(),
+            return Err(SwissArmyHammerError::git_operation_failed(
+                "check repository",
+                "Not in a git repository",
             ));
         }
 
@@ -58,15 +59,16 @@ impl GitOperations {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(SwissArmyHammerError::Other(format!(
-                "Failed to get current branch: {}",
-                stderr
-            )));
+            return Err(SwissArmyHammerError::git_command_failed(
+                "rev-parse --abbrev-ref HEAD",
+                output.status.code().unwrap_or(-1),
+                &stderr,
+            ));
         }
 
         let branch = String::from_utf8(output.stdout)
             .map_err(|e| {
-                SwissArmyHammerError::Other(format!("Invalid UTF-8 in git output: {}", e))
+                SwissArmyHammerError::parsing_failed("git output", "stdout", &e.to_string())
             })?
             .trim()
             .to_string();
@@ -123,10 +125,11 @@ impl GitOperations {
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                return Err(SwissArmyHammerError::Other(format!(
-                    "Failed to create branch: {}",
-                    stderr
-                )));
+                return Err(SwissArmyHammerError::git_command_failed(
+                    "checkout -b",
+                    output.status.code().unwrap_or(-1),
+                    &stderr,
+                ));
             }
         }
 
@@ -142,10 +145,11 @@ impl GitOperations {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(SwissArmyHammerError::Other(format!(
-                "Failed to checkout branch: {}",
-                stderr
-            )));
+            return Err(SwissArmyHammerError::git_command_failed(
+                "checkout",
+                output.status.code().unwrap_or(-1),
+                &stderr,
+            ));
         }
 
         Ok(())

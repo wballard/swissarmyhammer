@@ -427,6 +427,54 @@ impl fmt::Display for ErrorChain<'_> {
     }
 }
 
+/// Helper functions for creating standardized error messages
+impl SwissArmyHammerError {
+    /// Create a git operation error with consistent formatting
+    pub fn git_operation_failed(operation: &str, details: &str) -> Self {
+        SwissArmyHammerError::Other(format!("Git operation '{}' failed: {}", operation, details))
+    }
+
+    /// Create a git command error with consistent formatting
+    pub fn git_command_failed(command: &str, exit_code: i32, stderr: &str) -> Self {
+        SwissArmyHammerError::Other(format!(
+            "Git command '{}' failed with exit code {}: {}",
+            command, exit_code, stderr
+        ))
+    }
+
+    /// Create a file operation error with consistent formatting
+    pub fn file_operation_failed(operation: &str, path: &str, details: &str) -> Self {
+        SwissArmyHammerError::Other(format!(
+            "File operation '{}' failed on '{}': {}",
+            operation, path, details
+        ))
+    }
+
+    /// Create a validation error with consistent formatting
+    pub fn validation_failed(field: &str, value: &str, reason: &str) -> Self {
+        SwissArmyHammerError::Other(format!(
+            "Validation failed for {}: '{}' - {}",
+            field, value, reason
+        ))
+    }
+
+    /// Create a parsing error with consistent formatting
+    pub fn parsing_failed(what: &str, input: &str, reason: &str) -> Self {
+        SwissArmyHammerError::Other(format!(
+            "Failed to parse {}: '{}' - {}",
+            what, input, reason
+        ))
+    }
+
+    /// Create a directory operation error with consistent formatting
+    pub fn directory_operation_failed(operation: &str, path: &str, details: &str) -> Self {
+        SwissArmyHammerError::Other(format!(
+            "Directory operation '{}' failed on '{}': {}",
+            operation, path, details
+        ))
+    }
+}
+
 /// Extension trait for error types to format the full error chain
 pub trait ErrorChainExt {
     /// Format the full error chain

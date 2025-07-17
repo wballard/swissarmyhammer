@@ -92,10 +92,10 @@ pub fn validate_issue_name(name: &str) -> std::result::Result<String, McpError> 
     Ok(trimmed.to_string())
 }
 
-/// Validate issue content size according to MCP standards
+/// Validate issue content comprehensively according to MCP standards
 ///
-/// This function validates that issue content doesn't exceed size limits
-/// to prevent memory issues and ensure reasonable issue sizes.
+/// This function validates that issue content doesn't exceed size limits,
+/// contains safe markdown, and doesn't include potentially dangerous content.
 ///
 /// # Arguments
 ///
@@ -105,16 +105,24 @@ pub fn validate_issue_name(name: &str) -> std::result::Result<String, McpError> 
 ///
 /// * `Result<(), McpError>` - Success or validation error
 pub fn validate_issue_content_size(content: &str) -> std::result::Result<(), McpError> {
-    const MAX_CONTENT_SIZE: usize = 1024 * 1024; // 1MB limit
-    const MAX_CONTENT_LINES: usize = 10000; // 10k lines limit
+    // Configurable limits via environment variables with sensible defaults
+    let max_content_size = std::env::var("SWISSARMYHAMMER_MAX_CONTENT_SIZE")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1024 * 1024); // 1MB default
+    
+    let max_content_lines = std::env::var("SWISSARMYHAMMER_MAX_CONTENT_LINES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10000); // 10k lines default
 
     // Check content size in bytes
-    if content.len() > MAX_CONTENT_SIZE {
+    if content.len() > max_content_size {
         return Err(McpError::invalid_params(
             format!(
-                "Issue content too large: {} bytes (max {} bytes / 1MB)",
+                "Issue content too large: {} bytes (max {} bytes)",
                 content.len(),
-                MAX_CONTENT_SIZE
+                max_content_size
             ),
             None,
         ));
@@ -122,11 +130,94 @@ pub fn validate_issue_content_size(content: &str) -> std::result::Result<(), Mcp
 
     // Check line count
     let line_count = content.lines().count();
-    if line_count > MAX_CONTENT_LINES {
+    if line_count > max_content_lines {
         return Err(McpError::invalid_params(
             format!(
                 "Issue content has too many lines: {} lines (max {} lines)",
-                line_count, MAX_CONTENT_LINES
+                line_count, max_content_lines
+            ),
+            None,
+        ));
+    }
+
+    // Validate against control characters (except common ones like tabs and newlines)
+    for (line_num, line) in content.lines().enumerate() {
+        for c in line.chars() {
+            if c.is_control() && c != '\t' && c != '\n' && c != '\r' {
+                return Err(McpError::invalid_params(
+                    format!(
+                        "Issue content contains invalid control characters on line {}: '{}'",
+                        line_num + 1,
+                        line.chars().map(|c| if c.is_control() { '�' } else { c }).collect::<String>()
+                    ),
+                    None,
+                ));
+            }
+        }
+    }
+
+    // Check for potentially dangerous HTML tags/XSS vectors
+    validate_html_security(content)?;
+
+    // Validate markdown structure
+    validate_markdown_structure(content)?;
+
+    Ok(())
+}
+
+/// Validate content against potential XSS vectors and dangerous HTML
+fn validate_html_security(content: &str) -> std::result::Result<(), McpError> {
+    // Dangerous HTML tags that should not be present in issue content
+    let dangerous_tags = [
+        "<script", "<iframe", "<object", "<embed", "<link", "<style",
+        "<meta", "<base", "<form", "<input", "<button", "<svg",
+        "javascript:", "data:", "vbscript:", "onload=", "onerror=",
+        "onclick=", "onmouseover=", "onfocus=", "onblur=",
+    ];
+
+    let content_lower = content.to_lowercase();
+    
+    for tag in &dangerous_tags {
+        if content_lower.contains(tag) {
+            return Err(McpError::invalid_params(
+                format!(
+                    "Issue content contains potentially dangerous HTML/script content: '{}'",
+                    tag
+                ),
+                None,
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate basic markdown structure
+fn validate_markdown_structure(content: &str) -> std::result::Result<(), McpError> {
+    // Check for balanced code blocks
+    let mut code_block_count = 0;
+    let mut in_code_block = false;
+    
+    for line in content.lines() {
+        let trimmed = line.trim();
+        
+        // Check for code block markers
+        if trimmed.starts_with("```") {
+            if in_code_block {
+                code_block_count -= 1;
+                in_code_block = false;
+            } else {
+                code_block_count += 1;
+                in_code_block = true;
+            }
+        }
+    }
+
+    if code_block_count > 0 {
+        return Err(McpError::invalid_params(
+            format!(
+                "Issue content has {} unmatched code blocks (```). Each opening ``` must have a closing ```",
+                code_block_count
             ),
             None,
         ));

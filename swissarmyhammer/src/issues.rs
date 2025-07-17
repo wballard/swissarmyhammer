@@ -103,17 +103,18 @@ impl FileSystemIssueStorage {
     fn parse_issue_from_file(&self, path: &Path) -> Result<Issue> {
         let filename = path
             .file_stem()
-            .ok_or_else(|| SwissArmyHammerError::Other("Invalid file path".to_string()))?
+            .ok_or_else(|| SwissArmyHammerError::parsing_failed("file path", &path.display().to_string(), "no file stem"))?
             .to_str()
-            .ok_or_else(|| SwissArmyHammerError::Other("Invalid filename encoding".to_string()))?;
+            .ok_or_else(|| SwissArmyHammerError::parsing_failed("filename", &path.display().to_string(), "invalid UTF-8 encoding"))?;
 
         // Parse filename format: <nnnnnn>_<name>.md
         let parts: Vec<&str> = filename.splitn(2, '_').collect();
         if parts.len() != 2 {
-            return Err(SwissArmyHammerError::Other(format!(
-                "Invalid filename format: {}",
-                filename
-            )));
+            return Err(SwissArmyHammerError::parsing_failed(
+                "filename format",
+                filename,
+                "expected format: <nnnnnn>_<name>.md",
+            ));
         }
 
         // Parse the 6-digit number
@@ -602,6 +603,17 @@ pub fn create_safe_filename(name: &str) -> String {
         return "unnamed".to_string();
     }
 
+    // Configurable length limit
+    let max_filename_length = std::env::var("SWISSARMYHAMMER_MAX_FILENAME_LENGTH")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(100);
+
+    // Check for path traversal attempts
+    if name.contains("../") || name.contains("..\\") || name.contains("./") || name.contains(".\\") {
+        return "path_traversal_attempted".to_string();
+    }
+
     // Replace spaces with dashes and remove problematic characters
     let safe_name = name
         .chars()
@@ -609,6 +621,8 @@ pub fn create_safe_filename(name: &str) -> String {
             ' ' => '-',
             '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '-',
             c if c.is_control() => '-',
+            // Additional security: replace null bytes and other dangerous characters
+            '\0' | '\x01'..='\x1F' | '\x7F' => '-',
             c => c,
         })
         .collect::<String>();
@@ -632,13 +646,58 @@ pub fn create_safe_filename(name: &str) -> String {
     let result = result.trim_matches('-').to_string();
 
     // Ensure not empty and limit length
-    if result.is_empty() {
+    let result = if result.is_empty() {
         "unnamed".to_string()
-    } else if result.len() > 100 {
-        result.chars().take(100).collect()
+    } else if result.len() > max_filename_length {
+        result.chars().take(max_filename_length).collect()
     } else {
         result
+    };
+
+    // Check for reserved filenames on different operating systems
+    validate_against_reserved_names(&result)
+}
+
+/// Validate filename against reserved names on different operating systems
+fn validate_against_reserved_names(name: &str) -> String {
+    // Windows reserved names
+    let windows_reserved = [
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", 
+        "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", 
+        "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+    ];
+
+    // Unix/Linux reserved or problematic names
+    let unix_reserved = [".", "..", "/", "\\"];
+
+    let name_upper = name.to_uppercase();
+    
+    // Check Windows reserved names
+    if windows_reserved.contains(&name_upper.as_str()) {
+        return format!("{}_file", name);
     }
+
+    // Check Unix reserved names
+    if unix_reserved.contains(&name) {
+        return format!("{}_file", name);
+    }
+
+    // Check for names that start with a dot (hidden files)
+    if name.starts_with('.') && name.len() > 1 {
+        return format!("hidden_{}", &name[1..]);
+    }
+
+    // Check for names that end with a dot (Windows issue)
+    if name.ends_with('.') {
+        return format!("{}_file", name.trim_end_matches('.'));
+    }
+
+    // Check for overly long names that might cause issues
+    if name.len() > 255 {
+        return name.chars().take(250).collect::<String>() + "_trunc";
+    }
+
+    name.to_string()
 }
 
 /// Validate issue name
@@ -1855,5 +1914,48 @@ mod tests {
         let long_name = "a".repeat(200);
         let safe_name = create_safe_filename(&long_name);
         assert!(safe_name.len() <= 100);
+    }
+
+    #[test]
+    fn test_create_safe_filename_security() {
+        // Test path traversal protection
+        assert_eq!(create_safe_filename("../etc/passwd"), "path_traversal_attempted");
+        assert_eq!(create_safe_filename("./config"), "path_traversal_attempted");
+        assert_eq!(create_safe_filename("..\\windows\\system32"), "path_traversal_attempted");
+
+        // Test Windows reserved names
+        assert_eq!(create_safe_filename("CON"), "CON_file");
+        assert_eq!(create_safe_filename("PRN"), "PRN_file");
+        assert_eq!(create_safe_filename("AUX"), "AUX_file");
+        assert_eq!(create_safe_filename("NUL"), "NUL_file");
+        assert_eq!(create_safe_filename("COM1"), "COM1_file");
+        assert_eq!(create_safe_filename("LPT1"), "LPT1_file");
+
+        // Test case insensitive Windows reserved names
+        assert_eq!(create_safe_filename("con"), "con_file");
+        assert_eq!(create_safe_filename("Com1"), "Com1_file");
+
+        // Test Unix reserved names (when used as standalone names)
+        assert_eq!(create_safe_filename("."), "._file");
+        assert_eq!(create_safe_filename(".."), ".._file");
+
+        // Test hidden files (starting with dot)
+        assert_eq!(create_safe_filename(".hidden"), "hidden_hidden");
+        assert_eq!(create_safe_filename(".gitignore"), "hidden_gitignore");
+
+        // Test names ending with dot (Windows issue)
+        assert_eq!(create_safe_filename("filename."), "filename_file");
+        assert_eq!(create_safe_filename("test..."), "test_file");
+
+        // Test null bytes and control characters
+        assert_eq!(create_safe_filename("test\0null"), "test-null");
+        assert_eq!(create_safe_filename("test\x01control"), "test-control");
+        assert_eq!(create_safe_filename("test\x7Fdelete"), "test-delete");
+
+        // Test very long names - gets truncated to max_filename_length (default 100)
+        let very_long_name = "a".repeat(300);
+        let safe_name = create_safe_filename(&very_long_name);
+        assert_eq!(safe_name.len(), 100);
+        assert_eq!(safe_name, "a".repeat(100));
     }
 }

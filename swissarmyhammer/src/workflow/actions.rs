@@ -214,8 +214,6 @@ pub trait VariableSubstitution {
     }
 }
 
-
-
 /// Action that executes a prompt using Claude
 #[derive(Debug, Clone)]
 pub struct PromptAction {
@@ -246,7 +244,7 @@ impl PromptAction {
             arguments: HashMap::new(),
             result_variable: None,
             timeout: timeouts.prompt_timeout,
-            quiet: false,   // Default to showing output
+            quiet: false, // Default to showing output
         }
     }
 
@@ -273,7 +271,6 @@ impl PromptAction {
         self.quiet = quiet;
         self
     }
-
 
     /// Substitute variables in arguments using the context
     fn substitute_variables(&self, context: &HashMap<String, Value>) -> HashMap<String, String> {
@@ -302,7 +299,6 @@ impl Action for PromptAction {
 
     impl_as_any!();
 }
-
 
 /// Resolve the path to the swissarmyhammer binary
 ///

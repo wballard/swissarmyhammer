@@ -1,5 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use swissarmyhammer::issues::Issue;
 use swissarmyhammer::mcp::McpServer;
 use swissarmyhammer::workflow::{
@@ -359,6 +360,7 @@ fn create_test_issues(count: usize, completed_ratio: f64) -> Vec<Issue> {
             name: format!("test_issue_{}", i),
             content: format!("This is test issue number {}", i),
             completed: i < completed_count,
+            file_path: PathBuf::from(format!("test_issue_{}.md", i)),
         });
     }
 

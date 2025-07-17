@@ -3,6 +3,7 @@
 //! This directory contains organized test modules for the actions system:
 //! - `action_parsing_tests` - Tests for parsing actions from descriptions
 //! - `claude_output_formatting_tests` - Tests for formatting Claude output as YAML
+//! - `claude_retry_tests` - Tests for verifying Claude's built-in retry mechanism is used
 //! - `concurrent_action_tests` - Tests for concurrent action execution
 //! - `error_handling_tests` - Tests for error handling in actions
 //! - `integration_tests` - Integration tests for action execution
@@ -56,6 +57,9 @@ mod action_parsing_tests;
 
 #[cfg(test)]
 mod claude_output_formatting_tests;
+
+#[cfg(test)]
+mod claude_retry_tests;
 
 #[cfg(test)]
 mod concurrent_action_tests;

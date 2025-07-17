@@ -182,7 +182,7 @@ impl GitOperations {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             let stdout = String::from_utf8_lossy(&output.stdout);
-            
+
             // Check for merge conflicts
             if stderr.contains("CONFLICT") || stdout.contains("CONFLICT") {
                 return Err(SwissArmyHammerError::Other(format!(
@@ -190,7 +190,7 @@ impl GitOperations {
                     branch_name, stderr
                 )));
             }
-            
+
             // Check for other merge issues
             if stderr.contains("Automatic merge failed") {
                 return Err(SwissArmyHammerError::Other(format!(
@@ -198,7 +198,7 @@ impl GitOperations {
                     branch_name, stderr
                 )));
             }
-            
+
             return Err(SwissArmyHammerError::Other(format!(
                 "Failed to merge branch '{}': {}",
                 branch_name, stderr
@@ -230,12 +230,7 @@ impl GitOperations {
     pub fn get_last_commit_info(&self) -> Result<String> {
         let output = Command::new("git")
             .current_dir(&self.work_dir)
-            .args([
-                "log",
-                "-1",
-                "--pretty=format:%H|%s|%an|%ad",
-                "--date=iso",
-            ])
+            .args(["log", "-1", "--pretty=format:%H|%s|%an|%ad", "--date=iso"])
             .output()?;
 
         if !output.status.success() {

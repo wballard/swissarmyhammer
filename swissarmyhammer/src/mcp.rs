@@ -844,12 +844,12 @@ impl McpServer {
     }
 
     /// Get pending issues from a list of issues
-    fn get_pending_issues(issues: &[crate::issues::Issue]) -> Vec<&crate::issues::Issue> {
+    pub fn get_pending_issues(issues: &[crate::issues::Issue]) -> Vec<&crate::issues::Issue> {
         issues.iter().filter(|i| !i.completed).collect()
     }
 
     /// Format issue summary for display
-    fn format_issue_summary(issues: &[crate::issues::Issue], max_items: usize) -> String {
+    pub fn format_issue_summary(issues: &[crate::issues::Issue], max_items: usize) -> String {
         let pending_issues = Self::get_pending_issues(issues);
         let pending_count = pending_issues.len();
 

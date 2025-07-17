@@ -15,7 +15,6 @@ use serde_json::Value;
 use std::sync::Arc;
 use std::time::Instant;
 
-
 /// Workflow execution engine
 pub struct WorkflowExecutor {
     /// Execution history for debugging
@@ -445,11 +444,6 @@ impl WorkflowExecutor {
         }
         None
     }
-
-
-
-
-
 
     /// Execute action parsed from state description
     pub async fn execute_state_action(

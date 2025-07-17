@@ -329,11 +329,9 @@ impl ToolHandlers {
                 // First merge the branch
                 match ops.merge_issue_branch(&issue_name) {
                     Ok(_) => {
-                        let mut success_message = format!(
-                            "Merged work branch for issue {} to main",
-                            issue_name
-                        );
-                        
+                        let mut success_message =
+                            format!("Merged work branch for issue {} to main", issue_name);
+
                         // Get commit information after successful merge
                         let commit_info = match ops.get_last_commit_info() {
                             Ok(info) => {
@@ -352,26 +350,22 @@ impl ToolHandlers {
                             }
                             Err(_) => String::new(),
                         };
-                        
+
                         // If delete_branch is true, delete the branch after successful merge
                         if request.delete_branch {
                             let branch_name = format!("issue/{}", issue_name);
                             match ops.delete_branch(&branch_name) {
                                 Ok(_) => {
-                                    success_message.push_str(&format!(
-                                        " and deleted branch {}",
-                                        branch_name
-                                    ));
+                                    success_message
+                                        .push_str(&format!(" and deleted branch {}", branch_name));
                                 }
                                 Err(e) => {
-                                    success_message.push_str(&format!(
-                                        " but failed to delete branch: {}",
-                                        e
-                                    ));
+                                    success_message
+                                        .push_str(&format!(" but failed to delete branch: {}", e));
                                 }
                             }
                         }
-                        
+
                         success_message.push_str(&commit_info);
                         Ok(create_success_response(success_message))
                     }
@@ -390,11 +384,13 @@ impl ToolHandlers {
     /// Check if working directory is clean
     async fn check_working_directory_clean(&self, _git_ops: &GitOperations) -> Result<()> {
         use std::process::Command;
-        
+
         let output = Command::new("git")
             .args(["status", "--porcelain"])
             .output()
-            .map_err(|e| crate::SwissArmyHammerError::Other(format!("Failed to check git status: {}", e)))?;
+            .map_err(|e| {
+                crate::SwissArmyHammerError::Other(format!("Failed to check git status: {}", e))
+            })?;
 
         let status = String::from_utf8_lossy(&output.stdout);
 

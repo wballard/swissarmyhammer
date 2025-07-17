@@ -225,7 +225,6 @@ async fn test_concurrent_prompt_action_rate_limiting() {
         .map(|i| {
             PromptAction::new(format!("test-prompt-{}", i))
                 .with_argument("arg".to_string(), format!("value{}", i))
-                .with_max_retries(1)
         })
         .collect();
 

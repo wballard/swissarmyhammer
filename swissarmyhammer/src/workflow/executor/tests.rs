@@ -1084,11 +1084,8 @@ async fn test_retry_with_exponential_backoff() {
     ));
     workflow.add_state(create_state("end", "End state", true));
 
-    // Add transition with retry policy
-    let mut metadata = HashMap::new();
-    metadata.insert("retry_max_attempts".to_string(), "3".to_string());
-    metadata.insert("retry_backoff_ms".to_string(), "10".to_string()); // Short backoff for tests
-    metadata.insert("retry_backoff_multiplier".to_string(), "2".to_string());
+    // Add transition without retry policy (retry logic removed)
+    let metadata = HashMap::new();
 
     workflow.add_transition(Transition {
         from_state: StateId::new("start"),
@@ -1119,12 +1116,11 @@ async fn test_retry_with_exponential_backoff() {
         .filter(|e| e.details.contains("Retry attempt"))
         .collect();
 
-    // Should have 3 retry attempts
-    assert_eq!(retry_events.len(), 3);
+    // Should have 0 retry attempts (retry logic removed)
+    assert_eq!(retry_events.len(), 0);
 
-    // Verify exponential backoff timing
-    assert!(history.iter().any(|e| e.details.contains("waiting 10ms")));
-    assert!(history.iter().any(|e| e.details.contains("waiting 20ms")));
+    // Should not have any backoff timing messages
+    assert!(!history.iter().any(|e| e.details.contains("waiting")));
 }
 
 #[tokio::test]
@@ -1472,9 +1468,8 @@ async fn test_dead_letter_state() {
         true,
     ));
 
-    // Configure dead letter after max retries
+    // Configure dead letter (retry logic removed)
     let mut metadata = HashMap::new();
-    metadata.insert("retry_max_attempts".to_string(), "2".to_string());
     metadata.insert("dead_letter_state".to_string(), "dead_letter".to_string());
 
     workflow.add_transition(Transition {
@@ -1493,9 +1488,9 @@ async fn test_dead_letter_state() {
     // Should have transitioned to dead letter state
     assert_eq!(run.current_state, StateId::new("dead_letter"));
 
-    // Verify error details are preserved
+    // Verify error details are preserved (retry_attempts no longer exists)
     assert!(run.context.contains_key("dead_letter_reason"));
-    assert!(run.context.contains_key("retry_attempts"));
+    // retry_attempts is no longer part of the context since retry logic was removed
 
     // Resume to complete the dead letter state execution
     run = executor.resume_workflow(run).await.unwrap();

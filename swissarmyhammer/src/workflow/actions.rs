@@ -5,7 +5,6 @@
 
 use crate::workflow::action_parser::ActionParser;
 use crate::workflow::{WorkflowExecutor, WorkflowName, WorkflowRunStatus, WorkflowStorage};
-use chrono::{Local, Timelike};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -215,114 +214,7 @@ pub trait VariableSubstitution {
     }
 }
 
-/// Retry strategy for retryable actions
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub enum RetryStrategy {
-    /// Wait until the next hour (used for rate limits)
-    WaitUntilNextHour,
-    /// Exponential backoff with base delay and max delay
-    ExponentialBackoff {
-        /// Base delay to start with
-        base: Duration,
-        /// Maximum delay to wait
-        max: Duration,
-    },
-    /// Fixed delay between retries
-    FixedDelay(Duration),
-}
 
-/// Trait for actions that support retry on failure
-#[async_trait::async_trait]
-pub trait RetryableAction: Action {
-    /// Get the maximum number of retries
-    fn max_retries(&self) -> u32 {
-        2 // Default to 2 retries
-    }
-
-    /// Get the retry strategy
-    fn retry_strategy(&self) -> RetryStrategy {
-        RetryStrategy::WaitUntilNextHour // Default for backward compatibility
-    }
-
-    /// Check if an error is retryable
-    fn is_retryable_error(&self, error: &ActionError) -> bool {
-        matches!(error, ActionError::RateLimit { .. })
-            && !matches!(error, ActionError::AbortError(_))
-    }
-
-    /// Calculate wait time based on retry strategy and attempt number
-    fn calculate_wait_time(&self, error: &ActionError, attempt: u32) -> Duration {
-        match error {
-            ActionError::RateLimit { wait_time, .. } => *wait_time,
-            _ => match self.retry_strategy() {
-                RetryStrategy::WaitUntilNextHour => {
-                    // Calculate time until next hour
-                    let now = Local::now();
-                    let next_hour = now
-                        .with_minute(0)
-                        .unwrap()
-                        .with_second(0)
-                        .unwrap()
-                        .with_nanosecond(0)
-                        .unwrap()
-                        + chrono::Duration::hours(1);
-                    let wait_duration = next_hour - now;
-                    Duration::from_secs(wait_duration.num_seconds() as u64)
-                }
-                RetryStrategy::ExponentialBackoff { base, max } => {
-                    let multiplier = 2u32.pow(attempt.saturating_sub(1));
-                    let delay = base.saturating_mul(multiplier);
-                    if delay > max {
-                        max
-                    } else {
-                        delay
-                    }
-                }
-                RetryStrategy::FixedDelay(delay) => delay,
-            },
-        }
-    }
-
-    /// Execute the action once (without retry)
-    async fn execute_once(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value>;
-
-    /// Execute the action with retry logic
-    async fn execute_with_retry(
-        &self,
-        context: &mut HashMap<String, Value>,
-    ) -> ActionResult<Value> {
-        let mut retries = 0;
-
-        loop {
-            match self.execute_once(context).await {
-                Ok(response) => return Ok(response),
-                Err(error) if self.is_retryable_error(&error) => {
-                    if retries >= self.max_retries() {
-                        // Max retries exceeded, return the error
-                        return Err(error);
-                    }
-
-                    retries += 1;
-                    let wait_time = self.calculate_wait_time(&error, retries);
-
-                    tracing::warn!(
-                        "Error occurred (attempt {}/{}): {}. Waiting {:?} before retry...",
-                        retries,
-                        self.max_retries() + 1,
-                        error,
-                        wait_time
-                    );
-
-                    tokio::time::sleep(wait_time).await;
-
-                    tracing::info!("Retrying after wait...");
-                }
-                Err(error) => return Err(error), // Non-retryable errors
-            }
-        }
-    }
-}
 
 /// Action that executes a prompt using Claude
 #[derive(Debug, Clone)]
@@ -343,15 +235,6 @@ pub struct PromptAction {
     ///
     /// The quiet mode can also be controlled via the `_quiet` context variable in workflows.
     pub quiet: bool,
-    /// Maximum number of retries for rate limit errors
-    pub max_retries: u32,
-    // TODO: Future enhancement - Add configurable retry strategy
-    // pub retry_strategy: RetryStrategy,
-    // where RetryStrategy could be:
-    // - WaitUntilNextHour (current behavior)
-    // - ExponentialBackoff { base: Duration, max: Duration }
-    // - FixedDelay(Duration)
-    // - Custom(Box<dyn Fn(u32) -> Duration>)
 }
 
 impl PromptAction {
@@ -364,7 +247,6 @@ impl PromptAction {
             result_variable: None,
             timeout: timeouts.prompt_timeout,
             quiet: false,   // Default to showing output
-            max_retries: 2, // Default to 2 retries for rate limits
         }
     }
 
@@ -392,11 +274,6 @@ impl PromptAction {
         self
     }
 
-    /// Set the maximum number of retries for rate limit errors
-    pub fn with_max_retries(mut self, max_retries: u32) -> Self {
-        self.max_retries = max_retries;
-        self
-    }
 
     /// Substitute variables in arguments using the context
     fn substitute_variables(&self, context: &HashMap<String, Value>) -> HashMap<String, String> {
@@ -409,7 +286,7 @@ impl VariableSubstitution for PromptAction {}
 #[async_trait::async_trait]
 impl Action for PromptAction {
     async fn execute(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
-        self.execute_with_retry(context).await
+        self.execute_once_internal(context).await
     }
 
     fn description(&self) -> String {
@@ -426,17 +303,6 @@ impl Action for PromptAction {
     impl_as_any!();
 }
 
-#[async_trait::async_trait]
-impl RetryableAction for PromptAction {
-    fn max_retries(&self) -> u32 {
-        self.max_retries
-    }
-
-    async fn execute_once(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
-        // Moved from the existing execute_once method in impl PromptAction
-        self.execute_once_internal(context).await
-    }
-}
 
 /// Resolve the path to the swissarmyhammer binary
 ///
@@ -1843,13 +1709,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_prompt_action_with_rate_limit_retry() {
+    async fn test_prompt_action_without_retry() {
         let action = PromptAction::new("test-prompt".to_string());
 
-        // The action should have default max_retries
-        assert_eq!(action.max_retries, 2);
-
-        // Verify other defaults
+        // Verify basic properties (retry logic removed)
         assert_eq!(action.prompt_name, "test-prompt");
         assert_eq!(action.timeout, Duration::from_secs(3600));
         assert!(!action.quiet);
@@ -1858,19 +1721,16 @@ mod tests {
     }
 
     #[test]
-    fn test_prompt_action_with_max_retries_builder() {
-        let action = PromptAction::new("test-prompt".to_string()).with_max_retries(5);
+    fn test_prompt_action_builder_without_retry() {
+        let action = PromptAction::new("test-prompt".to_string());
 
-        assert_eq!(action.max_retries, 5);
         assert_eq!(action.prompt_name, "test-prompt");
 
-        // Test chaining with other builders
+        // Test chaining with other builders (retry methods removed)
         let action2 = PromptAction::new("test-prompt2".to_string())
             .with_quiet(true)
-            .with_max_retries(0)
             .with_timeout(Duration::from_secs(60));
 
-        assert_eq!(action2.max_retries, 0);
         assert!(action2.quiet);
         assert_eq!(action2.timeout, Duration::from_secs(60));
     }

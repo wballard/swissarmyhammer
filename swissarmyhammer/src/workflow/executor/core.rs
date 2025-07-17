@@ -13,31 +13,8 @@ use crate::workflow::{
 use cel_interpreter::Program;
 use serde_json::Value;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-/// Configuration for retry behavior
-#[derive(Debug, Clone)]
-struct RetryConfig {
-    /// Maximum number of retry attempts
-    max_attempts: usize,
-    /// Initial backoff duration in milliseconds
-    backoff_ms: u64,
-    /// Multiplier for exponential backoff
-    backoff_multiplier: f64,
-}
-
-impl RetryConfig {
-    /// Maximum allowed retry attempts
-    const MAX_RETRY_ATTEMPTS: usize = 100;
-    /// Maximum allowed initial backoff in milliseconds
-    const MAX_BACKOFF_MS: u64 = 60_000; // 1 minute
-    /// Maximum allowed backoff multiplier
-    const MAX_BACKOFF_MULTIPLIER: f64 = 10.0;
-    /// Default initial backoff in milliseconds
-    const DEFAULT_BACKOFF_MS: u64 = 100;
-    /// Default backoff multiplier for exponential backoff
-    const DEFAULT_BACKOFF_MULTIPLIER: f64 = 2.0;
-}
 
 /// Workflow execution engine
 pub struct WorkflowExecutor {
@@ -469,136 +446,10 @@ impl WorkflowExecutor {
         None
     }
 
-    /// Get retry configuration from current transition metadata
-    fn get_retry_config(&mut self, run: &WorkflowRun) -> Option<RetryConfig> {
-        // Find transitions TO the current state (the transition that brought us here)
-        let transitions = self.find_transitions_to_state(run, &run.current_state);
 
-        // Look for retry configuration in transition metadata
-        for transition in transitions {
-            if let Some(max_attempts) = transition.metadata.get("retry_max_attempts") {
-                // Parse configuration values safely
-                let max_attempts = match max_attempts.parse::<usize>() {
-                    Ok(n) if n <= RetryConfig::MAX_RETRY_ATTEMPTS => n,
-                    Ok(n) => {
-                        self.log_event(
-                            ExecutionEventType::Failed,
-                            format!(
-                                "Retry attempts {} exceeds maximum allowed {}",
-                                n,
-                                RetryConfig::MAX_RETRY_ATTEMPTS
-                            ),
-                        );
-                        RetryConfig::MAX_RETRY_ATTEMPTS
-                    }
-                    Err(_) => {
-                        self.log_event(
-                            ExecutionEventType::Failed,
-                            format!("Invalid retry_max_attempts value: {}", max_attempts),
-                        );
-                        continue;
-                    }
-                };
 
-                let backoff_ms = transition
-                    .metadata
-                    .get("retry_backoff_ms")
-                    .and_then(|s| s.parse::<u64>().ok())
-                    .map(|ms| ms.min(RetryConfig::MAX_BACKOFF_MS))
-                    .unwrap_or(RetryConfig::DEFAULT_BACKOFF_MS);
 
-                let backoff_multiplier = transition
-                    .metadata
-                    .get("retry_backoff_multiplier")
-                    .and_then(|s| s.parse::<f64>().ok())
-                    .map(|m| m.clamp(1.0, RetryConfig::MAX_BACKOFF_MULTIPLIER))
-                    .unwrap_or(RetryConfig::DEFAULT_BACKOFF_MULTIPLIER);
 
-                let config = RetryConfig {
-                    max_attempts,
-                    backoff_ms,
-                    backoff_multiplier,
-                };
-
-                if config.max_attempts > 0 {
-                    return Some(config);
-                }
-            }
-        }
-
-        None
-    }
-
-    /// Execute action with retry logic
-    async fn execute_action_with_retry(
-        &mut self,
-        run: &mut WorkflowRun,
-        action: Box<dyn crate::workflow::Action>,
-        retry_config: &RetryConfig,
-    ) -> Result<Value, ActionError> {
-        let mut last_error = None;
-        let mut backoff_ms = retry_config.backoff_ms;
-
-        for attempt in 1..=retry_config.max_attempts {
-            self.log_event(
-                ExecutionEventType::StateExecution,
-                format!("Retry attempt {} of {}", attempt, retry_config.max_attempts),
-            );
-
-            match action.execute(&mut run.context).await {
-                Ok(result) => {
-                    self.handle_retry_success(run, attempt);
-                    return Ok(result);
-                }
-                Err(error) => {
-                    last_error = Some(error);
-
-                    if attempt < retry_config.max_attempts {
-                        self.handle_retry_failure(backoff_ms).await;
-                        backoff_ms = self.calculate_next_backoff(backoff_ms, retry_config);
-                    }
-                }
-            }
-        }
-
-        // All retries exhausted
-        run.context.insert(
-            "retry_attempts".to_string(),
-            Value::Number(retry_config.max_attempts.into()),
-        );
-        Err(last_error.unwrap())
-    }
-
-    /// Handle successful retry attempt
-    fn handle_retry_success(&mut self, run: &mut WorkflowRun, attempt: usize) {
-        if attempt > 1 {
-            self.log_event(
-                ExecutionEventType::StateExecution,
-                format!("Action succeeded on retry attempt {}", attempt),
-            );
-        }
-
-        // Update error context with retry attempts if it exists
-        if let Some(Value::Object(error_obj)) = run.context.get_mut(ErrorContext::CONTEXT_KEY) {
-            error_obj.insert("retry_attempts".to_string(), Value::Number(attempt.into()));
-        }
-    }
-
-    /// Handle failed retry attempt
-    async fn handle_retry_failure(&mut self, backoff_ms: u64) {
-        self.log_event(
-            ExecutionEventType::Failed,
-            format!("Action failed, waiting {}ms before retry", backoff_ms),
-        );
-
-        // Wait with exponential backoff
-        tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
-    }
-
-    /// Calculate next backoff duration
-    fn calculate_next_backoff(&self, current_backoff: u64, retry_config: &RetryConfig) -> u64 {
-        (current_backoff as f64 * retry_config.backoff_multiplier) as u64
-    }
 
     /// Execute action parsed from state description
     pub async fn execute_state_action(
@@ -616,7 +467,7 @@ impl WorkflowExecutor {
             );
 
             // Execute the action and handle result
-            let result = self.execute_action_with_config(run, action).await;
+            let result = self.execute_action_direct(run, action).await;
             self.handle_action_result(run, result).await?;
             Ok(true)
         } else {
@@ -624,19 +475,13 @@ impl WorkflowExecutor {
         }
     }
 
-    /// Execute action with retry configuration if available
-    async fn execute_action_with_config(
+    /// Execute action directly without retry logic
+    async fn execute_action_direct(
         &mut self,
         run: &mut WorkflowRun,
         action: Box<dyn crate::workflow::Action>,
     ) -> Result<Value, ActionError> {
-        let retry_config = self.get_retry_config(run);
-
-        if let Some(config) = retry_config {
-            self.execute_action_with_retry(run, action, &config).await
-        } else {
-            action.execute(&mut run.context).await
-        }
+        action.execute(&mut run.context).await
     }
 
     /// Handle the result of action execution
@@ -756,22 +601,7 @@ impl WorkflowExecutor {
 
     /// Capture error context for the action error
     fn capture_error_context(&mut self, run: &mut WorkflowRun, action_error: &ActionError) {
-        let retry_attempts = run
-            .context
-            .get("retry_attempts")
-            .and_then(|v| v.as_u64())
-            .map(|v| v as usize);
-
-        let error_context = if let Some(attempts) = retry_attempts {
-            ErrorContext::with_retries(
-                action_error.to_string(),
-                run.current_state.clone(),
-                attempts,
-            )
-        } else {
-            ErrorContext::new(action_error.to_string(), run.current_state.clone())
-        };
-
+        let error_context = ErrorContext::new(action_error.to_string(), run.current_state.clone());
         let error_context_json = serde_json::to_value(&error_context).unwrap_or(Value::Null);
         run.context
             .insert(ErrorContext::CONTEXT_KEY.to_string(), error_context_json);

@@ -27,7 +27,9 @@ arguments:
 
 # Error Handling Test Workflow
 
-Tests error handling, retries, fallback paths, and recovery.
+Tests error handling, fallback paths, and recovery.
+
+**Note**: This is a legacy test workflow that demonstrates error handling patterns. In production workflows, retry logic is handled automatically by Claude's infrastructure and should not be implemented at the application level.
 
 ```mermaid
 stateDiagram-v2

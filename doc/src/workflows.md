@@ -302,6 +302,10 @@ swissarmyhammer flow run my-workflow \
 
 Workflows provide robust error handling:
 
+### Retry Logic
+
+**Note**: Retry logic is handled automatically by Claude's infrastructure. SwissArmyHammer workflows do not need to implement application-level retry mechanisms as Claude will automatically retry failed requests according to its built-in retry policies. This eliminates the need for manual retry implementation in your workflow logic.
+
 ### Try-Catch Pattern
 
 ```mermaid

@@ -5,10 +5,7 @@ use std::path::{Path, PathBuf};
 use tracing::debug;
 
 /// Maximum issue number supported (6 digits)
-const MAX_ISSUE_NUMBER: u32 = 999999;
-
-/// Number of digits for issue numbering in filenames
-const ISSUE_NUMBER_DIGITS: usize = 6;
+use crate::config::Config;
 
 /// Represents an issue in the tracking system
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -103,9 +100,21 @@ impl FileSystemIssueStorage {
     fn parse_issue_from_file(&self, path: &Path) -> Result<Issue> {
         let filename = path
             .file_stem()
-            .ok_or_else(|| SwissArmyHammerError::parsing_failed("file path", &path.display().to_string(), "no file stem"))?
+            .ok_or_else(|| {
+                SwissArmyHammerError::parsing_failed(
+                    "file path",
+                    &path.display().to_string(),
+                    "no file stem",
+                )
+            })?
             .to_str()
-            .ok_or_else(|| SwissArmyHammerError::parsing_failed("filename", &path.display().to_string(), "invalid UTF-8 encoding"))?;
+            .ok_or_else(|| {
+                SwissArmyHammerError::parsing_failed(
+                    "filename",
+                    &path.display().to_string(),
+                    "invalid UTF-8 encoding",
+                )
+            })?;
 
         // Parse filename format: <nnnnnn>_<name>.md
         let parts: Vec<&str> = filename.splitn(2, '_').collect();
@@ -122,10 +131,10 @@ impl FileSystemIssueStorage {
             .parse()
             .map_err(|_| SwissArmyHammerError::InvalidIssueNumber(parts[0].to_string()))?;
 
-        if number > MAX_ISSUE_NUMBER {
+        if number > Config::global().max_issue_number {
             return Err(SwissArmyHammerError::InvalidIssueNumber(format!(
                 "Issue number {} exceeds maximum ({})",
-                number, MAX_ISSUE_NUMBER
+                number, Config::global().max_issue_number
             )));
         }
 
@@ -231,7 +240,7 @@ impl FileSystemIssueStorage {
         let pending_issues = self.list_issues_in_dir(&self.state.issues_dir)?;
         // Check completed issues
         let completed_issues = self.list_issues_in_dir(&self.state.completed_dir)?;
-        
+
         // Combine both iterators and find the maximum issue number
         let max_number = pending_issues
             .iter()
@@ -385,7 +394,7 @@ impl IssueStorage for FileSystemIssueStorage {
     async fn get_issue(&self, number: u32) -> Result<Issue> {
         // Use existing list_issues() method to avoid duplicating search logic
         let all_issues = self.list_issues().await?;
-        
+
         all_issues
             .into_iter()
             .find(|issue| issue.number == number)
@@ -421,10 +430,10 @@ pub fn format_issue_number(number: u32) -> String {
 
 /// Parse issue number from string
 pub fn parse_issue_number(s: &str) -> Result<u32> {
-    if s.len() != ISSUE_NUMBER_DIGITS {
+    if s.len() != Config::global().issue_number_digits {
         return Err(SwissArmyHammerError::InvalidIssueNumber(format!(
             "Issue number must be exactly {} digits (e.g., '000123'), got {} digits: '{}'",
-            ISSUE_NUMBER_DIGITS,
+            Config::global().issue_number_digits,
             s.len(),
             s
         )));
@@ -437,10 +446,10 @@ pub fn parse_issue_number(s: &str) -> Result<u32> {
         ))
     })?;
 
-    if number > MAX_ISSUE_NUMBER {
+    if number > Config::global().max_issue_number {
         return Err(SwissArmyHammerError::InvalidIssueNumber(format!(
             "Issue number {} exceeds maximum allowed value ({}). Use 6-digit format: 000001-{}",
-            number, MAX_ISSUE_NUMBER, MAX_ISSUE_NUMBER
+            number, Config::global().max_issue_number, Config::global().max_issue_number
         )));
     }
 
@@ -610,7 +619,8 @@ pub fn create_safe_filename(name: &str) -> String {
         .unwrap_or(100);
 
     // Check for path traversal attempts
-    if name.contains("../") || name.contains("..\\") || name.contains("./") || name.contains(".\\") {
+    if name.contains("../") || name.contains("..\\") || name.contains("./") || name.contains(".\\")
+    {
         return "path_traversal_attempted".to_string();
     }
 
@@ -662,16 +672,15 @@ pub fn create_safe_filename(name: &str) -> String {
 fn validate_against_reserved_names(name: &str) -> String {
     // Windows reserved names
     let windows_reserved = [
-        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", 
-        "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", 
-        "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
     ];
 
     // Unix/Linux reserved or problematic names
     let unix_reserved = [".", "..", "/", "\\"];
 
     let name_upper = name.to_uppercase();
-    
+
     // Check Windows reserved names
     if windows_reserved.contains(&name_upper.as_str()) {
         return format!("{}_file", name);
@@ -797,10 +806,10 @@ mod tests {
     #[test]
     fn test_issue_number_validation() {
         // Valid 6-digit numbers
-        let valid_numbers = vec![1, 999, 1000, 99999, 100000, MAX_ISSUE_NUMBER];
+        let valid_numbers = vec![1, 999, 1000, 99999, 100000, Config::global().max_issue_number];
         for num in valid_numbers {
             assert!(
-                num <= MAX_ISSUE_NUMBER,
+                num <= Config::global().max_issue_number,
                 "Issue number {} should be valid",
                 num
             );
@@ -810,7 +819,7 @@ mod tests {
         let invalid_numbers = vec![1000000, 9999999];
         for num in invalid_numbers {
             assert!(
-                num > MAX_ISSUE_NUMBER,
+                num > Config::global().max_issue_number,
                 "Issue number {} should be invalid",
                 num
             );
@@ -1919,9 +1928,15 @@ mod tests {
     #[test]
     fn test_create_safe_filename_security() {
         // Test path traversal protection
-        assert_eq!(create_safe_filename("../etc/passwd"), "path_traversal_attempted");
+        assert_eq!(
+            create_safe_filename("../etc/passwd"),
+            "path_traversal_attempted"
+        );
         assert_eq!(create_safe_filename("./config"), "path_traversal_attempted");
-        assert_eq!(create_safe_filename("..\\windows\\system32"), "path_traversal_attempted");
+        assert_eq!(
+            create_safe_filename("..\\windows\\system32"),
+            "path_traversal_attempted"
+        );
 
         // Test Windows reserved names
         assert_eq!(create_safe_filename("CON"), "CON_file");

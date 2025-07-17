@@ -110,7 +110,7 @@ pub fn validate_issue_content_size(content: &str) -> std::result::Result<(), Mcp
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(1024 * 1024); // 1MB default
-    
+
     let max_content_lines = std::env::var("SWISSARMYHAMMER_MAX_CONTENT_LINES")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -148,7 +148,9 @@ pub fn validate_issue_content_size(content: &str) -> std::result::Result<(), Mcp
                     format!(
                         "Issue content contains invalid control characters on line {}: '{}'",
                         line_num + 1,
-                        line.chars().map(|c| if c.is_control() { '�' } else { c }).collect::<String>()
+                        line.chars()
+                            .map(|c| if c.is_control() { '�' } else { c })
+                            .collect::<String>()
                     ),
                     None,
                 ));
@@ -166,23 +168,142 @@ pub fn validate_issue_content_size(content: &str) -> std::result::Result<(), Mcp
 }
 
 /// Validate content against potential XSS vectors and dangerous HTML
+/// This provides comprehensive HTML sanitization using regex patterns and context-aware validation
 fn validate_html_security(content: &str) -> std::result::Result<(), McpError> {
-    // Dangerous HTML tags that should not be present in issue content
-    let dangerous_tags = [
-        "<script", "<iframe", "<object", "<embed", "<link", "<style",
-        "<meta", "<base", "<form", "<input", "<button", "<svg",
-        "javascript:", "data:", "vbscript:", "onload=", "onerror=",
-        "onclick=", "onmouseover=", "onfocus=", "onblur=",
+    use regex::Regex;
+    
+    // Pattern for dangerous HTML tags (more comprehensive than simple string matching)
+    static DANGEROUS_TAG_PATTERNS: &[&str] = &[
+        r"<\s*script[^>]*>",
+        r"<\s*iframe[^>]*>", 
+        r"<\s*object[^>]*>",
+        r"<\s*embed[^>]*>",
+        r"<\s*link[^>]*>",
+        r"<\s*style[^>]*>",
+        r"<\s*meta[^>]*>",
+        r"<\s*base[^>]*>",
+        r"<\s*form[^>]*>",
+        r"<\s*input[^>]*>",
+        r"<\s*button[^>]*>",
+        r"<\s*svg[^>]*>",
+        r"<\s*math[^>]*>",
+        r"<\s*details[^>]*>",
+        r"<\s*dialog[^>]*>",
+    ];
+
+    // Pattern for dangerous protocols
+    static DANGEROUS_PROTOCOLS: &[&str] = &[
+        r"javascript\s*:",
+        r"data\s*:",
+        r"vbscript\s*:",
+        r"file\s*:",
+        r"ftp\s*:",
+    ];
+
+    // Pattern for event handlers (more comprehensive)
+    static EVENT_HANDLER_PATTERNS: &[&str] = &[
+        r"on\w+\s*=",
+        r"@\w+\s*=", // Vue.js style events
+        r"ng-\w+\s*=", // Angular style events
+    ];
+
+    // Pattern for dangerous attributes
+    static DANGEROUS_ATTRIBUTE_PATTERNS: &[&str] = &[
+        r"srcdoc\s*=",
+        r"formaction\s*=",
+        r"action\s*=",
+        r"background\s*=",
+        r"poster\s*=",
     ];
 
     let content_lower = content.to_lowercase();
-    
-    for tag in &dangerous_tags {
-        if content_lower.contains(tag) {
+
+    // Check for dangerous HTML tags
+    for pattern in DANGEROUS_TAG_PATTERNS {
+        if let Ok(regex) = Regex::new(pattern) {
+            if regex.is_match(&content_lower) {
+                return Err(McpError::invalid_params(
+                    format!(
+                        "Issue content contains potentially dangerous HTML tag matching pattern: '{}'",
+                        pattern
+                    ),
+                    None,
+                ));
+            }
+        }
+    }
+
+    // Check for dangerous protocols
+    for pattern in DANGEROUS_PROTOCOLS {
+        if let Ok(regex) = Regex::new(pattern) {
+            if regex.is_match(&content_lower) {
+                return Err(McpError::invalid_params(
+                    format!(
+                        "Issue content contains potentially dangerous protocol: '{}'",
+                        pattern
+                    ),
+                    None,
+                ));
+            }
+        }
+    }
+
+    // Check for event handlers
+    for pattern in EVENT_HANDLER_PATTERNS {
+        if let Ok(regex) = Regex::new(pattern) {
+            if regex.is_match(&content_lower) {
+                return Err(McpError::invalid_params(
+                    format!(
+                        "Issue content contains potentially dangerous event handler: '{}'",
+                        pattern
+                    ),
+                    None,
+                ));
+            }
+        }
+    }
+
+    // Check for dangerous attributes
+    for pattern in DANGEROUS_ATTRIBUTE_PATTERNS {
+        if let Ok(regex) = Regex::new(pattern) {
+            if regex.is_match(&content_lower) {
+                return Err(McpError::invalid_params(
+                    format!(
+                        "Issue content contains potentially dangerous attribute: '{}'",
+                        pattern
+                    ),
+                    None,
+                ));
+            }
+        }
+    }
+
+    // Additional validation for encoded content
+    validate_encoded_content(&content_lower)?;
+
+    Ok(())
+}
+
+/// Validate against encoded malicious content
+fn validate_encoded_content(content: &str) -> std::result::Result<(), McpError> {
+    // Check for HTML entities that could be used to bypass validation
+    let suspicious_entities = [
+        "&#x6a;&#x61;&#x76;&#x61;&#x73;&#x63;&#x72;&#x69;&#x70;&#x74;", // javascript
+        "&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;", // javascript
+        "&lt;script", // encoded script tags
+        "&lt;iframe",
+        "&lt;object",
+        "%3cscript", // URL encoded script
+        "%3ciframe",
+        "%3cobject",
+    ];
+
+    for entity in &suspicious_entities {
+        if content.contains(entity) {
             return Err(McpError::invalid_params(
                 format!(
-                    "Issue content contains potentially dangerous HTML/script content: '{}'",
-                    tag
+                    "Issue content contains potentially dangerous encoded content: '{}'",
+                    entity
                 ),
                 None,
             ));
@@ -197,10 +318,10 @@ fn validate_markdown_structure(content: &str) -> std::result::Result<(), McpErro
     // Check for balanced code blocks
     let mut code_block_count = 0;
     let mut in_code_block = false;
-    
+
     for line in content.lines() {
         let trimmed = line.trim();
-        
+
         // Check for code block markers
         if trimmed.starts_with("```") {
             if in_code_block {

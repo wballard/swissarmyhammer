@@ -113,7 +113,11 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Error types used throughout the library
 pub mod error;
 
+/// Configuration management
+pub mod config;
+
 pub use error::{ErrorChainExt, ErrorContext, Result, SwissArmyHammerError};
+pub use config::Config;
 
 /// Prelude module for convenient imports
 pub mod prelude {

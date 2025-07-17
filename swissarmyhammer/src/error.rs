@@ -60,6 +60,44 @@ pub enum SwissArmyHammerError {
     #[error("Issue already exists: {0}")]
     IssueAlreadyExists(u32),
 
+    /// Git operation failed
+    #[error("Git operation '{operation}' failed: {details}")]
+    GitOperationFailed {
+        /// The git operation that failed
+        operation: String,
+        /// Details about the failure
+        details: String,
+    },
+
+    /// Git command failed with exit code
+    #[error("Git command '{command}' failed with exit code {exit_code}: {stderr}")]
+    GitCommandFailed {
+        /// The git command that failed
+        command: String,
+        /// The exit code returned by the command
+        exit_code: i32,
+        /// Standard error output from the command
+        stderr: String,
+    },
+
+    /// Git repository not found or not initialized
+    #[error("Git repository not found or not initialized in path: {path}")]
+    GitRepositoryNotFound {
+        /// The path where git repository was expected
+        path: String,
+    },
+
+    /// Git branch operation failed
+    #[error("Git branch operation '{operation}' failed on branch '{branch}': {details}")]
+    GitBranchOperationFailed {
+        /// The branch operation that failed
+        operation: String,
+        /// The branch involved in the operation
+        branch: String,
+        /// Details about the failure
+        details: String,
+    },
+
     /// Other errors
     #[error("{0}")]
     Other(String),
@@ -431,15 +469,35 @@ impl fmt::Display for ErrorChain<'_> {
 impl SwissArmyHammerError {
     /// Create a git operation error with consistent formatting
     pub fn git_operation_failed(operation: &str, details: &str) -> Self {
-        SwissArmyHammerError::Other(format!("Git operation '{}' failed: {}", operation, details))
+        SwissArmyHammerError::GitOperationFailed {
+            operation: operation.to_string(),
+            details: details.to_string(),
+        }
     }
 
     /// Create a git command error with consistent formatting
     pub fn git_command_failed(command: &str, exit_code: i32, stderr: &str) -> Self {
-        SwissArmyHammerError::Other(format!(
-            "Git command '{}' failed with exit code {}: {}",
-            command, exit_code, stderr
-        ))
+        SwissArmyHammerError::GitCommandFailed {
+            command: command.to_string(),
+            exit_code,
+            stderr: stderr.to_string(),
+        }
+    }
+
+    /// Create a git repository not found error
+    pub fn git_repository_not_found(path: &str) -> Self {
+        SwissArmyHammerError::GitRepositoryNotFound {
+            path: path.to_string(),
+        }
+    }
+
+    /// Create a git branch operation error
+    pub fn git_branch_operation_failed(operation: &str, branch: &str, details: &str) -> Self {
+        SwissArmyHammerError::GitBranchOperationFailed {
+            operation: operation.to_string(),
+            branch: branch.to_string(),
+            details: details.to_string(),
+        }
     }
 
     /// Create a file operation error with consistent formatting

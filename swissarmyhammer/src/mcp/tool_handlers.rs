@@ -1,6 +1,6 @@
 //! Tool handlers for MCP operations
 
-use super::constants::{ISSUE_BRANCH_PREFIX, ISSUE_NUMBER_WIDTH};
+use super::types::{ISSUE_BRANCH_PREFIX, ISSUE_NUMBER_WIDTH};
 use super::responses::{
     create_all_complete_response, create_error_response, create_issue_response,
     create_mark_complete_response, create_success_response,
@@ -52,7 +52,7 @@ impl ToolHandlers {
         tracing::debug!("Creating issue: {}", request.name);
 
         // Validate issue name using shared validation logic
-        let validated_name = validate_issue_name(&request.name)?;
+        let validated_name = validate_issue_name(request.name.as_ref())?;
 
         let issue_storage = self.issue_storage.write().await;
         match issue_storage
@@ -96,7 +96,7 @@ impl ToolHandlers {
         request: MarkCompleteRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         let issue_storage = self.issue_storage.write().await;
-        match issue_storage.mark_complete(request.number).await {
+        match issue_storage.mark_complete(request.number.into()).await {
             Ok(issue) => Ok(create_mark_complete_response(&issue)),
             Err(crate::SwissArmyHammerError::IssueNotFound(num)) => Err(McpError::invalid_params(
                 format!("Issue #{:06} not found", num),
@@ -154,7 +154,7 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         let issue_storage = self.issue_storage.write().await;
         match issue_storage
-            .update_issue(request.number, request.content)
+            .update_issue(request.number.into(), request.content)
             .await
         {
             Ok(issue) => Ok(create_success_response(format!(
@@ -229,7 +229,7 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         // First get the issue to determine its name
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue(request.number).await {
+        let issue = match issue_storage.get_issue(request.number.into()).await {
             Ok(issue) => issue,
             Err(e) => {
                 return Ok(create_error_response(format!(
@@ -284,7 +284,7 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         // First get the issue to determine its name
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue(request.number).await {
+        let issue = match issue_storage.get_issue(request.number.into()).await {
             Ok(issue) => issue,
             Err(e) => {
                 return Ok(create_error_response(format!(
@@ -389,7 +389,7 @@ impl ToolHandlers {
             .args(["status", "--porcelain"])
             .output()
             .map_err(|e| {
-                crate::SwissArmyHammerError::Other(format!("Failed to check git status: {}", e))
+                crate::SwissArmyHammerError::git_operation_failed("git status check", &e.to_string())
             })?;
 
         let status = String::from_utf8_lossy(&output.stdout);

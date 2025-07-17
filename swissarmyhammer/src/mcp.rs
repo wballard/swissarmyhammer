@@ -19,10 +19,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
-use self::constants::{MAX_ISSUE_NUMBER, MIN_ISSUE_NUMBER};
+use self::types::{MAX_ISSUE_NUMBER, MIN_ISSUE_NUMBER};
 
 /// MCP module structure
-pub mod constants;
 pub mod error_handling;
 pub mod file_watcher;
 pub mod responses;
@@ -35,11 +34,7 @@ use responses::create_issue_response;
 use utils::{validate_issue_content_size, validate_issue_name};
 
 /// Constants for issue branch management
-const ISSUE_BRANCH_PREFIX: &str = "issue/";
-const ISSUE_NUMBER_WIDTH: usize = 6;
-
-/// Maximum number of pending issues to display in summary
-const MAX_PENDING_ISSUES_IN_SUMMARY: usize = 5;
+use crate::config::Config;
 
 /// Request structure for getting a prompt
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -199,7 +194,7 @@ impl McpServer {
             file_watcher: Arc::new(Mutex::new(FileWatcher::new())),
             issue_storage: Arc::new(RwLock::new(issue_storage)),
             git_ops: Arc::new(Mutex::new(git_ops)),
-            max_pending_issues_display: MAX_PENDING_ISSUES_IN_SUMMARY,
+            max_pending_issues_display: Config::global().max_pending_issues_in_summary,
         })
     }
 
@@ -455,7 +450,9 @@ impl McpServer {
             }
         }
 
-        Err(last_error.unwrap_or_else(|| SwissArmyHammerError::Other("File watcher initialization failed".to_string())))
+        Err(last_error.unwrap_or_else(|| {
+            SwissArmyHammerError::Other("File watcher initialization failed".to_string())
+        }))
     }
 
     /// Stop watching prompt directories for file changes.
@@ -762,7 +759,10 @@ impl McpServer {
         Ok(CallToolResult {
             content: vec![Annotated::new(
                 RawContent::Text(RawTextContent {
-                    text: response["message"].as_str().unwrap_or("Issue marked as complete").to_string(),
+                    text: response["message"]
+                        .as_str()
+                        .unwrap_or("Issue marked as complete")
+                        .to_string(),
                 }),
                 None,
             )],
@@ -997,7 +997,10 @@ impl McpServer {
         Ok(CallToolResult {
             content: vec![Annotated::new(
                 RawContent::Text(RawTextContent {
-                    text: response["message"].as_str().unwrap_or("Issue updated").to_string(),
+                    text: response["message"]
+                        .as_str()
+                        .unwrap_or("Issue updated")
+                        .to_string(),
                 }),
                 None,
             )],
@@ -1233,7 +1236,9 @@ impl McpServer {
         let mut git_ops = git_ops;
         let branch_name = git_ops
             .as_mut()
-            .ok_or_else(|| McpError::internal_error("Git operations not available".to_string(), None))?
+            .ok_or_else(|| {
+                McpError::internal_error("Git operations not available".to_string(), None)
+            })?
             .create_work_branch(&issue_name)
             .map_err(|e| {
                 McpError::internal_error(
@@ -1245,7 +1250,9 @@ impl McpServer {
         // Get current branch to confirm switch
         let current_branch = git_ops
             .as_ref()
-            .ok_or_else(|| McpError::internal_error("Git operations not available".to_string(), None))?
+            .ok_or_else(|| {
+                McpError::internal_error("Git operations not available".to_string(), None)
+            })?
             .current_branch()
             .unwrap_or_else(|_| branch_name.clone());
 
@@ -1270,7 +1277,10 @@ impl McpServer {
         Ok(CallToolResult {
             content: vec![Annotated::new(
                 RawContent::Text(RawTextContent {
-                    text: response["message"].as_str().unwrap_or("Working on issue").to_string(),
+                    text: response["message"]
+                        .as_str()
+                        .unwrap_or("Working on issue")
+                        .to_string(),
                 }),
                 None,
             )],
@@ -1313,7 +1323,7 @@ impl McpServer {
             "{:0width$}_{}",
             issue.number,
             issue.name,
-            width = ISSUE_NUMBER_WIDTH
+            width = Config::global().issue_number_width
         );
 
         match git_ops.as_mut() {
@@ -1362,11 +1372,11 @@ impl McpServer {
         // Expected format: issue/<issue_name>
         // Where issue_name is <nnnnnn>_<name>
 
-        if !branch.starts_with(ISSUE_BRANCH_PREFIX) {
+        if !branch.starts_with(&Config::global().issue_branch_prefix) {
             return Ok(None);
         }
 
-        let issue_part = &branch[ISSUE_BRANCH_PREFIX.len()..]; // Skip "issue/"
+        let issue_part = &branch[Config::global().issue_branch_prefix.len()..]; // Skip prefix
 
         // Try to parse the issue number from the beginning
         // Handle both formats: issue/000001_name and issue/name_000001
@@ -1419,7 +1429,9 @@ impl McpServer {
                             "⚠️ Reload attempt {} failed, retrying in {}ms: {}",
                             attempt,
                             backoff_ms,
-                            last_error.as_ref().map_or("Unknown error".to_string(), |e| e.to_string())
+                            last_error
+                                .as_ref()
+                                .map_or("Unknown error".to_string(), |e| e.to_string())
                         );
 
                         tokio::time::sleep(tokio::time::Duration::from_millis(backoff_ms)).await;
@@ -1431,7 +1443,8 @@ impl McpServer {
             }
         }
 
-        Err(last_error.unwrap_or_else(|| SwissArmyHammerError::Other("Prompt reload failed".to_string())))
+        Err(last_error
+            .unwrap_or_else(|| SwissArmyHammerError::Other("Prompt reload failed".to_string())))
     }
 
     /// Check if an error is a retryable file system error
@@ -2992,7 +3005,8 @@ mod tests {
                 .expect("Failed to list git branches");
 
             let branches_output = String::from_utf8_lossy(&git_branches.stdout);
-            assert!(branches_output.contains(&format!("issue/{:06}_git_integration_test", issue_number)));
+            assert!(branches_output
+                .contains(&format!("issue/{:06}_git_integration_test", issue_number)));
 
             // Test 3: Update the issue content
             let update_request = UpdateIssueRequest {
@@ -3009,7 +3023,10 @@ mod tests {
                 number: issue_number,
             };
 
-            let complete_result = server.handle_issue_mark_complete(complete_request).await.unwrap();
+            let complete_result = server
+                .handle_issue_mark_complete(complete_request)
+                .await
+                .unwrap();
             assert!(!complete_result.is_error.unwrap_or(false));
 
             // Verify the issue is in completed state
@@ -3034,7 +3051,7 @@ mod tests {
 
             let _status_output = String::from_utf8_lossy(&git_status.stdout);
             // Repository should be clean or have only expected changes
-            
+
             // Test 7: Verify current branch is main/master
             let current_branch = Command::new("git")
                 .args(["rev-parse", "--abbrev-ref", "HEAD"])
@@ -3107,7 +3124,9 @@ mod tests {
 
                 let branch_output_string = String::from_utf8_lossy(&current_branch.stdout);
                 let branch_output = branch_output_string.trim();
-                assert!(branch_output.contains(&format!("issue/{:06}_{}", issue_number, issues[i].0)));
+                assert!(
+                    branch_output.contains(&format!("issue/{:06}_{}", issue_number, issues[i].0))
+                );
             }
 
             // Complete all issues
@@ -3116,7 +3135,10 @@ mod tests {
                     number: issue_number,
                 };
 
-                let complete_result = server.handle_issue_mark_complete(complete_request).await.unwrap();
+                let complete_result = server
+                    .handle_issue_mark_complete(complete_request)
+                    .await
+                    .unwrap();
                 assert!(!complete_result.is_error.unwrap_or(false));
             }
 
@@ -3151,18 +3173,14 @@ mod tests {
             let _temp_path = temp_dir.path();
 
             // Test working on a non-existent issue
-            let work_request = WorkIssueRequest {
-                number: 99999,
-            };
+            let work_request = WorkIssueRequest { number: 99999 };
 
             let work_result = server.handle_issue_work(work_request).await;
             // This should return an error since the issue wasn't found
             assert!(work_result.is_err());
 
             // Test merging a non-existent issue
-            let merge_request = MergeIssueRequest {
-                number: 99999,
-            };
+            let merge_request = MergeIssueRequest { number: 99999 };
 
             let _merge_result = server.handle_issue_merge(merge_request).await;
             // Note: merge operation may handle missing issues gracefully

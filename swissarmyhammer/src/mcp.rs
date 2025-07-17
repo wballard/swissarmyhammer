@@ -36,6 +36,9 @@ use responses::create_issue_response;
 const ISSUE_BRANCH_PREFIX: &str = "issue/";
 const ISSUE_NUMBER_WIDTH: usize = 6;
 
+/// Maximum number of pending issues to display in summary
+const MAX_PENDING_ISSUES_IN_SUMMARY: usize = 5;
+
 /// Request structure for getting a prompt
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct GetPromptRequest {
@@ -113,6 +116,7 @@ pub struct McpServer {
     file_watcher: Arc<Mutex<FileWatcher>>,
     issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
     git_ops: Arc<Mutex<Option<GitOperations>>>,
+    max_pending_issues_display: usize,
 }
 
 impl McpServer {
@@ -173,6 +177,7 @@ impl McpServer {
             file_watcher: Arc::new(Mutex::new(FileWatcher::new())),
             issue_storage: Arc::new(RwLock::new(issue_storage)),
             git_ops: Arc::new(Mutex::new(git_ops)),
+            max_pending_issues_display: MAX_PENDING_ISSUES_IN_SUMMARY,
         })
     }
 
@@ -794,9 +799,8 @@ impl McpServer {
         
         // If there are pending issues, list them
         if !all_complete && pending_count > 0 {
-            let pending_issues: Vec<_> = all_issues
-                .iter()
-                .filter(|i| !i.completed)
+            let pending_issues: Vec<_> = Self::get_pending_issues(&all_issues)
+                .into_iter()
                 .map(|i| {
                     serde_json::json!({
                         "number": i.number,
@@ -805,20 +809,23 @@ impl McpServer {
                 })
                 .collect();
             
-            response.as_object_mut().unwrap().insert(
-                "pending_issues".to_string(),
-                serde_json::Value::Array(pending_issues),
-            );
+            if let Some(obj) = response.as_object_mut() {
+                obj.insert(
+                    "pending_issues".to_string(),
+                    serde_json::Value::Array(pending_issues),
+                );
+            }
         }
         
         // Add summary for text response
         let summary = if !all_complete {
-            Self::format_issue_summary(&all_issues, 5)
+            Self::format_issue_summary(&all_issues, self.max_pending_issues_display)
         } else {
             String::new()
         };
         
-        let text_response = format!("{}{}", response["message"].as_str().unwrap(), summary);
+        let message = response["message"].as_str().unwrap_or("Status check complete");
+        let text_response = format!("{}{}", message, summary);
         
         Ok(CallToolResult {
             content: vec![Annotated::new(
@@ -829,20 +836,27 @@ impl McpServer {
         })
     }
 
+    /// Get pending issues from a list of issues
+    fn get_pending_issues(issues: &[crate::issues::Issue]) -> Vec<&crate::issues::Issue> {
+        issues.iter().filter(|i| !i.completed).collect()
+    }
+
     /// Format issue summary for display
     fn format_issue_summary(issues: &[crate::issues::Issue], max_items: usize) -> String {
-        let pending_issues: Vec<_> = issues
-            .iter()
-            .filter(|i| !i.completed)
-            .take(max_items)
-            .collect();
+        let pending_issues = Self::get_pending_issues(issues);
+        let pending_count = pending_issues.len();
         
-        if pending_issues.is_empty() {
+        if pending_count == 0 {
             return String::new();
         }
         
+        let displayed_issues: Vec<_> = pending_issues
+            .into_iter()
+            .take(max_items)
+            .collect();
+        
         let mut summary = String::from("\nPending issues:\n");
-        for issue in &pending_issues {
+        for issue in &displayed_issues {
             summary.push_str(&format!(
                 "  - #{:06}: {}\n",
                 issue.number,
@@ -850,10 +864,10 @@ impl McpServer {
             ));
         }
         
-        if issues.iter().filter(|i| !i.completed).count() > max_items {
+        if pending_count > max_items {
             summary.push_str(&format!(
                 "  ... and {} more\n",
-                issues.iter().filter(|i| !i.completed).count() - max_items
+                pending_count - max_items
             ));
         }
         

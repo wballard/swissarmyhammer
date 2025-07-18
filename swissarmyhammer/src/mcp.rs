@@ -505,43 +505,6 @@ impl McpServer {
             .unwrap_or_else(|| Arc::new(serde_json::Map::new()))
     }
 
-    /// Create a success response for a tool call.
-    ///
-    /// # Arguments
-    ///
-    /// * `message` - The success message to include in the response
-    ///
-    /// # Returns
-    ///
-    /// * `CallToolResult` - A successful tool call result with the message
-    fn create_success_response(message: String) -> CallToolResult {
-        CallToolResult {
-            content: vec![Annotated::new(
-                RawContent::Text(RawTextContent { text: message }),
-                None,
-            )],
-            is_error: Some(false),
-        }
-    }
-
-    /// Create an error response for a tool call.
-    ///
-    /// # Arguments
-    ///
-    /// * `message` - The error message to include in the response
-    ///
-    /// # Returns
-    ///
-    /// * `CallToolResult` - An error tool call result with the message
-    fn create_error_response(message: String) -> CallToolResult {
-        CallToolResult {
-            content: vec![Annotated::new(
-                RawContent::Text(RawTextContent { text: message }),
-                None,
-            )],
-            is_error: Some(true),
-        }
-    }
 
     /// Validate and sanitize issue name for MCP tool calls.
     ///
@@ -1483,41 +1446,219 @@ impl McpServer {
         let issue_storage = self.issue_storage.read().await;
         let issue = match issue_storage.get_issue(request.number.into()).await {
             Ok(issue) => issue,
-            Err(e) => {
-                return Ok(Self::create_error_response(format!(
-                    "Failed to get issue {}: {}",
-                    request.number, e
-                )))
+            Err(_e) => {
+                return Ok(CallToolResult {
+                    content: vec![Annotated::new(
+                        RawContent::Text(RawTextContent { 
+                            text: format!("❌ Issue #{:06} not found", request.number.0) 
+                        }),
+                        None,
+                    )],
+                    is_error: Some(true),
+                });
             }
         };
         drop(issue_storage);
 
-        // Merge branch
+        // Check if issue is completed
+        if !issue.completed {
+            return Ok(CallToolResult {
+                content: vec![Annotated::new(
+                    RawContent::Text(RawTextContent { 
+                        text: format!(
+                            "⚠️ Issue #{:06} - {} is not completed\n\n📋 Issue Status:\n• Status: Active (not completed)\n• File: {}\n\n💡 Required Actions:\n• Complete the issue first: issue_mark_complete number={}\n• Then merge: issue_merge number={}",
+                            issue.number,
+                            issue.name,
+                            issue.file_path.display(),
+                            request.number.0,
+                            request.number.0
+                        )
+                    }),
+                    None,
+                )],
+                is_error: Some(true),
+            });
+        }
+
+        // Initialize git operations
         let mut git_ops = self.git_ops.lock().await;
-        let issue_name = format!(
+        let git_ops = match git_ops.as_mut() {
+            Some(ops) => ops,
+            None => {
+                return Ok(CallToolResult {
+                    content: vec![Annotated::new(
+                        RawContent::Text(RawTextContent { 
+                            text: "❌ Git repository error: Git operations not available".to_string()
+                        }),
+                        None,
+                    )],
+                    is_error: Some(true),
+                });
+            }
+        };
+
+        // Create branch identifier
+        let branch_identifier = format!(
             "{:0width$}_{}",
             issue.number,
             issue.name,
             width = Config::global().issue_number_width
         );
+        let branch_name = format!("issue/{}", branch_identifier);
 
-        match git_ops.as_mut() {
-            Some(ops) => match ops.merge_issue_branch(&issue_name) {
-                Ok(_) => Ok(Self::create_success_response(format!(
-                    "Merged work branch for issue {} to main",
-                    issue_name
-                ))),
-                Err(e) => Ok(Self::create_error_response(format!(
-                    "Failed to merge branch: {}",
-                    e
-                ))),
-            },
-            None => Ok(Self::create_error_response(
-                "Git operations not available".to_string(),
-            )),
+        // Check if branch exists
+        if !git_ops.branch_exists(&branch_name).unwrap_or(false) {
+            return Ok(CallToolResult {
+                content: vec![Annotated::new(
+                    RawContent::Text(RawTextContent { 
+                        text: format!(
+                            "⚠️ Issue work branch '{}' does not exist\n\n📋 Branch Status:\n• Expected branch: {}\n• Exists: No\n\n💡 Possible Reasons:\n• Issue work was done on main branch\n• Branch was already merged and deleted\n• Branch name doesn't match issue",
+                            branch_name,
+                            branch_name
+                        )
+                    }),
+                    None,
+                )],
+                is_error: Some(true),
+            });
+        }
+
+        // Get current branch before merge
+        let _current_branch = git_ops.current_branch().unwrap_or_else(|_| "unknown".to_string());
+        let main_branch = git_ops.main_branch().unwrap_or_else(|_| "main".to_string());
+
+        // Validate pre-merge state
+        if let Some(error_response) = self.validate_pre_merge_state(&git_ops) {
+            return Ok(error_response);
+        }
+
+        // Perform the merge
+        match git_ops.merge_issue_branch(&branch_identifier) {
+            Ok(()) => {
+                // Merge successful
+                
+                // Optionally delete the branch
+                let branch_deleted = if request.delete_branch {
+                    match git_ops.delete_branch(&branch_name) {
+                        Ok(()) => true,
+                        Err(e) => {
+                            eprintln!("Warning: Failed to delete branch {}: {}", branch_name, e);
+                            false
+                        }
+                    }
+                } else {
+                    false
+                };
+
+                // Generate post-merge statistics
+                let stats = self.generate_post_merge_stats().await;
+
+                // Format success response
+                let response_text = format!(
+                    "✅ Successfully merged issue #{:06} - {} to main\n\nMerged work branch for issue {} to main\n\n📋 Issue Details:\n• Number: {}\n• Name: {}\n• Status: Completed ✅\n• File: {}\n\n🌿 Git Operations:\n• Source branch: {}\n• Target branch: {}\n• Branch deleted: {}\n• Current branch: {}\n\n🎉 Issue Complete!\nThe issue has been successfully merged to the main branch and is now part of the project history.{}",
+                    issue.number,
+                    issue.name,
+                    branch_identifier,
+                    issue.number,
+                    issue.name,
+                    issue.file_path.display(),
+                    branch_name,
+                    main_branch,
+                    if branch_deleted { "Yes" } else { "No" },
+                    git_ops.current_branch().unwrap_or_else(|_| "unknown".to_string()),
+                    stats
+                );
+
+                Ok(CallToolResult {
+                    content: vec![Annotated::new(
+                        RawContent::Text(RawTextContent { text: response_text }),
+                        None,
+                    )],
+                    is_error: Some(false),
+                })
+            }
+            Err(e) => {
+                // Merge failed
+                let error_msg = match e.to_string() {
+                    msg if msg.contains("conflict") => {
+                        format!("🔀 Merge conflict detected. Please resolve conflicts manually:\n• git checkout {}\n• git merge {}\n• Resolve conflicts and commit\n• Then try again", main_branch, branch_name)
+                    }
+                    msg if msg.contains("uncommitted") => {
+                        "⚠️ Uncommitted changes prevent merge. Please commit or stash changes first.".to_string()
+                    }
+                    _ => {
+                        format!("❌ Merge failed: {}", e)
+                    }
+                };
+
+                Ok(CallToolResult {
+                    content: vec![Annotated::new(
+                        RawContent::Text(RawTextContent { text: error_msg }),
+                        None,
+                    )],
+                    is_error: Some(true),
+                })
+            }
         }
     }
 
+    /// Validate repository state before merging
+    fn validate_pre_merge_state(&self, git_ops: &crate::git::GitOperations) -> Option<CallToolResult> {
+        let current_branch = git_ops.current_branch().unwrap_or_else(|_| "unknown".to_string());
+        
+        // Check for uncommitted changes
+        if git_ops.has_uncommitted_changes().unwrap_or(false) {
+            return Some(CallToolResult {
+                content: vec![Annotated::new(
+                    RawContent::Text(RawTextContent { 
+                        text: format!(
+                            "⚠️ Cannot merge with uncommitted changes\n\n📋 Current Status:\n• Branch: {}\n• Uncommitted changes: Yes\n\n💡 Required Actions:\n• Commit changes: git add . && git commit -m \"Your message\"\n• Or stash changes: git stash\n• Then try merge again",
+                            current_branch
+                        )
+                    }),
+                    None,
+                )],
+                is_error: Some(true),
+            });
+        }
+        
+        None
+    }
+
+    /// Generate post-merge project statistics
+    async fn generate_post_merge_stats(&self) -> String {
+        let issue_storage = self.issue_storage.read().await;
+        let all_issues = match issue_storage.list_issues().await {
+            Ok(issues) => issues,
+            Err(_) => return "".to_string(),
+        };
+        
+        let total_issues = all_issues.len();
+        let completed_count = all_issues.iter().filter(|i| i.completed).count();
+        let active_count = total_issues - completed_count;
+        
+        if active_count == 0 && total_issues > 0 {
+            format!(
+                "\n\n🎉 Project Status: ALL ISSUES COMPLETED! 🎉\n• Total issues: {}\n• Completed: {} (100%)\n• Active: 0\n\n✨ Congratulations! All tracked issues have been completed and merged.",
+                total_issues,
+                completed_count
+            )
+        } else {
+            let completion_percentage = if total_issues > 0 {
+                (completed_count * 100) / total_issues
+            } else {
+                0
+            };
+            
+            format!(
+                "\n\n📊 Project Status:\n• Total issues: {}\n• Completed: {} ({}%)\n• Active: {}",
+                total_issues,
+                completed_count,
+                completion_percentage,
+                active_count
+            )
+        }
+    }
 
     /// Parse issue information from branch name
     fn parse_issue_branch(
@@ -3027,6 +3168,15 @@ mod tests {
                 .output()
                 .expect("Failed to commit");
 
+            // Mark issue as complete
+            let complete_request = MarkCompleteRequest {
+                number: IssueNumber(issue_number),
+            };
+            server.handle_issue_mark_complete(complete_request).await.unwrap();
+            
+            // Commit the issue completion
+            commit_changes(_temp.path()).await;
+
             // Test merge
             let merge_request = MergeIssueRequest {
                 number: IssueNumber(issue_number),
@@ -3185,6 +3335,19 @@ mod tests {
             let update_result = server.handle_issue_update(update_request).await.unwrap();
             assert!(!update_result.is_error.unwrap_or(false));
 
+            // Commit the updated issue
+            Command::new("git")
+                .args(["add", "."])
+                .current_dir(temp_path)
+                .output()
+                .expect("Failed to add updated issue to git");
+
+            Command::new("git")
+                .args(["commit", "-m", "Update issue content"])
+                .current_dir(temp_path)
+                .output()
+                .expect("Failed to commit updated issue");
+
             // Test 4: Complete the issue (should switch back to main branch)
             let complete_request = MarkCompleteRequest {
                 number: IssueNumber(issue_number),
@@ -3195,6 +3358,19 @@ mod tests {
                 .await
                 .unwrap();
             assert!(!complete_result.is_error.unwrap_or(false));
+
+            // Commit the issue completion (issue moved to completed directory)
+            Command::new("git")
+                .args(["add", "."])
+                .current_dir(temp_path)
+                .output()
+                .expect("Failed to add completed issue to git");
+
+            Command::new("git")
+                .args(["commit", "-m", "Complete issue"])
+                .current_dir(temp_path)
+                .output()
+                .expect("Failed to commit completed issue");
 
             // Verify the issue is in completed state
             let current_request = CurrentIssueRequest { branch: None };
@@ -3207,8 +3383,9 @@ mod tests {
                 delete_branch: false,
             };
 
-            let _merge_result = server.handle_issue_merge(merge_request).await.unwrap();
+            let merge_result = server.handle_issue_merge(merge_request).await.unwrap();
             // Note: merge may fail if branch doesn't exist or is already merged, which is okay
+            assert!(!merge_result.is_error.unwrap_or(false));
 
             // Test 6: Verify git repository state
             let git_status = Command::new("git")
@@ -3220,7 +3397,10 @@ mod tests {
             let _status_output = String::from_utf8_lossy(&git_status.stdout);
             // Repository should be clean or have only expected changes
 
-            // Test 7: Verify current branch is main/master
+            // Test 7: Verify current branch is the main branch
+            let git_ops = GitOperations::with_work_dir(temp_path.to_path_buf()).unwrap();
+            let expected_main_branch = git_ops.main_branch().unwrap();
+            
             let current_branch = Command::new("git")
                 .args(["rev-parse", "--abbrev-ref", "HEAD"])
                 .current_dir(temp_path)
@@ -3229,7 +3409,7 @@ mod tests {
 
             let branch_output_string = String::from_utf8_lossy(&current_branch.stdout);
             let branch_output = branch_output_string.trim();
-            assert!(branch_output == "main" || branch_output == "master");
+            assert_eq!(branch_output, expected_main_branch);
         }
 
         #[tokio::test]
@@ -3648,6 +3828,236 @@ mod tests {
                 assert!(text.text.contains("⏳"));
                 assert!(text.text.contains("🔄"));
                 assert!(text.text.contains("✅"));
+            } else {
+                panic!("Expected text response");
+            }
+        }
+
+        #[tokio::test]
+        async fn test_mcp_issue_merge_incomplete_issue() {
+            let (server, _temp) = create_test_mcp_server().await;
+
+            // Create an issue but don't mark it as complete
+            let create_request = CreateIssueRequest {
+                name: IssueName::new("incomplete_merge_test".to_string()).unwrap(),
+                content: "Test merge of incomplete issue".to_string(),
+            };
+            let create_result = server.handle_issue_create(create_request).await.unwrap();
+            let issue_number = extract_issue_number_from_response(&create_result);
+
+            // Try to merge incomplete issue - should fail
+            let merge_request = MergeIssueRequest {
+                number: IssueNumber(issue_number),
+                delete_branch: false,
+            };
+
+            let merge_result = server.handle_issue_merge(merge_request).await.unwrap();
+            
+            // Should fail because issue is not completed
+            assert!(merge_result.is_error.unwrap_or(false));
+
+            // Verify error message mentions issue is not completed
+            if let RawContent::Text(text) = &merge_result.content[0].raw {
+                assert!(text.text.contains("not completed"));
+            } else {
+                panic!("Expected text response");
+            }
+        }
+
+        #[tokio::test]
+        async fn test_mcp_issue_merge_non_existent_issue() {
+            let (server, _temp) = create_test_mcp_server().await;
+
+            // Try to merge non-existent issue
+            let merge_request = MergeIssueRequest {
+                number: IssueNumber(99999),
+                delete_branch: false,
+            };
+
+            let merge_result = server.handle_issue_merge(merge_request).await.unwrap();
+            
+            // Should fail because issue doesn't exist
+            assert!(merge_result.is_error.unwrap_or(false));
+
+            // Verify error message mentions issue not found
+            if let RawContent::Text(text) = &merge_result.content[0].raw {
+                assert!(text.text.contains("not found"));
+            } else {
+                panic!("Expected text response");
+            }
+        }
+
+        #[tokio::test]
+        async fn test_mcp_issue_merge_no_branch() {
+            let (server, _temp) = create_test_mcp_server().await;
+
+            // Create and complete an issue but don't create a branch
+            let create_request = CreateIssueRequest {
+                name: IssueName::new("no_branch_test".to_string()).unwrap(),
+                content: "Test merge with no branch".to_string(),
+            };
+            let create_result = server.handle_issue_create(create_request).await.unwrap();
+            let issue_number = extract_issue_number_from_response(&create_result);
+
+            // Mark issue as complete
+            let complete_request = MarkCompleteRequest {
+                number: IssueNumber(issue_number),
+            };
+            server.handle_issue_mark_complete(complete_request).await.unwrap();
+
+            // Try to merge without creating a branch - should fail
+            let merge_request = MergeIssueRequest {
+                number: IssueNumber(issue_number),
+                delete_branch: false,
+            };
+
+            let merge_result = server.handle_issue_merge(merge_request).await.unwrap();
+            
+            // Should fail because branch doesn't exist
+            assert!(merge_result.is_error.unwrap_or(false));
+
+            // Verify error message mentions branch not found
+            if let RawContent::Text(text) = &merge_result.content[0].raw {
+                assert!(text.text.contains("does not exist"));
+            } else {
+                panic!("Expected text response");
+            }
+        }
+
+        #[tokio::test]
+        async fn test_mcp_issue_merge_with_branch_deletion() {
+            let (server, _temp) = create_test_mcp_server().await;
+
+            // Create an issue
+            let create_request = CreateIssueRequest {
+                name: IssueName::new("delete_branch_test".to_string()).unwrap(),
+                content: "Test merge with branch deletion".to_string(),
+            };
+            let create_result = server.handle_issue_create(create_request).await.unwrap();
+            let issue_number = extract_issue_number_from_response(&create_result);
+
+            // Commit the issue file to keep git clean
+            commit_changes(_temp.path()).await;
+
+            // Work on the issue to create a branch
+            let work_request = WorkIssueRequest {
+                number: IssueNumber(issue_number),
+            };
+            server.handle_issue_work(work_request).await.unwrap();
+
+            // Make a dummy commit on the issue branch
+            fs::write(_temp.path().join("test_file.txt"), "test content").unwrap();
+            Command::new("git")
+                .args(["add", "test_file.txt"])
+                .current_dir(_temp.path())
+                .output()
+                .expect("Failed to add file");
+
+            Command::new("git")
+                .args(["commit", "-m", "Test commit"])
+                .current_dir(_temp.path())
+                .output()
+                .expect("Failed to commit");
+
+            // Mark issue as complete
+            let complete_request = MarkCompleteRequest {
+                number: IssueNumber(issue_number),
+            };
+            server.handle_issue_mark_complete(complete_request).await.unwrap();
+            
+            // Commit the issue completion
+            commit_changes(_temp.path()).await;
+
+            // Test merge with branch deletion
+            let merge_request = MergeIssueRequest {
+                number: IssueNumber(issue_number),
+                delete_branch: true,
+            };
+
+            let merge_result = server.handle_issue_merge(merge_request).await.unwrap();
+            assert!(!merge_result.is_error.unwrap_or(false));
+
+            // Verify merge response mentions branch deletion
+            if let RawContent::Text(text) = &merge_result.content[0].raw {
+                assert!(text.text.contains("Successfully merged"));
+                assert!(text.text.contains("Branch deleted: Yes"));
+            } else {
+                panic!("Expected text response");
+            }
+        }
+
+        #[tokio::test]
+        async fn test_mcp_issue_merge_project_statistics() {
+            let (server, _temp) = create_test_mcp_server().await;
+
+            // Create and complete multiple issues
+            let mut issue_numbers = Vec::new();
+            for i in 0..3 {
+                let create_request = CreateIssueRequest {
+                    name: IssueName::new(format!("stats_test_{}", i)).unwrap(),
+                    content: format!("Test issue {}", i),
+                };
+                let create_result = server.handle_issue_create(create_request).await.unwrap();
+                let issue_number = extract_issue_number_from_response(&create_result);
+                issue_numbers.push(issue_number);
+            }
+
+            // Complete all issues except the first one
+            for &issue_number in &issue_numbers[1..] {
+                let complete_request = MarkCompleteRequest {
+                    number: IssueNumber(issue_number),
+                };
+                server.handle_issue_mark_complete(complete_request).await.unwrap();
+            }
+            
+            // Commit issue completions
+            commit_changes(_temp.path()).await;
+
+            // Work on the first issue
+            let work_request = WorkIssueRequest {
+                number: IssueNumber(issue_numbers[0]),
+            };
+            server.handle_issue_work(work_request).await.unwrap();
+
+            // Make a dummy commit
+            fs::write(_temp.path().join("test_file.txt"), "test content").unwrap();
+            Command::new("git")
+                .args(["add", "test_file.txt"])
+                .current_dir(_temp.path())
+                .output()
+                .expect("Failed to add file");
+
+            Command::new("git")
+                .args(["commit", "-m", "Test commit"])
+                .current_dir(_temp.path())
+                .output()
+                .expect("Failed to commit");
+
+            // Now complete the first issue
+            let complete_request = MarkCompleteRequest {
+                number: IssueNumber(issue_numbers[0]),
+            };
+            server.handle_issue_mark_complete(complete_request).await.unwrap();
+            
+            // Commit the issue completion
+            commit_changes(_temp.path()).await;
+
+            // Test merge - should include project statistics
+            let merge_request = MergeIssueRequest {
+                number: IssueNumber(issue_numbers[0]),
+                delete_branch: false,
+            };
+
+            let merge_result = server.handle_issue_merge(merge_request).await.unwrap();
+            assert!(!merge_result.is_error.unwrap_or(false));
+
+            // Verify merge response includes project statistics
+            if let RawContent::Text(text) = &merge_result.content[0].raw {
+                assert!(text.text.contains("Successfully merged"));
+                assert!(text.text.contains("Project Status"));
+                assert!(text.text.contains("Total issues"));
+                assert!(text.text.contains("Completed"));
+                assert!(text.text.contains("Active"));
             } else {
                 panic!("Expected text response");
             }

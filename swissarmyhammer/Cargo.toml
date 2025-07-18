@@ -88,3 +88,8 @@ path = "src/lib.rs"
 name = "benchmarks"
 harness = false
 path = "../benches/benchmarks.rs"
+
+[[bench]]
+name = "issue_performance"
+harness = false
+path = "../benches/issue_performance.rs"

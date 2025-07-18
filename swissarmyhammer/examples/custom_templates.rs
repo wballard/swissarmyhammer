@@ -23,7 +23,7 @@ Size: {{ content | size }}
     args.insert("content".to_string(), "Line 1\nLine 2\nLine 3".to_string());
 
     let result = engine.render(template1, &args)?;
-    println!("Filters example:\n{}", result);
+    println!("Filters example:\n{result}");
 
     // Example 3: Complex template with conditionals and loops
     let _template3 = r#"
@@ -129,7 +129,7 @@ Fixes: {{ issues }}
     args.insert("issues".to_string(), "#123, #456".to_string());
 
     let commit_msg = prompt.render(&args)?;
-    println!("\nGenerated commit message:\n{}", commit_msg);
+    println!("\nGenerated commit message:\n{commit_msg}");
 
     Ok(())
 }

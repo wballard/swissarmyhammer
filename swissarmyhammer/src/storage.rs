@@ -317,7 +317,7 @@ mod tests {
 
     fn create_test_prompt(name: &str, template: &str) -> Prompt {
         Prompt::new(name, template)
-            .with_description(format!("Description for {}", name))
+            .with_description(format!("Description for {name}"))
             .with_category("test")
             .with_tags(vec!["test".to_string(), name.to_string()])
     }

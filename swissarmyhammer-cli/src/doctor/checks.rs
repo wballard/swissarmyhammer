@@ -81,8 +81,7 @@ pub fn check_installation(checks: &mut Vec<Check>) -> Result<()> {
         name: check_names::INSTALLATION_METHOD.to_string(),
         status: CheckStatus::Ok,
         message: format!(
-            "{} (v{}, {}) at {}",
-            installation_method, version, build_info, exe_path
+            "{installation_method} (v{version}, {build_info}) at {exe_path}"
         ),
         fix: None,
     });
@@ -107,7 +106,7 @@ pub fn check_installation(checks: &mut Vec<Check>) -> Result<()> {
                     name: check_names::BINARY_PERMISSIONS.to_string(),
                     status: CheckStatus::Error,
                     message: "Binary is not executable".to_string(),
-                    fix: Some(format!("Run: chmod +x {}", exe_path)),
+                    fix: Some(format!("Run: chmod +x {exe_path}")),
                 });
             }
         }
@@ -123,14 +122,14 @@ pub fn check_installation(checks: &mut Vec<Check>) -> Result<()> {
         checks.push(Check {
             name: check_names::BINARY_NAME.to_string(),
             status: CheckStatus::Ok,
-            message: format!("Running as {}", exe_name),
+            message: format!("Running as {exe_name}"),
             fix: None,
         });
     } else {
         checks.push(Check {
             name: check_names::BINARY_NAME.to_string(),
             status: CheckStatus::Warning,
-            message: format!("Unexpected binary name: {}", exe_name),
+            message: format!("Unexpected binary name: {exe_name}"),
             fix: Some("Consider renaming binary to 'swissarmyhammer'".to_string()),
         });
     }
@@ -314,7 +313,7 @@ pub fn check_prompt_directories(checks: &mut Vec<Check>) -> Result<()> {
             checks.push(Check {
                 name: check_names::USER_PROMPTS_DIR.to_string(),
                 status: CheckStatus::Ok,
-                message: format!("Found {} prompts in {:?}", count, user_prompts),
+                message: format!("Found {count} prompts in {user_prompts:?}"),
                 fix: None,
             });
         } else {
@@ -325,7 +324,7 @@ pub fn check_prompt_directories(checks: &mut Vec<Check>) -> Result<()> {
                     "{} directory not found (optional): {:?}",
                     "User prompts", user_prompts
                 ),
-                fix: Some(format!("Create directory: mkdir -p {:?}", user_prompts)),
+                fix: Some(format!("Create directory: mkdir -p {user_prompts:?}")),
             });
         }
     }
@@ -337,7 +336,7 @@ pub fn check_prompt_directories(checks: &mut Vec<Check>) -> Result<()> {
         checks.push(Check {
             name: check_names::LOCAL_PROMPTS_DIR.to_string(),
             status: CheckStatus::Ok,
-            message: format!("Found {} prompts in {:?}", count, local_prompts),
+            message: format!("Found {count} prompts in {local_prompts:?}"),
             fix: None,
         });
     } else {
@@ -348,7 +347,7 @@ pub fn check_prompt_directories(checks: &mut Vec<Check>) -> Result<()> {
                 "{} directory not found (optional): {:?}",
                 "Local prompts", local_prompts
             ),
-            fix: Some(format!("Create directory: mkdir -p {:?}", local_prompts)),
+            fix: Some(format!("Create directory: mkdir -p {local_prompts:?}")),
         });
     }
 
@@ -398,7 +397,7 @@ pub fn check_yaml_parsing(checks: &mut Vec<Check>) -> Result<()> {
                 Err(e) => {
                     yaml_errors.push((
                         entry.path().to_path_buf(),
-                        format!("Failed to read file: {}", e),
+                        format!("Failed to read file: {e}"),
                     ));
                 }
             }
@@ -418,7 +417,7 @@ pub fn check_yaml_parsing(checks: &mut Vec<Check>) -> Result<()> {
                 name: format!("YAML parsing: {:?}", path.file_name().unwrap_or_default()),
                 status: CheckStatus::Error,
                 message: error,
-                fix: Some(format!("Fix the YAML syntax in {:?}", path)),
+                fix: Some(format!("Fix the YAML syntax in {path:?}")),
             });
         }
     }
@@ -437,7 +436,7 @@ pub fn check_file_permissions(checks: &mut Vec<Check>) -> Result<()> {
             checks.push(Check {
                 name: check_names::FILE_PERMISSIONS.to_string(),
                 status: CheckStatus::Ok,
-                message: format!("Can read current directory: {:?}", cwd),
+                message: format!("Can read current directory: {cwd:?}"),
                 fix: None,
             });
         }
@@ -445,7 +444,7 @@ pub fn check_file_permissions(checks: &mut Vec<Check>) -> Result<()> {
             checks.push(Check {
                 name: check_names::FILE_PERMISSIONS.to_string(),
                 status: CheckStatus::Error,
-                message: format!("Failed to read current directory: {}", e),
+                message: format!("Failed to read current directory: {e}"),
                 fix: Some("Check file permissions for the current directory".to_string()),
             });
         }
@@ -491,15 +490,15 @@ pub fn check_workflow_directories(checks: &mut Vec<Check>) -> Result<()> {
             checks.push(Check {
                 name: "Workflow run storage directory".to_string(),
                 status: CheckStatus::Ok,
-                message: format!("Run storage directory exists: {:?}", run_storage),
+                message: format!("Run storage directory exists: {run_storage:?}"),
                 fix: None,
             });
         } else {
             checks.push(Check {
                 name: "Workflow run storage directory".to_string(),
                 status: CheckStatus::Warning,
-                message: format!("Run storage directory not found: {:?}", run_storage),
-                fix: Some(format!("Create directory: mkdir -p {:?}", run_storage)),
+                message: format!("Run storage directory not found: {run_storage:?}"),
+                fix: Some(format!("Create directory: mkdir -p {run_storage:?}")),
             });
         }
     }
@@ -561,7 +560,7 @@ pub fn check_workflow_permissions(checks: &mut Vec<Check>) -> Result<()> {
                             "Directory permissions may be insufficient: {:o}",
                             mode & 0o777
                         ),
-                        fix: Some(format!("Run: chmod 755 {:?}", dir)),
+                        fix: Some(format!("Run: chmod 755 {dir:?}")),
                     });
                 }
             } else {
@@ -627,7 +626,7 @@ pub fn check_workflow_parsing(checks: &mut Vec<Check>) -> Result<()> {
         {
             // Validate path before reading
             if let Err(e) = validate_path_no_traversal(entry.path()) {
-                workflow_errors.push((entry.path().to_path_buf(), format!("Invalid path: {}", e)));
+                workflow_errors.push((entry.path().to_path_buf(), format!("Invalid path: {e}")));
                 continue;
             }
 
@@ -644,7 +643,7 @@ pub fn check_workflow_parsing(checks: &mut Vec<Check>) -> Result<()> {
                 Err(e) => {
                     workflow_errors.push((
                         entry.path().to_path_buf(),
-                        format!("Failed to read workflow file: {}", e),
+                        format!("Failed to read workflow file: {e}"),
                     ));
                 }
             }
@@ -667,7 +666,7 @@ pub fn check_workflow_parsing(checks: &mut Vec<Check>) -> Result<()> {
                 ),
                 status: CheckStatus::Error,
                 message: error,
-                fix: Some(format!("Fix or remove the workflow file: {:?}", path)),
+                fix: Some(format!("Fix or remove the workflow file: {path:?}")),
             });
         }
     }
@@ -693,7 +692,7 @@ pub fn check_workflow_run_storage(checks: &mut Vec<Check>) -> Result<()> {
                 name: check_names::WORKFLOW_RUN_STORAGE_ACCESS.to_string(),
                 status: CheckStatus::Warning,
                 message: "Run storage directory does not exist".to_string(),
-                fix: Some(format!("Create directory: mkdir -p {:?}", run_storage)),
+                fix: Some(format!("Create directory: mkdir -p {run_storage:?}")),
             });
         }
     }
@@ -721,8 +720,8 @@ fn check_run_storage_write_access(checks: &mut Vec<Check>, run_storage: &Path) -
             checks.push(Check {
                 name: check_names::WORKFLOW_RUN_STORAGE_ACCESS.to_string(),
                 status: CheckStatus::Error,
-                message: format!("Run storage is not writable: {}", e),
-                fix: Some(format!("Check permissions on {:?}", run_storage)),
+                message: format!("Run storage is not writable: {e}"),
+                fix: Some(format!("Check permissions on {run_storage:?}")),
             });
         }
     }
@@ -738,7 +737,7 @@ fn check_run_storage_disk_space(checks: &mut Vec<Check>, run_storage: &Path) -> 
                 checks.push(Check {
                     name: check_names::WORKFLOW_RUN_STORAGE_SPACE.to_string(),
                     status: CheckStatus::Warning,
-                    message: format!("Low disk space: {}", available),
+                    message: format!("Low disk space: {available}"),
                     fix: Some(
                         "Consider cleaning up old workflow runs or freeing disk space".to_string(),
                     ),
@@ -747,7 +746,7 @@ fn check_run_storage_disk_space(checks: &mut Vec<Check>, run_storage: &Path) -> 
                 checks.push(Check {
                     name: check_names::WORKFLOW_RUN_STORAGE_SPACE.to_string(),
                     status: CheckStatus::Ok,
-                    message: format!("Adequate disk space: {}", available),
+                    message: format!("Adequate disk space: {available}"),
                     fix: None,
                 });
             }
@@ -756,7 +755,7 @@ fn check_run_storage_disk_space(checks: &mut Vec<Check>, run_storage: &Path) -> 
             checks.push(Check {
                 name: check_names::WORKFLOW_RUN_STORAGE_SPACE.to_string(),
                 status: CheckStatus::Warning,
-                message: format!("Failed to check disk space: {}", e),
+                message: format!("Failed to check disk space: {e}"),
                 fix: None,
             });
         }
@@ -818,16 +817,15 @@ fn check_name_conflicts(
             has_conflicts = true;
             let locations = paths
                 .iter()
-                .map(|p| format!("{:?}", p))
+                .map(|p| format!("{p:?}"))
                 .collect::<Vec<_>>()
                 .join(", ");
 
             checks.push(Check {
-                name: format!("Workflow name conflict: {}", name),
+                name: format!("Workflow name conflict: {name}"),
                 status: CheckStatus::Warning,
                 message: format!(
-                    "Workflow '{}' exists in multiple locations: {}",
-                    name, locations
+                    "Workflow '{name}' exists in multiple locations: {locations}"
                 ),
                 fix: Some("Rename or remove duplicate workflows to avoid conflicts".to_string()),
             });

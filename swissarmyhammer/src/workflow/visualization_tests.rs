@@ -266,8 +266,8 @@ mod tests {
         let mut execution_path = Vec::new();
         for i in 0..MAX_EXECUTION_STEPS + 1 {
             execution_path.push(ExecutionStep {
-                state_id: StateId::new(format!("state_{}", i)),
-                state_description: format!("State {}", i),
+                state_id: StateId::new(format!("state_{i}")),
+                state_description: format!("State {i}"),
                 duration: Some(Duration::from_millis(100)),
                 timestamp: Utc::now(),
                 success: true,
@@ -291,7 +291,7 @@ mod tests {
 
         // Check that DoS protection is triggered
         assert!(html.contains("Error: Execution trace too large"));
-        assert!(html.contains(&format!("maximum allowed is {}", MAX_EXECUTION_STEPS)));
+        assert!(html.contains(&format!("maximum allowed is {MAX_EXECUTION_STEPS}")));
     }
 
     #[test]

@@ -24,13 +24,13 @@ fn test_partials_with_liquid_extension() {
     let args = HashMap::new();
     match library.render_prompt("do_next_issue", &args) {
         Ok(result) => {
-            println!("Success:\n{}", result);
+            println!("Success:\n{result}");
             assert!(result.contains("Principals"));
             assert!(result.contains("Don't hold back"));
         }
         Err(e) => {
-            println!("Error: {}", e);
-            panic!("Failed to render prompt with partial: {}", e);
+            println!("Error: {e}");
+            panic!("Failed to render prompt with partial: {e}");
         }
     }
 }
@@ -58,13 +58,13 @@ fn test_partials_without_extension() {
     let args = HashMap::new();
     match library.render_prompt("do_next_issue", &args) {
         Ok(result) => {
-            println!("Success:\n{}", result);
+            println!("Success:\n{result}");
             assert!(result.contains("Principals"));
             assert!(result.contains("Don't hold back"));
         }
         Err(e) => {
-            println!("Error: {}", e);
-            panic!("Failed to render prompt with partial: {}", e);
+            println!("Error: {e}");
+            panic!("Failed to render prompt with partial: {e}");
         }
     }
 }

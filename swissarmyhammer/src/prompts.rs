@@ -1354,10 +1354,9 @@ mod tests {
             let path = std::path::Path::new(filename);
             let result = loader.extract_prompt_name(path);
             println!(
-                "File: {} -> Name: {} (expected: {})",
-                filename, result, expected
+                "File: {filename} -> Name: {result} (expected: {expected})"
             );
-            assert_eq!(result, expected, "Failed for {}", filename);
+            assert_eq!(result, expected, "Failed for {filename}");
         }
     }
 

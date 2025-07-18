@@ -335,7 +335,7 @@ This prompt was added while the server was running"#;
             let response = handle.await??;
             assert!(response.get("messages").is_some());
             let text = &response["messages"][0]["content"]["text"];
-            assert!(text.as_str().unwrap().contains(&format!("User{}", i)));
+            assert!(text.as_str().unwrap().contains(&format!("User{i}")));
         }
 
         client.stop_server().await?;

@@ -1949,9 +1949,7 @@ impl ServerHandler for McpServer {
                 let req: CreateIssueRequest = serde_json::from_value(serde_json::Value::Object(
                     request.arguments.clone().unwrap_or_default(),
                 ))
-                .map_err(|e| {
-                    McpError::invalid_request(format!("Invalid arguments: {e}"), None)
-                })?;
+                .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
                 self.handle_issue_create(req).await
             }
 
@@ -1959,9 +1957,7 @@ impl ServerHandler for McpServer {
                 let req: MarkCompleteRequest = serde_json::from_value(serde_json::Value::Object(
                     request.arguments.clone().unwrap_or_default(),
                 ))
-                .map_err(|e| {
-                    McpError::invalid_request(format!("Invalid arguments: {e}"), None)
-                })?;
+                .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
                 self.handle_issue_mark_complete(req).await
             }
 
@@ -1969,9 +1965,7 @@ impl ServerHandler for McpServer {
                 let req: AllCompleteRequest = serde_json::from_value(serde_json::Value::Object(
                     request.arguments.clone().unwrap_or_default(),
                 ))
-                .map_err(|e| {
-                    McpError::invalid_request(format!("Invalid arguments: {e}"), None)
-                })?;
+                .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
                 self.handle_issue_all_complete(req).await
             }
 
@@ -1979,9 +1973,7 @@ impl ServerHandler for McpServer {
                 let req: UpdateIssueRequest = serde_json::from_value(serde_json::Value::Object(
                     request.arguments.clone().unwrap_or_default(),
                 ))
-                .map_err(|e| {
-                    McpError::invalid_request(format!("Invalid arguments: {e}"), None)
-                })?;
+                .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
                 self.handle_issue_update(req).await
             }
 
@@ -1989,9 +1981,7 @@ impl ServerHandler for McpServer {
                 let req: CurrentIssueRequest = serde_json::from_value(serde_json::Value::Object(
                     request.arguments.clone().unwrap_or_default(),
                 ))
-                .map_err(|e| {
-                    McpError::invalid_request(format!("Invalid arguments: {e}"), None)
-                })?;
+                .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
                 self.handle_issue_current(req).await
             }
 
@@ -1999,9 +1989,7 @@ impl ServerHandler for McpServer {
                 let req: WorkIssueRequest = serde_json::from_value(serde_json::Value::Object(
                     request.arguments.clone().unwrap_or_default(),
                 ))
-                .map_err(|e| {
-                    McpError::invalid_request(format!("Invalid arguments: {e}"), None)
-                })?;
+                .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
                 self.handle_issue_work(req).await
             }
 
@@ -2009,9 +1997,7 @@ impl ServerHandler for McpServer {
                 let req: MergeIssueRequest = serde_json::from_value(serde_json::Value::Object(
                     request.arguments.clone().unwrap_or_default(),
                 ))
-                .map_err(|e| {
-                    McpError::invalid_request(format!("Invalid arguments: {e}"), None)
-                })?;
+                .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
                 self.handle_issue_merge(req).await
             }
 
@@ -2206,7 +2192,7 @@ mod tests {
         // This test verifies the API consistency
         println!("PromptResolver found {} directories", resolver_dirs.len());
         for dir in resolver_dirs {
-            println!("  - {:?}", dir);
+            println!("  - {dir:?}");
         }
     }
 
@@ -2230,13 +2216,12 @@ mod tests {
         assert!(result.is_err(), "Should return error for missing prompt");
 
         let error_msg = result.unwrap_err().to_string();
-        println!("Error for missing prompt: {}", error_msg);
+        println!("Error for missing prompt: {error_msg}");
 
         // Should contain helpful message about prompt not being available
         assert!(
             error_msg.contains("not available") || error_msg.contains("not found"),
-            "Error should mention prompt issue: {}",
-            error_msg
+            "Error should mention prompt issue: {error_msg}"
         );
     }
 
@@ -2469,8 +2454,7 @@ mod tests {
         let error = result.unwrap_err();
         assert!(
             error.to_string().contains("Issue name cannot be empty"),
-            "Error should mention empty name: {}",
-            error
+            "Error should mention empty name: {error}"
         );
     }
 
@@ -2494,8 +2478,7 @@ mod tests {
         let error = result.unwrap_err();
         assert!(
             error.to_string().contains("Issue name cannot be empty"),
-            "Error should mention empty name: {}",
-            error
+            "Error should mention empty name: {error}"
         );
     }
 
@@ -2517,8 +2500,7 @@ mod tests {
         let error = result.unwrap_err();
         assert!(
             error.to_string().contains("too long"),
-            "Error should mention name too long: {}",
-            error
+            "Error should mention name too long: {error}"
         );
     }
 
@@ -2548,16 +2530,13 @@ mod tests {
             let result = server.handle_issue_create(request).await;
             assert!(
                 result.is_err(),
-                "Invalid name '{}' should fail validation",
-                invalid_name
+                "Invalid name '{invalid_name}' should fail validation"
             );
 
             let error = result.unwrap_err();
             assert!(
                 error.to_string().contains("invalid characters"),
-                "Error should mention invalid characters for '{}': {}",
-                invalid_name,
-                error
+                "Error should mention invalid characters for '{invalid_name}': {error}"
             );
         }
     }
@@ -2622,9 +2601,7 @@ mod tests {
         // Verify the second issue has a higher number than the first
         assert!(
             second_issue_number > first_issue_number,
-            "Second issue number ({}) should be greater than first issue number ({})",
-            second_issue_number,
-            first_issue_number
+            "Second issue number ({second_issue_number}) should be greater than first issue number ({first_issue_number})"
         );
     }
 
@@ -2646,8 +2623,7 @@ mod tests {
             let result = validate_issue_name(name);
             assert!(
                 result.is_ok(),
-                "Valid name '{}' should pass validation",
-                name
+                "Valid name '{name}' should pass validation"
             );
             assert_eq!(result.unwrap(), name.trim());
         }
@@ -2679,9 +2655,7 @@ mod tests {
             let result = validate_issue_name(name);
             assert!(
                 result.is_err(),
-                "Invalid name '{}' should fail validation ({})",
-                name,
-                reason
+                "Invalid name '{name}' should fail validation ({reason})"
             );
         }
 
@@ -2705,8 +2679,7 @@ mod tests {
             let result = validate_issue_name(input);
             assert!(
                 result.is_ok(),
-                "Name with whitespace '{}' should be valid",
-                input
+                "Name with whitespace '{input}' should be valid"
             );
             assert_eq!(result.unwrap(), expected);
         }
@@ -3291,7 +3264,7 @@ mod tests {
 
             let branches_output = String::from_utf8_lossy(&git_branches.stdout);
             assert!(branches_output
-                .contains(&format!("issue/{:06}_git_integration_test", issue_number)));
+                .contains(&format!("issue/{issue_number:06}_git_integration_test")));
 
             // Test 3: Update the issue content
             let update_request = UpdateIssueRequest {
@@ -3414,7 +3387,7 @@ mod tests {
                     .expect("Failed to add issues to git");
 
                 Command::new("git")
-                    .args(["commit", "-m", &format!("Add issue {}", name)])
+                    .args(["commit", "-m", &format!("Add issue {name}")])
                     .current_dir(temp_path)
                     .output()
                     .expect("Failed to commit issue");
@@ -3968,8 +3941,8 @@ mod tests {
             let mut issue_numbers = Vec::new();
             for i in 0..3 {
                 let create_request = CreateIssueRequest {
-                    name: IssueName::new(format!("stats_test_{}", i)).unwrap(),
-                    content: format!("Test issue {}", i),
+                    name: IssueName::new(format!("stats_test_{i}")).unwrap(),
+                    content: format!("Test issue {i}"),
                 };
                 let create_result = server.handle_issue_create(create_request).await.unwrap();
                 let issue_number = extract_issue_number_from_response(&create_result);

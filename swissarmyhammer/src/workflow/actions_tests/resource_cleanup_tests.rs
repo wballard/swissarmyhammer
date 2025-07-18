@@ -191,8 +191,8 @@ async fn test_action_context_cleanup_on_panic() {
 
     // Note: In this case, changes might persist unless we implement
     // transactional context updates. This test documents current behavior.
-    println!("Initial keys: {:?}", initial_keys);
-    println!("Final keys: {:?}", final_keys);
+    println!("Initial keys: {initial_keys:?}");
+    println!("Final keys: {final_keys:?}");
 }
 
 #[tokio::test]
@@ -221,7 +221,7 @@ async fn test_log_action_file_handle_cleanup() {
     let num_iterations = 100;
 
     for i in 0..num_iterations {
-        let action = LogAction::info(format!("Log message {}", i));
+        let action = LogAction::info(format!("Log message {i}"));
         let mut context = create_test_context();
 
         let result = action.execute(&mut context).await;
@@ -250,7 +250,7 @@ async fn test_semaphore_cleanup_in_rate_limited_actions() {
             tokio::time::sleep(Duration::from_millis(50)).await;
 
             // Permit automatically released when dropped
-            format!("Task {} completed", i)
+            format!("Task {i} completed")
         });
 
         handles.push(handle);

@@ -516,9 +516,7 @@ impl SwissArmyHammerError {
 
     /// Create a parsing error with consistent formatting
     pub fn parsing_failed(what: &str, input: &str, reason: &str) -> Self {
-        SwissArmyHammerError::Other(format!(
-            "Failed to parse {what}: '{input}' - {reason}"
-        ))
+        SwissArmyHammerError::Other(format!("Failed to parse {what}: '{input}' - {reason}"))
     }
 
     /// Create a directory operation error with consistent formatting

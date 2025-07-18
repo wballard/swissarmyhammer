@@ -61,11 +61,11 @@ async fn create_large_prompt_library(temp_dir: &TempDir, count: usize) -> Result
 
     // Create many prompt files
     for i in 0..count {
-        let prompt_file = prompts_dir.join(format!("prompt_{:04}.md", i));
+        let prompt_file = prompts_dir.join(format!("prompt_{i:04}.md"));
         let content = format!(
             r#"---
-name: prompt_{:04}
-description: Performance test prompt {}
+name: prompt_{i:04}
+description: Performance test prompt {i}
 category: performance
 tags: ["test", "performance", "load"]
 arguments:
@@ -80,7 +80,7 @@ arguments:
     description: Third argument
     required: false
 ---
-This is performance test prompt {} with template content.
+This is performance test prompt {i} with template content.
 
 {{{{arg1}}}} is required.
 {{%- if arg2 %}}
@@ -95,8 +95,7 @@ Optional arg3: {{{{arg3}}}}
 Multiple lines to simulate
 a more realistic prompt
 with various content types
-and formatting."#,
-            i, i, i
+and formatting."#
         );
 
         std::fs::write(&prompt_file, content)?;
@@ -121,7 +120,7 @@ mod tests {
         let library = create_large_prompt_library(&temp_dir, 100).await?;
         let duration = start.elapsed();
 
-        println!("Loading 100 prompts took: {:?}", duration);
+        println!("Loading 100 prompts took: {duration:?}");
         assert!(
             duration < Duration::from_secs(2),
             "Loading 100 prompts took too long"
@@ -141,7 +140,7 @@ mod tests {
         let library = create_large_prompt_library(&temp_dir, 500).await?;
         let duration = start.elapsed();
 
-        println!("Loading 500 prompts took: {:?}", duration);
+        println!("Loading 500 prompts took: {duration:?}");
         assert!(
             duration < Duration::from_secs(5),
             "Loading 500 prompts took too long"
@@ -162,7 +161,7 @@ mod tests {
         let library = create_large_prompt_library(&temp_dir, 5000).await?;
         let duration = start.elapsed();
 
-        println!("Loading 5000 prompts took: {:?}", duration);
+        println!("Loading 5000 prompts took: {duration:?}");
         assert!(
             duration < Duration::from_secs(30),
             "Loading 5000 prompts took too long"
@@ -333,7 +332,7 @@ mod tests {
                     // Render operation
                     if let Ok(prompt) = get_result {
                         let mut args = HashMap::new();
-                        args.insert("arg1".to_string(), format!("value_{}", i));
+                        args.insert("arg1".to_string(), format!("value_{i}"));
 
                         let render_start = Instant::now();
                         let render_result = prompt.render(&args);
@@ -359,7 +358,7 @@ mod tests {
         let total_duration = start.elapsed();
 
         println!("Concurrent access performance:");
-        println!("  Total time: {:?}", total_duration);
+        println!("  Total time: {total_duration:?}");
         println!("  Total operations: {}", total_metrics.total_operations);
         println!(
             "  Operations per second: {:.2}",
@@ -389,7 +388,7 @@ mod tests {
         args.insert("arg1".to_string(), "test".to_string());
 
         for i in 0..100 {
-            let prompt_name = format!("prompt_{:04}", i);
+            let prompt_name = format!("prompt_{i:04}");
             let prompt = library.get(&prompt_name)?;
             let _ = prompt.render(&args)?;
         }

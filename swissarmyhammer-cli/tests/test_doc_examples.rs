@@ -147,8 +147,7 @@ fn test_all_doc_example_prompts_are_valid() {
     }
 
     println!(
-        "Successfully validated {} documentation example prompts",
-        tested_files
+        "Successfully validated {tested_files} documentation example prompts"
     );
 }
 
@@ -172,8 +171,7 @@ fn test_doc_examples_directory_structure() {
         let dir_path = doc_examples_dir.join(dir_name);
         assert!(
             dir_path.exists() && dir_path.is_dir(),
-            "Expected examples subdirectory '{}' not found",
-            dir_name
+            "Expected examples subdirectory '{dir_name}' not found"
         );
     }
 }

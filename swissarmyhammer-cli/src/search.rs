@@ -148,11 +148,11 @@ pub fn run_search_command(
     match format {
         OutputFormat::Json => {
             let json = serde_json::to_string_pretty(&results)?;
-            println!("{}", json);
+            println!("{json}");
         }
         OutputFormat::Yaml => {
             let yaml = serde_yaml::to_string(&results)?;
-            print!("{}", yaml);
+            print!("{yaml}");
         }
         OutputFormat::Table => {
             display_table(&results, full)?;
@@ -223,7 +223,7 @@ fn display_table(results: &[SearchResult], full: bool) -> Result<()> {
 
     table.with(Modify::new(Rows::new(1..)).with(Alignment::left()));
 
-    println!("{}", table);
+    println!("{table}");
 
     if is_tty && !results.is_empty() {
         println!();
@@ -245,9 +245,9 @@ pub fn generate_excerpt(content: &str, query: &str, highlight: bool) -> Option<S
 
         if highlight {
             let highlighted = excerpt.replace(query, &format!("{}", query.bright_yellow()));
-            Some(format!("...{}...", highlighted))
+            Some(format!("...{highlighted}..."))
         } else {
-            Some(format!("...{}...", excerpt))
+            Some(format!("...{excerpt}..."))
         }
     } else {
         None

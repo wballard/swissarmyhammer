@@ -591,9 +591,7 @@ impl WorkflowRunStorageBackend for FileSystemWorkflowRunStorage {
 
         let path = self.run_path(id);
         if !path.exists() {
-            return Err(SwissArmyHammerError::WorkflowRunNotFound(format!(
-                "{id:?}"
-            )));
+            return Err(SwissArmyHammerError::WorkflowRunNotFound(format!("{id:?}")));
         }
 
         let content = std::fs::read_to_string(&path)?;
@@ -614,9 +612,7 @@ impl WorkflowRunStorageBackend for FileSystemWorkflowRunStorage {
     fn remove_run(&mut self, id: &WorkflowRunId) -> Result<()> {
         let run_dir = self.run_dir(id);
         if !run_dir.exists() {
-            return Err(SwissArmyHammerError::WorkflowRunNotFound(format!(
-                "{id:?}"
-            )));
+            return Err(SwissArmyHammerError::WorkflowRunNotFound(format!("{id:?}")));
         }
 
         std::fs::remove_dir_all(run_dir)?;
@@ -844,9 +840,7 @@ impl WorkflowStorageBackend for CompressedWorkflowStorage {
             let encoded_data = &stored_workflow.description[16..]; // Skip "COMPRESSED_DATA:"
             let compressed_data = general_purpose::STANDARD
                 .decode(encoded_data)
-                .map_err(|e| {
-                    SwissArmyHammerError::Storage(format!("Base64 decode failed: {e}"))
-                })?;
+                .map_err(|e| SwissArmyHammerError::Storage(format!("Base64 decode failed: {e}")))?;
 
             let json_data = self.decompress_data(&compressed_data)?;
             let workflow: Workflow = serde_json::from_slice(&json_data).map_err(|e| {
@@ -1297,12 +1291,11 @@ stateDiagram-v2
                     // This is OK in CI - builtin workflows are embedded in the binary
                     // and don't require filesystem access
                     println!(
-                        "Warning: Could not load workflows from filesystem in CI: {}",
-                        e
+                        "Warning: Could not load workflows from filesystem in CI: {e}"
                     );
                     return;
                 } else {
-                    panic!("Unexpected error loading workflows: {}", e);
+                    panic!("Unexpected error loading workflows: {e}");
                 }
             }
         }
@@ -1389,7 +1382,7 @@ swissarmyhammer flow run hello-world
                 assert!(workflow.states.contains_key(&StateId::new("Complete")));
             }
             Err(e) => {
-                panic!("Failed to parse hello-world workflow: {:?}", e);
+                panic!("Failed to parse hello-world workflow: {e:?}");
             }
         }
     }

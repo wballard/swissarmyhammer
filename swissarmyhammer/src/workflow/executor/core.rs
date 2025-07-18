@@ -510,9 +510,7 @@ impl WorkflowExecutor {
 
                 self.log_event(
                     ExecutionEventType::StateExecution,
-                    format!(
-                        "Action completed successfully with result: {result_value}"
-                    ),
+                    format!("Action completed successfully with result: {result_value}"),
                 );
                 Ok(())
             }
@@ -618,9 +616,7 @@ impl WorkflowExecutor {
                 format!("Action execution failed: {msg}")
             }
             ActionError::RateLimit { message, wait_time } => {
-                format!(
-                    "Rate limit reached: {message}. Please wait {wait_time:?} before retrying."
-                )
+                format!("Rate limit reached: {message}. Please wait {wait_time:?} before retrying.")
             }
             ActionError::AbortError(msg) => format!("ABORT ERROR: {msg}"),
         }

@@ -34,14 +34,14 @@ async fn test_mcp_server_basic_functionality() {
     std::thread::spawn(move || {
         let stderr_reader = BufReader::new(stderr);
         for line in stderr_reader.lines().map_while(Result::ok) {
-            eprintln!("SERVER: {}", line);
+            eprintln!("SERVER: {line}");
         }
     });
 
     // Helper to send JSON-RPC request
     let send_request = |stdin: &mut std::process::ChildStdin, request: Value| {
         let request_str = serde_json::to_string(&request).unwrap();
-        writeln!(stdin, "{}", request_str).unwrap();
+        writeln!(stdin, "{request_str}").unwrap();
         stdin.flush().unwrap();
     };
 
@@ -136,8 +136,8 @@ async fn test_mcp_server_prompt_loading() {
 
     // Debug: Print paths
     eprintln!("Temp dir: {:?}", temp_dir.path());
-    eprintln!("Prompts dir: {:?}", prompts_dir);
-    eprintln!("Test prompt: {:?}", test_prompt);
+    eprintln!("Prompts dir: {prompts_dir:?}");
+    eprintln!("Test prompt: {test_prompt:?}");
     eprintln!("Test prompt exists: {}", test_prompt.exists());
 
     // Start MCP server with HOME set to temp dir
@@ -159,7 +159,7 @@ async fn test_mcp_server_prompt_loading() {
     std::thread::spawn(move || {
         let stderr_reader = BufReader::new(stderr);
         for line in stderr_reader.lines().map_while(Result::ok) {
-            eprintln!("SERVER: {}", line);
+            eprintln!("SERVER: {line}");
         }
     });
 
@@ -209,7 +209,7 @@ async fn test_mcp_server_prompt_loading() {
     let response: Value = serde_json::from_str(&response_line).unwrap();
 
     // Debug: Print the response to see what's loaded
-    eprintln!("Prompts response: {}", response);
+    eprintln!("Prompts response: {response}");
 
     // Verify our test prompt is loaded
     let prompts = response["result"]["prompts"].as_array().unwrap();
@@ -218,7 +218,7 @@ async fn test_mcp_server_prompt_loading() {
     // Print all prompt names for debugging
     for prompt in prompts {
         if let Some(name) = prompt["name"].as_str() {
-            eprintln!("Prompt name: {}", name);
+            eprintln!("Prompt name: {name}");
         }
     }
 

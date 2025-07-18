@@ -111,14 +111,13 @@ fn test_abort_error_detection_in_response() {
 
     for (response, should_detect, expected_message) in test_cases {
         let is_abort = response.starts_with("ABORT ERROR:");
-        assert_eq!(is_abort, should_detect, "Failed for response: {}", response);
+        assert_eq!(is_abort, should_detect, "Failed for response: {response}");
 
         if should_detect {
             let message = response.trim_start_matches("ABORT ERROR:").trim();
             assert_eq!(
                 message, expected_message,
-                "Failed to extract message from: {}",
-                response
+                "Failed to extract message from: {response}"
             );
         }
     }

@@ -137,8 +137,7 @@ async fn run_workflow_command(config: WorkflowCommandConfig) -> Result<()> {
             );
         } else {
             return Err(SwissArmyHammerError::Other(format!(
-                "Invalid variable format: '{}'. Expected 'key=value' format. Example: --var input=test",
-                var
+                "Invalid variable format: '{var}'. Expected 'key=value' format. Example: --var input=test"
             )));
         }
     }
@@ -154,8 +153,7 @@ async fn run_workflow_command(config: WorkflowCommandConfig) -> Result<()> {
             );
         } else {
             return Err(SwissArmyHammerError::Other(format!(
-                "Invalid set variable format: '{}'. Expected 'key=value' format for liquid template variables. Example: --set author=John",
-                set_var
+                "Invalid set variable format: '{set_var}'. Expected 'key=value' format for liquid template variables. Example: --set author=John"
             )));
         }
     }
@@ -171,9 +169,9 @@ async fn run_workflow_command(config: WorkflowCommandConfig) -> Result<()> {
         println!("🔍 Dry run mode - showing execution plan:");
         println!("📋 Workflow: {}", workflow.name);
         println!("🏁 Initial state: {}", workflow.initial_state);
-        println!("🔧 Variables: {:?}", variables);
+        println!("🔧 Variables: {variables:?}");
         if let Some(timeout) = timeout_duration {
-            println!("⏱️  Timeout: {:?}", timeout);
+            println!("⏱️  Timeout: {timeout:?}");
         }
         println!("📊 States: {}", workflow.states.len());
         println!("🔄 Transitions: {}", workflow.transitions.len());
@@ -196,9 +194,9 @@ async fn run_workflow_command(config: WorkflowCommandConfig) -> Result<()> {
         println!("🧪 Test mode - executing workflow with mocked actions:");
         println!("📋 Workflow: {}", workflow.name);
         println!("🏁 Initial state: {}", workflow.initial_state);
-        println!("🔧 Variables: {:?}", variables);
+        println!("🔧 Variables: {variables:?}");
         if let Some(timeout) = timeout_duration {
-            println!("⏱️  Timeout: {:?}", timeout);
+            println!("⏱️  Timeout: {timeout:?}");
         }
 
         // Execute in test mode with coverage tracking
@@ -241,7 +239,7 @@ async fn run_workflow_command(config: WorkflowCommandConfig) -> Result<()> {
         if !coverage.unvisited_states.is_empty() {
             println!("\n❌ Unvisited states:");
             for state in &coverage.unvisited_states {
-                println!("  - {}", state);
+                println!("  - {state}");
             }
         }
 
@@ -249,7 +247,7 @@ async fn run_workflow_command(config: WorkflowCommandConfig) -> Result<()> {
         if !coverage.unvisited_transitions.is_empty() {
             println!("\n❌ Unvisited transitions:");
             for transition in &coverage.unvisited_transitions {
-                println!("  - {}", transition);
+                println!("  - {transition}");
             }
         }
 
@@ -524,12 +522,12 @@ async fn list_workflows_command(
         OutputFormat::Json => {
             let workflows: Vec<_> = workflow_infos.into_iter().map(|(w, _)| w).collect();
             let json_output = serde_json::to_string_pretty(&workflows)?;
-            println!("{}", json_output);
+            println!("{json_output}");
         }
         OutputFormat::Yaml => {
             let workflows: Vec<_> = workflow_infos.into_iter().map(|(w, _)| w).collect();
             let yaml_output = serde_yaml::to_string(&workflows)?;
-            println!("{}", yaml_output);
+            println!("{yaml_output}");
         }
     }
 
@@ -599,16 +597,16 @@ fn display_workflows_to_writer<W: Write>(
                     title.magenta().to_string(),
                 ),
             };
-            format!("{} | {}", name_colored, title_colored)
+            format!("{name_colored} | {title_colored}")
         } else {
-            format!("{} | {}", name, title)
+            format!("{name} | {title}")
         };
 
-        writeln!(writer, "{}", first_line)?;
+        writeln!(writer, "{first_line}")?;
 
         // Second line: Full description (indented)
         if !description.is_empty() {
-            writeln!(writer, "  {}", description)?;
+            writeln!(writer, "  {description}")?;
         } else {
             writeln!(writer, "  (no description)")?;
         }
@@ -707,8 +705,7 @@ async fn logs_workflow_command(
 
     if follow {
         println!(
-            "📄 Following logs for run {} (Press Ctrl+C to stop)...",
-            run_id
+            "📄 Following logs for run {run_id} (Press Ctrl+C to stop)..."
         );
 
         loop {
@@ -813,11 +810,11 @@ fn print_run_status(
         }
         OutputFormat::Json => {
             let json_output = serde_json::to_string_pretty(&run)?;
-            println!("{}", json_output);
+            println!("{json_output}");
         }
         OutputFormat::Yaml => {
             let yaml_output = serde_yaml::to_string(&run)?;
-            println!("{}", yaml_output);
+            println!("{yaml_output}");
         }
     }
 
@@ -865,7 +862,7 @@ fn print_run_logs(
     if !run.context.is_empty() {
         println!("\n🔧 Current Variables:");
         for (key, value) in &run.context {
-            println!("  {} = {}", key, value);
+            println!("  {key} = {value}");
         }
     }
 
@@ -893,8 +890,7 @@ fn parse_duration(s: &str) -> Result<Duration> {
 
     let value: u64 = value_str.parse().map_err(|_| {
         SwissArmyHammerError::Other(format!(
-            "Invalid duration value: '{}'. Expected a positive number",
-            value_str
+            "Invalid duration value: '{value_str}'. Expected a positive number"
         ))
     })?;
 
@@ -904,8 +900,7 @@ fn parse_duration(s: &str) -> Result<Duration> {
         "h" => Duration::from_secs(value * 3600),
         _ => {
             return Err(SwissArmyHammerError::Other(format!(
-                "Invalid duration unit: '{}'. Supported units: s (seconds), m (minutes), h (hours)",
-                unit
+                "Invalid duration unit: '{unit}'. Supported units: s (seconds), m (minutes), h (hours)"
             )))
         }
     };
@@ -916,7 +911,7 @@ fn parse_duration(s: &str) -> Result<Duration> {
 /// Helper to parse WorkflowRunId from string
 fn parse_workflow_run_id(s: &str) -> Result<WorkflowRunId> {
     WorkflowRunId::parse(s)
-        .map_err(|e| SwissArmyHammerError::Other(format!("Invalid workflow run ID '{}': {}", s, e)))
+        .map_err(|e| SwissArmyHammerError::Other(format!("Invalid workflow run ID '{s}': {e}")))
 }
 
 /// Helper to convert WorkflowRunId to string
@@ -958,11 +953,11 @@ async fn metrics_workflow_command(
             }
             OutputFormat::Json => {
                 let json_output = serde_json::to_string_pretty(&global_metrics)?;
-                println!("{}", json_output);
+                println!("{json_output}");
             }
             OutputFormat::Yaml => {
                 let yaml_output = serde_yaml::to_string(&global_metrics)?;
-                println!("{}", yaml_output);
+                println!("{yaml_output}");
             }
         }
     } else if let Some(run_id_str) = run_id {
@@ -972,7 +967,7 @@ async fn metrics_workflow_command(
         if let Some(run_metrics) = metrics.get_run_metrics(&run_id_typed) {
             match format {
                 OutputFormat::Table => {
-                    println!("📊 Run Metrics: {}", run_id_str);
+                    println!("📊 Run Metrics: {run_id_str}");
                     println!("Workflow: {}", run_metrics.workflow_name);
                     println!("Status: {:?}", run_metrics.status);
                     println!(
@@ -993,15 +988,15 @@ async fn metrics_workflow_command(
                 }
                 OutputFormat::Json => {
                     let json_output = serde_json::to_string_pretty(&run_metrics)?;
-                    println!("{}", json_output);
+                    println!("{json_output}");
                 }
                 OutputFormat::Yaml => {
                     let yaml_output = serde_yaml::to_string(&run_metrics)?;
-                    println!("{}", yaml_output);
+                    println!("{yaml_output}");
                 }
             }
         } else {
-            println!("No metrics found for run: {}", run_id_str);
+            println!("No metrics found for run: {run_id_str}");
         }
     } else if let Some(workflow_name) = workflow {
         // Show metrics for specific workflow
@@ -1010,7 +1005,7 @@ async fn metrics_workflow_command(
         if let Some(workflow_metrics) = metrics.get_workflow_summary(&workflow_name_typed) {
             match format {
                 OutputFormat::Table => {
-                    println!("📊 Workflow Metrics: {}", workflow_name);
+                    println!("📊 Workflow Metrics: {workflow_name}");
                     println!("Total runs: {}", workflow_metrics.total_runs);
                     println!("Successful runs: {}", workflow_metrics.successful_runs);
                     println!("Failed runs: {}", workflow_metrics.failed_runs);
@@ -1046,15 +1041,15 @@ async fn metrics_workflow_command(
                 }
                 OutputFormat::Json => {
                     let json_output = serde_json::to_string_pretty(&workflow_metrics)?;
-                    println!("{}", json_output);
+                    println!("{json_output}");
                 }
                 OutputFormat::Yaml => {
                     let yaml_output = serde_yaml::to_string(&workflow_metrics)?;
-                    println!("{}", yaml_output);
+                    println!("{yaml_output}");
                 }
             }
         } else {
-            println!("No metrics found for workflow: {}", workflow_name);
+            println!("No metrics found for workflow: {workflow_name}");
         }
     } else {
         // Show all run metrics
@@ -1075,11 +1070,11 @@ async fn metrics_workflow_command(
             }
             OutputFormat::Json => {
                 let json_output = serde_json::to_string_pretty(&metrics.run_metrics)?;
-                println!("{}", json_output);
+                println!("{json_output}");
             }
             OutputFormat::Yaml => {
                 let yaml_output = serde_yaml::to_string(&metrics.run_metrics)?;
-                println!("{}", yaml_output);
+                println!("{yaml_output}");
             }
         }
     }
@@ -1136,9 +1131,9 @@ async fn visualize_workflow_command(
 
     if let Some(output_path) = output {
         std::fs::write(&output_path, content)?;
-        println!("Visualization saved to: {}", output_path);
+        println!("Visualization saved to: {output_path}");
     } else {
-        println!("{}", content);
+        println!("{content}");
     }
 
     Ok(())

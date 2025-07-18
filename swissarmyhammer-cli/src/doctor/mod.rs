@@ -171,7 +171,7 @@ impl Doctor {
             if use_color {
                 println!("{}", category_name.bold().yellow());
             } else {
-                println!("{}", category_name);
+                println!("{category_name}");
             }
             for check in checks {
                 print_check(check, use_color);
@@ -304,7 +304,7 @@ fn print_check(check: &Check, use_color: bool) {
         if use_color {
             println!("    {} {}", "→".dimmed(), fix.dimmed());
         } else {
-            println!("    → {}", fix);
+            println!("    → {fix}");
         }
     } else {
         println!();

@@ -26,7 +26,7 @@ fn test_mcp_server_exits_on_client_disconnect() {
     // Send MCP initialization to establish connection
     let stdin = server.stdin.as_mut().expect("Failed to get stdin");
     let init_msg = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{"roots":{"listChanged":true}},"clientInfo":{"name":"test","version":"1.0.0"}}}"#;
-    writeln!(stdin, "{}", init_msg).expect("Failed to write initialization");
+    writeln!(stdin, "{init_msg}").expect("Failed to write initialization");
     stdin.flush().expect("Failed to flush stdin");
 
     // Give the server time to process initialization
@@ -34,7 +34,7 @@ fn test_mcp_server_exits_on_client_disconnect() {
 
     // Send initialized notification to complete handshake
     let initialized_msg = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
-    writeln!(stdin, "{}", initialized_msg).expect("Failed to write initialized notification");
+    writeln!(stdin, "{initialized_msg}").expect("Failed to write initialized notification");
     stdin.flush().expect("Failed to flush stdin");
 
     // Give the server time to fully establish connection
@@ -48,8 +48,8 @@ fn test_mcp_server_exits_on_client_disconnect() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    println!("Server stdout: {}", stdout);
-    println!("Server stderr: {}", stderr);
+    println!("Server stdout: {stdout}");
+    println!("Server stderr: {stderr}");
     println!("Server exit status: {:?}", output.status);
 
     assert!(
@@ -91,7 +91,7 @@ fn test_mcp_server_responds_to_ctrl_c() {
         Ok(Some(status)) => {
             // On Unix, SIGINT causes a different exit status
             // Just check that the process exited, not the specific status
-            println!("Server exited with status: {:?}", status);
+            println!("Server exited with status: {status:?}");
         }
         Ok(None) => {
             // Server is still running, kill it and fail the test
@@ -100,7 +100,7 @@ fn test_mcp_server_responds_to_ctrl_c() {
             println!("Server did not exit after Ctrl+C (this may be due to test environment limitations)");
         }
         Err(e) => {
-            panic!("Failed to check server status: {}", e);
+            panic!("Failed to check server status: {e}");
         }
     }
 }

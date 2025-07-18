@@ -41,7 +41,7 @@ fn test_builtin_prompts_validate_directly() -> Result<()> {
                         println!("✓ Valid prompt: {}", prompt.name);
                     }
                     Err(e) => {
-                        println!("✗ Invalid prompt at {:?}: {}", path, e);
+                        println!("✗ Invalid prompt at {path:?}: {e}");
                         result.errors += 1;
                     }
                 }
@@ -64,7 +64,7 @@ fn test_builtin_prompts_validate_directly() -> Result<()> {
             if fs::read_to_string(path).is_ok() {
                 println!("✓ Valid workflow file: {:?}", path.file_name().unwrap());
             } else {
-                println!("✗ Cannot read workflow file: {:?}", path);
+                println!("✗ Cannot read workflow file: {path:?}");
                 result.errors += 1;
             }
         }

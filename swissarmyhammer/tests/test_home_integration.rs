@@ -65,10 +65,10 @@ fn test_prompt_resolver_with_test_home() {
 
     // Verify HOME is set correctly
     let home = std::env::var("HOME").expect("HOME not set");
-    println!("HOME is set to: {}", home);
+    println!("HOME is set to: {home}");
 
     let test_prompts_dir = get_test_swissarmyhammer_dir().join("prompts");
-    println!("Test prompts dir: {:?}", test_prompts_dir);
+    println!("Test prompts dir: {test_prompts_dir:?}");
     println!("Test prompts dir exists: {}", test_prompts_dir.exists());
 
     let mut resolver = PromptResolver::new();
@@ -83,7 +83,7 @@ fn test_prompt_resolver_with_test_home() {
     let user_prompt_names: Vec<String> = prompts.iter().map(|p| p.name.clone()).collect();
 
     // Debug output to see what prompts were loaded
-    println!("Loaded prompts: {:?}", user_prompt_names);
+    println!("Loaded prompts: {user_prompt_names:?}");
 
     // Should have loaded our test prompts
     assert!(

@@ -61,7 +61,7 @@ async fn test_success_branch_execution() -> Result<()> {
 
     // Verify that workflow completed successfully
     if let Err(e) = &result {
-        eprintln!("Error executing workflow: {:?}", e);
+        eprintln!("Error executing workflow: {e:?}");
     }
     assert!(result.is_ok());
 
@@ -105,7 +105,7 @@ async fn test_failure_branch_execution() -> Result<()> {
     // Debug: Print all context variables
     println!("Final context variables:");
     for (key, value) in &run.context {
-        println!("  {}: {:?}", key, value);
+        println!("  {key}: {value:?}");
     }
 
     // The workflow should have is_error=true from the failed Claude prompt
@@ -128,7 +128,7 @@ async fn test_failure_branch_execution() -> Result<()> {
     // Debug: Print context before BranchDecision
     println!("Context before BranchDecision:");
     for (key, value) in &run.context {
-        println!("  {}: {:?}", key, value);
+        println!("  {key}: {value:?}");
     }
     println!("Current state: {}", run.current_state);
 
@@ -149,15 +149,15 @@ async fn test_failure_branch_execution() -> Result<()> {
     for transition in &transitions {
         println!("  -> {}: {:?}", transition.to_state, transition.condition);
         let condition_result = executor.evaluate_condition(&transition.condition, &run.context);
-        println!("    Evaluates to: {:?}", condition_result);
+        println!("    Evaluates to: {condition_result:?}");
     }
 
     // Execute from BranchDecision - should go to Branch2 due to is_error=true
     let result = executor.execute_single_cycle(&mut run).await;
-    println!("execute_single_cycle result: {:?}", result);
+    println!("execute_single_cycle result: {result:?}");
     match &result {
-        Ok(transition_performed) => println!("Transition performed: {}", transition_performed),
-        Err(e) => println!("Error: {}", e),
+        Ok(transition_performed) => println!("Transition performed: {transition_performed}"),
+        Err(e) => println!("Error: {e}"),
     }
     assert!(result.is_ok());
 
@@ -171,7 +171,7 @@ async fn test_failure_branch_execution() -> Result<()> {
         .iter()
         .map(|(state_id, _)| state_id.clone())
         .collect();
-    println!("Visited states: {:?}", visited_states);
+    println!("Visited states: {visited_states:?}");
     assert!(visited_states.contains(&StateId::new("Branch2")));
 
     // Verify context variables were set properly
@@ -434,7 +434,7 @@ async fn test_debug_cel_expressions() -> Result<()> {
     // Debug: Print current context
     println!("Context after workflow execution:");
     for (key, value) in &run.context {
-        println!("  {}: {:?}", key, value);
+        println!("  {key}: {value:?}");
     }
 
     // Test different values for error_handled
@@ -452,7 +452,7 @@ async fn test_debug_cel_expressions() -> Result<()> {
             .insert("example_var".to_string(), json!("No Hello"));
         run.current_state = StateId::new("BranchDecision");
 
-        println!("\nTesting {} with error_handled = {:?}", label, value);
+        println!("\nTesting {label} with error_handled = {value:?}");
 
         // Get the transitions from BranchDecision
         let transitions: Vec<_> = run

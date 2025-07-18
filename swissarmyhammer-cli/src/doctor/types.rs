@@ -271,7 +271,7 @@ mod tests {
     fn test_workflow_directory_display() {
         let path = PathBuf::from("/test/workflows");
         let dir = WorkflowDirectory::new(path);
-        let display = format!("{}", dir);
+        let display = format!("{dir}");
         assert!(display.contains("/test/workflows"));
     }
 
@@ -301,7 +301,7 @@ mod tests {
     #[test]
     fn test_disk_space_display() {
         let space = DiskSpace::from_mb(1024);
-        assert_eq!(format!("{}", space), "1024 MB");
+        assert_eq!(format!("{space}"), "1024 MB");
     }
 
     #[test]

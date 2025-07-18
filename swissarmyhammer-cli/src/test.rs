@@ -215,10 +215,10 @@ impl TestRunner {
         println!("{}", "📄 Prompt Details:".bold());
         println!("  Name: {}", prompt.name);
         if let Some(description) = &prompt.description {
-            println!("  Description: {}", description);
+            println!("  Description: {description}");
         }
         if let Some(category) = &prompt.category {
-            println!("  Category: {}", category);
+            println!("  Category: {category}");
         }
         if let Some(source) = &prompt.source {
             println!("  Source: {}", source.display());
@@ -269,11 +269,11 @@ impl TestRunner {
     ) -> Result<()> {
         // Display the result
         if raw {
-            print!("{}", rendered);
+            print!("{rendered}");
         } else {
             println!("{}", "✨ Rendered Output:".bold().green());
             println!("{}", "─".repeat(50));
-            println!("{}", rendered);
+            println!("{rendered}");
             println!("{}", "─".repeat(50));
         }
 
@@ -284,11 +284,11 @@ impl TestRunner {
                     Ok(_) => println!("{}", "📋 Copied to clipboard!".green()),
                     Err(e) => println!(
                         "{}",
-                        format!("⚠️  Failed to copy to clipboard: {}", e).yellow()
+                        format!("⚠️  Failed to copy to clipboard: {e}").yellow()
                     ),
                 },
                 Err(e) => {
-                    println!("{}", format!("⚠️  Clipboard not available: {}", e).yellow());
+                    println!("{}", format!("⚠️  Clipboard not available: {e}").yellow());
                 }
             }
         }
@@ -296,7 +296,7 @@ impl TestRunner {
         // Save to file if requested
         if let Some(path) = save_path {
             fs::write(path, rendered)?;
-            println!("{}", format!("💾 Saved to: {}", path).green());
+            println!("{}", format!("💾 Saved to: {path}").green());
         }
 
         Ok(())
@@ -333,8 +333,7 @@ pub fn get_prompt_validation(prompt: &Prompt) -> (Vec<String>, Vec<String>) {
     for var in &template_vars {
         if !prompt.arguments.iter().any(|arg| &arg.name == var) {
             errors.push(format!(
-                "Template variable '{{{{ {} }}}}' is not defined in arguments",
-                var
+                "Template variable '{{{{ {var} }}}}' is not defined in arguments"
             ));
         }
     }

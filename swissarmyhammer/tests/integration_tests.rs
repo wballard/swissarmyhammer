@@ -212,13 +212,12 @@ fn test_prompt_loader() {
     for i in 1..=3 {
         let content = format!(
             r#"---
-description: "Test prompt {}"
+description: "Test prompt {i}"
 category: "test"
 ---
-This is test prompt {}!"#,
-            i, i
+This is test prompt {i}!"#
         );
-        fs::write(prompts_dir.join(format!("test{}.md", i)), content).unwrap();
+        fs::write(prompts_dir.join(format!("test{i}.md")), content).unwrap();
     }
 
     // Load all prompts
@@ -428,7 +427,7 @@ This is a regular md file"#;
     let mut library = PromptLibrary::new();
     let count = library.add_directory(&prompts_dir).unwrap();
 
-    println!("Loaded {} prompts", count);
+    println!("Loaded {count} prompts");
 
     // List all loaded prompts
     let prompts = library.list().unwrap();
@@ -443,17 +442,17 @@ This is a regular md file"#;
     );
 
     // We should have loaded both files
-    assert!(count >= 2, "Expected at least 2 prompts, found {}", count);
+    assert!(count >= 2, "Expected at least 2 prompts, found {count}");
 
     // Check that both prompts are accessible
     let test_prompt = library.get("test");
     let test2_prompt = library.get("test2");
 
     if let Err(ref e) = test_prompt {
-        println!("Could not find 'test' prompt: {:?}", e);
+        println!("Could not find 'test' prompt: {e:?}");
     }
     if let Err(ref e) = test2_prompt {
-        println!("Could not find 'test2' prompt: {:?}", e);
+        println!("Could not find 'test2' prompt: {e:?}");
     }
 
     assert!(test_prompt.is_ok(), "test.liquid.md file should be loaded");

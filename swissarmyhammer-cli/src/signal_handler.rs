@@ -134,8 +134,7 @@ mod tests {
         // The function should return almost immediately (within 100ms)
         assert!(
             elapsed.as_millis() < 100,
-            "setup_signal_handlers should not block, but took {:?}",
-            elapsed
+            "setup_signal_handlers should not block, but took {elapsed:?}"
         );
     }
 

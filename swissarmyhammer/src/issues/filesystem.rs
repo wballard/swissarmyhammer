@@ -1,9 +1,9 @@
 use crate::error::{Result, SwissArmyHammerError};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::debug;
-use chrono::{DateTime, Utc};
 
 /// Maximum issue number supported (6 digits)
 use crate::config::Config;
@@ -24,7 +24,7 @@ impl IssueNumber {
         }
         Ok(Self(number))
     }
-    
+
     /// Get the raw u32 value
     pub fn value(&self) -> u32 {
         self.0
@@ -51,7 +51,7 @@ impl From<IssueNumber> for u32 {
 
 impl std::ops::Add<u32> for IssueNumber {
     type Output = IssueNumber;
-    
+
     fn add(self, rhs: u32) -> Self::Output {
         IssueNumber(self.0 + rhs)
     }
@@ -104,13 +104,13 @@ pub trait IssueStorage: Send + Sync {
     /// Batch operations for better performance
     /// Create multiple issues at once
     async fn create_issues_batch(&self, issues: Vec<(String, String)>) -> Result<Vec<Issue>>;
-    
+
     /// Get multiple issues by their numbers
     async fn get_issues_batch(&self, numbers: Vec<u32>) -> Result<Vec<Issue>>;
-    
+
     /// Update multiple issues at once
     async fn update_issues_batch(&self, updates: Vec<(u32, String)>) -> Result<Vec<Issue>>;
-    
+
     /// Mark multiple issues as complete
     async fn mark_complete_batch(&self, numbers: Vec<u32>) -> Result<Vec<Issue>>;
 }
@@ -139,7 +139,7 @@ impl FileSystemIssueStorage {
     }
 
     /// Create a new FileSystemIssueStorage instance with default directory
-    /// 
+    ///
     /// Uses current working directory joined with "issues" as the default location
     pub fn new_default() -> Result<Self> {
         let current_dir = std::env::current_dir().map_err(SwissArmyHammerError::Io)?;
@@ -511,12 +511,12 @@ impl IssueStorage for FileSystemIssueStorage {
 
     async fn create_issues_batch(&self, issues: Vec<(String, String)>) -> Result<Vec<Issue>> {
         let mut created_issues = Vec::new();
-        
+
         for (name, content) in issues {
             let issue = self.create_issue(name, content).await?;
             created_issues.push(issue);
         }
-        
+
         Ok(created_issues)
     }
 
@@ -525,14 +525,14 @@ impl IssueStorage for FileSystemIssueStorage {
         for number in &numbers {
             self.get_issue(*number).await?; // This will fail if issue doesn't exist
         }
-        
+
         let mut issues = Vec::new();
-        
+
         for number in numbers {
             let issue = self.get_issue(number).await?;
             issues.push(issue);
         }
-        
+
         Ok(issues)
     }
 
@@ -541,14 +541,14 @@ impl IssueStorage for FileSystemIssueStorage {
         for (number, _) in &updates {
             self.get_issue(*number).await?; // This will fail if issue doesn't exist
         }
-        
+
         let mut updated_issues = Vec::new();
-        
+
         for (number, content) in updates {
             let issue = self.update_issue(number, content).await?;
             updated_issues.push(issue);
         }
-        
+
         Ok(updated_issues)
     }
 
@@ -557,14 +557,14 @@ impl IssueStorage for FileSystemIssueStorage {
         for number in &numbers {
             self.get_issue(*number).await?; // This will fail if issue doesn't exist
         }
-        
+
         let mut completed_issues = Vec::new();
-        
+
         for number in numbers {
             let issue = self.mark_complete(number).await?;
             completed_issues.push(issue);
         }
-        
+
         Ok(completed_issues)
     }
 }
@@ -858,7 +858,8 @@ fn validate_against_reserved_names(name: &str) -> String {
 /// Sanitize issue name for security while preserving most names
 pub fn sanitize_issue_name(name: &str) -> String {
     // Only sanitize dangerous path traversal attempts
-    if name.contains("../") || name.contains("..\\") || name.contains("./") || name.contains(".\\") {
+    if name.contains("../") || name.contains("..\\") || name.contains("./") || name.contains(".\\")
+    {
         return "path_traversal_attempted".to_string();
     }
     // Preserve all other names, including empty names
@@ -976,8 +977,7 @@ mod tests {
         for num in valid_numbers {
             assert!(
                 num <= Config::global().max_issue_number,
-                "Issue number {} should be valid",
-                num
+                "Issue number {num} should be valid"
             );
         }
 
@@ -986,8 +986,7 @@ mod tests {
         for num in invalid_numbers {
             assert!(
                 num > Config::global().max_issue_number,
-                "Issue number {} should be invalid",
-                num
+                "Issue number {num} should be invalid"
             );
         }
     }
@@ -1456,7 +1455,7 @@ mod tests {
             let storage_clone = storage.clone();
             let handle = tokio::spawn(async move {
                 storage_clone
-                    .create_issue(format!("issue_{}", i), format!("Content {}", i))
+                    .create_issue(format!("issue_{i}"), format!("Content {i}"))
                     .await
             });
             handles.push(handle);
@@ -1537,8 +1536,7 @@ mod tests {
                 .await;
             assert!(
                 result.is_ok(),
-                "Failed to create issue with name: '{}'",
-                name
+                "Failed to create issue with name: '{name}'"
             );
         }
 
@@ -2143,15 +2141,15 @@ mod tests {
     #[tokio::test]
     async fn test_create_issues_batch() {
         let (storage, _temp) = create_test_storage();
-        
+
         let batch_data = vec![
             ("issue_1".to_string(), "Content 1".to_string()),
             ("issue_2".to_string(), "Content 2".to_string()),
             ("issue_3".to_string(), "Content 3".to_string()),
         ];
-        
+
         let issues = storage.create_issues_batch(batch_data).await.unwrap();
-        
+
         assert_eq!(issues.len(), 3);
         assert_eq!(issues[0].name, "issue_1");
         assert_eq!(issues[0].content, "Content 1");
@@ -2159,7 +2157,7 @@ mod tests {
         assert_eq!(issues[1].content, "Content 2");
         assert_eq!(issues[2].name, "issue_3");
         assert_eq!(issues[2].content, "Content 3");
-        
+
         // Verify issues were actually created
         let all_issues = storage.list_issues().await.unwrap();
         assert_eq!(all_issues.len(), 3);
@@ -2168,25 +2166,38 @@ mod tests {
     #[tokio::test]
     async fn test_create_issues_batch_empty() {
         let (storage, _temp) = create_test_storage();
-        
+
         let batch_data = vec![];
         let issues = storage.create_issues_batch(batch_data).await.unwrap();
-        
+
         assert_eq!(issues.len(), 0);
     }
 
     #[tokio::test]
     async fn test_get_issues_batch() {
         let (storage, _temp) = create_test_storage();
-        
+
         // Create some issues first
-        let issue1 = storage.create_issue("issue_1".to_string(), "Content 1".to_string()).await.unwrap();
-        let issue2 = storage.create_issue("issue_2".to_string(), "Content 2".to_string()).await.unwrap();
-        let issue3 = storage.create_issue("issue_3".to_string(), "Content 3".to_string()).await.unwrap();
-        
-        let numbers = vec![issue1.number.value(), issue2.number.value(), issue3.number.value()];
+        let issue1 = storage
+            .create_issue("issue_1".to_string(), "Content 1".to_string())
+            .await
+            .unwrap();
+        let issue2 = storage
+            .create_issue("issue_2".to_string(), "Content 2".to_string())
+            .await
+            .unwrap();
+        let issue3 = storage
+            .create_issue("issue_3".to_string(), "Content 3".to_string())
+            .await
+            .unwrap();
+
+        let numbers = vec![
+            issue1.number.value(),
+            issue2.number.value(),
+            issue3.number.value(),
+        ];
         let retrieved_issues = storage.get_issues_batch(numbers).await.unwrap();
-        
+
         assert_eq!(retrieved_issues.len(), 3);
         assert_eq!(retrieved_issues[0].number, issue1.number);
         assert_eq!(retrieved_issues[1].number, issue2.number);
@@ -2196,20 +2207,20 @@ mod tests {
     #[tokio::test]
     async fn test_get_issues_batch_empty() {
         let (storage, _temp) = create_test_storage();
-        
+
         let numbers = vec![];
         let issues = storage.get_issues_batch(numbers).await.unwrap();
-        
+
         assert_eq!(issues.len(), 0);
     }
 
     #[tokio::test]
     async fn test_get_issues_batch_nonexistent() {
         let (storage, _temp) = create_test_storage();
-        
+
         let numbers = vec![999, 1000, 1001];
         let result = storage.get_issues_batch(numbers).await;
-        
+
         // Should fail because the issues don't exist
         assert!(result.is_err());
     }
@@ -2217,25 +2228,34 @@ mod tests {
     #[tokio::test]
     async fn test_update_issues_batch() {
         let (storage, _temp) = create_test_storage();
-        
+
         // Create some issues first
-        let issue1 = storage.create_issue("issue_1".to_string(), "Original 1".to_string()).await.unwrap();
-        let issue2 = storage.create_issue("issue_2".to_string(), "Original 2".to_string()).await.unwrap();
-        let issue3 = storage.create_issue("issue_3".to_string(), "Original 3".to_string()).await.unwrap();
-        
+        let issue1 = storage
+            .create_issue("issue_1".to_string(), "Original 1".to_string())
+            .await
+            .unwrap();
+        let issue2 = storage
+            .create_issue("issue_2".to_string(), "Original 2".to_string())
+            .await
+            .unwrap();
+        let issue3 = storage
+            .create_issue("issue_3".to_string(), "Original 3".to_string())
+            .await
+            .unwrap();
+
         let updates = vec![
             (issue1.number.value(), "Updated 1".to_string()),
             (issue2.number.value(), "Updated 2".to_string()),
             (issue3.number.value(), "Updated 3".to_string()),
         ];
-        
+
         let updated_issues = storage.update_issues_batch(updates).await.unwrap();
-        
+
         assert_eq!(updated_issues.len(), 3);
         assert_eq!(updated_issues[0].content, "Updated 1");
         assert_eq!(updated_issues[1].content, "Updated 2");
         assert_eq!(updated_issues[2].content, "Updated 3");
-        
+
         // Verify updates were persisted
         let retrieved_issue1 = storage.get_issue(issue1.number.value()).await.unwrap();
         assert_eq!(retrieved_issue1.content, "Updated 1");
@@ -2244,24 +2264,24 @@ mod tests {
     #[tokio::test]
     async fn test_update_issues_batch_empty() {
         let (storage, _temp) = create_test_storage();
-        
+
         let updates = vec![];
         let issues = storage.update_issues_batch(updates).await.unwrap();
-        
+
         assert_eq!(issues.len(), 0);
     }
 
     #[tokio::test]
     async fn test_update_issues_batch_nonexistent() {
         let (storage, _temp) = create_test_storage();
-        
+
         let updates = vec![
             (999, "Updated 1".to_string()),
             (1000, "Updated 2".to_string()),
         ];
-        
+
         let result = storage.update_issues_batch(updates).await;
-        
+
         // Should fail because the issues don't exist
         assert!(result.is_err());
     }
@@ -2269,20 +2289,33 @@ mod tests {
     #[tokio::test]
     async fn test_mark_complete_batch() {
         let (storage, _temp) = create_test_storage();
-        
+
         // Create some issues first
-        let issue1 = storage.create_issue("issue_1".to_string(), "Content 1".to_string()).await.unwrap();
-        let issue2 = storage.create_issue("issue_2".to_string(), "Content 2".to_string()).await.unwrap();
-        let issue3 = storage.create_issue("issue_3".to_string(), "Content 3".to_string()).await.unwrap();
-        
-        let numbers = vec![issue1.number.value(), issue2.number.value(), issue3.number.value()];
+        let issue1 = storage
+            .create_issue("issue_1".to_string(), "Content 1".to_string())
+            .await
+            .unwrap();
+        let issue2 = storage
+            .create_issue("issue_2".to_string(), "Content 2".to_string())
+            .await
+            .unwrap();
+        let issue3 = storage
+            .create_issue("issue_3".to_string(), "Content 3".to_string())
+            .await
+            .unwrap();
+
+        let numbers = vec![
+            issue1.number.value(),
+            issue2.number.value(),
+            issue3.number.value(),
+        ];
         let completed_issues = storage.mark_complete_batch(numbers).await.unwrap();
-        
+
         assert_eq!(completed_issues.len(), 3);
         assert!(completed_issues[0].completed);
         assert!(completed_issues[1].completed);
         assert!(completed_issues[2].completed);
-        
+
         // Verify issues were marked complete
         let retrieved_issue1 = storage.get_issue(issue1.number.value()).await.unwrap();
         assert!(retrieved_issue1.completed);
@@ -2291,20 +2324,20 @@ mod tests {
     #[tokio::test]
     async fn test_mark_complete_batch_empty() {
         let (storage, _temp) = create_test_storage();
-        
+
         let numbers = vec![];
         let issues = storage.mark_complete_batch(numbers).await.unwrap();
-        
+
         assert_eq!(issues.len(), 0);
     }
 
     #[tokio::test]
     async fn test_mark_complete_batch_nonexistent() {
         let (storage, _temp) = create_test_storage();
-        
+
         let numbers = vec![999, 1000, 1001];
         let result = storage.mark_complete_batch(numbers).await;
-        
+
         // Should fail because the issues don't exist
         assert!(result.is_err());
     }
@@ -2312,30 +2345,30 @@ mod tests {
     #[tokio::test]
     async fn test_batch_operations_preserve_order() {
         let (storage, _temp) = create_test_storage();
-        
+
         // Create issues in a specific order
         let batch_data = vec![
             ("alpha".to_string(), "First".to_string()),
             ("beta".to_string(), "Second".to_string()),
             ("gamma".to_string(), "Third".to_string()),
         ];
-        
+
         let created_issues = storage.create_issues_batch(batch_data).await.unwrap();
-        
+
         // Verify order is preserved
         assert_eq!(created_issues[0].name, "alpha");
         assert_eq!(created_issues[1].name, "beta");
         assert_eq!(created_issues[2].name, "gamma");
-        
+
         // Get issues in different order
         let numbers = vec![
             created_issues[2].number.value(),
             created_issues[0].number.value(),
             created_issues[1].number.value(),
         ];
-        
+
         let retrieved_issues = storage.get_issues_batch(numbers).await.unwrap();
-        
+
         // Should preserve requested order
         assert_eq!(retrieved_issues[0].name, "gamma");
         assert_eq!(retrieved_issues[1].name, "alpha");
@@ -2345,37 +2378,38 @@ mod tests {
     #[tokio::test]
     async fn test_batch_operations_with_large_batches() {
         let (storage, _temp) = create_test_storage();
-        
+
         // Create a large batch
         let batch_size = 100;
         let batch_data: Vec<(String, String)> = (1..=batch_size)
-            .map(|i| (format!("issue_{}", i), format!("Content {}", i)))
+            .map(|i| (format!("issue_{i}"), format!("Content {i}")))
             .collect();
-        
+
         let created_issues = storage.create_issues_batch(batch_data).await.unwrap();
         assert_eq!(created_issues.len(), batch_size);
-        
+
         // Get all issues in batch
         let numbers: Vec<u32> = created_issues.iter().map(|i| i.number.value()).collect();
         let retrieved_issues = storage.get_issues_batch(numbers.clone()).await.unwrap();
         assert_eq!(retrieved_issues.len(), batch_size);
-        
+
         // Update all issues in batch
-        let updates: Vec<(u32, String)> = created_issues.iter()
+        let updates: Vec<(u32, String)> = created_issues
+            .iter()
             .map(|i| (i.number.value(), format!("Updated {}", i.number.value())))
             .collect();
         let updated_issues = storage.update_issues_batch(updates).await.unwrap();
         assert_eq!(updated_issues.len(), batch_size);
-        
+
         // Mark half complete in batch
         let half_numbers: Vec<u32> = numbers.iter().take(batch_size / 2).cloned().collect();
         let completed_issues = storage.mark_complete_batch(half_numbers).await.unwrap();
         assert_eq!(completed_issues.len(), batch_size / 2);
-        
+
         // Verify final state
         let all_issues = storage.list_issues().await.unwrap();
         assert_eq!(all_issues.len(), batch_size);
-        
+
         let completed_count = all_issues.iter().filter(|i| i.completed).count();
         assert_eq!(completed_count, batch_size / 2);
     }
@@ -2383,27 +2417,30 @@ mod tests {
     #[tokio::test]
     async fn test_batch_operations_partial_failure_behavior() {
         let (storage, _temp) = create_test_storage();
-        
+
         // Create one issue
-        let issue = storage.create_issue("existing".to_string(), "Content".to_string()).await.unwrap();
-        
+        let issue = storage
+            .create_issue("existing".to_string(), "Content".to_string())
+            .await
+            .unwrap();
+
         // Try to get batch with mix of existing and non-existing issues
         let numbers = vec![issue.number.value(), 999, 1000];
         let result = storage.get_issues_batch(numbers).await;
-        
+
         // Should fail entirely, not return partial results
         assert!(result.is_err());
-        
+
         // Try to update batch with mix of existing and non-existing issues
         let updates = vec![
             (issue.number.value(), "Updated".to_string()),
             (999, "Should fail".to_string()),
         ];
         let result = storage.update_issues_batch(updates).await;
-        
+
         // Should fail entirely
         assert!(result.is_err());
-        
+
         // Verify original issue was not updated
         let retrieved_issue = storage.get_issue(issue.number.value()).await.unwrap();
         assert_eq!(retrieved_issue.content, "Content");

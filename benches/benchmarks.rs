@@ -78,8 +78,8 @@ fn create_complex_workflow() -> Workflow {
     // Create a workflow with 100 states
     for i in 0..100 {
         workflow.add_state(State {
-            id: StateId::new(format!("state_{}", i)),
-            description: format!("State {}", i),
+            id: StateId::new(format!("state_{i}")),
+            description: format!("State {i}"),
             state_type: StateType::Normal,
             is_terminal: i == 99,
             allows_parallel: false,
@@ -89,7 +89,7 @@ fn create_complex_workflow() -> Workflow {
         if i > 0 {
             workflow.add_transition(Transition {
                 from_state: StateId::new(format!("state_{}", i - 1)),
-                to_state: StateId::new(format!("state_{}", i)),
+                to_state: StateId::new(format!("state_{i}")),
                 condition: TransitionCondition {
                     condition_type: ConditionType::Always,
                     expression: None,
@@ -283,19 +283,19 @@ fn benchmark_workflow_scalability(c: &mut Criterion) {
     let mut group = c.benchmark_group("workflow_scalability");
 
     for size in workflow_sizes {
-        group.bench_function(format!("workflow_size_{}", size), |b| {
+        group.bench_function(format!("workflow_size_{size}"), |b| {
             b.iter(|| {
                 let mut workflow = Workflow::new(
-                    WorkflowName::new(format!("scale_test_{}", size)),
-                    format!("Scalability test with {} states", size),
+                    WorkflowName::new(format!("scale_test_{size}")),
+                    format!("Scalability test with {size} states"),
                     StateId::new("start"),
                 );
 
                 // Create states and transitions
                 for i in 0..size {
                     workflow.add_state(State {
-                        id: StateId::new(format!("state_{}", i)),
-                        description: format!("State {}", i),
+                        id: StateId::new(format!("state_{i}")),
+                        description: format!("State {i}"),
                         state_type: StateType::Normal,
                         is_terminal: i == size - 1,
                         allows_parallel: false,
@@ -305,7 +305,7 @@ fn benchmark_workflow_scalability(c: &mut Criterion) {
                     if i > 0 {
                         workflow.add_transition(Transition {
                             from_state: StateId::new(format!("state_{}", i - 1)),
-                            to_state: StateId::new(format!("state_{}", i)),
+                            to_state: StateId::new(format!("state_{i}")),
                             condition: TransitionCondition {
                                 condition_type: ConditionType::Always,
                                 expression: None,
@@ -357,10 +357,10 @@ fn create_test_issues(count: usize, completed_ratio: f64) -> Vec<Issue> {
     for i in 0..count {
         issues.push(Issue {
             number: IssueNumber::from(i as u32),
-            name: format!("test_issue_{}", i),
-            content: format!("This is test issue number {}", i),
+            name: format!("test_issue_{i}"),
+            content: format!("This is test issue number {i}"),
             completed: i < completed_count,
-            file_path: PathBuf::from(format!("test_issue_{}.md", i)),
+            file_path: PathBuf::from(format!("test_issue_{i}.md")),
             created_at: chrono::Utc::now(),
         });
     }
@@ -376,7 +376,7 @@ fn benchmark_get_pending_issues(c: &mut Criterion) {
         // Test with 50% completed issues
         let issues = create_test_issues(count, 0.5);
 
-        group.bench_function(format!("get_pending_issues_{}", count), |b| {
+        group.bench_function(format!("get_pending_issues_{count}"), |b| {
             b.iter(|| McpServer::get_pending_issues(black_box(&issues)));
         });
     }
@@ -392,7 +392,7 @@ fn benchmark_format_issue_summary(c: &mut Criterion) {
         // Test with 50% completed issues (so half will be pending)
         let issues = create_test_issues(count, 0.5);
 
-        group.bench_function(format!("format_issue_summary_{}", count), |b| {
+        group.bench_function(format!("format_issue_summary_{count}"), |b| {
             b.iter(|| McpServer::format_issue_summary(black_box(&issues), black_box(5)));
         });
     }

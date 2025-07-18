@@ -54,7 +54,7 @@ fn test_mcp_notification_simple() -> Result<()> {
     std::thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines().map_while(Result::ok) {
-            eprintln!("STDERR: {}", line);
+            eprintln!("STDERR: {line}");
         }
     });
 
@@ -83,7 +83,7 @@ fn test_mcp_notification_simple() -> Result<()> {
     let mut reader = BufReader::new(stdout);
     let mut response = String::new();
     reader.read_line(&mut response)?;
-    println!("Init response: {}", response);
+    println!("Init response: {response}");
 
     // Send initialized
     let initialized = json!({
@@ -106,7 +106,7 @@ fn test_mcp_notification_simple() -> Result<()> {
                 Ok(_) => {
                     let trimmed = line.trim();
                     if !trimmed.is_empty() {
-                        println!("SERVER: {}", trimmed);
+                        println!("SERVER: {trimmed}");
                         if let Ok(msg) = serde_json::from_str::<Value>(trimmed) {
                             if msg["method"] == "notifications/prompts/list_changed" {
                                 println!("🎉 NOTIFICATION RECEIVED!");

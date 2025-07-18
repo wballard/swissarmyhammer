@@ -578,7 +578,7 @@ impl Validator {
                     content_title: None,
                     line: None,
                     column: None,
-                    message: format!("Failed to read workflow file: {}", e),
+                    message: format!("Failed to read workflow file: {e}"),
                     suggestion: None,
                 });
                 // Continue validation of other files
@@ -600,7 +600,7 @@ impl Validator {
                     content_title: None,
                     line: None,
                     column: None,
-                    message: format!("Failed to parse workflow syntax: {}", e),
+                    message: format!("Failed to parse workflow syntax: {e}"),
                     suggestion: Some("Check your Mermaid state diagram syntax".to_string()),
                 });
                 // Continue validation of other files
@@ -1744,10 +1744,10 @@ mod tests {
         for (i, location) in non_standard_locations.iter().enumerate() {
             std::fs::create_dir_all(location).unwrap();
             std::fs::write(
-                location.join(format!("workflow{}.md", i)),
+                location.join(format!("workflow{i}.md")),
                 format!(
                     r#"---
-name: test-workflow-{}
+name: test-workflow-{i}
 description: Test workflow in non-standard location
 ---
 
@@ -1755,8 +1755,7 @@ stateDiagram-v2
     [*] --> Start
     Start --> End
     End --> [*]
-"#,
-                    i
+"#
                 ),
             )
             .unwrap();
@@ -1965,21 +1964,19 @@ stateDiagram-v2
                 metadata: HashMap::new(),
             };
 
-            let workflow_path = PathBuf::from(format!("workflow:test:{}", dangerous_name));
+            let workflow_path = PathBuf::from(format!("workflow:test:{dangerous_name}"));
             validator.validate_workflow_structure(&workflow, &workflow_path, &mut result);
 
             assert!(
                 result.has_errors(),
-                "Should have error for dangerous name: {}",
-                dangerous_name
+                "Should have error for dangerous name: {dangerous_name}"
             );
             assert!(
                 result
                     .issues
                     .iter()
                     .any(|issue| issue.message.contains("Invalid workflow name")),
-                "Should have invalid name error for: {}",
-                dangerous_name
+                "Should have invalid name error for: {dangerous_name}"
             );
         }
     }
@@ -2010,15 +2007,14 @@ stateDiagram-v2
             let mut result = ValidationResult::new();
             validator.validate_workflow(&workflow_path, &mut result);
 
-            assert!(result.has_errors(), "Test case {} should have errors", i);
+            assert!(result.has_errors(), "Test case {i} should have errors");
             assert!(
                 result.issues.iter().any(|issue| issue
                     .message
                     .contains("Failed to parse workflow syntax")
                     || issue.message.contains("no terminal state")
                     || issue.message.contains("validation failed")),
-                "Test case {} should have parsing or validation errors",
-                i
+                "Test case {i} should have parsing or validation errors"
             );
         }
     }

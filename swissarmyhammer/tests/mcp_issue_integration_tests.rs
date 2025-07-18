@@ -82,7 +82,6 @@ impl TestEnvironment {
             .output()
             .unwrap();
     }
-
 }
 
 #[tokio::test]
@@ -217,7 +216,7 @@ async fn test_concurrent_operations() {
             storage
                 .write()
                 .await
-                .create_issue(format!("issue_{}", i), format!("Content for issue {}", i))
+                .create_issue(format!("issue_{i}"), format!("Content for issue {i}"))
                 .await
         };
         create_futures.push(future);
@@ -323,8 +322,8 @@ async fn test_performance_with_many_issues() {
             .write()
             .await
             .create_issue(
-                format!("perf_issue_{:03}", i),
-                format!("Performance test issue number {}", i),
+                format!("perf_issue_{i:03}"),
+                format!("Performance test issue number {i}"),
             )
             .await
             .unwrap();

@@ -63,8 +63,7 @@ stateDiagram-v2
             assert!(
                 error_msg.contains("Failed to load sub-workflow")
                     || error_msg.contains("workflow 'hello-world'"),
-                "Expected workflow loading error, got: {}",
-                error_msg
+                "Expected workflow loading error, got: {error_msg}"
             );
             assert!(
                 !error_msg.contains("Failed to spawn"),
@@ -228,7 +227,7 @@ stateDiagram-v2
             assert!(visited_states.contains(&StateId::new("CallB")));
         }
         Err(e) => {
-            println!("Workflow execution error (expected): {}", e);
+            println!("Workflow execution error (expected): {e}");
             // This is expected if the workflow tried to execute a sub-workflow
             // that doesn't exist in the file system
         }
@@ -297,11 +296,10 @@ stateDiagram-v2
         Err(e) => {
             // Expected error if workflow doesn't exist
             let error_msg = e.to_string();
-            println!("Expected error: {}", error_msg);
+            println!("Expected error: {error_msg}");
             assert!(
                 error_msg.contains("workflow") || error_msg.contains("timeout"),
-                "Expected workflow or timeout error, got: {}",
-                error_msg
+                "Expected workflow or timeout error, got: {error_msg}"
             );
         }
     }
@@ -366,7 +364,7 @@ stateDiagram-v2
         }
         Err(e) => {
             // Expected if sub-workflow doesn't exist
-            println!("Expected error (workflow not found): {}", e);
+            println!("Expected error (workflow not found): {e}");
         }
     }
 
@@ -423,8 +421,7 @@ stateDiagram-v2
     // Verify execution was reasonably quick (not hanging)
     assert!(
         duration.as_secs() < 5,
-        "Workflow execution took too long: {:?}",
-        duration
+        "Workflow execution took too long: {duration:?}"
     );
 
     match result {
@@ -432,7 +429,7 @@ stateDiagram-v2
             println!("Workflow completed successfully");
         }
         Err(e) => {
-            println!("Workflow error (may be expected): {}", e);
+            println!("Workflow error (may be expected): {e}");
         }
     }
 
@@ -541,7 +538,7 @@ stateDiagram-v2
     // Check if workflow stack tracking would prevent infinite recursion
     // (Even though the sub-workflows will fail to load from file system)
     if let Some(stack) = run.context.get("_workflow_stack") {
-        println!("Workflow execution stack: {:?}", stack);
+        println!("Workflow execution stack: {stack:?}");
     }
 
     Ok(())
@@ -597,11 +594,11 @@ stateDiagram-v2
 
             // Check how deep we went
             if let Some(depth) = run.context.get("depth") {
-                println!("Final depth: {:?}", depth);
+                println!("Final depth: {depth:?}");
             }
         }
         Err(e) => {
-            println!("Recursive workflow error (expected): {}", e);
+            println!("Recursive workflow error (expected): {e}");
             // This is expected as the sub-workflow won't exist in the file system
         }
     }
@@ -666,7 +663,7 @@ stateDiagram-v2
         }
         Err(e) => {
             // Expected if sub-workflows don't exist
-            println!("Context isolation test error (expected): {}", e);
+            println!("Context isolation test error (expected): {e}");
 
             // Even with errors, parent context should be preserved
             if let Some(parent_only) = run.context.get("parent_only") {

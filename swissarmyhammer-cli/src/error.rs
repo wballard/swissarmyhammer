@@ -35,7 +35,7 @@ impl CliError {
 
         let mut current_source = self.source();
         while let Some(err) = current_source {
-            result.push_str(&format!("\n  Caused by: {}", err));
+            result.push_str(&format!("\n  Caused by: {err}"));
             current_source = err.source();
         }
 

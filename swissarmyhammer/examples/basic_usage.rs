@@ -52,7 +52,7 @@ Focus on:
     // Load prompts from a directory (if it exists)
     if std::path::Path::new("./.swissarmyhammer/prompts").exists() {
         let count = library.add_directory("./.swissarmyhammer/prompts")?;
-        println!("Loaded {} prompts from directory", count);
+        println!("Loaded {count} prompts from directory");
     }
 
     // List all available prompts
@@ -85,7 +85,7 @@ fn fibonacci(n: u32) -> u32 {
     );
 
     let rendered = prompt.render(&args)?;
-    println!("\nRendered prompt:\n{}", rendered);
+    println!("\nRendered prompt:\n{rendered}");
 
     Ok(())
 }

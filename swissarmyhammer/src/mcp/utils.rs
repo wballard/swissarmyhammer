@@ -218,9 +218,7 @@ fn validate_dangerous_protocols(content: &str) -> std::result::Result<(), McpErr
         if let Ok(regex) = Regex::new(pattern) {
             if regex.is_match(content) {
                 return Err(McpError::invalid_params(
-                    format!(
-                        "Issue content contains potentially dangerous protocol: '{pattern}'"
-                    ),
+                    format!("Issue content contains potentially dangerous protocol: '{pattern}'"),
                     None,
                 ));
             }
@@ -270,9 +268,7 @@ fn validate_dangerous_attributes(content: &str) -> std::result::Result<(), McpEr
         if let Ok(regex) = Regex::new(pattern) {
             if regex.is_match(content) {
                 return Err(McpError::invalid_params(
-                    format!(
-                        "Issue content contains potentially dangerous attribute: '{pattern}'"
-                    ),
+                    format!("Issue content contains potentially dangerous attribute: '{pattern}'"),
                     None,
                 ));
             }
@@ -321,9 +317,7 @@ fn validate_encoded_content(content: &str) -> std::result::Result<(), McpError> 
     for entity in &suspicious_entities {
         if content.contains(entity) {
             return Err(McpError::invalid_params(
-                format!(
-                    "Issue content contains potentially dangerous encoded content: '{entity}'"
-                ),
+                format!("Issue content contains potentially dangerous encoded content: '{entity}'"),
                 None,
             ));
         }

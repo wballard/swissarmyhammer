@@ -133,8 +133,8 @@ mod tests {
     use std::collections::HashMap;
 
     fn create_test_prompt(name: &str, category: Option<&str>, tags: Vec<&str>) -> Prompt {
-        let mut prompt = Prompt::new(name, format!("Template for {}", name))
-            .with_description(format!("Description for {}", name));
+        let mut prompt = Prompt::new(name, format!("Template for {name}"))
+            .with_description(format!("Description for {name}"));
 
         if let Some(cat) = category {
             prompt = prompt.with_category(cat);

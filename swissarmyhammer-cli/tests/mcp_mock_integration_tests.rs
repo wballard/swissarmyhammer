@@ -58,7 +58,7 @@ impl MockMcpClient {
                     let age = args
                         .get("age")
                         .ok_or_else(|| anyhow::anyhow!("Missing required argument: age"))?;
-                    Ok(format!("Hello {}, you are {} years old", name, age))
+                    Ok(format!("Hello {name}, you are {age} years old"))
                 } else {
                     Err(anyhow::anyhow!("Missing required arguments"))
                 }
@@ -72,12 +72,12 @@ impl MockMcpClient {
                     let default_punctuation = "!".to_string();
                     let greeting = args.get("greeting").unwrap_or(&default_greeting);
                     let punctuation = args.get("punctuation").unwrap_or(&default_punctuation);
-                    Ok(format!("{} {}{}", greeting, name, punctuation))
+                    Ok(format!("{greeting} {name}{punctuation}"))
                 } else {
                     Err(anyhow::anyhow!("Missing required argument: name"))
                 }
             }
-            _ => Ok(format!("Rendered prompt: {}", name)),
+            _ => Ok(format!("Rendered prompt: {name}")),
         }
     }
 
@@ -115,17 +115,17 @@ async fn setup_test_environment() -> Result<(MockMcpClient, PromptLibrary, TempD
 
     for (name, template, args) in test_prompts {
         // Create prompt file
-        let prompt_file = prompts_dir.join(format!("{}.prompt", name));
+        let prompt_file = prompts_dir.join(format!("{name}.prompt"));
         let mut yaml_content = String::from("---\n");
-        yaml_content.push_str(&format!("name: {}\n", name));
-        yaml_content.push_str(&format!("description: Test prompt for {}\n", name));
+        yaml_content.push_str(&format!("name: {name}\n"));
+        yaml_content.push_str(&format!("description: Test prompt for {name}\n"));
 
         if !args.is_empty() {
             yaml_content.push_str("arguments:\n");
             for (arg_name, desc, required) in &args {
-                yaml_content.push_str(&format!("  - name: {}\n", arg_name));
-                yaml_content.push_str(&format!("    description: {}\n", desc));
-                yaml_content.push_str(&format!("    required: {}\n", required));
+                yaml_content.push_str(&format!("  - name: {arg_name}\n"));
+                yaml_content.push_str(&format!("    description: {desc}\n"));
+                yaml_content.push_str(&format!("    required: {required}\n"));
             }
         }
 
@@ -137,7 +137,7 @@ async fn setup_test_environment() -> Result<(MockMcpClient, PromptLibrary, TempD
         // Add to mock client
         let mock_prompt = MockPrompt {
             name: name.to_string(),
-            description: format!("Test prompt for {}", name),
+            description: format!("Test prompt for {name}"),
             arguments: args
                 .iter()
                 .map(|(name, desc, required)| MockArgument {
@@ -266,7 +266,7 @@ mod tests {
             let client_clone = client.clone();
             let handle = tokio::spawn(async move {
                 let mut args = HashMap::new();
-                args.insert("name".to_string(), format!("User{}", i));
+                args.insert("name".to_string(), format!("User{i}"));
                 args.insert("age".to_string(), format!("{}", 20 + i));
                 client_clone.get_prompt("with_args", Some(args)).await
             });
@@ -341,8 +341,8 @@ This has invalid syntax {{unclosed"#;
         for i in 0..1000 {
             client
                 .add_prompt(MockPrompt {
-                    name: format!("prompt_{}", i),
-                    description: format!("Test prompt {}", i),
+                    name: format!("prompt_{i}"),
+                    description: format!("Test prompt {i}"),
                     arguments: vec![
                         MockArgument {
                             name: "arg1".to_string(),
@@ -363,8 +363,7 @@ This has invalid syntax {{unclosed"#;
         // Should add quickly
         assert!(
             add_duration.as_secs() < 5,
-            "Adding prompts took too long: {:?}",
-            add_duration
+            "Adding prompts took too long: {add_duration:?}"
         );
 
         // List all prompts
@@ -375,8 +374,7 @@ This has invalid syntax {{unclosed"#;
         assert_eq!(prompts.len(), 1000);
         assert!(
             list_duration.as_millis() < 100,
-            "Listing prompts took too long: {:?}",
-            list_duration
+            "Listing prompts took too long: {list_duration:?}"
         );
 
         Ok(())

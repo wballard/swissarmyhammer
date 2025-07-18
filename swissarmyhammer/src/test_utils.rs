@@ -174,9 +174,7 @@ fn validate_path_safety(path: &Path, project_root: &Path) {
             // Just validate it doesn't contain suspicious patterns
             let path_str = path.to_string_lossy();
             if path_str.contains("../..") || path_str.contains("....") {
-                panic!(
-                    "Security error: Test home path '{path_str}' contains suspicious patterns"
-                );
+                panic!("Security error: Test home path '{path_str}' contains suspicious patterns");
             }
         }
         (_, Err(e)) => {

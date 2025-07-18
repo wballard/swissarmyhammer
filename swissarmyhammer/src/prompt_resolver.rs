@@ -171,8 +171,7 @@ mod tests {
                 let builtin_prompt_names: Vec<String> =
                     prompts.iter().map(|p| p.name.clone()).collect();
                 panic!(
-                    "debug/error prompt not found. Available builtin prompts: {:?}",
-                    builtin_prompt_names
+                    "debug/error prompt not found. Available builtin prompts: {builtin_prompt_names:?}"
                 );
             }
         }

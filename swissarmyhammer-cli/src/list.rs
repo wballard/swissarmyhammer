@@ -127,11 +127,11 @@ pub fn run_list_command(
     match format {
         OutputFormat::Json => {
             let json = serde_json::to_string_pretty(&prompt_infos)?;
-            println!("{}", json);
+            println!("{json}");
         }
         OutputFormat::Yaml => {
             let yaml = serde_yaml::to_string(&prompt_infos)?;
-            print!("{}", yaml);
+            print!("{yaml}");
         }
         OutputFormat::Table => {
             display_table(&prompt_infos, verbose)?;
@@ -177,20 +177,20 @@ fn display_table_to_writer<W: Write>(
                     title.magenta().to_string(),
                 ),
             };
-            format!("{} | {}", name_colored, title_colored)
+            format!("{name_colored} | {title_colored}")
         } else {
             format!("{} | {}", info.name, title)
         };
 
         // Second line: Full description (indented)
         let second_line = if !description.is_empty() {
-            format!("  {}", description)
+            format!("  {description}")
         } else {
             "  (no description)".to_string()
         };
 
-        writeln!(writer, "{}", first_line)?;
-        writeln!(writer, "{}", second_line)?;
+        writeln!(writer, "{first_line}")?;
+        writeln!(writer, "{second_line}")?;
         writeln!(writer)?; // Empty line between entries
     }
 

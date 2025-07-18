@@ -59,9 +59,9 @@ pub fn validate_path_security(path: &Path, root: &Path) -> Result<PathBuf> {
 
     // For files that don't exist yet, we need to check the parent directory
     let canonical_path = if full_path.exists() {
-        full_path.canonicalize().map_err(|e| {
-            SwissArmyHammerError::Other(format!("Failed to canonicalize path: {e}"))
-        })?
+        full_path
+            .canonicalize()
+            .map_err(|e| SwissArmyHammerError::Other(format!("Failed to canonicalize path: {e}")))?
     } else {
         // Check the parent directory exists and is valid
         let parent = full_path.parent().ok_or_else(|| {
@@ -168,7 +168,7 @@ mod tests {
         // Test with relative path
         let result = validate_path_security(Path::new("test.txt"), root);
         if let Err(e) = &result {
-            panic!("Expected Ok, got error: {}", e);
+            panic!("Expected Ok, got error: {e}");
         }
         assert_eq!(result.unwrap(), safe_file.canonicalize().unwrap());
     }
@@ -186,8 +186,7 @@ mod tests {
                 let error_str = e.to_string();
                 assert!(
                     error_str.contains("parent directory"),
-                    "Expected 'parent directory' in error, got: {}",
-                    error_str
+                    "Expected 'parent directory' in error, got: {error_str}"
                 );
             }
         }
@@ -211,7 +210,7 @@ mod tests {
                 // Absolute paths are rejected early in the validation
                 assert!(error_str.contains("absolute root reference") || 
                         error_str.contains("outside allowed directory"), 
-                    "Expected 'absolute root reference' or 'outside allowed directory' in error, got: {}", error_str);
+                    "Expected 'absolute root reference' or 'outside allowed directory' in error, got: {error_str}");
             }
         }
     }

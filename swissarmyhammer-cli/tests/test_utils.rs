@@ -56,17 +56,17 @@ pub fn create_test_prompt_files(prompts_dir: &Path) -> Result<()> {
     ];
 
     for (name, template, args) in test_prompts {
-        let prompt_file = prompts_dir.join(format!("{}.prompt", name));
+        let prompt_file = prompts_dir.join(format!("{name}.prompt"));
         let mut yaml_content = String::from("---\n");
-        yaml_content.push_str(&format!("name: {}\n", name));
-        yaml_content.push_str(&format!("description: Test prompt for {}\n", name));
+        yaml_content.push_str(&format!("name: {name}\n"));
+        yaml_content.push_str(&format!("description: Test prompt for {name}\n"));
 
         if !args.is_empty() {
             yaml_content.push_str("arguments:\n");
             for (arg_name, desc, required) in args {
-                yaml_content.push_str(&format!("  - name: {}\n", arg_name));
-                yaml_content.push_str(&format!("    description: {}\n", desc));
-                yaml_content.push_str(&format!("    required: {}\n", required));
+                yaml_content.push_str(&format!("  - name: {arg_name}\n"));
+                yaml_content.push_str(&format!("    description: {desc}\n"));
+                yaml_content.push_str(&format!("    required: {required}\n"));
             }
         }
 

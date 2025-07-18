@@ -31,7 +31,7 @@ async fn wait_for_server_ready(
         let request_str = serde_json::to_string(&test_request)?;
 
         // Try to send the request
-        match writeln!(stdin, "{}", request_str) {
+        match writeln!(stdin, "{request_str}") {
             Ok(_) => {
                 if stdin.flush().is_ok() {
                     // Try to read a response with a short timeout
@@ -61,7 +61,7 @@ async fn wait_for_server_ready(
 
         // Log progress every second
         if attempt % 10 == 0 && attempt > 0 {
-            eprintln!("Waiting for server to be ready... (attempt {})", attempt);
+            eprintln!("Waiting for server to be ready... (attempt {attempt})");
         }
     }
 
@@ -97,14 +97,14 @@ async fn test_mcp_server_partial_rendering() {
     std::thread::spawn(move || {
         let stderr_reader = BufReader::new(stderr);
         for line in stderr_reader.lines().map_while(Result::ok) {
-            eprintln!("SERVER: {}", line);
+            eprintln!("SERVER: {line}");
         }
     });
 
     // Helper to send JSON-RPC request
     let send_request = |stdin: &mut std::process::ChildStdin, request: Value| {
         let request_str = serde_json::to_string(&request).unwrap();
-        writeln!(stdin, "{}", request_str).unwrap();
+        writeln!(stdin, "{request_str}").unwrap();
         stdin.flush().unwrap();
     };
 
@@ -176,7 +176,7 @@ async fn test_mcp_server_partial_rendering() {
         .as_str()
         .expect("Expected text content");
 
-    println!("Rendered content:\n{}", content);
+    println!("Rendered content:\n{content}");
 
     // Verify that the partial was successfully rendered
     assert!(

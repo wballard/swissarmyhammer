@@ -624,10 +624,9 @@ mod tests {
             let vars = extract_template_variables(template);
             assert!(
                 vars.contains(&"name".to_string()),
-                "Failed for template: {}",
-                template
+                "Failed for template: {template}"
             );
-            assert_eq!(vars.len(), 1, "Failed for template: {}", template);
+            assert_eq!(vars.len(), 1, "Failed for template: {template}");
         }
     }
 
@@ -649,7 +648,7 @@ mod tests {
     fn test_extract_template_variables_long_names() {
         // Test very long template variable names
         let long_var_name = "a".repeat(100);
-        let template = format!("Hello {{{{ {} }}}}", long_var_name);
+        let template = format!("Hello {{{{ {long_var_name} }}}}");
         let vars = extract_template_variables(&template);
 
         assert!(vars.contains(&long_var_name));

@@ -11,7 +11,7 @@ async fn test_concurrent_set_variable_actions() {
     let context = Arc::new(Mutex::new(create_test_context()));
 
     let actions: Vec<SetVariableAction> = (0..10)
-        .map(|i| SetVariableAction::new(format!("concurrent_var_{}", i), format!("value_{}", i)))
+        .map(|i| SetVariableAction::new(format!("concurrent_var_{i}"), format!("value_{i}")))
         .collect();
 
     let mut handles = vec![];
@@ -33,13 +33,12 @@ async fn test_concurrent_set_variable_actions() {
     // Verify all variables were set correctly
     let ctx = context.lock().await;
     for i in 0..10 {
-        let key = format!("concurrent_var_{}", i);
-        let expected_value = format!("value_{}", i);
+        let key = format!("concurrent_var_{i}");
+        let expected_value = format!("value_{i}");
         assert_eq!(
             ctx.get(&key),
             Some(&Value::String(expected_value)),
-            "Variable {} was not set correctly",
-            key
+            "Variable {key} was not set correctly"
         );
     }
 }
@@ -76,8 +75,7 @@ async fn test_concurrent_log_actions() {
     // Verify execution was concurrent (should be much less than sequential)
     assert!(
         duration.as_millis() < 100,
-        "Concurrent execution took too long: {:?}",
-        duration
+        "Concurrent execution took too long: {duration:?}"
     );
 }
 
@@ -88,7 +86,7 @@ async fn test_concurrent_wait_actions() {
     let num_actions = 5;
 
     let actions: Vec<WaitAction> = (0..num_actions)
-        .map(|i| WaitAction::new_duration(wait_duration).with_message(format!("Wait action {}", i)))
+        .map(|i| WaitAction::new_duration(wait_duration).with_message(format!("Wait action {i}")))
         .collect();
 
     let start = Instant::now();
@@ -112,8 +110,7 @@ async fn test_concurrent_wait_actions() {
     // If sequential, it would be num_actions * wait_duration
     assert!(
         duration < Duration::from_millis(200),
-        "Concurrent wait actions took too long: {:?} (expected < 200ms)",
-        duration
+        "Concurrent wait actions took too long: {duration:?} (expected < 200ms)"
     );
 }
 
@@ -223,8 +220,8 @@ async fn test_concurrent_prompt_action_rate_limiting() {
 
     let actions: Vec<PromptAction> = (0..3)
         .map(|i| {
-            PromptAction::new(format!("test-prompt-{}", i))
-                .with_argument("arg".to_string(), format!("value{}", i))
+            PromptAction::new(format!("test-prompt-{i}"))
+                .with_argument("arg".to_string(), format!("value{i}"))
         })
         .collect();
 
@@ -251,7 +248,7 @@ async fn test_concurrent_prompt_action_rate_limiting() {
 
     // Verify that execution attempted concurrently
     // (actual rate limiting would depend on external service)
-    println!("Concurrent prompt actions completed in {:?}", duration);
+    println!("Concurrent prompt actions completed in {duration:?}");
 }
 
 #[tokio::test]
@@ -267,8 +264,8 @@ async fn test_concurrent_sub_workflow_actions() {
 
     let actions: Vec<SubWorkflowAction> = (0..3)
         .map(|i| {
-            SubWorkflowAction::new(format!("sub-workflow-{}", i))
-                .with_input("input".to_string(), format!("data{}", i))
+            SubWorkflowAction::new(format!("sub-workflow-{i}"))
+                .with_input("input".to_string(), format!("data{i}"))
         })
         .collect();
 
@@ -348,7 +345,6 @@ async fn test_concurrent_action_context_consistency() {
     // Due to the mutex, all increments should be atomic
     assert_eq!(
         final_value, num_actions as i64,
-        "Expected counter to be {}, but was {}",
-        num_actions, final_value
+        "Expected counter to be {num_actions}, but was {final_value}"
     );
 }

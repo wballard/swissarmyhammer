@@ -295,9 +295,7 @@ impl WorkflowExecutor {
         // The conditional transitions are handled by the normal transition evaluation
         self.log_event(
             ExecutionEventType::StateExecution,
-            format!(
-                "Choice state '{choice_state}' ready for conditional transition evaluation"
-            ),
+            format!("Choice state '{choice_state}' ready for conditional transition evaluation"),
         );
 
         Ok(())

@@ -181,7 +181,7 @@ fn test_execution_history_limit() {
 
     // Add many events to trigger trimming
     for i in 0..20 {
-        executor.log_event(ExecutionEventType::Started, format!("Event {}", i));
+        executor.log_event(ExecutionEventType::Started, format!("Event {i}"));
     }
 
     // History should be trimmed to stay under limit
@@ -962,7 +962,7 @@ fn test_cel_expression_security_validation() {
     for pattern in forbidden_patterns {
         let condition = TransitionCondition {
             condition_type: ConditionType::Custom,
-            expression: Some(format!("{} == true", pattern)),
+            expression: Some(format!("{pattern} == true")),
         };
 
         let result = executor.evaluate_condition(&condition, &context);

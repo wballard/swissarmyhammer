@@ -145,15 +145,13 @@ fn test_completion_command() -> Result<()> {
 
         assert!(
             output.status.success(),
-            "{} completion should succeed",
-            shell
+            "{shell} completion should succeed"
         );
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(
             !stdout.is_empty(),
-            "{} completion should generate output",
-            shell
+            "{shell} completion should generate output"
         );
     }
 
@@ -570,7 +568,7 @@ async fn test_concurrent_flow_test() -> Result<()> {
                     "test",
                     "hello-world",
                     "--set",
-                    &format!("run_id={}", i),
+                    &format!("run_id={i}"),
                 ])
                 .output()
                 .expect("Failed to run command");
@@ -582,7 +580,7 @@ async fn test_concurrent_flow_test() -> Result<()> {
     // All commands should succeed
     while let Some(result) = tasks.join_next().await {
         let (i, success) = result?;
-        assert!(success, "Concurrent flow test {} should succeed", i);
+        assert!(success, "Concurrent flow test {i} should succeed");
     }
 
     Ok(())
@@ -601,8 +599,7 @@ fn test_prompt_list_formats() -> Result<()> {
 
         assert!(
             output.status.code().is_some(),
-            "prompt list --format {} should complete",
-            format
+            "prompt list --format {format} should complete"
         );
     }
 
@@ -632,7 +629,7 @@ async fn test_concurrent_commands() -> Result<()> {
     // All commands should succeed
     while let Some(result) = tasks.join_next().await {
         let (i, success) = result?;
-        assert!(success, "Concurrent command {} should succeed", i);
+        assert!(success, "Concurrent command {i} should succeed");
     }
 
     Ok(())
@@ -1323,13 +1320,12 @@ fn test_root_validate_stress_many_files() -> Result<()> {
     // Create 100 workflow files
     for i in 0..100 {
         std::fs::write(
-            workflow_dir.join(format!("workflow_{}.mermaid", i)),
+            workflow_dir.join(format!("workflow_{i}.mermaid")),
             format!(
                 r#"stateDiagram-v2
-    [*] --> State{}
-    State{} --> [*]
-"#,
-                i, i
+    [*] --> State{i}
+    State{i} --> [*]
+"#
             ),
         )?;
     }

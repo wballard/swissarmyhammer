@@ -383,9 +383,7 @@ impl PromptAction {
 
         // Execute the command
         let output = cmd.output().await.map_err(|e| {
-            ActionError::ClaudeError(format!(
-                "Failed to render prompt with swissarmyhammer: {e}"
-            ))
+            ActionError::ClaudeError(format!("Failed to render prompt with swissarmyhammer: {e}"))
         })?;
 
         // Check for errors
@@ -1753,7 +1751,7 @@ mod tests {
             ActionError::AbortError(msg) => {
                 assert_eq!(msg, "Test abort message");
             }
-            _ => panic!("Expected AbortError, got {:?}", error),
+            _ => panic!("Expected AbortError, got {error:?}"),
         }
     }
 
@@ -1775,7 +1773,7 @@ mod tests {
             ActionError::AbortError(msg) => {
                 assert_eq!(msg, "Error in test.rs: compilation failed");
             }
-            _ => panic!("Expected AbortError, got {:?}", error),
+            _ => panic!("Expected AbortError, got {error:?}"),
         }
     }
 

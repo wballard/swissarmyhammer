@@ -107,7 +107,7 @@ stateDiagram-v2
     let result = executor.execute_state(&mut run).await;
 
     // Check that the workflow completed successfully
-    assert!(result.is_ok(), "Workflow execution failed: {:?}", result);
+    assert!(result.is_ok(), "Workflow execution failed: {result:?}");
 
     // Workflow execution should have completed successfully
     // The parent workflow should have executed its state 3 after the sub-workflow completed

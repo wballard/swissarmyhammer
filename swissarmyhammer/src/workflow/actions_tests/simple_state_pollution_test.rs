@@ -168,7 +168,7 @@ async fn test_state_pollution_manual() {
     // Execute process state (should run child workflow)
     eprintln!("Executing parent process state (sub-workflow call)");
     let result = executor.execute_single_state(&mut run).await;
-    eprintln!("Sub-workflow execution result: {:?}", result);
+    eprintln!("Sub-workflow execution result: {result:?}");
     eprintln!("After sub-workflow - context: {:?}", run.context);
 
     // The test passes if:

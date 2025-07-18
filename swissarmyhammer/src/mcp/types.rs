@@ -2,18 +2,7 @@
 
 use serde::Deserialize;
 use std::collections::HashMap;
-
-// Constants for MCP server configuration
-
-/// Constants for issue branch management
-pub const ISSUE_BRANCH_PREFIX: &str = "issue/";
-/// Width for zero-padded issue numbers (e.g., 000001)
-pub const ISSUE_NUMBER_WIDTH: usize = 6;
-
-/// Minimum valid issue number
-pub const MIN_ISSUE_NUMBER: u32 = 1;
-/// Maximum valid issue number
-pub const MAX_ISSUE_NUMBER: u32 = 999999;
+use crate::config::Config;
 
 // Type safety wrapper types
 
@@ -25,10 +14,11 @@ pub struct IssueNumber(pub u32);
 impl IssueNumber {
     /// Create a new issue number after validation
     pub fn new(number: u32) -> Result<Self, String> {
-        if number < MIN_ISSUE_NUMBER || number > MAX_ISSUE_NUMBER {
+        let config = Config::global();
+        if !(config.min_issue_number..=config.max_issue_number).contains(&number) {
             return Err(format!(
                 "Issue number {} is out of valid range ({}-{})",
-                number, MIN_ISSUE_NUMBER, MAX_ISSUE_NUMBER
+                number, config.min_issue_number, config.max_issue_number
             ));
         }
         Ok(IssueNumber(number))
@@ -47,7 +37,8 @@ impl IssueNumber {
 
 impl std::fmt::Display for IssueNumber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:06}", self.0)
+        let config = Config::global();
+        write!(f, "{:0width$}", self.0, width = config.issue_number_digits)
     }
 }
 

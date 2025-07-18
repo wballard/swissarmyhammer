@@ -1,6 +1,6 @@
 //! Tool handlers for MCP operations
 
-use super::types::{ISSUE_BRANCH_PREFIX, ISSUE_NUMBER_WIDTH};
+use crate::config::Config;
 use super::responses::{
     create_all_complete_response, create_error_response, create_issue_response,
     create_mark_complete_response, create_success_response,
@@ -188,7 +188,8 @@ impl ToolHandlers {
         match git_ops.as_ref() {
             Some(ops) => match ops.current_branch() {
                 Ok(branch) => {
-                    if let Some(issue_name) = branch.strip_prefix(ISSUE_BRANCH_PREFIX) {
+                    let config = Config::global();
+                    if let Some(issue_name) = branch.strip_prefix(&config.issue_branch_prefix) {
                         Ok(create_success_response(format!(
                             "Currently working on issue: {}",
                             issue_name
@@ -246,7 +247,7 @@ impl ToolHandlers {
             "{:0width$}_{}",
             issue.number,
             issue.name,
-            width = ISSUE_NUMBER_WIDTH
+            width = Config::global().issue_number_width
         );
 
         match git_ops.as_mut() {
@@ -321,7 +322,7 @@ impl ToolHandlers {
             "{:0width$}_{}",
             issue.number,
             issue.name,
-            width = ISSUE_NUMBER_WIDTH
+            width = Config::global().issue_number_width
         );
 
         match git_ops.as_mut() {

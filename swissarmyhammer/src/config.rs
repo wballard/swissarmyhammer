@@ -14,6 +14,8 @@ pub struct Config {
     pub issue_number_width: usize,
     /// Maximum number of pending issues to display in summary (default: 5)
     pub max_pending_issues_in_summary: usize,
+    /// Minimum issue number allowed (default: 1)
+    pub min_issue_number: u32,
     /// Maximum issue number allowed (default: 999999)
     pub max_issue_number: u32,
     /// Number of digits for issue numbering in filenames (default: 6)
@@ -26,6 +28,7 @@ impl Default for Config {
             issue_branch_prefix: "issue/".to_string(),
             issue_number_width: 6,
             max_pending_issues_in_summary: 5,
+            min_issue_number: 1,
             max_issue_number: 999999,
             issue_number_digits: 6,
         }
@@ -47,6 +50,10 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(5),
+            min_issue_number: env::var("SWISSARMYHAMMER_MIN_ISSUE_NUMBER")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1),
             max_issue_number: env::var("SWISSARMYHAMMER_MAX_ISSUE_NUMBER")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -83,6 +90,7 @@ mod tests {
         assert_eq!(config.issue_branch_prefix, "issue/");
         assert_eq!(config.issue_number_width, 6);
         assert_eq!(config.max_pending_issues_in_summary, 5);
+        assert_eq!(config.min_issue_number, 1);
         assert_eq!(config.max_issue_number, 999999);
         assert_eq!(config.issue_number_digits, 6);
     }
@@ -101,6 +109,7 @@ mod tests {
         assert_eq!(config.issue_branch_prefix, "issue/");
         assert_eq!(config.issue_number_width, 6);
         assert_eq!(config.max_pending_issues_in_summary, 5);
+        assert_eq!(config.min_issue_number, 1);
         assert_eq!(config.max_issue_number, 999999);
         assert_eq!(config.issue_number_digits, 6);
     }
@@ -126,6 +135,7 @@ mod tests {
         assert_eq!(config.issue_branch_prefix, "feature/");
         assert_eq!(config.issue_number_width, 8);
         assert_eq!(config.max_pending_issues_in_summary, 10);
+        assert_eq!(config.min_issue_number, 1);
         assert_eq!(config.max_issue_number, 9999999);
         assert_eq!(config.issue_number_digits, 7);
 

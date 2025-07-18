@@ -19,7 +19,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
-use self::types::{MAX_ISSUE_NUMBER, MIN_ISSUE_NUMBER};
 
 /// MCP module structure
 pub mod error_handling;
@@ -667,11 +666,12 @@ impl McpServer {
         request: MarkCompleteRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         // Validate issue number
-        if request.number < MIN_ISSUE_NUMBER || request.number > MAX_ISSUE_NUMBER {
+        let config = Config::global();
+        if request.number < config.min_issue_number || request.number > config.max_issue_number {
             return Err(McpError::invalid_params(
                 format!(
                     "Invalid issue number (must be {}-{})",
-                    MIN_ISSUE_NUMBER, MAX_ISSUE_NUMBER
+                    config.min_issue_number, config.max_issue_number
                 ),
                 None,
             ));
@@ -907,11 +907,12 @@ impl McpServer {
         request: UpdateIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         // Validate issue number
-        if request.number < MIN_ISSUE_NUMBER || request.number > MAX_ISSUE_NUMBER {
+        let config = Config::global();
+        if request.number < config.min_issue_number || request.number > config.max_issue_number {
             return Err(McpError::invalid_params(
                 format!(
                     "Invalid issue number (must be {}-{})",
-                    MIN_ISSUE_NUMBER, MAX_ISSUE_NUMBER
+                    config.min_issue_number, config.max_issue_number
                 ),
                 None,
             ));
@@ -1193,11 +1194,12 @@ impl McpServer {
         request: WorkIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         // Validate issue number
-        if request.number < MIN_ISSUE_NUMBER || request.number > MAX_ISSUE_NUMBER {
+        let config = Config::global();
+        if request.number < config.min_issue_number || request.number > config.max_issue_number {
             return Err(McpError::invalid_params(
                 format!(
                     "Invalid issue number (must be {}-{})",
-                    MIN_ISSUE_NUMBER, MAX_ISSUE_NUMBER
+                    config.min_issue_number, config.max_issue_number
                 ),
                 None,
             ));

@@ -26,6 +26,10 @@ pub struct Config {
     pub max_line_length: usize,
     /// Maximum issue name length (default: 100)
     pub max_issue_name_length: usize,
+    /// Cache TTL in seconds (default: 300, i.e., 5 minutes)
+    pub cache_ttl_seconds: u64,
+    /// Maximum cache size (default: 1000)
+    pub cache_max_size: usize,
 }
 
 impl Default for Config {
@@ -40,6 +44,8 @@ impl Default for Config {
             max_content_length: 50000,
             max_line_length: 10000,
             max_issue_name_length: 100,
+            cache_ttl_seconds: 300,
+            cache_max_size: 1000,
         }
     }
 }
@@ -85,6 +91,14 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(100),
+            cache_ttl_seconds: env::var("SWISSARMYHAMMER_CACHE_TTL_SECONDS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(300),
+            cache_max_size: env::var("SWISSARMYHAMMER_CACHE_MAX_SIZE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1000),
         }
     }
 

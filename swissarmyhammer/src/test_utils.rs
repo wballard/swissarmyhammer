@@ -175,13 +175,12 @@ fn validate_path_safety(path: &Path, project_root: &Path) {
             let path_str = path.to_string_lossy();
             if path_str.contains("../..") || path_str.contains("....") {
                 panic!(
-                    "Security error: Test home path '{}' contains suspicious patterns",
-                    path_str
+                    "Security error: Test home path '{path_str}' contains suspicious patterns"
                 );
             }
         }
         (_, Err(e)) => {
-            panic!("Failed to canonicalize project root: {}", e);
+            panic!("Failed to canonicalize project root: {e}");
         }
     }
 }
@@ -338,7 +337,7 @@ pub fn create_test_prompts() -> Vec<Prompt> {
 ///
 /// Useful for tests that need a single prompt without all the metadata.
 pub fn create_simple_test_prompt(name: &str, template: &str) -> Prompt {
-    Prompt::new(name, template).with_description(format!("Test prompt: {}", name))
+    Prompt::new(name, template).with_description(format!("Test prompt: {name}"))
 }
 
 /// Create a test prompt library with standard test prompts

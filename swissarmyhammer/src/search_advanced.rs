@@ -162,9 +162,9 @@ impl AdvancedSearchEngine {
         let re = if case_sensitive {
             Regex::new(pattern)
         } else {
-            Regex::new(&format!("(?i){}", pattern))
+            Regex::new(&format!("(?i){pattern}"))
         }
-        .map_err(|e| crate::SwissArmyHammerError::Other(format!("Invalid regex: {}", e)))?;
+        .map_err(|e| crate::SwissArmyHammerError::Other(format!("Invalid regex: {e}")))?;
 
         let mut results = Vec::new();
 
@@ -209,10 +209,10 @@ pub fn generate_excerpt(content: &str, query: &str, highlight: bool) -> Option<S
         if highlight {
             // In a terminal context, we might use ANSI codes, but for library usage,
             // we'll use a simple marker
-            let highlighted = excerpt.replace(query, &format!("**{}**", query));
-            Some(format!("...{}...", highlighted))
+            let highlighted = excerpt.replace(query, &format!("**{query}**"));
+            Some(format!("...{highlighted}..."))
         } else {
-            Some(format!("...{}...", excerpt))
+            Some(format!("...{excerpt}..."))
         }
     } else {
         None

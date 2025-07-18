@@ -326,7 +326,7 @@ impl WorkflowExecutor {
         if self.requires_manual_intervention(run) {
             self.log_event(
                 ExecutionEventType::StateExecution,
-                format!("State {} requires manual intervention", current_state_id),
+                format!("State {current_state_id} requires manual intervention"),
             );
 
             // Check if manual approval has been provided
@@ -339,8 +339,7 @@ impl WorkflowExecutor {
                 // Pause execution here - workflow will need to be resumed
                 // Mark workflow as paused by returning the proper error type
                 return Err(ExecutorError::ManualInterventionRequired(format!(
-                    "State {} requires manual approval",
-                    current_state_id
+                    "State {current_state_id} requires manual approval"
                 )));
             }
         }
@@ -512,8 +511,7 @@ impl WorkflowExecutor {
                 self.log_event(
                     ExecutionEventType::StateExecution,
                     format!(
-                        "Action completed successfully with result: {}",
-                        result_value
+                        "Action completed successfully with result: {result_value}"
                     ),
                 );
                 Ok(())
@@ -574,7 +572,7 @@ impl WorkflowExecutor {
         if let Err(comp_error) = self.execute_compensation(run).await {
             self.log_event(
                 ExecutionEventType::Failed,
-                format!("Compensation failed: {}", comp_error),
+                format!("Compensation failed: {comp_error}"),
             );
         }
 
@@ -605,27 +603,26 @@ impl WorkflowExecutor {
     fn format_action_error(&self, action_error: &ActionError) -> String {
         match action_error {
             ActionError::Timeout { timeout } => {
-                format!("Action timed out after {:?}", timeout)
+                format!("Action timed out after {timeout:?}")
             }
-            ActionError::ClaudeError(msg) => format!("Claude command failed: {}", msg),
+            ActionError::ClaudeError(msg) => format!("Claude command failed: {msg}"),
             ActionError::VariableError(msg) => {
-                format!("Variable operation failed: {}", msg)
+                format!("Variable operation failed: {msg}")
             }
-            ActionError::IoError(io_err) => format!("IO operation failed: {}", io_err),
+            ActionError::IoError(io_err) => format!("IO operation failed: {io_err}"),
             ActionError::JsonError(json_err) => {
-                format!("JSON parsing failed: {}", json_err)
+                format!("JSON parsing failed: {json_err}")
             }
-            ActionError::ParseError(msg) => format!("Action parsing failed: {}", msg),
+            ActionError::ParseError(msg) => format!("Action parsing failed: {msg}"),
             ActionError::ExecutionError(msg) => {
-                format!("Action execution failed: {}", msg)
+                format!("Action execution failed: {msg}")
             }
             ActionError::RateLimit { message, wait_time } => {
                 format!(
-                    "Rate limit reached: {}. Please wait {:?} before retrying.",
-                    message, wait_time
+                    "Rate limit reached: {message}. Please wait {wait_time:?} before retrying."
                 )
             }
-            ActionError::AbortError(msg) => format!("ABORT ERROR: {}", msg),
+            ActionError::AbortError(msg) => format!("ABORT ERROR: {msg}"),
         }
     }
 
@@ -639,13 +636,13 @@ impl WorkflowExecutor {
         // Add dead letter reason to context
         run.context.insert(
             "dead_letter_reason".to_string(),
-            Value::String(format!("Max retries exhausted: {}", action_error)),
+            Value::String(format!("Max retries exhausted: {action_error}")),
         );
 
         // Transition to dead letter state
         self.log_event(
             ExecutionEventType::StateTransition,
-            format!("Transitioning to dead letter state: {}", dead_letter_state),
+            format!("Transitioning to dead letter state: {dead_letter_state}"),
         );
         self.perform_transition(run, dead_letter_state)?;
 
@@ -700,7 +697,7 @@ impl WorkflowExecutor {
         if let Some((key, comp_state)) = compensation_states.into_iter().next() {
             self.log_event(
                 ExecutionEventType::StateExecution,
-                format!("Executing compensation state: {}", comp_state),
+                format!("Executing compensation state: {comp_state}"),
             );
 
             // Just transition to the compensation state, don't execute it

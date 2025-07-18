@@ -67,8 +67,7 @@ impl PluginRegistry {
         // Check if plugin already exists
         if self.plugins.contains_key(&name) {
             return Err(SwissArmyHammerError::Config(format!(
-                "Plugin '{}' is already registered",
-                name
+                "Plugin '{name}' is already registered"
             )));
         }
 
@@ -80,8 +79,7 @@ impl PluginRegistry {
             let filter_name = filter.name().to_string();
             if self.filters.contains_key(&filter_name) {
                 return Err(SwissArmyHammerError::Config(format!(
-                    "Filter '{}' is already registered",
-                    filter_name
+                    "Filter '{filter_name}' is already registered"
                 )));
             }
             self.filters.insert(filter_name, Arc::from(filter));

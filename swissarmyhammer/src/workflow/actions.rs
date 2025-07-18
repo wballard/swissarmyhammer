@@ -369,11 +369,11 @@ impl PromptAction {
         for (key, value) in &args {
             if !is_valid_argument_key(key) {
                 return Err(ActionError::ParseError(
-                    format!("Invalid argument key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
+                    format!("Invalid argument key '{key}': must contain only alphanumeric characters, hyphens, and underscores")
                 ));
             }
             cmd.arg("--arg");
-            cmd.arg(format!("{}={}", key, value));
+            cmd.arg(format!("{key}={value}"));
         }
 
         // Set up process pipes
@@ -384,8 +384,7 @@ impl PromptAction {
         // Execute the command
         let output = cmd.output().await.map_err(|e| {
             ActionError::ClaudeError(format!(
-                "Failed to render prompt with swissarmyhammer: {}",
-                e
+                "Failed to render prompt with swissarmyhammer: {e}"
             ))
         })?;
 
@@ -453,8 +452,7 @@ impl PromptAction {
             })
             .map_err(|e| {
                 ActionError::ClaudeError(format!(
-                    "Claude CLI not found. Make sure 'claude' is installed and available in your PATH. Error: {}",
-                    e
+                    "Claude CLI not found. Make sure 'claude' is installed and available in your PATH. Error: {e}"
                 ))
             })?;
         let mut cmd = Command::new(&claude_path);
@@ -481,7 +479,7 @@ impl PromptAction {
 
         // Spawn the Claude process
         let mut child = cmd.spawn().map_err(|e| {
-            ActionError::ClaudeError(format!("Failed to spawn Claude command: {}", e))
+            ActionError::ClaudeError(format!("Failed to spawn Claude command: {e}"))
         })?;
 
         // Write the prompt to Claude's stdin
@@ -491,10 +489,10 @@ impl PromptAction {
                 .write_all(rendered_prompt.as_bytes())
                 .await
                 .map_err(|e| {
-                    ActionError::ClaudeError(format!("Failed to write prompt to Claude: {}", e))
+                    ActionError::ClaudeError(format!("Failed to write prompt to Claude: {e}"))
                 })?;
             stdin.shutdown().await.map_err(|e| {
-                ActionError::ClaudeError(format!("Failed to close Claude stdin: {}", e))
+                ActionError::ClaudeError(format!("Failed to close Claude stdin: {e}"))
             })?;
         }
 
@@ -593,8 +591,7 @@ impl PromptAction {
             Ok(Ok(status)) => status,
             Ok(Err(e)) => {
                 return Err(ActionError::ClaudeError(format!(
-                    "Failed to wait for Claude: {}",
-                    e
+                    "Failed to wait for Claude: {e}"
                 )))
             }
             Err(_) => {
@@ -638,7 +635,7 @@ impl PromptAction {
             yaml_output.push_str(&format!("prompt: {}\n", self.prompt_name));
             yaml_output.push_str("claude_response: |\n");
             for line in response_text.lines() {
-                yaml_output.push_str(&format!("  {}\n", line));
+                yaml_output.push_str(&format!("  {line}\n"));
             }
             yaml_output.push_str("---");
 
@@ -743,7 +740,7 @@ impl Action for WaitAction {
 
     fn description(&self) -> String {
         match self.duration {
-            Some(duration) => format!("Wait for {:?}", duration),
+            Some(duration) => format!("Wait for {duration:?}"),
             None => "Wait for user input".to_string(),
         }
     }
@@ -1015,7 +1012,7 @@ impl Action for SubWorkflowAction {
         for key in substituted_inputs.keys() {
             if !is_valid_argument_key(key) {
                 return Err(ActionError::ParseError(
-                    format!("Invalid input variable key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
+                    format!("Invalid input variable key '{key}': must contain only alphanumeric characters, hyphens, and underscores")
                 ));
             }
         }
@@ -1033,7 +1030,7 @@ impl Action for SubWorkflowAction {
             test_storage
         } else {
             Arc::new(WorkflowStorage::file_system().map_err(|e| {
-                ActionError::ExecutionError(format!("Failed to create workflow storage: {}", e))
+                ActionError::ExecutionError(format!("Failed to create workflow storage: {e}"))
             })?)
         };
 
@@ -1244,7 +1241,7 @@ fn format_value_as_yaml(value: &Value, indent_level: usize) -> String {
                 let mut result = "|-\n".to_string();
                 let content_indent = "  ".repeat(indent_level + 1);
                 for line in lines {
-                    result.push_str(&format!("{}{}\n", content_indent, line));
+                    result.push_str(&format!("{content_indent}{line}\n"));
                 }
                 result.trim_end().to_string()
             } else {
@@ -1273,7 +1270,7 @@ fn format_value_as_yaml(value: &Value, indent_level: usize) -> String {
                         result.push('\n');
                         let item_indent = "  ".repeat(indent_level + 1);
                         for line in item_str.lines() {
-                            result.push_str(&format!("{}{}\n", item_indent, line));
+                            result.push_str(&format!("{item_indent}{line}\n"));
                         }
                         result = result.trim_end().to_string();
                     } else {
@@ -1293,7 +1290,7 @@ fn format_value_as_yaml(value: &Value, indent_level: usize) -> String {
                 }
                 first = false;
 
-                result.push_str(&format!("{}: ", key));
+                result.push_str(&format!("{key}: "));
                 let value_str = format_value_as_yaml(value, indent_level + 1);
 
                 if value_str.contains('\n') && !matches!(value, Value::String(_)) {
@@ -1301,7 +1298,7 @@ fn format_value_as_yaml(value: &Value, indent_level: usize) -> String {
                     result.push('\n');
                     let value_indent = "  ".repeat(indent_level + 1);
                     for line in value_str.lines() {
-                        result.push_str(&format!("{}{}\n", value_indent, line));
+                        result.push_str(&format!("{value_indent}{line}\n"));
                     }
                     result = result.trim_end().to_string();
                 } else {

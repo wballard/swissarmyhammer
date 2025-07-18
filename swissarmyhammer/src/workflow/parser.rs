@@ -68,7 +68,7 @@ impl MermaidParser {
                     actions,
                 ),
                 _ => Err(ParseError::WrongDiagramType {
-                    diagram_type: format!("{:?}", diagram),
+                    diagram_type: format!("{diagram:?}"),
                 }),
             },
             Err(e) => Err(ParseError::MermaidError(e.to_string())),
@@ -101,7 +101,7 @@ impl MermaidParser {
                     )
                 }
                 _ => Err(ParseError::WrongDiagramType {
-                    diagram_type: format!("{:?}", diagram),
+                    diagram_type: format!("{diagram:?}"),
                 }),
             },
             Err(e) => Err(ParseError::MermaidError(e.to_string())),
@@ -528,7 +528,7 @@ impl MermaidParser {
 
             if !all_have_actions {
                 return Err(ParseError::InvalidStructure {
-                    message: format!("Unreachable states found: {:?}", unreachable),
+                    message: format!("Unreachable states found: {unreachable:?}"),
                 });
             }
             // If they all have actions, they're likely states within compound states

@@ -114,7 +114,7 @@ impl WorkflowExecutor {
 
         self.log_event(
             ExecutionEventType::StateExecution,
-            format!("Executing fork state: {}", fork_state),
+            format!("Executing fork state: {fork_state}"),
         );
 
         // Validate fork state has valid transitions
@@ -168,8 +168,7 @@ impl WorkflowExecutor {
         if branch_states.is_empty() {
             return Err(ExecutorError::ExecutionFailed(
                 format!(
-                    "Fork state '{}' has no outgoing transitions. Fork states must have at least two outgoing transitions to parallel branches",
-                    fork_state
+                    "Fork state '{fork_state}' has no outgoing transitions. Fork states must have at least two outgoing transitions to parallel branches"
                 ),
             ));
         }
@@ -208,9 +207,7 @@ impl WorkflowExecutor {
         self.find_join_state(run, branch_states).ok_or_else(|| {
             ExecutorError::ExecutionFailed(
                 format!(
-                    "No join state found for fork '{}' with branches: {:?}. All fork branches must eventually converge at a join state",
-                    fork_state,
-                    branch_states
+                    "No join state found for fork '{fork_state}' with branches: {branch_states:?}. All fork branches must eventually converge at a join state"
                 ),
             )
         })
@@ -250,7 +247,7 @@ impl WorkflowExecutor {
 
             self.log_event(
                 ExecutionEventType::StateExecution,
-                format!("Branch {} completed", branch_state),
+                format!("Branch {branch_state} completed"),
             );
 
             completed_branches.push(branch);
@@ -265,14 +262,14 @@ impl WorkflowExecutor {
 
         self.log_event(
             ExecutionEventType::StateExecution,
-            format!("Executing join state: {}", join_state),
+            format!("Executing join state: {join_state}"),
         );
 
         // Join state execution is mostly handled in the fork state
         // Here we just log that we've reached the join point
         self.log_event(
             ExecutionEventType::StateExecution,
-            format!("All branches joined at: {}", join_state),
+            format!("All branches joined at: {join_state}"),
         );
 
         Ok(())
@@ -291,7 +288,7 @@ impl WorkflowExecutor {
 
         self.log_event(
             ExecutionEventType::StateExecution,
-            format!("Executing choice state: {}", choice_state),
+            format!("Executing choice state: {choice_state}"),
         );
 
         // Choice states don't perform any actions themselves
@@ -299,8 +296,7 @@ impl WorkflowExecutor {
         self.log_event(
             ExecutionEventType::StateExecution,
             format!(
-                "Choice state '{}' ready for conditional transition evaluation",
-                choice_state
+                "Choice state '{choice_state}' ready for conditional transition evaluation"
             ),
         );
 

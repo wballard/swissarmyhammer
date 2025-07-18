@@ -1,25 +1,30 @@
 use super::filesystem::{Issue, IssueStorage};
 use super::cache::{IssueCache, CacheStats};
 use crate::error::Result;
+use crate::config::Config;
 use async_trait::async_trait;
 use tokio::time::Duration;
 use std::sync::Arc;
 
+/// A storage wrapper that adds in-memory caching to any IssueStorage implementation
 pub struct CachedIssueStorage {
     storage: Box<dyn IssueStorage>,
     cache: Arc<IssueCache>,
 }
 
 impl CachedIssueStorage {
+    /// Create a new cached storage with default cache settings from global config
     pub fn new(storage: Box<dyn IssueStorage>) -> Self {
+        let config = Config::global();
         let cache = Arc::new(IssueCache::new(
-            Duration::from_secs(300), // 5 minutes TTL
-            1000, // Max 1000 issues in cache
+            Duration::from_secs(config.cache_ttl_seconds),
+            config.cache_max_size,
         ));
         
         Self { storage, cache }
     }
     
+    /// Create a new cached storage with custom cache settings
     pub fn with_cache_config(
         storage: Box<dyn IssueStorage>,
         ttl: Duration,
@@ -29,14 +34,17 @@ impl CachedIssueStorage {
         Self { storage, cache }
     }
     
+    /// Get current cache statistics
     pub fn cache_stats(&self) -> CacheStats {
         self.cache.stats()
     }
     
+    /// Clear all entries from the cache
     pub fn clear_cache(&self) {
         self.cache.clear();
     }
     
+    /// Reset cache hit/miss statistics
     pub fn reset_cache_stats(&self) {
         self.cache.reset_stats();
     }
@@ -111,15 +119,18 @@ impl IssueStorage for CachedIssueStorage {
     }
 
     async fn get_issues_batch(&self, numbers: Vec<u32>) -> Result<Vec<Issue>> {
-        let mut issues = Vec::new();
+        let mut result = Vec::with_capacity(numbers.len());
         let mut cache_misses = Vec::new();
+        let mut cache_miss_indices = Vec::new();
         
-        // Try to get issues from cache first
-        for number in numbers {
-            if let Some(issue) = self.cache.get(number) {
-                issues.push(issue);
+        // Try to get issues from cache first, preserving order
+        for (index, number) in numbers.iter().enumerate() {
+            if let Some(issue) = self.cache.get(*number) {
+                result.push(Some(issue));
             } else {
-                cache_misses.push(number);
+                result.push(None);
+                cache_misses.push(*number);
+                cache_miss_indices.push(index);
             }
         }
         
@@ -127,15 +138,15 @@ impl IssueStorage for CachedIssueStorage {
         if !cache_misses.is_empty() {
             let missing_issues = self.storage.get_issues_batch(cache_misses).await?;
             
-            // Cache the missing issues
-            for issue in &missing_issues {
-                self.cache.put(issue.clone());
+            // Cache the missing issues and place them in correct positions
+            for (missing_issue, &index) in missing_issues.iter().zip(cache_miss_indices.iter()) {
+                self.cache.put(missing_issue.clone());
+                result[index] = Some(missing_issue.clone());
             }
-            
-            issues.extend(missing_issues);
         }
         
-        Ok(issues)
+        // Convert Option<Issue> to Issue, this should never fail since we filled all slots
+        Ok(result.into_iter().map(|opt| opt.unwrap()).collect())
     }
 
     async fn update_issues_batch(&self, updates: Vec<(u32, String)>) -> Result<Vec<Issue>> {

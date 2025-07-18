@@ -92,7 +92,7 @@ pub fn validate_issue_name(name: &str) -> std::result::Result<String, McpError> 
 
     // Use the existing validation function for additional checks
     validate_issue_name_internal(trimmed)
-        .map_err(|e| McpError::invalid_params(format!("Invalid issue name: {}", e), None))?;
+        .map_err(|e| McpError::invalid_params(format!("Invalid issue name: {e}"), None))?;
 
     Ok(trimmed.to_string())
 }
@@ -192,8 +192,7 @@ fn validate_dangerous_html_tags(content: &str) -> std::result::Result<(), McpErr
             if regex.is_match(content) {
                 return Err(McpError::invalid_params(
                     format!(
-                        "Issue content contains potentially dangerous HTML tag matching pattern: '{}'",
-                        pattern
+                        "Issue content contains potentially dangerous HTML tag matching pattern: '{pattern}'"
                     ),
                     None,
                 ));
@@ -220,8 +219,7 @@ fn validate_dangerous_protocols(content: &str) -> std::result::Result<(), McpErr
             if regex.is_match(content) {
                 return Err(McpError::invalid_params(
                     format!(
-                        "Issue content contains potentially dangerous protocol: '{}'",
-                        pattern
+                        "Issue content contains potentially dangerous protocol: '{pattern}'"
                     ),
                     None,
                 ));
@@ -246,8 +244,7 @@ fn validate_event_handlers(content: &str) -> std::result::Result<(), McpError> {
             if regex.is_match(content) {
                 return Err(McpError::invalid_params(
                     format!(
-                        "Issue content contains potentially dangerous event handler: '{}'",
-                        pattern
+                        "Issue content contains potentially dangerous event handler: '{pattern}'"
                     ),
                     None,
                 ));
@@ -274,8 +271,7 @@ fn validate_dangerous_attributes(content: &str) -> std::result::Result<(), McpEr
             if regex.is_match(content) {
                 return Err(McpError::invalid_params(
                     format!(
-                        "Issue content contains potentially dangerous attribute: '{}'",
-                        pattern
+                        "Issue content contains potentially dangerous attribute: '{pattern}'"
                     ),
                     None,
                 ));
@@ -326,8 +322,7 @@ fn validate_encoded_content(content: &str) -> std::result::Result<(), McpError> 
         if content.contains(entity) {
             return Err(McpError::invalid_params(
                 format!(
-                    "Issue content contains potentially dangerous encoded content: '{}'",
-                    entity
+                    "Issue content contains potentially dangerous encoded content: '{entity}'"
                 ),
                 None,
             ));
@@ -361,8 +356,7 @@ fn validate_markdown_structure(content: &str) -> std::result::Result<(), McpErro
     if code_block_count > 0 {
         return Err(McpError::invalid_params(
             format!(
-                "Issue content has {} unmatched code blocks (```). Each opening ``` must have a closing ```",
-                code_block_count
+                "Issue content has {code_block_count} unmatched code blocks (```). Each opening ``` must have a closing ```"
             ),
             None,
         ));

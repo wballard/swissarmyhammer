@@ -47,7 +47,7 @@ impl ActionParser {
                 } else {
                     Err(Rich::custom(
                         span,
-                        format!("expected '{}', found '{}'", word, s),
+                        format!("expected '{word}', found '{s}'"),
                     ))
                 }
             })
@@ -71,7 +71,7 @@ impl ActionParser {
                     .repeated()
                     .collect::<String>(),
             )
-            .map(|(first, rest)| format!("{}{}", first, rest))
+            .map(|(first, rest)| format!("{first}{rest}"))
     }
 
     /// Parse an argument key (allows hyphens)
@@ -84,7 +84,7 @@ impl ActionParser {
                     .repeated()
                     .collect::<String>(),
             )
-            .map(|(first, rest)| format!("{}{}", first, rest))
+            .map(|(first, rest)| format!("{first}{rest}"))
     }
 
     /// Parse a prompt action from description
@@ -121,7 +121,7 @@ impl ActionParser {
                         } else {
                             if !self.is_valid_argument_key(&key) {
                                 return Err(ActionError::ParseError(
-                                    format!("Invalid argument key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
+                                    format!("Invalid argument key '{key}': must contain only alphanumeric characters, hyphens, and underscores")
                                 ));
                             }
                             action.arguments.insert(key, value);
@@ -241,7 +241,7 @@ impl ActionParser {
                 // Validate variable name
                 if !self.is_valid_variable_name(&var_name) {
                     return Err(ActionError::ParseError(
-                        format!("Invalid variable name '{}': must start with letter or underscore and contain only alphanumeric characters and underscores", var_name)
+                        format!("Invalid variable name '{var_name}': must start with letter or underscore and contain only alphanumeric characters and underscores")
                     ));
                 }
 
@@ -336,7 +336,7 @@ impl ActionParser {
                         } else {
                             if !self.is_valid_argument_key(&key) {
                                 return Err(ActionError::ParseError(
-                                    format!("Invalid input variable key '{}': must contain only alphanumeric characters, hyphens, and underscores", key)
+                                    format!("Invalid input variable key '{key}': must contain only alphanumeric characters, hyphens, and underscores")
                                 ));
                             }
                             action.input_variables.insert(key, value);
@@ -357,7 +357,7 @@ impl ActionParser {
         context: &HashMap<String, Value>,
     ) -> ActionResult<String> {
         let var_regex = Regex::new(r"\$\{([a-zA-Z_][a-zA-Z0-9_.-]*)\}").map_err(|e| {
-            ActionError::ParseError(format!("Failed to compile variable regex: {}", e))
+            ActionError::ParseError(format!("Failed to compile variable regex: {e}"))
         })?;
 
         let result = var_regex.replace_all(input, |caps: &regex::Captures| {
@@ -365,7 +365,7 @@ impl ActionParser {
             context
                 .get(var_name)
                 .map(|v| self.value_to_string(v))
-                .unwrap_or_else(|| format!("${{{}}}", var_name))
+                .unwrap_or_else(|| format!("${{{var_name}}}"))
         });
 
         Ok(result.into_owned())
@@ -378,8 +378,7 @@ impl ActionParser {
             "minute" | "minutes" | "min" | "m" => Ok(Duration::from_secs(value * 60)),
             "hour" | "hours" | "h" => Ok(Duration::from_secs(value * 3600)),
             _ => Err(ActionError::ParseError(format!(
-                "Invalid duration unit: {}",
-                unit
+                "Invalid duration unit: {unit}"
             ))),
         }
     }

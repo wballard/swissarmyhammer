@@ -101,7 +101,7 @@ impl GitOperations {
                 "show-ref",
                 "--verify",
                 "--quiet",
-                &format!("refs/heads/{}", branch),
+                &format!("refs/heads/{branch}"),
             ])
             .output()?;
 
@@ -110,7 +110,7 @@ impl GitOperations {
 
     /// Create and switch to issue work branch
     pub fn create_work_branch(&self, issue_name: &str) -> Result<String> {
-        let branch_name = format!("issue/{}", issue_name);
+        let branch_name = format!("issue/{issue_name}");
 
         // Check if branch already exists
         if self.branch_exists(&branch_name)? {
@@ -157,14 +157,13 @@ impl GitOperations {
 
     /// Merge issue branch to main branch
     pub fn merge_issue_branch(&self, issue_name: &str) -> Result<()> {
-        let branch_name = format!("issue/{}", issue_name);
+        let branch_name = format!("issue/{issue_name}");
         let main_branch = self.main_branch()?;
 
         // Ensure the branch exists
         if !self.branch_exists(&branch_name)? {
             return Err(SwissArmyHammerError::Other(format!(
-                "Issue branch '{}' does not exist",
-                branch_name
+                "Issue branch '{branch_name}' does not exist"
             )));
         }
 
@@ -179,7 +178,7 @@ impl GitOperations {
                 "--no-ff",
                 &branch_name,
                 "-m",
-                &format!("Merge {}", branch_name),
+                &format!("Merge {branch_name}"),
             ])
             .output()?;
 
@@ -190,22 +189,19 @@ impl GitOperations {
             // Check for merge conflicts
             if stderr.contains("CONFLICT") || stdout.contains("CONFLICT") {
                 return Err(SwissArmyHammerError::Other(format!(
-                    "Merge conflict detected while merging branch '{}'. Please resolve conflicts manually:\n{}",
-                    branch_name, stderr
+                    "Merge conflict detected while merging branch '{branch_name}'. Please resolve conflicts manually:\n{stderr}"
                 )));
             }
 
             // Check for other merge issues
             if stderr.contains("Automatic merge failed") {
                 return Err(SwissArmyHammerError::Other(format!(
-                    "Automatic merge failed for branch '{}'. Manual intervention required:\n{}",
-                    branch_name, stderr
+                    "Automatic merge failed for branch '{branch_name}'. Manual intervention required:\n{stderr}"
                 )));
             }
 
             return Err(SwissArmyHammerError::Other(format!(
-                "Failed to merge branch '{}': {}",
-                branch_name, stderr
+                "Failed to merge branch '{branch_name}': {stderr}"
             )));
         }
 
@@ -222,8 +218,7 @@ impl GitOperations {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(SwissArmyHammerError::Other(format!(
-                "Failed to delete branch '{}': {}",
-                branch_name, stderr
+                "Failed to delete branch '{branch_name}': {stderr}"
             )));
         }
 
@@ -240,8 +235,7 @@ impl GitOperations {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(SwissArmyHammerError::Other(format!(
-                "Failed to get last commit info: {}",
-                stderr
+                "Failed to get last commit info: {stderr}"
             )));
         }
 

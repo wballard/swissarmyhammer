@@ -19,7 +19,7 @@ impl WorkflowRunId {
     pub fn parse(s: &str) -> Result<Self, String> {
         Ulid::from_string(s)
             .map(Self)
-            .map_err(|e| format!("Invalid workflow run ID '{}': {}", s, e))
+            .map_err(|e| format!("Invalid workflow run ID '{s}': {e}"))
     }
 }
 

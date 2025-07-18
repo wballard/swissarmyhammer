@@ -102,7 +102,6 @@ pub trait IssueStorage: Send + Sync {
     async fn mark_complete(&self, number: u32) -> Result<Issue>;
 
     /// Batch operations for better performance
-    
     /// Create multiple issues at once
     async fn create_issues_batch(&self, issues: Vec<(String, String)>) -> Result<Vec<Issue>>;
     
@@ -572,7 +571,7 @@ impl IssueStorage for FileSystemIssueStorage {
 
 /// Format issue number as 6-digit string with leading zeros
 pub fn format_issue_number(number: u32) -> String {
-    format!("{:06}", number)
+    format!("{number:06}")
 }
 
 /// Parse issue number from string
@@ -588,8 +587,7 @@ pub fn parse_issue_number(s: &str) -> Result<u32> {
 
     let number = s.parse::<u32>().map_err(|_| {
         SwissArmyHammerError::InvalidIssueNumber(format!(
-            "Issue number must contain only digits (e.g., '000123'), got: '{}'",
-            s
+            "Issue number must contain only digits (e.g., '000123'), got: '{s}'"
         ))
     })?;
 
@@ -673,8 +671,7 @@ pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
     let parts: Vec<&str> = filename.splitn(2, '_').collect();
     if parts.len() != 2 {
         return Err(SwissArmyHammerError::Other(format!(
-            "Invalid filename format: expected <nnnnnn>_<name> (e.g., '000123_bug_fix'), got: '{}'",
-            filename
+            "Invalid filename format: expected <nnnnnn>_<name> (e.g., '000123_bug_fix'), got: '{filename}'"
         )));
     }
 
@@ -832,12 +829,12 @@ fn validate_against_reserved_names(name: &str) -> String {
 
     // Check Windows reserved names
     if windows_reserved.contains(&name_upper.as_str()) {
-        return format!("{}_file", name);
+        return format!("{name}_file");
     }
 
     // Check Unix reserved names
     if unix_reserved.contains(&name) {
-        return format!("{}_file", name);
+        return format!("{name}_file");
     }
 
     // Check for names that start with a dot (hidden files)

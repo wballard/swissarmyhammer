@@ -94,7 +94,7 @@ impl WorkflowResolver {
 
         // Add builtin workflows to VFS with .md extension so they get processed
         for (name, content) in builtin_workflows {
-            self.vfs.add_builtin(format!("{}.md", name), content);
+            self.vfs.add_builtin(format!("{name}.md"), content);
         }
 
         Ok(())
@@ -307,7 +307,7 @@ impl WorkflowRunStorageBackend for MemoryWorkflowRunStorage {
         self.runs
             .get(id)
             .cloned()
-            .ok_or_else(|| SwissArmyHammerError::WorkflowRunNotFound(format!("{:?}", id)))
+            .ok_or_else(|| SwissArmyHammerError::WorkflowRunNotFound(format!("{id:?}")))
     }
 
     fn list_runs(&self) -> Result<Vec<WorkflowRun>> {
@@ -317,7 +317,7 @@ impl WorkflowRunStorageBackend for MemoryWorkflowRunStorage {
     fn remove_run(&mut self, id: &WorkflowRunId) -> Result<()> {
         self.runs
             .remove(id)
-            .ok_or_else(|| SwissArmyHammerError::WorkflowRunNotFound(format!("{:?}", id)))?;
+            .ok_or_else(|| SwissArmyHammerError::WorkflowRunNotFound(format!("{id:?}")))?;
         Ok(())
     }
 
@@ -560,12 +560,12 @@ impl FileSystemWorkflowRunStorage {
     fn run_path(&self, id: &WorkflowRunId) -> PathBuf {
         self.base_path
             .join("runs")
-            .join(format!("{:?}", id))
+            .join(format!("{id:?}"))
             .join("run.json")
     }
 
     fn run_dir(&self, id: &WorkflowRunId) -> PathBuf {
-        self.base_path.join("runs").join(format!("{:?}", id))
+        self.base_path.join("runs").join(format!("{id:?}"))
     }
 }
 
@@ -592,8 +592,7 @@ impl WorkflowRunStorageBackend for FileSystemWorkflowRunStorage {
         let path = self.run_path(id);
         if !path.exists() {
             return Err(SwissArmyHammerError::WorkflowRunNotFound(format!(
-                "{:?}",
-                id
+                "{id:?}"
             )));
         }
 
@@ -616,8 +615,7 @@ impl WorkflowRunStorageBackend for FileSystemWorkflowRunStorage {
         let run_dir = self.run_dir(id);
         if !run_dir.exists() {
             return Err(SwissArmyHammerError::WorkflowRunNotFound(format!(
-                "{:?}",
-                id
+                "{id:?}"
             )));
         }
 
@@ -808,13 +806,13 @@ impl CompressedWorkflowStorage {
     /// Compress data using zstd
     fn compress_data(&self, data: &[u8]) -> Result<Vec<u8>> {
         zstd::encode_all(data, self.compression_level)
-            .map_err(|e| SwissArmyHammerError::Storage(format!("Compression failed: {}", e)))
+            .map_err(|e| SwissArmyHammerError::Storage(format!("Compression failed: {e}")))
     }
 
     /// Decompress data using zstd
     fn decompress_data(&self, data: &[u8]) -> Result<Vec<u8>> {
         zstd::decode_all(data)
-            .map_err(|e| SwissArmyHammerError::Storage(format!("Decompression failed: {}", e)))
+            .map_err(|e| SwissArmyHammerError::Storage(format!("Decompression failed: {e}")))
     }
 }
 
@@ -822,7 +820,7 @@ impl WorkflowStorageBackend for CompressedWorkflowStorage {
     fn store_workflow(&mut self, workflow: Workflow) -> Result<()> {
         // Serialize workflow to JSON
         let json_data = serde_json::to_vec(&workflow)
-            .map_err(|e| SwissArmyHammerError::Storage(format!("Serialization failed: {}", e)))?;
+            .map_err(|e| SwissArmyHammerError::Storage(format!("Serialization failed: {e}")))?;
 
         // Compress the JSON data
         let compressed_data = self.compress_data(&json_data)?;
@@ -847,12 +845,12 @@ impl WorkflowStorageBackend for CompressedWorkflowStorage {
             let compressed_data = general_purpose::STANDARD
                 .decode(encoded_data)
                 .map_err(|e| {
-                    SwissArmyHammerError::Storage(format!("Base64 decode failed: {}", e))
+                    SwissArmyHammerError::Storage(format!("Base64 decode failed: {e}"))
                 })?;
 
             let json_data = self.decompress_data(&compressed_data)?;
             let workflow: Workflow = serde_json::from_slice(&json_data).map_err(|e| {
-                SwissArmyHammerError::Storage(format!("Deserialization failed: {}", e))
+                SwissArmyHammerError::Storage(format!("Deserialization failed: {e}"))
             })?;
 
             Ok(workflow)
@@ -873,12 +871,12 @@ impl WorkflowStorageBackend for CompressedWorkflowStorage {
                     general_purpose::STANDARD
                         .decode(encoded_data)
                         .map_err(|e| {
-                            SwissArmyHammerError::Storage(format!("Base64 decode failed: {}", e))
+                            SwissArmyHammerError::Storage(format!("Base64 decode failed: {e}"))
                         })?;
 
                 let json_data = self.decompress_data(&compressed_data)?;
                 let workflow: Workflow = serde_json::from_slice(&json_data).map_err(|e| {
-                    SwissArmyHammerError::Storage(format!("Deserialization failed: {}", e))
+                    SwissArmyHammerError::Storage(format!("Deserialization failed: {e}"))
                 })?;
 
                 workflows.push(workflow);

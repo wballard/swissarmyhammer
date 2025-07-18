@@ -106,7 +106,7 @@ impl FileWatcher {
             notify::Config::default(),
         )
         .map_err(|e| {
-            crate::SwissArmyHammerError::Other(format!("Failed to create file watcher: {}", e))
+            crate::SwissArmyHammerError::Other(format!("Failed to create file watcher: {e}"))
         })?;
 
         // Watch all directories
@@ -119,8 +119,7 @@ impl FileWatcher {
         for path in &watch_paths {
             watcher.watch(path, recursive_mode).map_err(|e| {
                 crate::SwissArmyHammerError::Other(format!(
-                    "Failed to watch directory {:?}: {}",
-                    path, e
+                    "Failed to watch directory {path:?}: {e}"
                 ))
             })?;
             tracing::info!("Watching directory: {:?}", path);
@@ -152,7 +151,7 @@ impl FileWatcher {
                             // Notify callback about the change
                             if let Err(e) = callback.on_file_changed(relevant_paths).await {
                                 tracing::error!("❌ File watcher callback failed: {}", e);
-                                callback.on_error(format!("Callback failed: {}", e)).await;
+                                callback.on_error(format!("Callback failed: {e}")).await;
                             }
                         } else {
                             tracing::debug!("🚫 Ignoring non-prompt file: {:?}", event.paths);

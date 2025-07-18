@@ -379,7 +379,7 @@ impl Validator {
                 content_title: None,
                 line: None,
                 column: None,
-                message: format!("Invalid workflow name '{}': only alphanumeric characters, hyphens, and underscores are allowed", workflow_name),
+                message: format!("Invalid workflow name '{workflow_name}': only alphanumeric characters, hyphens, and underscores are allowed"),
                 suggestion: Some("Use a name like 'my-workflow' or 'my_workflow'".to_string()),
             });
             return;
@@ -418,7 +418,7 @@ impl Validator {
                         content_title: None,
                         line: None,
                         column: None,
-                        message: format!("Workflow validation failed: {}", error),
+                        message: format!("Workflow validation failed: {error}"),
                         suggestion: None,
                     });
                 }
@@ -438,7 +438,7 @@ impl Validator {
                 content_title: None,
                 line: None,
                 column: None,
-                message: format!("State '{}' is unreachable from the initial state", state_id),
+                message: format!("State '{state_id}' is unreachable from the initial state"),
                 suggestion: Some(
                     "Ensure all states have incoming transitions or remove unused states"
                         .to_string(),
@@ -508,7 +508,7 @@ impl Validator {
                     content_title: None,
                     line: None,
                     column: None,
-                    message: format!("Circular dependency detected: {}", first_cycle),
+                    message: format!("Circular dependency detected: {first_cycle}"),
                     suggestion: Some(
                         "Ensure the workflow has proper exit conditions to avoid infinite loops"
                             .to_string(),
@@ -727,7 +727,7 @@ impl Validator {
                     content_title: None,
                     line: Some(e.location().map(|l| l.line()).unwrap_or(1)),
                     column: Some(e.location().map(|l| l.column()).unwrap_or(1)),
-                    message: format!("YAML syntax error: {}", e),
+                    message: format!("YAML syntax error: {e}"),
                     suggestion: Some(suggestion),
                 });
                 Ok(None)
@@ -786,7 +786,7 @@ impl Validator {
                     content_title: None,
                     line: None,
                     column: None,
-                    message: format!("Liquid template syntax error: {}", error_msg),
+                    message: format!("Liquid template syntax error: {error_msg}"),
                     suggestion: Some("Check Liquid template syntax and fix any errors".to_string()),
                 });
             }
@@ -816,7 +816,7 @@ impl Validator {
                     content_title,
                     line: None,
                     column: None,
-                    message: format!("Liquid template syntax error: {}", error_msg),
+                    message: format!("Liquid template syntax error: {error_msg}"),
                     suggestion: Some(
                         "Check Liquid template syntax and partial references".to_string(),
                     ),
@@ -933,10 +933,9 @@ impl Validator {
                     content_title: content_title.clone(),
                     line: None,
                     column: None,
-                    message: format!("Undefined template variable: '{}'", used_var),
+                    message: format!("Undefined template variable: '{used_var}'"),
                     suggestion: Some(format!(
-                        "Add '{}' to the arguments list or remove the template variable",
-                        used_var
+                        "Add '{used_var}' to the arguments list or remove the template variable"
                     )),
                 });
             }
@@ -1038,9 +1037,9 @@ impl Validator {
                 };
 
                 let location = if let (Some(line), Some(col)) = (issue.line, issue.column) {
-                    format!("{}:{}", line, col)
+                    format!("{line}:{col}")
                 } else if let Some(line) = issue.line {
-                    format!("{}", line)
+                    format!("{line}")
                 } else {
                     "-".to_string()
                 };
@@ -1127,7 +1126,7 @@ impl Validator {
                     content_title: None,
                     line: None,
                     column: None,
-                    message: format!("Workflow directory does not exist: {}", dir),
+                    message: format!("Workflow directory does not exist: {dir}"),
                     suggestion: Some("Check that the path is correct".to_string()),
                 });
                 continue;
@@ -1143,7 +1142,7 @@ impl Validator {
                         content_title: None,
                         line: None,
                         column: None,
-                        message: format!("Failed to read directory: {}", e),
+                        message: format!("Failed to read directory: {e}"),
                         suggestion: None,
                     });
                     continue;
@@ -1180,7 +1179,7 @@ impl Validator {
                     content_title: None,
                     line: None,
                     column: None,
-                    message: format!("Failed to read workflow file: {}", e),
+                    message: format!("Failed to read workflow file: {e}"),
                     suggestion: None,
                 });
                 return;
@@ -1240,7 +1239,7 @@ impl Validator {
                             content_title: None,
                             line: None,
                             column: None,
-                            message: format!("Failed to parse workflow: {}", e),
+                            message: format!("Failed to parse workflow: {e}"),
                             suggestion: Some("Check your Mermaid state diagram syntax".to_string()),
                         });
                         return;
@@ -1270,7 +1269,7 @@ impl Validator {
                         content_title: None,
                         line: None,
                         column: None,
-                        message: format!("Failed to parse workflow: {}", e),
+                        message: format!("Failed to parse workflow: {e}"),
                         suggestion: Some("Check your Mermaid state diagram syntax".to_string()),
                     });
                     return;

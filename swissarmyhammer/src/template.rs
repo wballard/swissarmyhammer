@@ -106,7 +106,7 @@ impl liquid::partials::PartialSource for PromptPartialSource {
         // Try with various prompt file extensions
         let extensions = [".md", ".markdown", ".liquid", ".md.liquid"];
         for ext in &extensions {
-            let name_with_ext = format!("{}{}", name, ext);
+            let name_with_ext = format!("{name}{ext}");
             if self.library.get(&name_with_ext).is_ok() {
                 return true;
             }
@@ -123,7 +123,7 @@ impl liquid::partials::PartialSource for PromptPartialSource {
                     // Also try with other extensions
                     for other_ext in &extensions {
                         if ext != other_ext {
-                            let name_with_other_ext = format!("{}{}", name_without_ext, other_ext);
+                            let name_with_other_ext = format!("{name_without_ext}{other_ext}");
                             if self.library.get(&name_with_other_ext).is_ok() {
                                 return true;
                             }
@@ -149,7 +149,7 @@ impl liquid::partials::PartialSource for PromptPartialSource {
         // Try with various prompt file extensions
         let extensions = [".md", ".markdown", ".liquid", ".md.liquid"];
         for ext in &extensions {
-            let name_with_ext = format!("{}{}", name, ext);
+            let name_with_ext = format!("{name}{ext}");
             if let Ok(prompt) = self.library.get(&name_with_ext) {
                 return Some(Cow::Owned(prompt.template));
             }
@@ -166,7 +166,7 @@ impl liquid::partials::PartialSource for PromptPartialSource {
                     // Also try with other extensions
                     for other_ext in &extensions {
                         if ext != other_ext {
-                            let name_with_other_ext = format!("{}{}", name_without_ext, other_ext);
+                            let name_with_other_ext = format!("{name_without_ext}{other_ext}");
                             if let Ok(prompt) = self.library.get(&name_with_other_ext) {
                                 return Some(Cow::Owned(prompt.template));
                             }

@@ -96,7 +96,7 @@ impl McpServer {
     /// Returns an error if workflow storage, issue storage, or git operations fail to initialize.
     pub fn new(library: PromptLibrary) -> Result<Self> {
         let work_dir = std::env::current_dir().map_err(|e| {
-            SwissArmyHammerError::Other(format!("Failed to get current directory: {}", e))
+            SwissArmyHammerError::Other(format!("Failed to get current directory: {e}"))
         })?;
         Self::new_with_work_dir(library, work_dir)
     }
@@ -119,7 +119,7 @@ impl McpServer {
         // Initialize workflow storage with filesystem backend
         let workflow_backend = Arc::new(FileSystemWorkflowStorage::new().map_err(|e| {
             tracing::error!("Failed to create workflow storage: {}", e);
-            SwissArmyHammerError::Other(format!("Failed to create workflow storage: {}", e))
+            SwissArmyHammerError::Other(format!("Failed to create workflow storage: {e}"))
         })?) as Arc<dyn WorkflowStorageBackend>;
 
         // Create runs directory in user's home directory
@@ -127,7 +127,7 @@ impl McpServer {
 
         let run_backend = Arc::new(FileSystemWorkflowRunStorage::new(runs_path).map_err(|e| {
             tracing::error!("Failed to create workflow run storage: {}", e);
-            SwissArmyHammerError::Other(format!("Failed to create workflow run storage: {}", e))
+            SwissArmyHammerError::Other(format!("Failed to create workflow run storage: {e}"))
         })?) as Arc<dyn WorkflowRunStorageBackend>;
 
         let workflow_storage = WorkflowStorage::new(workflow_backend, run_backend);
@@ -137,7 +137,7 @@ impl McpServer {
 
         let issue_storage = Box::new(FileSystemIssueStorage::new(issues_dir).map_err(|e| {
             tracing::error!("Failed to create issue storage: {}", e);
-            SwissArmyHammerError::Other(format!("Failed to create issue storage: {}", e))
+            SwissArmyHammerError::Other(format!("Failed to create issue storage: {e}"))
         })?) as Box<dyn IssueStorage>;
 
         // Initialize git operations with work_dir - make it optional for tests
@@ -282,8 +282,7 @@ impl McpServer {
         // Check if this is a partial template
         if Self::is_partial_template(&prompt) {
             return Err(SwissArmyHammerError::Other(format!(
-                "Cannot access partial template '{}' via MCP. Partial templates are for internal use only.",
-                name
+                "Cannot access partial template '{name}' via MCP. Partial templates are for internal use only."
             )));
         }
 
@@ -548,14 +547,14 @@ impl McpServer {
             Err(SwissArmyHammerError::IssueAlreadyExists(num)) => {
                 tracing::warn!("Issue #{:06} already exists", num);
                 Err(McpError::invalid_params(
-                    format!("Issue #{:06} already exists", num),
+                    format!("Issue #{num:06} already exists"),
                     None,
                 ))
             }
             Err(e) => {
                 tracing::error!("Failed to create issue: {}", e);
                 Err(McpError::internal_error(
-                    format!("Failed to create issue: {}", e),
+                    format!("Failed to create issue: {e}"),
                     None,
                 ))
             }
@@ -613,7 +612,7 @@ impl McpServer {
                 }
                 Err(e) => {
                     return Err(McpError::internal_error(
-                        format!("Failed to get issue: {}", e),
+                        format!("Failed to get issue: {e}"),
                         None,
                     ));
                 }
@@ -649,7 +648,7 @@ impl McpServer {
                 }
                 Err(e) => {
                     return Err(McpError::internal_error(
-                        format!("Failed to mark issue complete: {}", e),
+                        format!("Failed to mark issue complete: {e}"),
                         None,
                     ));
                 }
@@ -722,7 +721,7 @@ impl McpServer {
                         "Issues directory not found. The project may not have issue tracking initialized.".to_string()
                     }
                     _ => {
-                        format!("Failed to check issue status: {}", e)
+                        format!("Failed to check issue status: {e}")
                     }
                 };
 
@@ -791,14 +790,7 @@ impl McpServer {
             };
 
             format!(
-                "⏳ Project has active issues ({}% complete)\n\n📊 Project Status:\n• Total Issues: {}\n• Completed: {} ({}%)\n• Active: {}\n\n🔄 Active Issues:\n{}\n\n✅ Completed Issues:\n{}",
-                completion_percentage,
-                total_issues,
-                completed_count,
-                completion_percentage,
-                active_count,
-                active_list,
-                completed_list
+                "⏳ Project has active issues ({completion_percentage}% complete)\n\n📊 Project Status:\n• Total Issues: {total_issues}\n• Completed: {completed_count} ({completion_percentage}%)\n• Active: {active_count}\n\n🔄 Active Issues:\n{active_list}\n\n✅ Completed Issues:\n{completed_list}"
             )
         };
 
@@ -860,7 +852,7 @@ impl McpServer {
         } else {
             "\n\n"
         };
-        format!("{}{}{}", original, separator, new_content)
+        format!("{original}{separator}{new_content}")
     }
 
     /// Generate change summary for issue update
@@ -919,7 +911,7 @@ impl McpServer {
                     format!("Issue #{:06} not found", request.number),
                     None,
                 ),
-                _ => McpError::internal_error(format!("Failed to get issue: {}", e), None),
+                _ => McpError::internal_error(format!("Failed to get issue: {e}"), None),
             })?;
 
         let final_content =
@@ -940,10 +932,10 @@ impl McpServer {
             .map_err(|e| {
                 let error_msg = match &e {
                     SwissArmyHammerError::Io(io_err) => {
-                        format!("Failed to write issue file: {}", io_err)
+                        format!("Failed to write issue file: {io_err}")
                     }
                     _ => {
-                        format!("Failed to update issue: {}", e)
+                        format!("Failed to update issue: {e}")
                     }
                 };
                 McpError::internal_error(error_msg, None)
@@ -1087,7 +1079,7 @@ impl McpServer {
             Some(ops) => match ops.current_branch() {
                 Ok(branch) => Ok(branch),
                 Err(e) => Err(McpError::internal_error(
-                    format!("Failed to get current branch: {}", e),
+                    format!("Failed to get current branch: {e}"),
                     None,
                 )),
             },
@@ -1119,8 +1111,7 @@ impl McpServer {
             Err(SwissArmyHammerError::IssueNotFound(_)) => {
                 // Handle orphaned issue branch
                 let orphaned_text = format!(
-                    "⚠️ On issue branch '{}' but no corresponding issue found\n\n🔍 Branch Analysis:\n• Branch: {}\n• Type: Issue branch (orphaned)\n• Issue number: {:06}\n• Issue file: Missing\n\n💡 Suggestions:\n• Create issue with: issue_create\n• Switch to main branch: git checkout main\n• Delete orphaned branch: git branch -d {}",
-                    branch, branch, issue_number, branch
+                    "⚠️ On issue branch '{branch}' but no corresponding issue found\n\n🔍 Branch Analysis:\n• Branch: {branch}\n• Type: Issue branch (orphaned)\n• Issue number: {issue_number:06}\n• Issue file: Missing\n\n💡 Suggestions:\n• Create issue with: issue_create\n• Switch to main branch: git checkout main\n• Delete orphaned branch: git branch -d {branch}"
                 );
 
                 return Ok(CallToolResult {
@@ -1135,7 +1126,7 @@ impl McpServer {
             }
             Err(e) => {
                 return Err(McpError::internal_error(
-                    format!("Failed to get issue: {}", e),
+                    format!("Failed to get issue: {e}"),
                     None,
                 ));
             }
@@ -1222,13 +1213,12 @@ impl McpServer {
             Ok(issue) => issue,
             Err(SwissArmyHammerError::IssueNotFound(_)) => {
                 return Ok(Self::create_error_response(format!(
-                    "❌ Issue #{:06} not found",
-                    issue_number
+                    "❌ Issue #{issue_number:06} not found"
                 )))
             }
             Err(e) => {
                 return Err(McpError::internal_error(
-                    format!("Failed to get issue: {}", e),
+                    format!("Failed to get issue: {e}"),
                     None,
                 ))
             }
@@ -1337,7 +1327,7 @@ impl McpServer {
                             "Ensure you're in a git repository".to_string(),
                             "Try: git status".to_string(),
                         ];
-                        (format!("Git operation failed: {}", e), suggestions)
+                        (format!("Git operation failed: {e}"), suggestions)
                     }
                 };
 
@@ -1349,7 +1339,7 @@ impl McpServer {
                                 error_msg,
                                 recovery_suggestions
                                     .iter()
-                                    .map(|s| format!("• {}", s))
+                                    .map(|s| format!("• {s}"))
                                     .collect::<Vec<_>>()
                                     .join("\n")
                             ),
@@ -1383,7 +1373,7 @@ impl McpServer {
         git_ops: &GitOperations,
     ) -> std::result::Result<PreWorkValidation, McpError> {
         let current_branch = git_ops.current_branch().map_err(|e| {
-            McpError::internal_error(format!("Failed to get current branch: {}", e), None)
+            McpError::internal_error(format!("Failed to get current branch: {e}"), None)
         })?;
 
         // Check for uncommitted changes
@@ -1474,7 +1464,7 @@ impl McpServer {
             issue.name,
             width = Config::global().issue_number_width
         );
-        let branch_name = format!("issue/{}", branch_identifier);
+        let branch_name = format!("issue/{branch_identifier}");
 
         // Check if branch exists
         if !git_ops.branch_exists(&branch_name).unwrap_or(false) {
@@ -1482,9 +1472,7 @@ impl McpServer {
                 content: vec![Annotated::new(
                     RawContent::Text(RawTextContent {
                         text: format!(
-                            "⚠️ Issue work branch '{}' does not exist\n\n📋 Branch Status:\n• Expected branch: {}\n• Exists: No\n\n💡 Possible Reasons:\n• Issue work was done on main branch\n• Branch was already merged and deleted\n• Branch name doesn't match issue",
-                            branch_name,
-                            branch_name
+                            "⚠️ Issue work branch '{branch_name}' does not exist\n\n📋 Branch Status:\n• Expected branch: {branch_name}\n• Exists: No\n\n💡 Possible Reasons:\n• Issue work was done on main branch\n• Branch was already merged and deleted\n• Branch name doesn't match issue"
                         )
                     }),
                     None,
@@ -1544,13 +1532,13 @@ impl McpServer {
                 // Merge failed
                 let error_msg = match e.to_string() {
                     msg if msg.contains("conflict") => {
-                        format!("🔀 Merge conflict detected. Please resolve conflicts manually:\n• git checkout {}\n• git merge {}\n• Resolve conflicts and commit\n• Then try again", main_branch, branch_name)
+                        format!("🔀 Merge conflict detected. Please resolve conflicts manually:\n• git checkout {main_branch}\n• git merge {branch_name}\n• Resolve conflicts and commit\n• Then try again")
                     }
                     msg if msg.contains("uncommitted") => {
                         "⚠️ Uncommitted changes prevent merge. Please commit or stash changes first.".to_string()
                     }
                     _ => {
-                        format!("❌ Merge failed: {}", e)
+                        format!("❌ Merge failed: {e}")
                     }
                 };
 
@@ -1574,8 +1562,7 @@ impl McpServer {
                 content: vec![Annotated::new(
                     RawContent::Text(RawTextContent {
                         text: format!(
-                            "⚠️ Cannot merge with uncommitted changes\n\n📋 Current Status:\n• Branch: {}\n• Uncommitted changes: Yes\n\n💡 Required Actions:\n• Commit changes: git add . && git commit -m \"Your message\"\n• Or stash changes: git stash\n• Then try merge again",
-                            current_branch
+                            "⚠️ Cannot merge with uncommitted changes\n\n📋 Current Status:\n• Branch: {current_branch}\n• Uncommitted changes: Yes\n\n💡 Required Actions:\n• Commit changes: git add . && git commit -m \"Your message\"\n• Or stash changes: git stash\n• Then try merge again"
                         )
                     }),
                     None,
@@ -1601,9 +1588,7 @@ impl McpServer {
 
         if active_count == 0 && total_issues > 0 {
             format!(
-                "\n\n🎉 Project Status: ALL ISSUES COMPLETED! 🎉\n• Total issues: {}\n• Completed: {} (100%)\n• Active: 0\n\n✨ Congratulations! All tracked issues have been completed and merged.",
-                total_issues,
-                completed_count
+                "\n\n🎉 Project Status: ALL ISSUES COMPLETED! 🎉\n• Total issues: {total_issues}\n• Completed: {completed_count} (100%)\n• Active: 0\n\n✨ Congratulations! All tracked issues have been completed and merged."
             )
         } else {
             let completion_percentage = if total_issues > 0 {
@@ -1613,8 +1598,7 @@ impl McpServer {
             };
 
             format!(
-                "\n\n📊 Project Status:\n• Total issues: {}\n• Completed: {} ({}%)\n• Active: {}",
-                total_issues, completed_count, completion_percentage, active_count
+                "\n\n📊 Project Status:\n• Total issues: {total_issues}\n• Completed: {completed_count} ({completion_percentage}%)\n• Active: {active_count}"
             )
         }
     }
@@ -1869,7 +1853,7 @@ impl ServerHandler for McpServer {
                         Ok(rendered) => rendered,
                         Err(e) => {
                             return Err(McpError::internal_error(
-                                format!("Template rendering error: {}", e),
+                                format!("Template rendering error: {e}"),
                                 None,
                             ))
                         }
@@ -1966,7 +1950,7 @@ impl ServerHandler for McpServer {
                     request.arguments.clone().unwrap_or_default(),
                 ))
                 .map_err(|e| {
-                    McpError::invalid_request(format!("Invalid arguments: {}", e), None)
+                    McpError::invalid_request(format!("Invalid arguments: {e}"), None)
                 })?;
                 self.handle_issue_create(req).await
             }
@@ -1976,7 +1960,7 @@ impl ServerHandler for McpServer {
                     request.arguments.clone().unwrap_or_default(),
                 ))
                 .map_err(|e| {
-                    McpError::invalid_request(format!("Invalid arguments: {}", e), None)
+                    McpError::invalid_request(format!("Invalid arguments: {e}"), None)
                 })?;
                 self.handle_issue_mark_complete(req).await
             }
@@ -1986,7 +1970,7 @@ impl ServerHandler for McpServer {
                     request.arguments.clone().unwrap_or_default(),
                 ))
                 .map_err(|e| {
-                    McpError::invalid_request(format!("Invalid arguments: {}", e), None)
+                    McpError::invalid_request(format!("Invalid arguments: {e}"), None)
                 })?;
                 self.handle_issue_all_complete(req).await
             }
@@ -1996,7 +1980,7 @@ impl ServerHandler for McpServer {
                     request.arguments.clone().unwrap_or_default(),
                 ))
                 .map_err(|e| {
-                    McpError::invalid_request(format!("Invalid arguments: {}", e), None)
+                    McpError::invalid_request(format!("Invalid arguments: {e}"), None)
                 })?;
                 self.handle_issue_update(req).await
             }
@@ -2006,7 +1990,7 @@ impl ServerHandler for McpServer {
                     request.arguments.clone().unwrap_or_default(),
                 ))
                 .map_err(|e| {
-                    McpError::invalid_request(format!("Invalid arguments: {}", e), None)
+                    McpError::invalid_request(format!("Invalid arguments: {e}"), None)
                 })?;
                 self.handle_issue_current(req).await
             }
@@ -2016,7 +2000,7 @@ impl ServerHandler for McpServer {
                     request.arguments.clone().unwrap_or_default(),
                 ))
                 .map_err(|e| {
-                    McpError::invalid_request(format!("Invalid arguments: {}", e), None)
+                    McpError::invalid_request(format!("Invalid arguments: {e}"), None)
                 })?;
                 self.handle_issue_work(req).await
             }
@@ -2026,7 +2010,7 @@ impl ServerHandler for McpServer {
                     request.arguments.clone().unwrap_or_default(),
                 ))
                 .map_err(|e| {
-                    McpError::invalid_request(format!("Invalid arguments: {}", e), None)
+                    McpError::invalid_request(format!("Invalid arguments: {e}"), None)
                 })?;
                 self.handle_issue_merge(req).await
             }

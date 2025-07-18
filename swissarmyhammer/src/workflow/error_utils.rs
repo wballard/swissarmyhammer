@@ -33,8 +33,7 @@ pub fn handle_command_error(result: Output, command_name: &str) -> ActionResult<
     if !result.status.success() {
         let stderr = String::from_utf8_lossy(&result.stderr);
         return Err(ActionError::ExecutionError(format!(
-            "{} command failed: {}",
-            command_name, stderr
+            "{command_name} command failed: {stderr}"
         )));
     }
     Ok(String::from_utf8_lossy(&result.stdout).into_owned())
@@ -61,8 +60,7 @@ pub fn handle_command_error_with_mapper<E>(
     if !result.status.success() {
         let stderr = String::from_utf8_lossy(&result.stderr);
         return Err(error_mapper(format!(
-            "{} command failed: {}",
-            command_name, stderr
+            "{command_name} command failed: {stderr}"
         )));
     }
     Ok(String::from_utf8_lossy(&result.stdout).into_owned())
@@ -194,8 +192,7 @@ pub fn handle_claude_command_error(result: Output) -> ActionResult<String> {
         }
 
         return Err(ActionError::ClaudeError(format!(
-            "Claude command failed: {}",
-            stderr
+            "Claude command failed: {stderr}"
         )));
     }
     Ok(String::from_utf8_lossy(&result.stdout).into_owned())

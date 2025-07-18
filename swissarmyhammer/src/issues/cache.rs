@@ -3,10 +3,16 @@ use std::sync::{Arc, RwLock};
 use tokio::time::{Duration, Instant};
 use super::filesystem::Issue;
 
+/// An entry in the issue cache containing the issue data and metadata
 #[derive(Debug, Clone)]
 pub struct CacheEntry {
+    /// The cached issue data
     pub issue: Issue,
-    pub timestamp: Instant,
+    /// When this entry was created in the cache
+    pub created_at: Instant,
+    /// When this entry was last accessed
+    pub last_access: Instant,
+    /// How many times this entry has been accessed
     pub access_count: u64,
 }
 
@@ -20,6 +26,7 @@ pub struct IssueCache {
 }
 
 impl IssueCache {
+    /// Create a new issue cache with specified TTL and maximum size
     pub fn new(ttl: Duration, max_size: usize) -> Self {
         Self {
             entries: Arc::new(RwLock::new(HashMap::new())),
@@ -30,15 +37,16 @@ impl IssueCache {
         }
     }
     
+    /// Get an issue from the cache by number, updating access statistics
     pub fn get(&self, issue_number: u32) -> Option<Issue> {
         let now = Instant::now();
         let mut entries = self.entries.write().unwrap();
         
         if let Some(entry) = entries.get_mut(&issue_number) {
-            // Check if entry is still valid
-            if now.duration_since(entry.timestamp) < self.ttl {
+            // Check if entry is still valid (TTL based on creation time)
+            if now.duration_since(entry.created_at) < self.ttl {
                 entry.access_count += 1;
-                entry.timestamp = now; // Update access time for LRU
+                entry.last_access = now; // Update access time for LRU
                 
                 *self.hits.write().unwrap() += 1;
                 return Some(entry.issue.clone());
@@ -52,6 +60,7 @@ impl IssueCache {
         None
     }
     
+    /// Put an issue into the cache, evicting old entries if necessary
     pub fn put(&self, issue: Issue) {
         let now = Instant::now();
         let mut entries = self.entries.write().unwrap();
@@ -63,26 +72,31 @@ impl IssueCache {
         
         entries.insert(issue.number.value(), CacheEntry {
             issue,
-            timestamp: now,
+            created_at: now,
+            last_access: now,
             access_count: 1,
         });
     }
     
+    /// Remove a specific issue from the cache
     pub fn invalidate(&self, issue_number: u32) {
         let mut entries = self.entries.write().unwrap();
         entries.remove(&issue_number);
     }
     
+    /// Clear all entries from the cache
     pub fn clear(&self) {
         let mut entries = self.entries.write().unwrap();
         entries.clear();
     }
     
+    /// Reset cache hit/miss statistics
     pub fn reset_stats(&self) {
         *self.hits.write().unwrap() = 0;
         *self.misses.write().unwrap() = 0;
     }
     
+    /// Get current cache statistics
     pub fn stats(&self) -> CacheStats {
         let hits = *self.hits.read().unwrap();
         let misses = *self.misses.read().unwrap();
@@ -104,7 +118,7 @@ impl IssueCache {
         
         // Find the least recently used entry
         let lru_key = entries.iter()
-            .min_by_key(|(_, entry)| entry.timestamp)
+            .min_by_key(|(_, entry)| entry.last_access)
             .map(|(key, _)| *key)
             .unwrap();
         
@@ -112,12 +126,18 @@ impl IssueCache {
     }
 }
 
+/// Statistics about cache performance
 #[derive(Debug, Clone)]
 pub struct CacheStats {
+    /// Number of cache hits
     pub hits: u64,
+    /// Number of cache misses
     pub misses: u64,
+    /// Cache hit rate (hits / total requests)
     pub hit_rate: f64,
+    /// Current number of entries in cache
     pub size: usize,
+    /// Maximum number of entries the cache can hold
     pub max_size: usize,
 }
 

@@ -95,7 +95,7 @@ impl std::fmt::Display for ExecutionEventType {
             ExecutionEventType::Completed => "Completed",
             ExecutionEventType::Failed => "Failed",
         };
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 

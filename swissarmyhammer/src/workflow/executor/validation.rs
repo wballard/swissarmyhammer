@@ -156,8 +156,7 @@ impl WorkflowExecutor {
             if transitions.is_empty() {
                 return Err(ExecutorError::ExecutionFailed(
                     format!(
-                        "Choice state '{}' has no outgoing transitions. Choice states must have at least one outgoing transition",
-                        current_state
+                        "Choice state '{current_state}' has no outgoing transitions. Choice states must have at least one outgoing transition"
                     ),
                 ));
             }
@@ -208,8 +207,7 @@ impl WorkflowExecutor {
         if is_choice_state {
             return Err(ExecutorError::ExecutionFailed(
                 format!(
-                    "Choice state '{}' has no matching conditions. All transition conditions evaluated to false",
-                    current_state
+                    "Choice state '{current_state}' has no matching conditions. All transition conditions evaluated to false"
                 ),
             ));
         }
@@ -329,8 +327,7 @@ impl WorkflowExecutor {
             if success_count > 1 || failure_count > 1 {
                 return Err(ExecutorError::ExecutionFailed(
                     format!(
-                        "Choice state '{}' has ambiguous conditions: {} OnSuccess, {} OnFailure. Consider adding a default condition or making conditions mutually exclusive",
-                        state_id, success_count, failure_count
+                        "Choice state '{state_id}' has ambiguous conditions: {success_count} OnSuccess, {failure_count} OnFailure. Consider adding a default condition or making conditions mutually exclusive"
                     ),
                 ));
             }
@@ -350,8 +347,7 @@ impl WorkflowExecutor {
         if never_conditions > 0 {
             return Err(ExecutorError::ExecutionFailed(
                 format!(
-                    "Choice state '{}' has {} Never conditions. Never conditions in choice states are never selectable and should be removed",
-                    state_id, never_conditions
+                    "Choice state '{state_id}' has {never_conditions} Never conditions. Never conditions in choice states are never selectable and should be removed"
                 ),
             ));
         }
@@ -393,8 +389,7 @@ impl WorkflowExecutor {
         for pattern in FORBIDDEN_PATTERNS {
             if expr_lower.contains(pattern) {
                 return Err(ExecutorError::ExpressionError(format!(
-                    "CEL expression contains forbidden pattern: '{}'",
-                    pattern
+                    "CEL expression contains forbidden pattern: '{pattern}'"
                 )));
             }
         }
@@ -425,8 +420,7 @@ impl WorkflowExecutor {
 
         if paren_depth > 10 {
             return Err(ExecutorError::ExpressionError(format!(
-                "CEL expression has excessive nesting depth: {} (max 10)",
-                paren_depth
+                "CEL expression has excessive nesting depth: {paren_depth} (max 10)"
             )));
         }
 
@@ -493,16 +487,14 @@ impl WorkflowExecutor {
             self.log_event(
                 ExecutionEventType::StateExecution,
                 format!(
-                    "CEL cache hit for expression: {} (retrieved in {:?})",
-                    expression, compilation_duration
+                    "CEL cache hit for expression: {expression} (retrieved in {compilation_duration:?})"
                 ),
             );
         } else {
             self.log_event(
                 ExecutionEventType::StateExecution,
                 format!(
-                    "CEL cache miss - compiled expression: {} (compiled in {:?})",
-                    expression, compilation_duration
+                    "CEL cache miss - compiled expression: {expression} (compiled in {compilation_duration:?})"
                 ),
             );
         }
@@ -510,8 +502,7 @@ impl WorkflowExecutor {
         // Now get the compiled program
         let program = self.get_compiled_cel_program(expression).map_err(|e| {
             ExecutorError::ExpressionError(format!(
-                "CEL compilation failed: Unable to compile expression '{}' ({})",
-                expression, e
+                "CEL compilation failed: Unable to compile expression '{expression}' ({e})"
             ))
         })?;
 
@@ -524,8 +515,7 @@ impl WorkflowExecutor {
             .add_variable(DEFAULT_VARIABLE_NAME, true)
             .map_err(|e| {
                 ExecutorError::ExpressionError(format!(
-                    "CEL context error: Failed to add '{}' variable ({})",
-                    DEFAULT_VARIABLE_NAME, e
+                    "CEL context error: Failed to add '{DEFAULT_VARIABLE_NAME}' variable ({e})"
                 ))
             })?;
 
@@ -535,8 +525,7 @@ impl WorkflowExecutor {
             .add_variable(RESULT_VARIABLE_NAME, result_text)
             .map_err(|e| {
                 ExecutorError::ExpressionError(format!(
-                    "CEL context error: Failed to add '{}' variable ({})",
-                    RESULT_VARIABLE_NAME, e
+                    "CEL context error: Failed to add '{RESULT_VARIABLE_NAME}' variable ({e})"
                 ))
             })?;
 
@@ -545,8 +534,7 @@ impl WorkflowExecutor {
             Self::add_json_variable_to_cel_context_static(&mut cel_context, key, value).map_err(
                 |e| {
                     ExecutorError::ExpressionError(format!(
-                        "CEL context error: Failed to add variable '{}' ({})",
-                        key, e
+                        "CEL context error: Failed to add variable '{key}' ({e})"
                     ))
                 },
             )?;
@@ -558,8 +546,7 @@ impl WorkflowExecutor {
         let execution_start = Instant::now();
         let result = program.execute(&cel_context).map_err(|e| {
             ExecutorError::ExpressionError(format!(
-                "CEL execution failed: Unable to execute expression '{}' ({})",
-                expression, e
+                "CEL execution failed: Unable to execute expression '{expression}' ({e})"
             ))
         })?;
         let execution_duration = execution_start.elapsed();
@@ -601,7 +588,7 @@ impl WorkflowExecutor {
         if total_evaluation_time > Duration::from_millis(50) {
             self.log_event(
                 ExecutionEventType::StateExecution,
-                format!("CEL performance warning: Expression '{}' took {:?} to evaluate (consider optimization)", expression, total_evaluation_time),
+                format!("CEL performance warning: Expression '{expression}' took {total_evaluation_time:?} to evaluate (consider optimization)"),
             );
         }
 
@@ -637,7 +624,7 @@ impl WorkflowExecutor {
                 return match value {
                     Value::String(s) => s.clone(),
                     _ => serde_json::to_string(value)
-                        .unwrap_or_else(|_| format!("Error serializing value: {:?}", value)),
+                        .unwrap_or_else(|_| format!("Error serializing value: {value:?}")),
                 };
             }
         }
@@ -813,8 +800,7 @@ impl WorkflowExecutor {
             CelValue::String(s) => Ok(!s.is_empty()),
             CelValue::Null => Ok(false),
             _ => Err(ExecutorError::ExpressionError(format!(
-                "CEL expression '{}' returned non-boolean result: {:?}",
-                expression, value
+                "CEL expression '{expression}' returned non-boolean result: {value:?}"
             ))),
         }
     }

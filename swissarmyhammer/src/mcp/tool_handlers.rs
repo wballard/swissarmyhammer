@@ -66,14 +66,14 @@ impl ToolHandlers {
             Err(crate::SwissArmyHammerError::IssueAlreadyExists(num)) => {
                 tracing::warn!("Issue #{:06} already exists", num);
                 Err(McpError::invalid_params(
-                    format!("Issue #{:06} already exists", num),
+                    format!("Issue #{num:06} already exists"),
                     None,
                 ))
             }
             Err(e) => {
                 tracing::error!("Failed to create issue: {}", e);
                 Err(McpError::internal_error(
-                    format!("Failed to create issue: {}", e),
+                    format!("Failed to create issue: {e}"),
                     None,
                 ))
             }
@@ -99,11 +99,11 @@ impl ToolHandlers {
         match issue_storage.mark_complete(request.number.into()).await {
             Ok(issue) => Ok(create_mark_complete_response(&issue)),
             Err(crate::SwissArmyHammerError::IssueNotFound(num)) => Err(McpError::invalid_params(
-                format!("Issue #{:06} not found", num),
+                format!("Issue #{num:06} not found"),
                 None,
             )),
             Err(e) => Err(McpError::internal_error(
-                format!("Failed to mark issue complete: {}", e),
+                format!("Failed to mark issue complete: {e}"),
                 None,
             )),
         }
@@ -139,7 +139,7 @@ impl ToolHandlers {
                         "Issues directory not found. The project may not have issue tracking initialized.".to_string()
                     }
                     _ => {
-                        format!("Failed to check issue status: {}", e)
+                        format!("Failed to check issue status: {e}")
                     }
                 };
 
@@ -210,14 +210,7 @@ impl ToolHandlers {
             };
 
             format!(
-                "⏳ Project has active issues ({}% complete)\n\n📊 Project Status:\n• Total Issues: {}\n• Completed: {} ({}%)\n• Active: {}\n\n🔄 Active Issues:\n{}\n\n✅ Completed Issues:\n{}",
-                completion_percentage,
-                total_issues,
-                completed_count,
-                completion_percentage,
-                active_count,
-                active_list,
-                completed_list
+                "⏳ Project has active issues ({completion_percentage}% complete)\n\n📊 Project Status:\n• Total Issues: {total_issues}\n• Completed: {completed_count} ({completion_percentage}%)\n• Active: {active_count}\n\n🔄 Active Issues:\n{active_list}\n\n✅ Completed Issues:\n{completed_list}"
             )
         };
 
@@ -286,8 +279,7 @@ impl ToolHandlers {
                 issue.number, issue.name
             ))),
             Err(e) => Ok(create_error_response(format!(
-                "Failed to update issue: {}",
-                e
+                "Failed to update issue: {e}"
             ))),
         }
     }
@@ -315,19 +307,16 @@ impl ToolHandlers {
                     let config = Config::global();
                     if let Some(issue_name) = branch.strip_prefix(&config.issue_branch_prefix) {
                         Ok(create_success_response(format!(
-                            "Currently working on issue: {}",
-                            issue_name
+                            "Currently working on issue: {issue_name}"
                         )))
                     } else {
                         Ok(create_success_response(format!(
-                            "Not on an issue branch. Current branch: {}",
-                            branch
+                            "Not on an issue branch. Current branch: {branch}"
                         )))
                     }
                 }
                 Err(e) => Ok(create_error_response(format!(
-                    "Failed to get current branch: {}",
-                    e
+                    "Failed to get current branch: {e}"
                 ))),
             },
             None => Ok(create_error_response(
@@ -377,12 +366,10 @@ impl ToolHandlers {
         match git_ops.as_mut() {
             Some(ops) => match ops.create_work_branch(&issue_name) {
                 Ok(branch_name) => Ok(create_success_response(format!(
-                    "Switched to work branch: {}",
-                    branch_name
+                    "Switched to work branch: {branch_name}"
                 ))),
                 Err(e) => Ok(create_error_response(format!(
-                    "Failed to create work branch: {}",
-                    e
+                    "Failed to create work branch: {e}"
                 ))),
             },
             None => Ok(create_error_response(
@@ -433,8 +420,7 @@ impl ToolHandlers {
         if let Some(git_ops) = git_ops_guard.as_ref() {
             if let Err(e) = self.check_working_directory_clean(git_ops).await {
                 return Ok(create_error_response(format!(
-                    "Working directory is not clean. Please commit or stash changes before merging: {}",
-                    e
+                    "Working directory is not clean. Please commit or stash changes before merging: {e}"
                 )));
             }
         }
@@ -455,7 +441,7 @@ impl ToolHandlers {
                 match ops.merge_issue_branch(&issue_name) {
                     Ok(_) => {
                         let mut success_message =
-                            format!("Merged work branch for issue {} to main", issue_name);
+                            format!("Merged work branch for issue {issue_name} to main");
 
                         // Get commit information after successful merge
                         let commit_info = match ops.get_last_commit_info() {
@@ -470,7 +456,7 @@ impl ToolHandlers {
                                         parts[3]
                                     )
                                 } else {
-                                    format!("\n\nMerge commit: {}", info)
+                                    format!("\n\nMerge commit: {info}")
                                 }
                             }
                             Err(_) => String::new(),
@@ -478,15 +464,15 @@ impl ToolHandlers {
 
                         // If delete_branch is true, delete the branch after successful merge
                         if request.delete_branch {
-                            let branch_name = format!("issue/{}", issue_name);
+                            let branch_name = format!("issue/{issue_name}");
                             match ops.delete_branch(&branch_name) {
                                 Ok(_) => {
                                     success_message
-                                        .push_str(&format!(" and deleted branch {}", branch_name));
+                                        .push_str(&format!(" and deleted branch {branch_name}"));
                                 }
                                 Err(e) => {
                                     success_message
-                                        .push_str(&format!(" but failed to delete branch: {}", e));
+                                        .push_str(&format!(" but failed to delete branch: {e}"));
                                 }
                             }
                         }
@@ -495,8 +481,7 @@ impl ToolHandlers {
                         Ok(create_success_response(success_message))
                     }
                     Err(e) => Ok(create_error_response(format!(
-                        "Failed to merge branch: {}",
-                        e
+                        "Failed to merge branch: {e}"
                     ))),
                 }
             }

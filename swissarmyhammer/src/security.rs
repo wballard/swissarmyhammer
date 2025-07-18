@@ -48,7 +48,7 @@ pub fn validate_path_security(path: &Path, root: &Path) -> Result<PathBuf> {
 
     // Get canonical paths to resolve symlinks and relative paths
     let canonical_root = root.canonicalize().map_err(|e| {
-        SwissArmyHammerError::Other(format!("Failed to canonicalize root path: {}", e))
+        SwissArmyHammerError::Other(format!("Failed to canonicalize root path: {e}"))
     })?;
 
     let full_path = if path.is_absolute() {
@@ -60,7 +60,7 @@ pub fn validate_path_security(path: &Path, root: &Path) -> Result<PathBuf> {
     // For files that don't exist yet, we need to check the parent directory
     let canonical_path = if full_path.exists() {
         full_path.canonicalize().map_err(|e| {
-            SwissArmyHammerError::Other(format!("Failed to canonicalize path: {}", e))
+            SwissArmyHammerError::Other(format!("Failed to canonicalize path: {e}"))
         })?
     } else {
         // Check the parent directory exists and is valid
@@ -69,7 +69,7 @@ pub fn validate_path_security(path: &Path, root: &Path) -> Result<PathBuf> {
         })?;
 
         let canonical_parent = parent.canonicalize().map_err(|e| {
-            SwissArmyHammerError::Other(format!("Failed to canonicalize parent path: {}", e))
+            SwissArmyHammerError::Other(format!("Failed to canonicalize parent path: {e}"))
         })?;
 
         // Ensure the parent is within the root
@@ -145,8 +145,7 @@ pub fn validate_workflow_complexity(states_count: usize, transitions_count: usiz
 
     if total_complexity > MAX_WORKFLOW_COMPLEXITY {
         return Err(SwissArmyHammerError::Other(format!(
-            "Workflow too complex: {} states + {} transitions = {} (max allowed: {})",
-            states_count, transitions_count, total_complexity, MAX_WORKFLOW_COMPLEXITY
+            "Workflow too complex: {states_count} states + {transitions_count} transitions = {total_complexity} (max allowed: {MAX_WORKFLOW_COMPLEXITY})"
         )));
     }
 

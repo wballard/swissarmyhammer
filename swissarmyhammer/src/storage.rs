@@ -168,7 +168,7 @@ impl FileSystemStorage {
     }
 
     fn prompt_path(&self, name: &str) -> std::path::PathBuf {
-        self.base_path.join(format!("{}.yaml", name))
+        self.base_path.join(format!("{name}.yaml"))
     }
 }
 

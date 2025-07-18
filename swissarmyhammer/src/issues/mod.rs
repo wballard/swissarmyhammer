@@ -1,7 +1,12 @@
+/// In-memory cache for issue data with TTL and LRU eviction
 pub mod cache;
+/// Cached storage implementation combining filesystem storage with in-memory cache
 pub mod cached_storage;
+/// Filesystem-based issue storage implementation
 pub mod filesystem;
+/// Performance metrics collection and analysis
 pub mod metrics;
+/// Storage wrapper that collects performance metrics for all operations
 pub mod instrumented_storage;
 
 // Re-export main types from the filesystem module

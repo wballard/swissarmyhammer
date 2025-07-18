@@ -4,12 +4,14 @@ use crate::error::Result;
 use async_trait::async_trait;
 use tokio::time::Instant;
 
+/// A storage wrapper that collects performance metrics for all operations
 pub struct InstrumentedIssueStorage {
     storage: Box<dyn IssueStorage>,
     metrics: PerformanceMetrics,
 }
 
 impl InstrumentedIssueStorage {
+    /// Create a new instrumented storage wrapper
     pub fn new(storage: Box<dyn IssueStorage>) -> Self {
         Self {
             storage,
@@ -17,14 +19,17 @@ impl InstrumentedIssueStorage {
         }
     }
     
+    /// Get access to the performance metrics collector
     pub fn metrics(&self) -> &PerformanceMetrics {
         &self.metrics
     }
     
+    /// Get a snapshot of current performance metrics
     pub fn get_metrics_snapshot(&self) -> MetricsSnapshot {
         self.metrics.get_stats()
     }
     
+    /// Reset all performance metrics to zero
     pub fn reset_metrics(&self) {
         self.metrics.reset();
     }
@@ -82,10 +87,13 @@ impl IssueStorage for InstrumentedIssueStorage {
         let result = self.storage.create_issues_batch(issues).await;
         let duration = start.elapsed();
         
-        // Record each create operation in the batch
+        // Record each create operation in the batch with per-operation time
         if let Ok(ref created_issues) = result {
-            for _ in created_issues {
-                self.metrics.record_operation(Operation::Create, duration);
+            if !created_issues.is_empty() {
+                let per_operation_duration = duration / created_issues.len() as u32;
+                for _ in created_issues {
+                    self.metrics.record_operation(Operation::Create, per_operation_duration);
+                }
             }
         }
         
@@ -97,10 +105,13 @@ impl IssueStorage for InstrumentedIssueStorage {
         let result = self.storage.get_issues_batch(numbers).await;
         let duration = start.elapsed();
         
-        // Record each read operation in the batch
+        // Record each read operation in the batch with per-operation time
         if let Ok(ref issues) = result {
-            for _ in issues {
-                self.metrics.record_operation(Operation::Read, duration);
+            if !issues.is_empty() {
+                let per_operation_duration = duration / issues.len() as u32;
+                for _ in issues {
+                    self.metrics.record_operation(Operation::Read, per_operation_duration);
+                }
             }
         }
         
@@ -112,10 +123,13 @@ impl IssueStorage for InstrumentedIssueStorage {
         let result = self.storage.update_issues_batch(updates).await;
         let duration = start.elapsed();
         
-        // Record each update operation in the batch
+        // Record each update operation in the batch with per-operation time
         if let Ok(ref updated_issues) = result {
-            for _ in updated_issues {
-                self.metrics.record_operation(Operation::Update, duration);
+            if !updated_issues.is_empty() {
+                let per_operation_duration = duration / updated_issues.len() as u32;
+                for _ in updated_issues {
+                    self.metrics.record_operation(Operation::Update, per_operation_duration);
+                }
             }
         }
         
@@ -127,10 +141,13 @@ impl IssueStorage for InstrumentedIssueStorage {
         let result = self.storage.mark_complete_batch(numbers).await;
         let duration = start.elapsed();
         
-        // Record each delete operation in the batch
+        // Record each delete operation in the batch with per-operation time
         if let Ok(ref completed_issues) = result {
-            for _ in completed_issues {
-                self.metrics.record_operation(Operation::Delete, duration);
+            if !completed_issues.is_empty() {
+                let per_operation_duration = duration / completed_issues.len() as u32;
+                for _ in completed_issues {
+                    self.metrics.record_operation(Operation::Delete, per_operation_duration);
+                }
             }
         }
         

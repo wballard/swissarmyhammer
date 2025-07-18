@@ -2,31 +2,47 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::time::Duration;
 
+/// Performance metrics collector for issue storage operations
 #[derive(Debug, Clone)]
 pub struct PerformanceMetrics {
+    /// Counters for different operation types
     pub operation_counts: Arc<OperationCounts>,
+    /// Timing statistics for different operation types
     pub timing_stats: Arc<TimingStats>,
 }
 
+/// Atomic counters for different operation types
 #[derive(Debug)]
 pub struct OperationCounts {
+    /// Number of create operations performed
     pub create_operations: AtomicU64,
+    /// Number of read operations performed
     pub read_operations: AtomicU64,
+    /// Number of update operations performed
     pub update_operations: AtomicU64,
+    /// Number of delete operations performed
     pub delete_operations: AtomicU64,
+    /// Number of list operations performed
     pub list_operations: AtomicU64,
 }
 
+/// Atomic timing statistics for different operation types
 #[derive(Debug)]
 pub struct TimingStats {
+    /// Total time spent on create operations (microseconds)
     pub total_create_time: AtomicU64,
+    /// Total time spent on read operations (microseconds)
     pub total_read_time: AtomicU64,
+    /// Total time spent on update operations (microseconds)
     pub total_update_time: AtomicU64,
+    /// Total time spent on delete operations (microseconds)
     pub total_delete_time: AtomicU64,
+    /// Total time spent on list operations (microseconds)
     pub total_list_time: AtomicU64,
 }
 
 impl PerformanceMetrics {
+    /// Create a new performance metrics collector
     pub fn new() -> Self {
         Self {
             operation_counts: Arc::new(OperationCounts {
@@ -46,6 +62,7 @@ impl PerformanceMetrics {
         }
     }
     
+    /// Record a completed operation with its duration
     pub fn record_operation(&self, operation: Operation, duration: Duration) {
         let duration_micros = duration.as_micros() as u64;
         
@@ -73,6 +90,7 @@ impl PerformanceMetrics {
         }
     }
     
+    /// Get a snapshot of current metrics
     pub fn get_stats(&self) -> MetricsSnapshot {
         MetricsSnapshot {
             create_ops: self.operation_counts.create_operations.load(Ordering::Relaxed),
@@ -112,6 +130,7 @@ impl PerformanceMetrics {
         }
     }
     
+    /// Reset all metrics to zero
     pub fn reset(&self) {
         self.operation_counts.create_operations.store(0, Ordering::Relaxed);
         self.operation_counts.read_operations.store(0, Ordering::Relaxed);
@@ -133,35 +152,54 @@ impl Default for PerformanceMetrics {
     }
 }
 
+/// Types of operations that can be performed on issues
 #[derive(Debug, Clone)]
 pub enum Operation {
+    /// Create a new issue
     Create,
+    /// Read an existing issue
     Read,
+    /// Update an existing issue
     Update,
+    /// Delete or mark an issue as complete
     Delete,
+    /// List all issues
     List,
 }
 
+/// A snapshot of performance metrics at a point in time
 #[derive(Debug, Clone)]
 pub struct MetricsSnapshot {
+    /// Number of create operations performed
     pub create_ops: u64,
+    /// Number of read operations performed
     pub read_ops: u64,
+    /// Number of update operations performed
     pub update_ops: u64,
+    /// Number of delete operations performed
     pub delete_ops: u64,
+    /// Number of list operations performed
     pub list_ops: u64,
     
+    /// Average time per create operation (microseconds)
     pub avg_create_time: f64,
+    /// Average time per read operation (microseconds)
     pub avg_read_time: f64,
+    /// Average time per update operation (microseconds)
     pub avg_update_time: f64,
+    /// Average time per delete operation (microseconds)
     pub avg_delete_time: f64,
+    /// Average time per list operation (microseconds)
     pub avg_list_time: f64,
 }
 
 impl MetricsSnapshot {
+    /// Get the total number of operations performed
     pub fn total_operations(&self) -> u64 {
         self.create_ops + self.read_ops + self.update_ops + self.delete_ops + self.list_ops
     }
     
+    /// Get the overall average time per operation across all operation types
     pub fn overall_avg_time(&self) -> f64 {
         let total_time = (self.create_ops as f64 * self.avg_create_time)
             + (self.read_ops as f64 * self.avg_read_time)
@@ -177,6 +215,7 @@ impl MetricsSnapshot {
         }
     }
     
+    /// Calculate operations per second given elapsed time
     pub fn operations_per_second(&self, elapsed_seconds: f64) -> f64 {
         if elapsed_seconds <= 0.0 {
             0.0
@@ -185,6 +224,7 @@ impl MetricsSnapshot {
         }
     }
     
+    /// Get the fastest operation type (lowest average time)
     pub fn fastest_operation(&self) -> Option<Operation> {
         let mut fastest_time = f64::INFINITY;
         let mut fastest_op = None;
@@ -216,6 +256,7 @@ impl MetricsSnapshot {
         fastest_op
     }
     
+    /// Get the slowest operation type (highest average time)
     pub fn slowest_operation(&self) -> Option<Operation> {
         let mut slowest_time = 0.0;
         let mut slowest_op = None;

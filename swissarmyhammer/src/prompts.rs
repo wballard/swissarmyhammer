@@ -1227,7 +1227,7 @@ impl PromptLoader {
         let path_str = path.to_string_lossy().to_lowercase();
         self.extensions
             .iter()
-            .any(|ext| path_str.ends_with(&format!(".{}", ext)))
+            .any(|ext| path_str.ends_with(&format!(".{ext}")))
     }
 
     /// Parse front matter from content
@@ -1268,7 +1268,7 @@ impl PromptLoader {
 
         // Remove supported extensions, checking longest first
         for ext in &sorted_extensions {
-            let extension = format!(".{}", ext);
+            let extension = format!(".{ext}");
             if filename.ends_with(&extension) {
                 return filename[..filename.len() - extension.len()].to_string();
             }

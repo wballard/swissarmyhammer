@@ -83,7 +83,7 @@ fn collect_prompts(dir: &Path, prefix: &str, code: &mut String) {
                 let new_prefix = if prefix.is_empty() {
                     name.to_string()
                 } else {
-                    format!("{}/{}", prefix, name)
+                    format!("{prefix}/{name}")
                 };
                 collect_prompts(&path, &new_prefix, code);
             } else if name.ends_with(".md") || name.ends_with(".liquid") {
@@ -106,8 +106,7 @@ fn collect_prompts(dir: &Path, prefix: &str, code: &mut String) {
                 // Read the file content at build time and embed it as a string literal
                 if let Ok(content) = fs::read_to_string(&path) {
                     code.push_str(&format!(
-                        "        (\"{}\", r#\"{}\"#),\n",
-                        prompt_name, content
+                        "        (\"{prompt_name}\", r#\"{content}\"#),\n"
                     ));
                 }
             }
@@ -129,7 +128,7 @@ fn collect_workflows(dir: &Path, prefix: &str, code: &mut String) {
                 let new_prefix = if prefix.is_empty() {
                     name.to_string()
                 } else {
-                    format!("{}/{}", prefix, name)
+                    format!("{prefix}/{name}")
                 };
                 collect_workflows(&path, &new_prefix, code);
             } else if name.ends_with(".md") {
@@ -143,8 +142,7 @@ fn collect_workflows(dir: &Path, prefix: &str, code: &mut String) {
                 // Read the file content at build time and embed it as a string literal
                 if let Ok(content) = fs::read_to_string(&path) {
                     code.push_str(&format!(
-                        "        (\"{}\", r#\"{}\"#),\n",
-                        workflow_name, content
+                        "        (\"{workflow_name}\", r#\"{content}\"#),\n"
                     ));
                 }
             }

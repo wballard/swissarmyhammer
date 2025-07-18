@@ -288,7 +288,7 @@ impl ExecutionVisualizer {
             let status_icon = if step.success { "✓" } else { "✗" };
             let timing_info = if self.include_timing {
                 if let Some(duration) = step.duration {
-                    format!(" ({:?})", duration)
+                    format!(" ({duration:?})")
                 } else {
                     String::new()
                 }
@@ -400,7 +400,7 @@ impl ExecutionVisualizer {
             sanitized_run_id,
             trace.status,
             match trace.total_duration {
-                Some(duration) => format!("{:?}", duration),
+                Some(duration) => format!("{duration:?}"),
                 None => {
                     tracing::warn!("No duration available for trace {}", trace.run_id);
                     "N/A".to_string()
@@ -479,12 +479,12 @@ impl ExecutionVisualizer {
             ));
 
             if let Some(error) = &step.error {
-                report.push_str(&format!("   Error: {}\n", error));
+                report.push_str(&format!("   Error: {error}\n"));
             }
         }
 
         if let Some(error) = &trace.error_details {
-            report.push_str(&format!("\n## Error Details\n\n{}\n", error));
+            report.push_str(&format!("\n## Error Details\n\n{error}\n"));
         }
 
         report

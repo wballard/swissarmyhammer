@@ -248,8 +248,8 @@ impl ContentValidator for YamlTypoValidator {
                         content_title: content_title.clone(),
                         line: Some(line_num + 1),
                         column: None,
-                        message: format!("Possible typo: '{}' should be '{}'", typo, correct),
-                        suggestion: Some(format!("Replace '{}' with '{}'", typo, correct)),
+                        message: format!("Possible typo: '{typo}' should be '{correct}'"),
+                        suggestion: Some(format!("Replace '{typo}' with '{correct}'")),
                     });
                 }
             }

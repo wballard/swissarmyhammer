@@ -60,46 +60,119 @@ Please review this code for:
 - **🔧 Workflow Engine** - Advanced state-based workflow execution with Mermaid diagrams
 - **🔍 Advanced Search** - Full-text search with fuzzy matching and relevance scoring
 
-## 📝 Issue Tracking
+## 📝 Issue Management
 
-SwissArmyHammer includes built-in issue tracking that stores issues as markdown files directly in your repository. This allows you to track work items alongside your code, with full version control.
+SwissArmyHammer includes a comprehensive issue management system that integrates with git workflows and provides both MCP tools and CLI commands for managing project issues.
 
 ### Features
 
-- **Git-based Storage**: Issues are stored as markdown files in `./issues` directory
-- **Automatic Numbering**: Issues are automatically assigned sequential 6-digit numbers
-- **Branch Integration**: Each issue can have its own work branch (`issue/<number>_<name>`)
-- **MCP Tools**: Full integration with Model Context Protocol for AI assistants
+#### 🎯 Core Features
+- **Git-based Workflow**: Each issue can have its own work branch
+- **MCP Integration**: Full integration with Model Context Protocol for AI assistants
+- **CLI Tools**: Complete command-line interface for issue management
+- **Markdown Storage**: Issues stored as markdown files in your repository
+- **Automatic Numbering**: Sequential 6-digit issue numbering (000001, 000002, etc.)
+- **Completion Tracking**: Issues move from active to completed state
+
+#### 📋 Issue Lifecycle
+1. **Create** - Create new issues with `issue_create` or `swissarmyhammer issue create`
+2. **Work** - Switch to issue work branch with `issue_work`
+3. **Update** - Update issue content with `issue_update`
+4. **Complete** - Mark issues complete with `issue_mark_complete`
+5. **Merge** - Merge completed work with `issue_merge`
+
+#### 🔧 MCP Tools
+- `issue_create` - Create new issues
+- `issue_mark_complete` - Mark issues as complete
+- `issue_all_complete` - Check if all issues are completed
+- `issue_update` - Update issue content
+- `issue_current` - Get current issue from git branch
+- `issue_work` - Start working on an issue
+- `issue_merge` - Merge completed issue work
+
+#### 💻 CLI Commands
+- `swissarmyhammer issue create` - Create new issues
+- `swissarmyhammer issue list` - List all issues
+- `swissarmyhammer issue show` - Show issue details
+- `swissarmyhammer issue update` - Update issue content
+- `swissarmyhammer issue complete` - Mark issues complete
+- `swissarmyhammer issue work` - Start working on an issue
+- `swissarmyhammer issue merge` - Merge completed work
+- `swissarmyhammer issue current` - Show current issue
+- `swissarmyhammer issue status` - Show project status
 
 ### Quick Start
 
-1. Create an issue:
-   ```bash
-   # Via MCP tool
-   issue_create name="fix_bug" content="Fix the parsing bug in module X"
-   ```
+#### 1. Create Your First Issue
+```bash
+# Using CLI
+swissarmyhammer issue create "implement_auth" --content "Add JWT authentication"
 
-2. Work on an issue:
-   ```bash
-   # Switch to issue branch
-   issue_work number=1
-   ```
+# Using MCP (via Claude Code)
+> Create an issue to implement JWT authentication
+```
 
-3. Mark complete:
-   ```bash
-   # Move to completed directory
-   issue_mark_complete number=1
-   ```
+#### 2. Start Working
+```bash
+# Switch to issue work branch
+swissarmyhammer issue work 1
+
+# Check current issue
+swissarmyhammer issue current
+```
+
+#### 3. Update Progress
+```bash
+# Update with progress notes
+swissarmyhammer issue update 1 --content "Authentication implemented" --append
+
+# Mark complete when done
+swissarmyhammer issue complete 1
+```
+
+#### 4. Merge to Main
+```bash
+# Merge completed work
+swissarmyhammer issue merge 1
+```
 
 ### Directory Structure
 
 ```
 ./issues/
-├── 000001_fix_bug.md          # Active issue
-├── 000002_add_feature.md      # Active issue
+├── 000001_implement_auth.md      # Active issue
+├── 000002_fix_bug.md            # Active issue
 └── complete/
-    └── 000003_refactor.md     # Completed issue
+    └── 000003_add_tests.md      # Completed issue
 ```
+
+### Best Practices
+
+1. **Use Descriptive Names**: Issue names become part of branch names
+2. **Regular Updates**: Keep issues updated with progress notes
+3. **Complete Before Merge**: Always mark issues complete before merging
+4. **Clean Branches**: Use default branch deletion after merge
+5. **Atomic Commits**: Make focused commits in issue branches
+
+### Troubleshooting
+
+#### Common Issues
+
+**"Not in a git repository"**
+- Solution: Initialize git repository (`git init`)
+
+**"Uncommitted changes"**
+- Solution: Commit changes (`git add . && git commit`) or stash (`git stash`)
+
+**"Issue not found"**
+- Solution: Check issue number with `swissarmyhammer issue list`
+
+**"Branch already exists"**
+- Solution: Switch to existing branch or delete old branch
+
+#### Getting Help
+
+Use `swissarmyhammer issue --help` for detailed command help.
 
 ## 📂 Directory Structure
 

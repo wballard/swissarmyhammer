@@ -94,7 +94,7 @@ impl GitOperations {
     }
 
     /// Check if a branch exists
-    fn branch_exists(&self, branch: &str) -> Result<bool> {
+    pub fn branch_exists(&self, branch: &str) -> Result<bool> {
         let output = Command::new("git")
             .current_dir(&self.work_dir)
             .args([
@@ -275,6 +275,12 @@ impl GitOperations {
         }
 
         Ok(changes)
+    }
+
+    /// Check if working directory has uncommitted changes
+    pub fn has_uncommitted_changes(&self) -> Result<bool> {
+        let changes = self.is_working_directory_clean()?;
+        Ok(!changes.is_empty())
     }
 }
 
@@ -500,5 +506,36 @@ mod tests {
         // Try to merge non-existent branch
         let result = git_ops.merge_issue_branch("non_existent_issue");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_has_uncommitted_changes() {
+        let temp_dir = create_test_git_repo().unwrap();
+
+        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf()).unwrap();
+
+        // Initially should have no uncommitted changes
+        assert!(!git_ops.has_uncommitted_changes().unwrap());
+
+        // Add a file
+        fs::write(temp_dir.path().join("test.txt"), "test content").unwrap();
+
+        // Should now have uncommitted changes
+        assert!(git_ops.has_uncommitted_changes().unwrap());
+
+        // Stage and commit the file
+        Command::new("git")
+            .current_dir(temp_dir.path())
+            .args(["add", "test.txt"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir.path())
+            .args(["commit", "-m", "Add test file"])
+            .output()
+            .unwrap();
+
+        // Should have no uncommitted changes again
+        assert!(!git_ops.has_uncommitted_changes().unwrap());
     }
 }

@@ -37,6 +37,16 @@ use types::{
 use types::IssueName;
 use utils::validate_issue_name;
 
+/// Validation state for pre-work operations
+#[derive(Debug)]
+struct PreWorkValidation {
+    current_branch: String,
+    main_branch: String,
+    on_issue_branch: bool,
+    has_uncommitted: bool,
+    is_clean: bool,
+}
+
 /// Constants for issue branch management
 use crate::config::Config;
 
@@ -1262,100 +1272,211 @@ impl McpServer {
         &self,
         request: WorkIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
-        // Validate issue number
-        let config = Config::global();
-        if request.number < config.min_issue_number || request.number > config.max_issue_number {
-            return Err(McpError::invalid_params(
-                format!(
-                    "Invalid issue number (must be {}-{})",
-                    config.min_issue_number, config.max_issue_number
-                ),
-                None,
-            ));
-        }
-
-        // Get the issue to ensure it exists and get its name
+        // Extract and validate issue number
+        let issue_number = request.number.get();
+        
+        // Validate the issue exists
         let issue_storage = self.issue_storage.read().await;
-        let issue = issue_storage
-            .get_issue(request.number.into())
-            .await
-            .map_err(|e| match e {
-                SwissArmyHammerError::IssueNotFound(_) => McpError::invalid_params(
-                    format!("Issue #{:06} not found", request.number),
+        let issue = match issue_storage.get_issue(issue_number).await {
+            Ok(issue) => issue,
+            Err(SwissArmyHammerError::IssueNotFound(_)) => {
+                return Ok(CallToolResult {
+                    content: vec![Annotated::new(
+                        RawContent::Text(RawTextContent {
+                            text: format!("❌ Issue #{:06} not found", issue_number),
+                        }),
+                        None,
+                    )],
+                    is_error: Some(true),
+                })
+            }
+            Err(e) => {
+                return Err(McpError::internal_error(
+                    format!("Failed to get issue: {}", e),
                     None,
-                ),
-                _ => McpError::internal_error(format!("Failed to get issue: {}", e), None),
-            })?;
+                ))
+            }
+        };
         drop(issue_storage);
-
-        // Check for uncommitted changes before switching
+        
+        // Check if issue is already completed
+        if issue.completed {
+            return Ok(CallToolResult {
+                content: vec![Annotated::new(
+                    RawContent::Text(RawTextContent {
+                        text: format!(
+                            "⚠️ Issue #{:06} - {} is already completed\n\n📋 Issue Details:\n• Status: Completed ✅\n• File: {}\n\n💡 Suggestions:\n• Work on active issue: issue_all_complete\n• Create new issue: issue_create",
+                            issue.number,
+                            issue.name,
+                            issue.file_path.display()
+                        ),
+                    }),
+                    None,
+                )],
+                is_error: Some(false),
+            });
+        }
+        
+        // Initialize git operations
         let git_ops = self.git_ops.lock().await;
         let git_ops_ref = git_ops.as_ref().ok_or_else(|| {
             McpError::internal_error("Git operations not available".to_string(), None)
         })?;
-
-        if let Err(e) = self.check_working_directory_clean(git_ops_ref).await {
-            let suggestion = self.get_stash_suggestion();
-            return Err(McpError::invalid_params(
-                format!("{}\n\n{}", e, suggestion),
-                None,
-            ));
+        
+        // Validate pre-work state
+        let validation = self.validate_pre_work_state(git_ops_ref).await?;
+        
+        // Handle uncommitted changes
+        if validation.has_uncommitted {
+            return Ok(CallToolResult {
+                content: vec![Annotated::new(
+                    RawContent::Text(RawTextContent {
+                        text: format!(
+                            "⚠️ Cannot switch to work branch with uncommitted changes\n\n📋 Current Status:\n• Branch: {}\n• Uncommitted changes: Yes\n\n💡 Actions Required:\n• Commit your changes: git add . && git commit -m \"Your message\"\n• Or stash changes: git stash\n• Then try again: issue_work number={}",
+                            validation.current_branch,
+                            issue_number
+                        ),
+                    }),
+                    None,
+                )],
+                is_error: Some(true),
+            });
         }
-
-        // Create the issue branch name
-        let issue_name = format!("{:06}_{}", issue.number, issue.name);
+        
+        // Check if already on the target branch
+        let target_branch = format!("issue/{:06}_{}", issue.number, issue.name);
+        if validation.current_branch == target_branch {
+            return Ok(CallToolResult {
+                content: vec![Annotated::new(
+                    RawContent::Text(RawTextContent {
+                        text: format!(
+                            "ℹ️ Already working on issue #{:06} - {}\n\n📋 Current Status:\n• Branch: {}\n• Issue: Active\n• Ready for work: Yes\n\n💡 You can now:\n• Make changes and commit them\n• Update issue: issue_update\n• Mark complete: issue_mark_complete",
+                            issue.number,
+                            issue.name,
+                            validation.current_branch
+                        ),
+                    }),
+                    None,
+                )],
+                is_error: Some(false),
+            });
+        }
+        
+        // Create branch identifier
+        let branch_identifier = format!("{:06}_{}", issue.number, issue.name);
+        
+        // Create and switch to work branch
         let mut git_ops = git_ops;
-        let branch_name = git_ops
+        let branch_name = match git_ops
             .as_mut()
             .ok_or_else(|| {
                 McpError::internal_error("Git operations not available".to_string(), None)
             })?
-            .create_work_branch(&issue_name)
-            .map_err(|e| {
-                McpError::internal_error(
-                    format!("Failed to create/switch to work branch: {}", e),
-                    None,
-                )
-            })?;
-
-        // Get current branch to confirm switch
+            .create_work_branch(&branch_identifier)
+        {
+            Ok(branch) => branch,
+            Err(e) => {
+                let (error_msg, recovery_suggestions) = match &e {
+                    SwissArmyHammerError::Other(msg) if msg.contains("uncommitted changes") => {
+                        let suggestions = vec![
+                            "git add . && git commit -m \"Work in progress\"".to_string(),
+                            "git stash".to_string(),
+                            "git checkout -- . (to discard changes)".to_string()
+                        ];
+                        ("Uncommitted changes prevent branch switch".to_string(), suggestions)
+                    }
+                    SwissArmyHammerError::Other(msg) if msg.contains("already exists") => {
+                        let suggestions = vec![
+                            format!("git checkout {}", format!("issue/{}", branch_identifier)),
+                            "git branch -D issue/... (to delete existing branch)".to_string()
+                        ];
+                        ("Branch already exists".to_string(), suggestions)
+                    }
+                    _ => {
+                        let suggestions = vec![
+                            "Check git repository permissions".to_string(),
+                            "Ensure you're in a git repository".to_string(),
+                            "Try: git status".to_string()
+                        ];
+                        (format!("Git operation failed: {}", e), suggestions)
+                    }
+                };
+                
+                return Ok(CallToolResult {
+                    content: vec![Annotated::new(
+                        RawContent::Text(RawTextContent {
+                            text: format!(
+                                "❌ {}\n\n🔧 Recovery Suggestions:\n{}",
+                                error_msg,
+                                recovery_suggestions.iter()
+                                    .map(|s| format!("• {}", s))
+                                    .collect::<Vec<_>>()
+                                    .join("\n")
+                            ),
+                        }),
+                        None,
+                    )],
+                    is_error: Some(true),
+                });
+            }
+        };
+        
+        // Verify we're on the correct branch
         let current_branch = git_ops
             .as_ref()
             .ok_or_else(|| {
                 McpError::internal_error("Git operations not available".to_string(), None)
             })?
             .current_branch()
-            .unwrap_or_else(|_| branch_name.clone());
-
-        let response = serde_json::json!({
-            "issue": {
-                "number": issue.number,
-                "name": issue.name,
-                "completed": issue.completed,
-            },
-            "branch": {
-                "name": current_branch,
-                "created": !branch_name.contains("already exists"),
-            },
-            "message": format!(
-                "Switched to branch '{}' for issue #{:06} - {}",
-                current_branch,
-                issue.number,
-                issue.name
-            )
-        });
-
+            .unwrap_or_else(|_| "unknown".to_string());
+        
+        // Format success response
+        let response_text = format!(
+            "🔄 Switched to branch '{}' for issue #{:06} - {}\n\n📋 Issue Details:\n• Number: {}\n• Name: {}\n• Status: Active\n• File: {}\n\n🌿 Git Branch:\n• Branch: {}\n• Status: Active work branch\n• Previous branch: Switched from previous branch\n\n💡 Next Steps:\n• Make your changes and commit them\n• Update issue progress: issue_update\n• Mark complete when done: issue_mark_complete\n• Merge back to main: issue_merge\n\n📝 Issue Content:\n{}",
+            branch_name,
+            issue.number,
+            issue.name,
+            issue.number,
+            issue.name,
+            issue.file_path.display(),
+            branch_name,
+            issue.content
+        );
+        
         Ok(CallToolResult {
             content: vec![Annotated::new(
                 RawContent::Text(RawTextContent {
-                    text: response["message"]
-                        .as_str()
-                        .unwrap_or("Working on issue")
-                        .to_string(),
+                    text: response_text,
                 }),
                 None,
             )],
             is_error: Some(false),
+        })
+    }
+    
+    /// Validate repository state before creating work branch
+    async fn validate_pre_work_state(&self, git_ops: &GitOperations) -> std::result::Result<PreWorkValidation, McpError> {
+        let current_branch = git_ops.current_branch().map_err(|e| {
+            McpError::internal_error(format!("Failed to get current branch: {}", e), None)
+        })?;
+        
+        let main_branch = git_ops.main_branch().unwrap_or_else(|_| "main".to_string());
+        
+        // Check for uncommitted changes
+        let has_uncommitted = git_ops.has_uncommitted_changes().unwrap_or(false);
+        
+        // Check if already on an issue branch
+        let on_issue_branch = current_branch.starts_with("issue/");
+        
+        // Check if working directory is clean
+        let is_clean = !has_uncommitted;
+        
+        Ok(PreWorkValidation {
+            current_branch,
+            main_branch,
+            on_issue_branch,
+            has_uncommitted,
+            is_clean,
         })
     }
 
@@ -2881,7 +3002,14 @@ mod tests {
             };
 
             let result = server.handle_issue_work(work_request).await;
-            assert!(result.is_err());
+            assert!(result.is_ok());
+            let response = result.unwrap();
+            assert!(response.is_error.unwrap_or(false));
+            if let RawContent::Text(text) = &response.content[0].raw {
+                assert!(text.text.contains("not found"));
+            } else {
+                panic!("Expected text response");
+            }
         }
 
         #[tokio::test]
@@ -3255,8 +3383,15 @@ mod tests {
             };
 
             let work_result = server.handle_issue_work(work_request).await;
-            // This should return an error since the issue wasn't found
-            assert!(work_result.is_err());
+            // This should return Ok but with an error flag since the issue wasn't found
+            assert!(work_result.is_ok());
+            let response = work_result.unwrap();
+            assert!(response.is_error.unwrap_or(false));
+            if let RawContent::Text(text) = &response.content[0].raw {
+                assert!(text.text.contains("not found"));
+            } else {
+                panic!("Expected text response");
+            }
 
             // Test merging a non-existent issue
             let merge_request = MergeIssueRequest {

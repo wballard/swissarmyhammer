@@ -1139,44 +1139,64 @@ impl McpServer {
         branch: &str,
     ) -> std::result::Result<CallToolResult, McpError> {
         let issue_storage = self.issue_storage.read().await;
-        let issue = issue_storage
-            .get_issue(issue_number)
-            .await
-            .map_err(|e| match e {
-                SwissArmyHammerError::IssueNotFound(_) => McpError::internal_error(
-                    format!(
-                        "Issue #{:06} referenced by branch '{}' not found",
-                        issue_number, branch
-                    ),
-                    None,
-                ),
-                _ => McpError::internal_error(format!("Failed to get issue: {}", e), None),
-            })?;
+        let issue = match issue_storage.get_issue(issue_number).await {
+            Ok(issue) => issue,
+            Err(SwissArmyHammerError::IssueNotFound(_)) => {
+                // Handle orphaned issue branch
+                let orphaned_text = format!(
+                    "⚠️ On issue branch '{}' but no corresponding issue found\n\n🔍 Branch Analysis:\n• Branch: {}\n• Type: Issue branch (orphaned)\n• Issue number: {:06}\n• Issue file: Missing\n\n💡 Suggestions:\n• Create issue with: issue_create\n• Switch to main branch: git checkout main\n• Delete orphaned branch: git branch -d {}",
+                    branch, branch, issue_number, branch
+                );
+
+                return Ok(CallToolResult {
+                    content: vec![Annotated::new(
+                        RawContent::Text(RawTextContent { text: orphaned_text }),
+                        None,
+                    )],
+                    is_error: Some(false),
+                });
+            }
+            Err(e) => {
+                return Err(McpError::internal_error(format!("Failed to get issue: {}", e), None));
+            }
+        };
+
+        let status_emoji = if issue.completed { "✅" } else { "🔄" };
+        let status_text = if issue.completed { "Completed" } else { "Active" };
+
+        let response_text = format!(
+            "{} Current issue: #{:06} - {}\n\n📋 Issue Details:\n• Number: {}\n• Name: {}\n• Status: {}\n• Branch: {}\n• File: {}\n\n📝 Content:\n{}",
+            status_emoji,
+            issue.number,
+            issue.name,
+            issue.number,
+            issue.name,
+            status_text,
+            branch,
+            issue.file_path.display(),
+            issue.content
+        );
 
         let response = serde_json::json!({
+            "action": "current_issue",
+            "status": "success",
             "current_issue": {
                 "number": issue.number,
                 "name": issue.name,
-                "completed": issue.completed,
+                "content": issue.content,
                 "file_path": issue.file_path.to_string_lossy(),
+                "completed": issue.completed
             },
-            "branch": branch,
-            "message": format!(
-                "Current issue: #{:06} - {} (branch: {})",
-                issue.number,
-                issue.name,
-                branch
-            )
+            "branch": {
+                "name": branch,
+                "is_issue_branch": true,
+                "issue_number": issue.number
+            }
         });
 
         Ok(CallToolResult {
             content: vec![Annotated::new(
-                RawContent::Text(RawTextContent {
-                    text: response["message"]
-                        .as_str()
-                        .unwrap_or("Current issue status")
-                        .to_string(),
-                }),
+                RawContent::Text(RawTextContent { text: response_text }),
                 None,
             )],
             is_error: Some(false),
@@ -1205,25 +1225,29 @@ impl McpServer {
             None => "main".to_string(),
         };
 
+        let is_main = branch == main_branch;
+
+        let response_text = format!(
+            "ℹ️ Not currently working on a specific issue\n\n🔍 Branch Analysis:\n• Current branch: {}\n• Type: {}\n• Issue-specific work: No\n\n💡 Suggestions:\n• View all issues: issue_all_complete\n• Create new issue: issue_create\n• Work on existing issue: issue_work",
+            branch,
+            if is_main { "Main branch" } else { "Feature/other branch" }
+        );
+
         let response = serde_json::json!({
+            "action": "current_issue",
+            "status": "no_current_issue",
             "current_issue": null,
-            "branch": branch,
-            "is_main": branch == main_branch,
-            "message": if branch == main_branch {
-                format!("On main branch '{}', no specific issue selected", branch)
-            } else {
-                format!("On branch '{}' which is not an issue branch", branch)
+            "branch": {
+                "name": branch,
+                "is_issue_branch": false,
+                "is_main_branch": is_main,
+                "issue_number": null
             }
         });
 
         Ok(CallToolResult {
             content: vec![Annotated::new(
-                RawContent::Text(RawTextContent {
-                    text: response["message"]
-                        .as_str()
-                        .unwrap_or("Branch status")
-                        .to_string(),
-                }),
+                RawContent::Text(RawTextContent { text: response_text }),
                 None,
             )],
             is_error: Some(false),
@@ -1447,6 +1471,42 @@ impl McpServer {
 
         // If we can't parse it, maybe it's just issue/<name>
         // In this case, we need to search for an issue with this name
+        Ok(None)
+    }
+
+    /// Parse issue number from branch identifier
+    /// 
+    /// Attempts to parse an issue number from a branch identifier string,
+    /// supporting multiple formats and fallback to name-based lookup.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `identifier` - The branch identifier string (everything after "issue/")
+    /// 
+    /// # Returns
+    /// 
+    /// * `Result<Option<u32>>` - The parsed issue number if found, None if not parseable
+    async fn parse_issue_number_from_branch(&self, identifier: &str) -> Result<Option<u32>> {
+        // Try to parse as direct number first (e.g., "000123")
+        if let Ok(number) = identifier.parse::<u32>() {
+            return Ok(Some(number));
+        }
+        
+        // Try to parse as formatted number (e.g., "000123_name")
+        if let Ok((number, _)) = crate::issues::parse_issue_filename(identifier) {
+            return Ok(Some(number));
+        }
+        
+        // Try to find by name match - search all issues
+        let issue_storage = self.issue_storage.read().await;
+        let all_issues = issue_storage.list_issues().await?;
+        for issue in all_issues {
+            let issue_filename = format!("{:06}_{}", issue.number, issue.name);
+            if identifier == issue_filename {
+                return Ok(Some(issue.number));
+            }
+        }
+        
         Ok(None)
     }
 
@@ -3311,7 +3371,7 @@ mod tests {
             for (name, content) in issues {
                 // Create issue
                 let create_request = CreateIssueRequest {
-                    name: name.to_string(),
+                    name: IssueName(name.to_string()),
                     content: content.to_string(),
                 };
                 let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -3320,7 +3380,7 @@ mod tests {
                 // Extract issue number and complete it
                 let issue_number = extract_issue_number_from_response(&create_result);
                 let complete_request = MarkCompleteRequest {
-                    number: issue_number,
+                    number: IssueNumber(issue_number),
                 };
                 let complete_result = server
                     .handle_issue_mark_complete(complete_request)
@@ -3365,7 +3425,7 @@ mod tests {
 
             for (name, content) in active_issues {
                 let create_request = CreateIssueRequest {
-                    name: name.to_string(),
+                    name: IssueName(name.to_string()),
                     content: content.to_string(),
                 };
                 let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -3381,7 +3441,7 @@ mod tests {
 
             for (name, content) in completed_issues {
                 let create_request = CreateIssueRequest {
-                    name: name.to_string(),
+                    name: IssueName(name.to_string()),
                     content: content.to_string(),
                 };
                 let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -3389,7 +3449,7 @@ mod tests {
 
                 let issue_number = extract_issue_number_from_response(&create_result);
                 let complete_request = MarkCompleteRequest {
-                    number: issue_number,
+                    number: IssueNumber(issue_number),
                 };
                 let complete_result = server
                     .handle_issue_mark_complete(complete_request)
@@ -3438,7 +3498,7 @@ mod tests {
 
             for (name, content) in active_issues {
                 let create_request = CreateIssueRequest {
-                    name: name.to_string(),
+                    name: IssueName(name.to_string()),
                     content: content.to_string(),
                 };
                 let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -3477,14 +3537,14 @@ mod tests {
 
             // Create one active and one completed issue
             let create_request = CreateIssueRequest {
-                name: "format_test_active".to_string(),
+                name: IssueName("format_test_active".to_string()),
                 content: "Active issue content".to_string(),
             };
             let create_result = server.handle_issue_create(create_request).await.unwrap();
             assert!(!create_result.is_error.unwrap_or(false));
 
             let create_request = CreateIssueRequest {
-                name: "format_test_completed".to_string(),
+                name: IssueName("format_test_completed".to_string()),
                 content: "Completed issue content".to_string(),
             };
             let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -3492,7 +3552,7 @@ mod tests {
 
             let issue_number = extract_issue_number_from_response(&create_result);
             let complete_request = MarkCompleteRequest {
-                number: issue_number,
+                number: IssueNumber(issue_number),
             };
             let complete_result = server
                 .handle_issue_mark_complete(complete_request)

@@ -46,10 +46,12 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(6),
-            max_pending_issues_in_summary: env::var("SWISSARMYHAMMER_MAX_PENDING_ISSUES_IN_SUMMARY")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(5),
+            max_pending_issues_in_summary: env::var(
+                "SWISSARMYHAMMER_MAX_PENDING_ISSUES_IN_SUMMARY",
+            )
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(5),
             min_issue_number: env::var("SWISSARMYHAMMER_MIN_ISSUE_NUMBER")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -103,7 +105,7 @@ mod tests {
         std::env::remove_var("SWISSARMYHAMMER_MAX_PENDING_ISSUES_IN_SUMMARY");
         std::env::remove_var("SWISSARMYHAMMER_MAX_ISSUE_NUMBER");
         std::env::remove_var("SWISSARMYHAMMER_ISSUE_NUMBER_DIGITS");
-        
+
         let config = Config::new();
         // Should use defaults when environment variables are not set
         assert_eq!(config.issue_branch_prefix, "issue/");

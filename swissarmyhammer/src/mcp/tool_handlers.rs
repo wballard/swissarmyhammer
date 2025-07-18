@@ -1,12 +1,12 @@
 //! Tool handlers for MCP operations
 
-use crate::config::Config;
 use super::responses::{
-    create_all_complete_response, create_error_response, create_issue_response,
+    create_error_response, create_issue_response,
     create_mark_complete_response, create_success_response,
 };
 use super::types::*;
 use super::utils::validate_issue_name;
+use crate::config::Config;
 use crate::git::GitOperations;
 use crate::issues::IssueStorage;
 use crate::Result;
@@ -111,7 +111,8 @@ impl ToolHandlers {
 
     /// Handle the issue_all_complete tool operation.
     ///
-    /// Checks if all issues are completed by listing pending issues.
+    /// Provides comprehensive project status including all issues, completion statistics,
+    /// and detailed insights for AI assistants to understand project health.
     ///
     /// # Arguments
     ///
@@ -119,22 +120,139 @@ impl ToolHandlers {
     ///
     /// # Returns
     ///
-    /// * `Result<CallToolResult, McpError>` - The tool call result with completion status
+    /// * `Result<CallToolResult, McpError>` - The tool call result with comprehensive status
     pub async fn handle_issue_all_complete(
         &self,
         _request: AllCompleteRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         let issue_storage = self.issue_storage.read().await;
-        match issue_storage.list_issues().await {
-            Ok(issues) => {
-                let pending_count = issues.iter().filter(|i| !i.completed).count();
-                Ok(create_all_complete_response(issues.len(), pending_count))
+        
+        // Get all issues with comprehensive error handling
+        let all_issues = match issue_storage.list_issues().await {
+            Ok(issues) => issues,
+            Err(e) => {
+                let error_msg = match e.to_string() {
+                    msg if msg.contains("permission") => {
+                        "Permission denied: Unable to read issues directory. Check directory permissions.".to_string()
+                    }
+                    msg if msg.contains("No such file") => {
+                        "Issues directory not found. The project may not have issue tracking initialized.".to_string()
+                    }
+                    _ => {
+                        format!("Failed to check issue status: {}", e)
+                    }
+                };
+                
+                return Ok(CallToolResult {
+                    content: vec![Annotated::new(
+                        RawContent::Text(RawTextContent { text: error_msg.clone() }),
+                        None,
+                    )],
+                    is_error: Some(true),
+                });
             }
-            Err(e) => Err(McpError::internal_error(
-                format!("Failed to check issues: {}", e),
-                None,
-            )),
+        };
+        
+        // Separate active and completed issues
+        let mut active_issues = Vec::new();
+        let mut completed_issues = Vec::new();
+        
+        for issue in all_issues {
+            if issue.completed {
+                completed_issues.push(issue);
+            } else {
+                active_issues.push(issue);
+            }
         }
+        
+        // Calculate statistics
+        let total_issues = active_issues.len() + completed_issues.len();
+        let completed_count = completed_issues.len();
+        let active_count = active_issues.len();
+        let all_complete = active_count == 0 && total_issues > 0;
+        
+        let completion_percentage = if total_issues > 0 {
+            (completed_count * 100) / total_issues
+        } else {
+            0
+        };
+        
+        // Generate comprehensive response text
+        let response_text = if total_issues == 0 {
+            "📋 No issues found in the project\n\n✨ The project has no tracked issues. You can create issues using the `issue_create` tool.".to_string()
+        } else if all_complete {
+            format!(
+                "🎉 All issues are complete!\n\n📊 Project Status:\n• Total Issues: {}\n• Completed: {} (100%)\n• Active: 0\n\n✅ Completed Issues:\n{}",
+                total_issues,
+                completed_count,
+                completed_issues.iter()
+                    .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        } else {
+            let active_list = active_issues.iter()
+                .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
+                .collect::<Vec<_>>()
+                .join("\n");
+            
+            let completed_list = if completed_count > 0 {
+                completed_issues.iter()
+                    .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            } else {
+                "  (none)".to_string()
+            };
+            
+            format!(
+                "⏳ Project has active issues ({}% complete)\n\n📊 Project Status:\n• Total Issues: {}\n• Completed: {} ({}%)\n• Active: {}\n\n🔄 Active Issues:\n{}\n\n✅ Completed Issues:\n{}",
+                completion_percentage,
+                total_issues,
+                completed_count,
+                completion_percentage,
+                active_count,
+                active_list,
+                completed_list
+            )
+        };
+        
+        // Create comprehensive artifact with detailed data
+        let artifact = serde_json::json!({
+            "action": "all_complete",
+            "status": "success",
+            "all_complete": all_complete,
+            "statistics": {
+                "total_issues": total_issues,
+                "completed_count": completed_count,
+                "active_count": active_count,
+                "completion_percentage": completion_percentage
+            },
+            "issues": {
+                "active": active_issues.iter().map(|issue| {
+                    serde_json::json!({
+                        "number": issue.number,
+                        "name": issue.name,
+                        "file_path": issue.file_path.to_string_lossy()
+                    })
+                }).collect::<Vec<_>>(),
+                "completed": completed_issues.iter().map(|issue| {
+                    serde_json::json!({
+                        "number": issue.number,
+                        "name": issue.name,
+                        "file_path": issue.file_path.to_string_lossy()
+                    })
+                }).collect::<Vec<_>>()
+            }
+        });
+        
+        Ok(CallToolResult {
+            content: vec![Annotated::new(
+                RawContent::Text(RawTextContent { text: response_text }),
+                None,
+            )],
+            is_error: Some(false),
+        })
     }
 
     /// Handle the issue_update tool operation.
@@ -390,7 +508,10 @@ impl ToolHandlers {
             .args(["status", "--porcelain"])
             .output()
             .map_err(|e| {
-                crate::SwissArmyHammerError::git_operation_failed("git status check", &e.to_string())
+                crate::SwissArmyHammerError::git_operation_failed(
+                    "git status check",
+                    &e.to_string(),
+                )
             })?;
 
         let status = String::from_utf8_lossy(&output.stdout);

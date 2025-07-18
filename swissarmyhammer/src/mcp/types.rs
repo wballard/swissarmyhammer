@@ -1,8 +1,8 @@
 //! Request and response types for MCP operations, along with constants
 
+use crate::config::Config;
 use serde::Deserialize;
 use std::collections::HashMap;
-use crate::config::Config;
 
 // Type safety wrapper types
 
@@ -63,12 +63,12 @@ impl IssueName {
         if trimmed.len() > 100 {
             return Err("Issue name cannot exceed 100 characters".to_string());
         }
-        
+
         // Check for invalid characters
         if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains('\0') {
             return Err("Issue name contains invalid characters".to_string());
         }
-        
+
         Ok(IssueName(trimmed.to_string()))
     }
 

@@ -19,7 +19,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
-
 /// MCP module structure
 pub mod error_handling;
 pub mod file_watcher;
@@ -785,78 +784,101 @@ impl McpServer {
         &self,
         _request: AllCompleteRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
-        // Get all issues
         let issue_storage = self.issue_storage.read().await;
-        let all_issues = issue_storage
-            .list_issues()
-            .await
-            .map_err(|e| McpError::internal_error(format!("Failed to list issues: {}", e), None))?;
-
-        // Count pending and completed
-        let completed_count = all_issues.iter().filter(|i| i.completed).count();
-        let pending_count = all_issues.len() - completed_count;
-        let all_complete = pending_count == 0;
-
-        // Create detailed response
-        let mut response = serde_json::json!({
-            "all_complete": all_complete,
-            "stats": {
-                "total": all_issues.len(),
-                "completed": completed_count,
-                "pending": pending_count,
-            },
-            "message": if all_complete {
-                if all_issues.is_empty() {
-                    "No issues found. Issue list is empty.".to_string()
-                } else {
-                    format!("Yes, all {} issues are complete!", all_issues.len())
-                }
-            } else {
-                format!(
-                    "No, {} of {} issues are still pending.",
-                    pending_count,
-                    all_issues.len()
-                )
+        
+        // Get all issues with comprehensive error handling
+        let all_issues = match issue_storage.list_issues().await {
+            Ok(issues) => issues,
+            Err(e) => {
+                let error_msg = match e.to_string() {
+                    msg if msg.contains("permission") => {
+                        "Permission denied: Unable to read issues directory. Check directory permissions.".to_string()
+                    }
+                    msg if msg.contains("No such file") => {
+                        "Issues directory not found. The project may not have issue tracking initialized.".to_string()
+                    }
+                    _ => {
+                        format!("Failed to check issue status: {}", e)
+                    }
+                };
+                
+                return Ok(CallToolResult {
+                    content: vec![Annotated::new(
+                        RawContent::Text(RawTextContent { text: error_msg }),
+                        None,
+                    )],
+                    is_error: Some(true),
+                });
             }
-        });
-
-        // If there are pending issues, list them
-        if !all_complete && pending_count > 0 {
-            let pending_issues: Vec<_> = Self::get_pending_issues(&all_issues)
-                .into_iter()
-                .map(|i| {
-                    serde_json::json!({
-                        "number": i.number,
-                        "name": i.name,
-                    })
-                })
-                .collect();
-
-            if let Some(obj) = response.as_object_mut() {
-                obj.insert(
-                    "pending_issues".to_string(),
-                    serde_json::Value::Array(pending_issues),
-                );
+        };
+        
+        // Separate active and completed issues
+        let mut active_issues = Vec::new();
+        let mut completed_issues = Vec::new();
+        
+        for issue in all_issues {
+            if issue.completed {
+                completed_issues.push(issue);
+            } else {
+                active_issues.push(issue);
             }
         }
-
-        // Add summary for text response
-        let summary = if !all_complete {
-            Self::format_issue_summary(&all_issues, self.max_pending_issues_display)
+        
+        // Calculate statistics
+        let total_issues = active_issues.len() + completed_issues.len();
+        let completed_count = completed_issues.len();
+        let active_count = active_issues.len();
+        let all_complete = active_count == 0 && total_issues > 0;
+        
+        let completion_percentage = if total_issues > 0 {
+            (completed_count * 100) / total_issues
         } else {
-            String::new()
+            0
         };
-
-        let message = response["message"]
-            .as_str()
-            .unwrap_or("Status check complete");
-        let text_response = format!("{}{}", message, summary);
-
+        
+        // Generate comprehensive response text
+        let response_text = if total_issues == 0 {
+            "📋 No issues found in the project\n\n✨ The project has no tracked issues. You can create issues using the `issue_create` tool.".to_string()
+        } else if all_complete {
+            format!(
+                "🎉 All issues are complete!\n\n📊 Project Status:\n• Total Issues: {}\n• Completed: {} (100%)\n• Active: 0\n\n✅ Completed Issues:\n{}",
+                total_issues,
+                completed_count,
+                completed_issues.iter()
+                    .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        } else {
+            let active_list = active_issues.iter()
+                .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
+                .collect::<Vec<_>>()
+                .join("\n");
+            
+            let completed_list = if completed_count > 0 {
+                completed_issues.iter()
+                    .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            } else {
+                "  (none)".to_string()
+            };
+            
+            format!(
+                "⏳ Project has active issues ({}% complete)\n\n📊 Project Status:\n• Total Issues: {}\n• Completed: {} ({}%)\n• Active: {}\n\n🔄 Active Issues:\n{}\n\n✅ Completed Issues:\n{}",
+                completion_percentage,
+                total_issues,
+                completed_count,
+                completion_percentage,
+                active_count,
+                active_list,
+                completed_list
+            )
+        };
+        
         Ok(CallToolResult {
             content: vec![Annotated::new(
-                RawContent::Text(RawTextContent {
-                    text: text_response,
-                }),
+                RawContent::Text(RawTextContent { text: response_text }),
                 None,
             )],
             is_error: Some(false),
@@ -3218,6 +3240,236 @@ mod tests {
 
             let _merge_result = server.handle_issue_merge(merge_request).await.unwrap();
             // This should handle the case gracefully (may succeed or fail depending on implementation)
+        }
+
+        #[tokio::test]
+        async fn test_issue_all_complete_no_issues() {
+            let (server, _temp) = create_test_mcp_server().await;
+
+            let all_complete_request = AllCompleteRequest {};
+            let result = server.handle_issue_all_complete(all_complete_request).await.unwrap();
+            
+            assert!(!result.is_error.unwrap_or(false));
+            
+            // Check response text
+            if let RawContent::Text(text) = &result.content[0].raw {
+                assert!(text.text.contains("📋 No issues found in the project"));
+                assert!(text.text.contains("The project has no tracked issues"));
+            } else {
+                panic!("Expected text response");
+            }
+        }
+
+        #[tokio::test]
+        async fn test_issue_all_complete_all_completed() {
+            let (server, _temp) = create_test_mcp_server().await;
+
+            // Create and complete multiple issues
+            let issues = vec![
+                ("test_issue_1", "Content for issue 1"),
+                ("test_issue_2", "Content for issue 2"),
+                ("test_issue_3", "Content for issue 3"),
+            ];
+
+            for (name, content) in issues {
+                // Create issue
+                let create_request = CreateIssueRequest {
+                    name: name.to_string(),
+                    content: content.to_string(),
+                };
+                let create_result = server.handle_issue_create(create_request).await.unwrap();
+                assert!(!create_result.is_error.unwrap_or(false));
+
+                // Extract issue number and complete it
+                let issue_number = extract_issue_number_from_response(&create_result);
+                let complete_request = MarkCompleteRequest {
+                    number: issue_number,
+                };
+                let complete_result = server.handle_issue_mark_complete(complete_request).await.unwrap();
+                assert!(!complete_result.is_error.unwrap_or(false));
+            }
+
+            // Check all complete
+            let all_complete_request = AllCompleteRequest {};
+            let result = server.handle_issue_all_complete(all_complete_request).await.unwrap();
+            
+            assert!(!result.is_error.unwrap_or(false));
+            
+            // Check response text
+            if let RawContent::Text(text) = &result.content[0].raw {
+                assert!(text.text.contains("🎉 All issues are complete!"));
+                assert!(text.text.contains("Total Issues: 3"));
+                assert!(text.text.contains("Completed: 3 (100%)"));
+                assert!(text.text.contains("Active: 0"));
+                assert!(text.text.contains("✅ Completed Issues:"));
+                assert!(text.text.contains("test_issue_1"));
+                assert!(text.text.contains("test_issue_2"));
+                assert!(text.text.contains("test_issue_3"));
+            } else {
+                panic!("Expected text response");
+            }
+        }
+
+        #[tokio::test]
+        async fn test_issue_all_complete_mixed_states() {
+            let (server, _temp) = create_test_mcp_server().await;
+
+            // Create active issues
+            let active_issues = vec![
+                ("active_issue_1", "Active content 1"),
+                ("active_issue_2", "Active content 2"),
+            ];
+
+            for (name, content) in active_issues {
+                let create_request = CreateIssueRequest {
+                    name: name.to_string(),
+                    content: content.to_string(),
+                };
+                let create_result = server.handle_issue_create(create_request).await.unwrap();
+                assert!(!create_result.is_error.unwrap_or(false));
+            }
+
+            // Create and complete issues
+            let completed_issues = vec![
+                ("completed_issue_1", "Completed content 1"),
+                ("completed_issue_2", "Completed content 2"),
+                ("completed_issue_3", "Completed content 3"),
+            ];
+
+            for (name, content) in completed_issues {
+                let create_request = CreateIssueRequest {
+                    name: name.to_string(),
+                    content: content.to_string(),
+                };
+                let create_result = server.handle_issue_create(create_request).await.unwrap();
+                assert!(!create_result.is_error.unwrap_or(false));
+
+                let issue_number = extract_issue_number_from_response(&create_result);
+                let complete_request = MarkCompleteRequest {
+                    number: issue_number,
+                };
+                let complete_result = server.handle_issue_mark_complete(complete_request).await.unwrap();
+                assert!(!complete_result.is_error.unwrap_or(false));
+            }
+
+            // Check all complete
+            let all_complete_request = AllCompleteRequest {};
+            let result = server.handle_issue_all_complete(all_complete_request).await.unwrap();
+            
+            assert!(!result.is_error.unwrap_or(false));
+            
+            // Check response text
+            if let RawContent::Text(text) = &result.content[0].raw {
+                assert!(text.text.contains("⏳ Project has active issues"));
+                assert!(text.text.contains("Total Issues: 5"));
+                assert!(text.text.contains("Completed: 3 (60%)"));
+                assert!(text.text.contains("Active: 2"));
+                assert!(text.text.contains("🔄 Active Issues:"));
+                assert!(text.text.contains("active_issue_1"));
+                assert!(text.text.contains("active_issue_2"));
+                assert!(text.text.contains("✅ Completed Issues:"));
+                assert!(text.text.contains("completed_issue_1"));
+                assert!(text.text.contains("completed_issue_2"));
+                assert!(text.text.contains("completed_issue_3"));
+            } else {
+                panic!("Expected text response");
+            }
+        }
+
+        #[tokio::test]
+        async fn test_issue_all_complete_only_active() {
+            let (server, _temp) = create_test_mcp_server().await;
+
+            // Create only active issues
+            let active_issues = vec![
+                ("only_active_1", "Active content 1"),
+                ("only_active_2", "Active content 2"),
+                ("only_active_3", "Active content 3"),
+            ];
+
+            for (name, content) in active_issues {
+                let create_request = CreateIssueRequest {
+                    name: name.to_string(),
+                    content: content.to_string(),
+                };
+                let create_result = server.handle_issue_create(create_request).await.unwrap();
+                assert!(!create_result.is_error.unwrap_or(false));
+            }
+
+            // Check all complete
+            let all_complete_request = AllCompleteRequest {};
+            let result = server.handle_issue_all_complete(all_complete_request).await.unwrap();
+            
+            assert!(!result.is_error.unwrap_or(false));
+            
+            // Check response text
+            if let RawContent::Text(text) = &result.content[0].raw {
+                assert!(text.text.contains("⏳ Project has active issues"));
+                assert!(text.text.contains("Total Issues: 3"));
+                assert!(text.text.contains("Completed: 0 (0%)"));
+                assert!(text.text.contains("Active: 3"));
+                assert!(text.text.contains("🔄 Active Issues:"));
+                assert!(text.text.contains("only_active_1"));
+                assert!(text.text.contains("only_active_2"));
+                assert!(text.text.contains("only_active_3"));
+                assert!(text.text.contains("✅ Completed Issues:"));
+                assert!(text.text.contains("(none)"));
+            } else {
+                panic!("Expected text response");
+            }
+        }
+
+        #[tokio::test]
+        async fn test_issue_all_complete_comprehensive_response_format() {
+            let (server, _temp) = create_test_mcp_server().await;
+
+            // Create one active and one completed issue
+            let create_request = CreateIssueRequest {
+                name: "format_test_active".to_string(),
+                content: "Active issue content".to_string(),
+            };
+            let create_result = server.handle_issue_create(create_request).await.unwrap();
+            assert!(!create_result.is_error.unwrap_or(false));
+
+            let create_request = CreateIssueRequest {
+                name: "format_test_completed".to_string(),
+                content: "Completed issue content".to_string(),
+            };
+            let create_result = server.handle_issue_create(create_request).await.unwrap();
+            assert!(!create_result.is_error.unwrap_or(false));
+
+            let issue_number = extract_issue_number_from_response(&create_result);
+            let complete_request = MarkCompleteRequest {
+                number: issue_number,
+            };
+            let complete_result = server.handle_issue_mark_complete(complete_request).await.unwrap();
+            assert!(!complete_result.is_error.unwrap_or(false));
+
+            // Check all complete
+            let all_complete_request = AllCompleteRequest {};
+            let result = server.handle_issue_all_complete(all_complete_request).await.unwrap();
+            
+            assert!(!result.is_error.unwrap_or(false));
+            
+            // Check response formatting
+            if let RawContent::Text(text) = &result.content[0].raw {
+                // Check that it contains proper formatting
+                assert!(text.text.contains("📊 Project Status:"));
+                assert!(text.text.contains("• Total Issues:"));
+                assert!(text.text.contains("• Completed:"));
+                assert!(text.text.contains("• Active:"));
+                assert!(text.text.contains("50%"));
+                
+                // Check issue numbering format
+                assert!(text.text.contains("#000001") || text.text.contains("#000002"));
+                
+                // Check proper emoji usage
+                assert!(text.text.contains("⏳"));
+                assert!(text.text.contains("🔄"));
+                assert!(text.text.contains("✅"));
+            } else {
+                panic!("Expected text response");
+            }
         }
     }
 }

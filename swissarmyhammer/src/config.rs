@@ -20,6 +20,12 @@ pub struct Config {
     pub max_issue_number: u32,
     /// Number of digits for issue numbering in filenames (default: 6)
     pub issue_number_digits: usize,
+    /// Maximum content length for issue content (default: 50000)
+    pub max_content_length: usize,
+    /// Maximum line length for issue content (default: 10000)
+    pub max_line_length: usize,
+    /// Maximum issue name length (default: 100)
+    pub max_issue_name_length: usize,
 }
 
 impl Default for Config {
@@ -31,6 +37,9 @@ impl Default for Config {
             min_issue_number: 1,
             max_issue_number: 999999,
             issue_number_digits: 6,
+            max_content_length: 50000,
+            max_line_length: 10000,
+            max_issue_name_length: 100,
         }
     }
 }
@@ -64,6 +73,18 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(6),
+            max_content_length: env::var("SWISSARMYHAMMER_MAX_CONTENT_LENGTH")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(50000),
+            max_line_length: env::var("SWISSARMYHAMMER_MAX_LINE_LENGTH")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(10000),
+            max_issue_name_length: env::var("SWISSARMYHAMMER_MAX_ISSUE_NAME_LENGTH")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(100),
         }
     }
 
@@ -95,6 +116,9 @@ mod tests {
         assert_eq!(config.min_issue_number, 1);
         assert_eq!(config.max_issue_number, 999999);
         assert_eq!(config.issue_number_digits, 6);
+        assert_eq!(config.max_content_length, 50000);
+        assert_eq!(config.max_line_length, 10000);
+        assert_eq!(config.max_issue_name_length, 100);
     }
 
     #[test]
@@ -105,6 +129,9 @@ mod tests {
         std::env::remove_var("SWISSARMYHAMMER_MAX_PENDING_ISSUES_IN_SUMMARY");
         std::env::remove_var("SWISSARMYHAMMER_MAX_ISSUE_NUMBER");
         std::env::remove_var("SWISSARMYHAMMER_ISSUE_NUMBER_DIGITS");
+        std::env::remove_var("SWISSARMYHAMMER_MAX_CONTENT_LENGTH");
+        std::env::remove_var("SWISSARMYHAMMER_MAX_LINE_LENGTH");
+        std::env::remove_var("SWISSARMYHAMMER_MAX_ISSUE_NAME_LENGTH");
 
         let config = Config::new();
         // Should use defaults when environment variables are not set
@@ -114,6 +141,9 @@ mod tests {
         assert_eq!(config.min_issue_number, 1);
         assert_eq!(config.max_issue_number, 999999);
         assert_eq!(config.issue_number_digits, 6);
+        assert_eq!(config.max_content_length, 50000);
+        assert_eq!(config.max_line_length, 10000);
+        assert_eq!(config.max_issue_name_length, 100);
     }
 
     #[test]

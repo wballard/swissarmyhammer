@@ -2,13 +2,12 @@
 
 use crate::file_watcher::{FileWatcher, FileWatcherCallback};
 use crate::git::GitOperations;
-use crate::issues::{FileSystemIssueStorage, IssueStorage};
+use crate::issues::{FileSystemIssueStorage, Issue, IssueStorage};
 use crate::workflow::{
     FileSystemWorkflowRunStorage, FileSystemWorkflowStorage, WorkflowRunStorageBackend,
     WorkflowStorage, WorkflowStorageBackend,
 };
 use crate::{PromptLibrary, PromptResolver, Result, SwissArmyHammerError};
-use chrono::Local;
 use rmcp::model::*;
 use rmcp::service::RequestContext;
 use rmcp::{Error as McpError, RoleServer, ServerHandler};
@@ -29,7 +28,11 @@ pub mod utils;
 
 // Re-export commonly used items from submodules
 use responses::create_issue_response;
-use utils::{validate_issue_content_size, validate_issue_name};
+use types::{
+    CreateIssueRequest, MarkCompleteRequest, AllCompleteRequest, UpdateIssueRequest,
+    CurrentIssueRequest, WorkIssueRequest, MergeIssueRequest, IssueNumber, IssueName
+};
+use utils::validate_issue_name;
 
 /// Constants for issue branch management
 use crate::config::Config;
@@ -49,61 +52,6 @@ pub struct GetPromptRequest {
 pub struct ListPromptsRequest {
     /// Optional filter by category
     pub category: Option<String>,
-}
-
-/// Request to create a new issue
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-pub struct CreateIssueRequest {
-    /// Name of the issue (will be used in filename)
-    pub name: String,
-    /// Markdown content of the issue
-    pub content: String,
-}
-
-/// Request to mark an issue as complete
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-pub struct MarkCompleteRequest {
-    /// Issue number to mark as complete
-    pub number: u32,
-}
-
-/// Request to check if all issues are complete
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-pub struct AllCompleteRequest {
-    // No parameters needed
-}
-
-/// Request to update an issue
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-pub struct UpdateIssueRequest {
-    /// Issue number to update
-    pub number: u32,
-    /// New markdown content for the issue
-    pub content: String,
-    /// If true, append to existing content instead of replacing
-    #[serde(default)]
-    pub append: bool,
-}
-
-/// Request to get current issue
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-pub struct CurrentIssueRequest {
-    /// Which branch to check (optional, defaults to current)
-    pub branch: Option<String>,
-}
-
-/// Request to work on an issue
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-pub struct WorkIssueRequest {
-    /// Issue number to work on
-    pub number: u32,
-}
-
-/// Request to merge an issue
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-pub struct MergeIssueRequest {
-    /// Issue number to merge
-    pub number: u32,
 }
 
 /// MCP server for serving prompts and workflows
@@ -608,7 +556,7 @@ impl McpServer {
         tracing::debug!("Creating issue: {}", request.name);
 
         // Validate issue name using shared validation logic
-        let validated_name = validate_issue_name(&request.name)?;
+        let validated_name = validate_issue_name(request.name.as_str())?;
 
         let issue_storage = self.issue_storage.write().await;
         match issue_storage
@@ -677,7 +625,7 @@ impl McpServer {
         // Check if issue exists and get its current state
         let existing_issue = {
             let issue_storage = self.issue_storage.write().await;
-            match issue_storage.get_issue(request.number).await {
+            match issue_storage.get_issue(request.number.into()).await {
                 Ok(issue) => issue,
                 Err(crate::SwissArmyHammerError::IssueNotFound(_)) => {
                     return Err(McpError::invalid_params(
@@ -713,7 +661,7 @@ impl McpServer {
         // Mark the issue as complete with a new lock
         let issue = {
             let issue_storage = self.issue_storage.write().await;
-            match issue_storage.mark_complete(request.number).await {
+            match issue_storage.mark_complete(request.number.into()).await {
                 Ok(issue) => issue,
                 Err(crate::SwissArmyHammerError::IssueNotFound(_)) => {
                     return Err(McpError::invalid_params(
@@ -915,6 +863,161 @@ impl McpServer {
         summary
     }
 
+    /// Validate issue content for common issues
+    fn validate_issue_content(content: &str) -> std::result::Result<(), McpError> {
+        // Use the comprehensive validation from utils module
+        utils::validate_issue_content_size(content)
+    }
+
+    /// Smart merge content with duplicate detection
+    fn smart_merge_content(original: &str, new_content: &str, append: bool) -> String {
+        if !append {
+            return new_content.to_string();
+        }
+
+        if original.is_empty() {
+            return new_content.to_string();
+        }
+
+        // Check if new content is already present in original
+        if original.contains(new_content) {
+            return original.to_string();
+        }
+
+        // Smart append with proper spacing
+        let separator = if original.ends_with('\n') {
+            "\n"
+        } else {
+            "\n\n"
+        };
+        format!("{}{}{}", original, separator, new_content)
+    }
+
+    /// Generate change summary for issue update
+    fn generate_change_summary(original: &str, updated: &str, append: bool) -> String {
+        if append {
+            let added_content = updated
+                .strip_prefix(original)
+                .unwrap_or(&updated[original.len()..])
+                .trim_start_matches(['\n', ' ', '\t']);
+
+            format!("Appended {} characters of new content", added_content.len())
+        } else {
+            let original_lines = original.lines().count();
+            let updated_lines = updated.lines().count();
+            let line_diff = (updated_lines as i64) - (original_lines as i64);
+
+            format!(
+                "Replaced entire content ({} lines → {} lines, {} {})",
+                original_lines,
+                updated_lines,
+                if line_diff >= 0 { "+" } else { "" },
+                line_diff
+            )
+        }
+    }
+
+    /// Validate the update request parameters
+    fn validate_update_request(request: &UpdateIssueRequest) -> std::result::Result<(), McpError> {
+        let config = Config::global();
+        let issue_number = request.number.get();
+        if issue_number < config.min_issue_number || issue_number > config.max_issue_number {
+            return Err(McpError::invalid_params(
+                format!(
+                    "Invalid issue number (must be {}-{})",
+                    config.min_issue_number, config.max_issue_number
+                ),
+                None,
+            ));
+        }
+
+        Self::validate_issue_content(&request.content)?;
+        Ok(())
+    }
+
+    /// Get current issue and calculate final content
+    async fn get_current_issue_and_final_content(
+        &self,
+        request: &UpdateIssueRequest,
+    ) -> std::result::Result<(Issue, String), McpError> {
+        let issue_storage = self.issue_storage.write().await;
+        let current_issue = issue_storage
+            .get_issue(request.number.get())
+            .await
+            .map_err(|e| match e {
+                SwissArmyHammerError::IssueNotFound(_) => McpError::invalid_params(
+                    format!("Issue #{:06} not found", request.number),
+                    None,
+                ),
+                _ => McpError::internal_error(format!("Failed to get issue: {}", e), None),
+            })?;
+
+        let final_content = Self::smart_merge_content(&current_issue.content, &request.content, request.append);
+        Ok((current_issue, final_content))
+    }
+
+    /// Update the issue with enhanced error handling
+    async fn update_issue_with_content(
+        &self,
+        issue_number: IssueNumber,
+        final_content: String,
+    ) -> std::result::Result<Issue, McpError> {
+        let issue_storage = self.issue_storage.write().await;
+        issue_storage
+            .update_issue(issue_number.get(), final_content)
+            .await
+            .map_err(|e| {
+                let error_msg = match &e {
+                    SwissArmyHammerError::Io(io_err) => {
+                        format!("Failed to write issue file: {}", io_err)
+                    }
+                    _ => {
+                        format!("Failed to update issue: {}", e)
+                    }
+                };
+                McpError::internal_error(error_msg, None)
+            })
+    }
+
+    /// Generate the update response with metrics
+    fn generate_update_response(
+        current_issue: &Issue,
+        updated_issue: &Issue,
+        append: bool,
+    ) -> CallToolResult {
+        let _original_length = current_issue.content.len();
+        let _new_length = updated_issue.content.len();
+        let _change_type = if append { "appended" } else { "replaced" };
+
+        let change_summary = Self::generate_change_summary(
+            &current_issue.content,
+            &updated_issue.content,
+            append,
+        );
+
+        let response_text = format!(
+            "✅ Successfully updated issue #{:06} - {}\n\n📋 Issue Details:\n• Number: {}\n• Name: {}\n• File: {}\n• Status: {}\n\n📊 Changes:\n• {}\n\n📝 Updated Content:\n{}",
+            updated_issue.number,
+            updated_issue.name,
+            updated_issue.number,
+            updated_issue.name,
+            updated_issue.file_path.display(),
+            if updated_issue.completed { "Completed" } else { "Active" },
+            change_summary,
+            updated_issue.content
+        );
+
+        CallToolResult {
+            content: vec![Annotated::new(
+                RawContent::Text(RawTextContent {
+                    text: response_text,
+                }),
+                None,
+            )],
+            is_error: Some(false),
+        }
+    }
+
     /// Handle the issue_update tool operation.
     ///
     /// Updates the content of an existing issue with new markdown content.
@@ -930,107 +1033,33 @@ impl McpServer {
         &self,
         request: UpdateIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
-        // Validate issue number
-        let config = Config::global();
-        if request.number < config.min_issue_number || request.number > config.max_issue_number {
-            return Err(McpError::invalid_params(
-                format!(
-                    "Invalid issue number (must be {}-{})",
-                    config.min_issue_number, config.max_issue_number
-                ),
-                None,
-            ));
+        // Validate request parameters
+        Self::validate_update_request(&request)?;
+
+        // Get current issue and calculate final content
+        let (current_issue, final_content) = self.get_current_issue_and_final_content(&request).await?;
+
+        // Check if content actually changed
+        if final_content == current_issue.content {
+            return Ok(CallToolResult {
+                content: vec![Annotated::new(
+                    RawContent::Text(RawTextContent {
+                        text: format!(
+                            "ℹ️ Issue #{:06} - {} content unchanged\n\n📋 Current content:\n{}",
+                            current_issue.number, current_issue.name, current_issue.content
+                        ),
+                    }),
+                    None,
+                )],
+                is_error: Some(false),
+            });
         }
 
-        // Validate content size
-        validate_issue_content_size(&request.content)?;
+        // Update the issue
+        let updated_issue = self.update_issue_with_content(request.number, final_content).await?;
 
-        // Get current issue first to check it exists and calculate final content
-        let (current_issue, final_content) = {
-            let issue_storage = self.issue_storage.write().await;
-            let current_issue =
-                issue_storage
-                    .get_issue(request.number)
-                    .await
-                    .map_err(|e| match e {
-                        SwissArmyHammerError::IssueNotFound(_) => McpError::invalid_params(
-                            format!("Issue #{:06} not found", request.number),
-                            None,
-                        ),
-                        _ => McpError::internal_error(format!("Failed to get issue: {}", e), None),
-                    })?;
-
-            // Determine final content based on append mode
-            let final_content = if request.append {
-                // Append with separator and timestamp
-                format!(
-                    "{}\n\n---\n\n## Update: {}\n\n{}",
-                    current_issue.content,
-                    Local::now().format("%Y-%m-%d %H:%M:%S"),
-                    request.content
-                )
-            } else {
-                request.content.clone()
-            };
-
-            (current_issue, final_content)
-        }; // Drop the lock here
-
-        // Update the issue with a new lock
-        let updated_issue = {
-            let issue_storage = self.issue_storage.write().await;
-            issue_storage
-                .update_issue(request.number, final_content)
-                .await
-                .map_err(|e| {
-                    McpError::internal_error(format!("Failed to update issue: {}", e), None)
-                })?
-        };
-
-        // Calculate content change statistics
-        let old_lines = current_issue.content.lines().count();
-        let new_lines = updated_issue.content.lines().count();
-        let lines_changed = (new_lines as i32 - old_lines as i32).abs();
-
-        // Format response with detailed statistics
-        let response = serde_json::json!({
-            "number": updated_issue.number,
-            "name": updated_issue.name,
-            "file_path": updated_issue.file_path.to_string_lossy(),
-            "completed": updated_issue.completed,
-            "append_mode": request.append,
-            "content_stats": {
-                "old_lines": old_lines,
-                "new_lines": new_lines,
-                "lines_changed": lines_changed,
-                "old_size_bytes": current_issue.content.len(),
-                "new_size_bytes": updated_issue.content.len(),
-            },
-            "message": format!(
-                "Updated issue #{:06} - {}. Content changed: {} lines ({} mode)",
-                updated_issue.number,
-                updated_issue.name,
-                match new_lines.cmp(&old_lines) {
-                    std::cmp::Ordering::Greater => format!("+{}", new_lines - old_lines),
-                    std::cmp::Ordering::Less => format!("-{}", old_lines - new_lines),
-                    std::cmp::Ordering::Equal => "0".to_string(),
-                },
-                if request.append { "append" } else { "replace" }
-            )
-        });
-
-        Ok(CallToolResult {
-            content: vec![Annotated::new(
-                RawContent::Text(RawTextContent {
-                    text: response["message"]
-                        .as_str()
-                        .unwrap_or("Issue updated")
-                        .to_string(),
-                }),
-                None,
-            )],
-            is_error: Some(false),
-        })
+        // Generate and return the response
+        Ok(Self::generate_update_response(&current_issue, &updated_issue, request.append))
     }
 
     /// Handle the issue_current tool operation.
@@ -1232,7 +1261,7 @@ impl McpServer {
         // Get the issue to ensure it exists and get its name
         let issue_storage = self.issue_storage.read().await;
         let issue = issue_storage
-            .get_issue(request.number)
+            .get_issue(request.number.into())
             .await
             .map_err(|e| match e {
                 SwissArmyHammerError::IssueNotFound(_) => McpError::invalid_params(
@@ -1332,7 +1361,7 @@ impl McpServer {
     ) -> std::result::Result<CallToolResult, McpError> {
         // First get the issue to determine its name
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue(request.number).await {
+        let issue = match issue_storage.get_issue(request.number.into()).await {
             Ok(issue) => issue,
             Err(e) => {
                 return Ok(Self::create_error_response(format!(
@@ -2195,7 +2224,7 @@ mod tests {
         let server = McpServer::new(library).unwrap();
 
         let request = CreateIssueRequest {
-            name: "test_issue".to_string(),
+            name: IssueName::new("test_issue".to_string()).unwrap(),
             content: "# Test Issue\n\nThis is a test issue content.".to_string(),
         };
 
@@ -2224,7 +2253,7 @@ mod tests {
         let server = McpServer::new(library).unwrap();
 
         let request = CreateIssueRequest {
-            name: "".to_string(),
+            name: IssueName("".to_string()),
             content: "Some content".to_string(),
         };
 
@@ -2246,7 +2275,7 @@ mod tests {
         let server = McpServer::new(library).unwrap();
 
         let request = CreateIssueRequest {
-            name: "   ".to_string(),
+            name: IssueName("   ".to_string()),
             content: "Some content".to_string(),
         };
 
@@ -2272,7 +2301,7 @@ mod tests {
 
         let long_name = "a".repeat(101); // 101 characters, over the limit
         let request = CreateIssueRequest {
-            name: long_name,
+            name: IssueName(long_name),
             content: "Some content".to_string(),
         };
 
@@ -2306,7 +2335,7 @@ mod tests {
 
         for invalid_name in invalid_names {
             let request = CreateIssueRequest {
-                name: invalid_name.to_string(),
+                name: IssueName(invalid_name.to_string()),
                 content: "Some content".to_string(),
             };
 
@@ -2334,7 +2363,7 @@ mod tests {
         let server = McpServer::new(library).unwrap();
 
         let request = CreateIssueRequest {
-            name: "  test_issue  ".to_string(),
+            name: IssueName("  test_issue  ".to_string()),
             content: "Some content".to_string(),
         };
 
@@ -2362,7 +2391,7 @@ mod tests {
 
         // Create first issue
         let request1 = CreateIssueRequest {
-            name: "first_issue".to_string(),
+            name: IssueName::new("first_issue".to_string()).unwrap(),
             content: "First issue content".to_string(),
         };
 
@@ -2374,7 +2403,7 @@ mod tests {
 
         // Create second issue
         let request2 = CreateIssueRequest {
-            name: "second_issue".to_string(),
+            name: IssueName::new("second_issue".to_string()).unwrap(),
             content: "Second issue content".to_string(),
         };
 
@@ -2603,7 +2632,7 @@ mod tests {
 
             // Create issue via MCP
             let request = CreateIssueRequest {
-                name: "test_mcp_issue".to_string(),
+                name: IssueName::new("test_mcp_issue".to_string()).unwrap(),
                 content: "This is a test issue created via MCP".to_string(),
             };
 
@@ -2651,7 +2680,7 @@ mod tests {
 
             // Try to create issue with empty name
             let request = CreateIssueRequest {
-                name: "".to_string(),
+                name: IssueName("".to_string()),
                 content: "Content".to_string(),
             };
 
@@ -2668,7 +2697,7 @@ mod tests {
 
             // 1. Create an issue
             let create_request = CreateIssueRequest {
-                name: "feature_implementation".to_string(),
+                name: IssueName::new("feature_implementation".to_string()).unwrap(),
                 content: "Implement new feature X".to_string(),
             };
 
@@ -2680,7 +2709,7 @@ mod tests {
 
             // 2. Update the issue
             let update_request = UpdateIssueRequest {
-                number: issue_number,
+                number: IssueNumber(issue_number),
                 content: "Implement new feature X\n\nAdditional notes: Started implementation"
                     .to_string(),
                 append: false,
@@ -2693,7 +2722,7 @@ mod tests {
 
             // 3. Mark it complete
             let complete_request = MarkCompleteRequest {
-                number: issue_number,
+                number: IssueNumber(issue_number),
             };
 
             tracing::debug!("About to mark complete...");
@@ -2725,7 +2754,7 @@ mod tests {
 
             // Create an issue first
             let create_request = CreateIssueRequest {
-                name: "bug_fix".to_string(),
+                name: IssueName::new("bug_fix".to_string()).unwrap(),
                 content: "Fix critical bug in parser".to_string(),
             };
             let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -2738,7 +2767,7 @@ mod tests {
 
             // Work on the issue
             let work_request = WorkIssueRequest {
-                number: issue_number,
+                number: IssueNumber(issue_number),
             };
 
             let work_result = server.handle_issue_work(work_request).await;
@@ -2777,7 +2806,7 @@ mod tests {
 
             // Create and work on an issue
             let create_request = CreateIssueRequest {
-                name: "test_task".to_string(),
+                name: IssueName::new("test_task".to_string()).unwrap(),
                 content: "Test task content".to_string(),
             };
             let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -2789,7 +2818,7 @@ mod tests {
             commit_changes(_temp.path()).await;
 
             let work_request = WorkIssueRequest {
-                number: issue_number,
+                number: IssueNumber(issue_number),
             };
             server.handle_issue_work(work_request).await.unwrap();
 
@@ -2813,7 +2842,7 @@ mod tests {
 
             // Test updating non-existent issue
             let update_request = UpdateIssueRequest {
-                number: 999,
+                number: IssueNumber(999),
                 content: "New content".to_string(),
                 append: false,
             };
@@ -2823,13 +2852,13 @@ mod tests {
             assert!(result.unwrap_err().to_string().contains("not found"));
 
             // Test marking non-existent issue complete
-            let complete_request = MarkCompleteRequest { number: 999 };
+            let complete_request = MarkCompleteRequest { number: IssueNumber(999) };
 
             let result = server.handle_issue_mark_complete(complete_request).await;
             assert!(result.is_err());
 
             // Test working on non-existent issue
-            let work_request = WorkIssueRequest { number: 999 };
+            let work_request = WorkIssueRequest { number: IssueNumber(999) };
 
             let result = server.handle_issue_work(work_request).await;
             assert!(result.is_err());
@@ -2856,7 +2885,7 @@ mod tests {
 
             // Create an issue
             let create_request = CreateIssueRequest {
-                name: "merge_test".to_string(),
+                name: IssueName::new("merge_test".to_string()).unwrap(),
                 content: "Test merge functionality".to_string(),
             };
             let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -2869,7 +2898,7 @@ mod tests {
 
             // Work on the issue to create a branch
             let work_request = WorkIssueRequest {
-                number: issue_number,
+                number: IssueNumber(issue_number),
             };
             server.handle_issue_work(work_request).await.unwrap();
 
@@ -2889,7 +2918,8 @@ mod tests {
 
             // Test merge
             let merge_request = MergeIssueRequest {
-                number: issue_number,
+                number: IssueNumber(issue_number),
+                delete_branch: false,
             };
 
             let merge_result = server.handle_issue_merge(merge_request).await.unwrap();
@@ -2909,7 +2939,7 @@ mod tests {
 
             // Create an issue
             let create_request = CreateIssueRequest {
-                name: "append_test".to_string(),
+                name: IssueName::new("append_test".to_string()).unwrap(),
                 content: "Initial content".to_string(),
             };
             let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -2919,7 +2949,7 @@ mod tests {
 
             // Update in append mode
             let update_request = UpdateIssueRequest {
-                number: issue_number,
+                number: IssueNumber(issue_number),
                 content: "Additional content".to_string(),
                 append: true,
             };
@@ -2960,7 +2990,7 @@ mod tests {
             // Create an issue with large content
             let large_content = "x".repeat(10000);
             let create_request = CreateIssueRequest {
-                name: "large_content_test".to_string(),
+                name: IssueName::new("large_content_test".to_string()).unwrap(),
                 content: large_content.clone(),
             };
 
@@ -2992,7 +3022,7 @@ mod tests {
 
             // Test 1: Create an issue
             let create_request = CreateIssueRequest {
-                name: "git_integration_test".to_string(),
+                name: IssueName::new("git_integration_test".to_string()).unwrap(),
                 content: "Testing git integration with MCP server".to_string(),
             };
 
@@ -3017,7 +3047,7 @@ mod tests {
 
             // Test 2: Work on the issue (should create a git branch)
             let work_request = WorkIssueRequest {
-                number: issue_number,
+                number: IssueNumber(issue_number),
             };
 
             let work_result = server.handle_issue_work(work_request).await.unwrap();
@@ -3036,7 +3066,7 @@ mod tests {
 
             // Test 3: Update the issue content
             let update_request = UpdateIssueRequest {
-                number: issue_number,
+                number: IssueNumber(issue_number),
                 content: "Updated content for git integration test".to_string(),
                 append: false,
             };
@@ -3046,7 +3076,7 @@ mod tests {
 
             // Test 4: Complete the issue (should switch back to main branch)
             let complete_request = MarkCompleteRequest {
-                number: issue_number,
+                number: IssueNumber(issue_number),
             };
 
             let complete_result = server
@@ -3062,7 +3092,8 @@ mod tests {
 
             // Test 5: Merge the issue branch (if it still exists)
             let merge_request = MergeIssueRequest {
-                number: issue_number,
+                number: IssueNumber(issue_number),
+                delete_branch: false,
             };
 
             let _merge_result = server.handle_issue_merge(merge_request).await.unwrap();
@@ -3107,7 +3138,7 @@ mod tests {
             // Create all issues
             for (name, content) in &issues {
                 let create_request = CreateIssueRequest {
-                    name: name.to_string(),
+                    name: IssueName::new(name.to_string()).unwrap(),
                     content: content.to_string(),
                 };
 
@@ -3135,7 +3166,7 @@ mod tests {
             // Work on multiple issues (should create multiple branches)
             for (i, &issue_number) in issue_numbers.iter().enumerate() {
                 let work_request = WorkIssueRequest {
-                    number: issue_number,
+                    number: IssueNumber(issue_number),
                 };
 
                 let work_result = server.handle_issue_work(work_request).await.unwrap();
@@ -3158,7 +3189,7 @@ mod tests {
             // Complete all issues
             for &issue_number in &issue_numbers {
                 let complete_request = MarkCompleteRequest {
-                    number: issue_number,
+                    number: IssueNumber(issue_number),
                 };
 
                 let complete_result = server
@@ -3199,21 +3230,21 @@ mod tests {
             let _temp_path = temp_dir.path();
 
             // Test working on a non-existent issue
-            let work_request = WorkIssueRequest { number: 99999 };
+            let work_request = WorkIssueRequest { number: IssueNumber(99999) };
 
             let work_result = server.handle_issue_work(work_request).await;
             // This should return an error since the issue wasn't found
             assert!(work_result.is_err());
 
             // Test merging a non-existent issue
-            let merge_request = MergeIssueRequest { number: 99999 };
+            let merge_request = MergeIssueRequest { number: IssueNumber(99999), delete_branch: false };
 
             let _merge_result = server.handle_issue_merge(merge_request).await;
             // Note: merge operation may handle missing issues gracefully
 
             // Create a valid issue
             let create_request = CreateIssueRequest {
-                name: "error_test".to_string(),
+                name: IssueName::new("error_test".to_string()).unwrap(),
                 content: "Testing error handling".to_string(),
             };
 
@@ -3237,7 +3268,8 @@ mod tests {
 
             // Test merging an issue that hasn't been worked on (no branch exists)
             let merge_request = MergeIssueRequest {
-                number: issue_number,
+                number: IssueNumber(issue_number),
+                delete_branch: false,
             };
 
             let _merge_result = server.handle_issue_merge(merge_request).await.unwrap();

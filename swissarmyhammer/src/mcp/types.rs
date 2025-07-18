@@ -7,7 +7,7 @@ use std::collections::HashMap;
 // Type safety wrapper types
 
 /// A wrapper type for issue numbers to prevent mixing up different ID types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize, schemars::JsonSchema)]
 #[serde(transparent)]
 pub struct IssueNumber(pub u32);
 
@@ -29,9 +29,9 @@ impl IssueNumber {
         self.0
     }
 
-    /// Create from u32 without validation (use with caution)
-    pub fn from_u32_unchecked(number: u32) -> Self {
-        IssueNumber(number)
+    /// Create from u32 with validation
+    pub fn from_u32(number: u32) -> Result<Self, String> {
+        Self::new(number)
     }
 }
 
@@ -48,6 +48,18 @@ impl From<IssueNumber> for u32 {
     }
 }
 
+impl PartialOrd<u32> for IssueNumber {
+    fn partial_cmp(&self, other: &u32) -> Option<std::cmp::Ordering> {
+        self.0.partial_cmp(other)
+    }
+}
+
+impl PartialEq<u32> for IssueNumber {
+    fn eq(&self, other: &u32) -> bool {
+        self.0 == *other
+    }
+}
+
 /// A wrapper type for issue names to prevent mixing up different string types
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, schemars::JsonSchema)]
 #[serde(transparent)]
@@ -60,8 +72,9 @@ impl IssueName {
         if trimmed.is_empty() {
             return Err("Issue name cannot be empty".to_string());
         }
-        if trimmed.len() > 100 {
-            return Err("Issue name cannot exceed 100 characters".to_string());
+        let config = Config::global();
+        if trimmed.len() > config.max_issue_name_length {
+            return Err(format!("Issue name cannot exceed {} characters", config.max_issue_name_length));
         }
 
         // Check for invalid characters
@@ -76,10 +89,15 @@ impl IssueName {
     pub fn get(&self) -> &str {
         &self.0
     }
+    
+    /// Get the inner string value as a string reference
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 
-    /// Create from string without validation (use with caution)
-    pub fn from_string_unchecked(name: String) -> Self {
-        IssueName(name)
+    /// Create from string with validation
+    pub fn from_string(name: String) -> Result<Self, String> {
+        Self::new(name)
     }
 }
 
@@ -147,6 +165,9 @@ pub struct UpdateIssueRequest {
     pub number: IssueNumber,
     /// New markdown content for the issue
     pub content: String,
+    /// If true, append to existing content instead of replacing
+    #[serde(default)]
+    pub append: bool,
 }
 
 /// Request to get current issue

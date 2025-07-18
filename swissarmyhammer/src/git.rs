@@ -340,8 +340,8 @@ mod tests {
         let result = GitOperations::new();
         assert!(result.is_ok());
 
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        // Restore original directory (ensure we don't fail if temp dir is cleaned up)
+        let _ = std::env::set_current_dir(original_dir);
     }
 
     #[test]

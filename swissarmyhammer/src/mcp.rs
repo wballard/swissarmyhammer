@@ -29,9 +29,12 @@ pub mod utils;
 // Re-export commonly used items from submodules
 use responses::create_issue_response;
 use types::{
-    CreateIssueRequest, MarkCompleteRequest, AllCompleteRequest, UpdateIssueRequest,
-    CurrentIssueRequest, WorkIssueRequest, MergeIssueRequest, IssueNumber, IssueName
+    AllCompleteRequest, CreateIssueRequest, CurrentIssueRequest, IssueNumber, MarkCompleteRequest,
+    MergeIssueRequest, UpdateIssueRequest, WorkIssueRequest,
 };
+
+#[cfg(test)]
+use types::IssueName;
 use utils::validate_issue_name;
 
 /// Constants for issue branch management
@@ -952,7 +955,8 @@ impl McpServer {
                 _ => McpError::internal_error(format!("Failed to get issue: {}", e), None),
             })?;
 
-        let final_content = Self::smart_merge_content(&current_issue.content, &request.content, request.append);
+        let final_content =
+            Self::smart_merge_content(&current_issue.content, &request.content, request.append);
         Ok((current_issue, final_content))
     }
 
@@ -989,11 +993,8 @@ impl McpServer {
         let _new_length = updated_issue.content.len();
         let _change_type = if append { "appended" } else { "replaced" };
 
-        let change_summary = Self::generate_change_summary(
-            &current_issue.content,
-            &updated_issue.content,
-            append,
-        );
+        let change_summary =
+            Self::generate_change_summary(&current_issue.content, &updated_issue.content, append);
 
         let response_text = format!(
             "✅ Successfully updated issue #{:06} - {}\n\n📋 Issue Details:\n• Number: {}\n• Name: {}\n• File: {}\n• Status: {}\n\n📊 Changes:\n• {}\n\n📝 Updated Content:\n{}",
@@ -1037,7 +1038,8 @@ impl McpServer {
         Self::validate_update_request(&request)?;
 
         // Get current issue and calculate final content
-        let (current_issue, final_content) = self.get_current_issue_and_final_content(&request).await?;
+        let (current_issue, final_content) =
+            self.get_current_issue_and_final_content(&request).await?;
 
         // Check if content actually changed
         if final_content == current_issue.content {
@@ -1056,10 +1058,16 @@ impl McpServer {
         }
 
         // Update the issue
-        let updated_issue = self.update_issue_with_content(request.number, final_content).await?;
+        let updated_issue = self
+            .update_issue_with_content(request.number, final_content)
+            .await?;
 
         // Generate and return the response
-        Ok(Self::generate_update_response(&current_issue, &updated_issue, request.append))
+        Ok(Self::generate_update_response(
+            &current_issue,
+            &updated_issue,
+            request.append,
+        ))
     }
 
     /// Handle the issue_current tool operation.
@@ -1150,19 +1158,28 @@ impl McpServer {
 
                 return Ok(CallToolResult {
                     content: vec![Annotated::new(
-                        RawContent::Text(RawTextContent { text: orphaned_text }),
+                        RawContent::Text(RawTextContent {
+                            text: orphaned_text,
+                        }),
                         None,
                     )],
                     is_error: Some(false),
                 });
             }
             Err(e) => {
-                return Err(McpError::internal_error(format!("Failed to get issue: {}", e), None));
+                return Err(McpError::internal_error(
+                    format!("Failed to get issue: {}", e),
+                    None,
+                ));
             }
         };
 
         let status_emoji = if issue.completed { "✅" } else { "🔄" };
-        let status_text = if issue.completed { "Completed" } else { "Active" };
+        let status_text = if issue.completed {
+            "Completed"
+        } else {
+            "Active"
+        };
 
         let response_text = format!(
             "{} Current issue: #{:06} - {}\n\n📋 Issue Details:\n• Number: {}\n• Name: {}\n• Status: {}\n• Branch: {}\n• File: {}\n\n📝 Content:\n{}",
@@ -1177,26 +1194,11 @@ impl McpServer {
             issue.content
         );
 
-        let response = serde_json::json!({
-            "action": "current_issue",
-            "status": "success",
-            "current_issue": {
-                "number": issue.number,
-                "name": issue.name,
-                "content": issue.content,
-                "file_path": issue.file_path.to_string_lossy(),
-                "completed": issue.completed
-            },
-            "branch": {
-                "name": branch,
-                "is_issue_branch": true,
-                "issue_number": issue.number
-            }
-        });
-
         Ok(CallToolResult {
             content: vec![Annotated::new(
-                RawContent::Text(RawTextContent { text: response_text }),
+                RawContent::Text(RawTextContent {
+                    text: response_text,
+                }),
                 None,
             )],
             is_error: Some(false),
@@ -1233,21 +1235,11 @@ impl McpServer {
             if is_main { "Main branch" } else { "Feature/other branch" }
         );
 
-        let response = serde_json::json!({
-            "action": "current_issue",
-            "status": "no_current_issue",
-            "current_issue": null,
-            "branch": {
-                "name": branch,
-                "is_issue_branch": false,
-                "is_main_branch": is_main,
-                "issue_number": null
-            }
-        });
-
         Ok(CallToolResult {
             content: vec![Annotated::new(
-                RawContent::Text(RawTextContent { text: response_text }),
+                RawContent::Text(RawTextContent {
+                    text: response_text,
+                }),
                 None,
             )],
             is_error: Some(false),
@@ -1471,42 +1463,6 @@ impl McpServer {
 
         // If we can't parse it, maybe it's just issue/<name>
         // In this case, we need to search for an issue with this name
-        Ok(None)
-    }
-
-    /// Parse issue number from branch identifier
-    /// 
-    /// Attempts to parse an issue number from a branch identifier string,
-    /// supporting multiple formats and fallback to name-based lookup.
-    /// 
-    /// # Arguments
-    /// 
-    /// * `identifier` - The branch identifier string (everything after "issue/")
-    /// 
-    /// # Returns
-    /// 
-    /// * `Result<Option<u32>>` - The parsed issue number if found, None if not parseable
-    async fn parse_issue_number_from_branch(&self, identifier: &str) -> Result<Option<u32>> {
-        // Try to parse as direct number first (e.g., "000123")
-        if let Ok(number) = identifier.parse::<u32>() {
-            return Ok(Some(number));
-        }
-        
-        // Try to parse as formatted number (e.g., "000123_name")
-        if let Ok((number, _)) = crate::issues::parse_issue_filename(identifier) {
-            return Ok(Some(number));
-        }
-        
-        // Try to find by name match - search all issues
-        let issue_storage = self.issue_storage.read().await;
-        let all_issues = issue_storage.list_issues().await?;
-        for issue in all_issues {
-            let issue_filename = format!("{:06}_{}", issue.number, issue.name);
-            if identifier == issue_filename {
-                return Ok(Some(issue.number));
-            }
-        }
-        
         Ok(None)
     }
 
@@ -2912,13 +2868,17 @@ mod tests {
             assert!(result.unwrap_err().to_string().contains("not found"));
 
             // Test marking non-existent issue complete
-            let complete_request = MarkCompleteRequest { number: IssueNumber(999) };
+            let complete_request = MarkCompleteRequest {
+                number: IssueNumber(999),
+            };
 
             let result = server.handle_issue_mark_complete(complete_request).await;
             assert!(result.is_err());
 
             // Test working on non-existent issue
-            let work_request = WorkIssueRequest { number: IssueNumber(999) };
+            let work_request = WorkIssueRequest {
+                number: IssueNumber(999),
+            };
 
             let result = server.handle_issue_work(work_request).await;
             assert!(result.is_err());
@@ -3290,14 +3250,19 @@ mod tests {
             let _temp_path = temp_dir.path();
 
             // Test working on a non-existent issue
-            let work_request = WorkIssueRequest { number: IssueNumber(99999) };
+            let work_request = WorkIssueRequest {
+                number: IssueNumber(99999),
+            };
 
             let work_result = server.handle_issue_work(work_request).await;
             // This should return an error since the issue wasn't found
             assert!(work_result.is_err());
 
             // Test merging a non-existent issue
-            let merge_request = MergeIssueRequest { number: IssueNumber(99999), delete_branch: false };
+            let merge_request = MergeIssueRequest {
+                number: IssueNumber(99999),
+                delete_branch: false,
+            };
 
             let _merge_result = server.handle_issue_merge(merge_request).await;
             // Note: merge operation may handle missing issues gracefully

@@ -7,7 +7,9 @@ use std::collections::HashMap;
 // Type safety wrapper types
 
 /// A wrapper type for issue numbers to prevent mixing up different ID types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize, schemars::JsonSchema,
+)]
 #[serde(transparent)]
 pub struct IssueNumber(pub u32);
 
@@ -74,7 +76,10 @@ impl IssueName {
         }
         let config = Config::global();
         if trimmed.len() > config.max_issue_name_length {
-            return Err(format!("Issue name cannot exceed {} characters", config.max_issue_name_length));
+            return Err(format!(
+                "Issue name cannot exceed {} characters",
+                config.max_issue_name_length
+            ));
         }
 
         // Check for invalid characters
@@ -89,7 +94,7 @@ impl IssueName {
     pub fn get(&self) -> &str {
         &self.0
     }
-    
+
     /// Get the inner string value as a string reference
     pub fn as_str(&self) -> &str {
         &self.0

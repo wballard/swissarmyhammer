@@ -74,7 +74,10 @@ pub fn validate_issue_name(name: &str) -> std::result::Result<String, McpError> 
     let config = Config::global();
     if trimmed.len() > config.max_issue_name_length {
         return Err(McpError::invalid_params(
-            format!("Issue name too long (max {} characters)", config.max_issue_name_length),
+            format!(
+                "Issue name too long (max {} characters)",
+                config.max_issue_name_length
+            ),
             None,
         ));
     }
@@ -108,7 +111,7 @@ pub fn validate_issue_name(name: &str) -> std::result::Result<String, McpError> 
 /// * `Result<(), McpError>` - Success or validation error
 pub fn validate_issue_content_size(content: &str) -> std::result::Result<(), McpError> {
     let config = Config::global();
-    
+
     // Check content size in bytes
     if content.len() > config.max_content_length {
         return Err(McpError::invalid_params(
@@ -122,9 +125,15 @@ pub fn validate_issue_content_size(content: &str) -> std::result::Result<(), Mcp
     }
 
     // Check for extremely long lines
-    if content.lines().any(|line| line.len() > config.max_line_length) {
+    if content
+        .lines()
+        .any(|line| line.len() > config.max_line_length)
+    {
         return Err(McpError::invalid_params(
-            format!("Issue content lines cannot exceed {} characters", config.max_line_length),
+            format!(
+                "Issue content lines cannot exceed {} characters",
+                config.max_line_length
+            ),
             None,
         ));
     }
@@ -159,7 +168,7 @@ pub fn validate_issue_content_size(content: &str) -> std::result::Result<(), Mcp
 /// Validate content against dangerous HTML tags
 fn validate_dangerous_html_tags(content: &str) -> std::result::Result<(), McpError> {
     use regex::Regex;
-    
+
     static DANGEROUS_TAG_PATTERNS: &[&str] = &[
         r"<\s*script[^>]*>",
         r"<\s*iframe[^>]*>",
@@ -197,7 +206,7 @@ fn validate_dangerous_html_tags(content: &str) -> std::result::Result<(), McpErr
 /// Validate content against dangerous protocols
 fn validate_dangerous_protocols(content: &str) -> std::result::Result<(), McpError> {
     use regex::Regex;
-    
+
     static DANGEROUS_PROTOCOLS: &[&str] = &[
         r"javascript\s*:",
         r"data\s*:",
@@ -225,7 +234,7 @@ fn validate_dangerous_protocols(content: &str) -> std::result::Result<(), McpErr
 /// Validate content against dangerous event handlers
 fn validate_event_handlers(content: &str) -> std::result::Result<(), McpError> {
     use regex::Regex;
-    
+
     static EVENT_HANDLER_PATTERNS: &[&str] = &[
         r"on\w+\s*=",
         r"@\w+\s*=",   // Vue.js style events
@@ -251,7 +260,7 @@ fn validate_event_handlers(content: &str) -> std::result::Result<(), McpError> {
 /// Validate content against dangerous attributes
 fn validate_dangerous_attributes(content: &str) -> std::result::Result<(), McpError> {
     use regex::Regex;
-    
+
     static DANGEROUS_ATTRIBUTE_PATTERNS: &[&str] = &[
         r"srcdoc\s*=",
         r"formaction\s*=",
@@ -280,22 +289,22 @@ fn validate_dangerous_attributes(content: &str) -> std::result::Result<(), McpEr
 /// This provides comprehensive HTML sanitization using regex patterns and context-aware validation
 fn validate_html_security(content: &str) -> std::result::Result<(), McpError> {
     let content_lower = content.to_lowercase();
-    
+
     // Check for dangerous HTML tags
     validate_dangerous_html_tags(&content_lower)?;
-    
+
     // Check for dangerous protocols
     validate_dangerous_protocols(&content_lower)?;
-    
+
     // Check for event handlers
     validate_event_handlers(&content_lower)?;
-    
+
     // Check for dangerous attributes
     validate_dangerous_attributes(&content_lower)?;
-    
+
     // Additional validation for encoded content
     validate_encoded_content(&content_lower)?;
-    
+
     Ok(())
 }
 

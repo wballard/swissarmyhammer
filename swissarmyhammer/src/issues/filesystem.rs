@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use tracing::debug;
 
 /// Maximum issue number supported (6 digits)
@@ -119,6 +120,8 @@ pub trait IssueStorage: Send + Sync {
 pub struct FileSystemIssueStorage {
     #[allow(dead_code)]
     state: IssueState,
+    /// Mutex to ensure thread-safe issue creation
+    creation_lock: Mutex<()>,
 }
 
 impl FileSystemIssueStorage {
@@ -135,6 +138,7 @@ impl FileSystemIssueStorage {
                 issues_dir,
                 completed_dir,
             },
+            creation_lock: Mutex::new(()),
         })
     }
 
@@ -486,6 +490,11 @@ impl IssueStorage for FileSystemIssueStorage {
     }
 
     async fn create_issue(&self, name: String, content: String) -> Result<Issue> {
+        // Lock to ensure atomic issue creation (prevents race conditions)
+        let _lock = self.creation_lock.lock().map_err(|_| {
+            SwissArmyHammerError::Storage("Failed to acquire creation lock".to_string())
+        })?;
+        
         let number = self.get_next_issue_number()?;
         let file_path = self.create_issue_file(number, &name, &content)?;
         let sanitized_name = sanitize_issue_name(&name);

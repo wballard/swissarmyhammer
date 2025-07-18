@@ -38,7 +38,7 @@ use types::IssueName;
 use utils::validate_issue_name;
 
 /// Validation state for pre-work operations
-/// 
+///
 /// This struct captures the essential repository state information
 /// needed to make informed decisions about branch switching and
 /// work preparation for issue workflow operations.
@@ -505,7 +505,6 @@ impl McpServer {
             .unwrap_or_else(|| Arc::new(serde_json::Map::new()))
     }
 
-
     /// Validate and sanitize issue name for MCP tool calls.
     ///
     /// # Arguments
@@ -803,15 +802,7 @@ impl McpServer {
             )
         };
 
-        Ok(CallToolResult {
-            content: vec![Annotated::new(
-                RawContent::Text(RawTextContent {
-                    text: response_text,
-                }),
-                None,
-            )],
-            is_error: Some(false),
-        })
+        Ok(Self::create_success_response(response_text))
     }
 
     /// Get pending issues from a list of issues
@@ -1170,15 +1161,7 @@ impl McpServer {
             issue.content
         );
 
-        Ok(CallToolResult {
-            content: vec![Annotated::new(
-                RawContent::Text(RawTextContent {
-                    text: response_text,
-                }),
-                None,
-            )],
-            is_error: Some(false),
-        })
+        Ok(Self::create_success_response(response_text))
     }
 
     /// Create response for when current branch is not an issue branch.
@@ -1211,15 +1194,7 @@ impl McpServer {
             if is_main { "Main branch" } else { "Feature/other branch" }
         );
 
-        Ok(CallToolResult {
-            content: vec![Annotated::new(
-                RawContent::Text(RawTextContent {
-                    text: response_text,
-                }),
-                None,
-            )],
-            is_error: Some(false),
-        })
+        Ok(Self::create_success_response(response_text))
     }
 
     /// Handle the issue_work tool operation.
@@ -1240,21 +1215,16 @@ impl McpServer {
     ) -> std::result::Result<CallToolResult, McpError> {
         // Extract and validate issue number
         let issue_number = request.number.get();
-        
+
         // Validate the issue exists
         let issue_storage = self.issue_storage.read().await;
         let issue = match issue_storage.get_issue(issue_number).await {
             Ok(issue) => issue,
             Err(SwissArmyHammerError::IssueNotFound(_)) => {
-                return Ok(CallToolResult {
-                    content: vec![Annotated::new(
-                        RawContent::Text(RawTextContent {
-                            text: format!("❌ Issue #{:06} not found", issue_number),
-                        }),
-                        None,
-                    )],
-                    is_error: Some(true),
-                })
+                return Ok(Self::create_error_response(format!(
+                    "❌ Issue #{:06} not found",
+                    issue_number
+                )))
             }
             Err(e) => {
                 return Err(McpError::internal_error(
@@ -1264,7 +1234,7 @@ impl McpServer {
             }
         };
         drop(issue_storage);
-        
+
         // Check if issue is already completed
         if issue.completed {
             return Ok(CallToolResult {
@@ -1282,16 +1252,16 @@ impl McpServer {
                 is_error: Some(false),
             });
         }
-        
+
         // Initialize git operations
         let git_ops = self.git_ops.lock().await;
         let git_ops_ref = git_ops.as_ref().ok_or_else(|| {
             McpError::internal_error("Git operations not available".to_string(), None)
         })?;
-        
+
         // Validate pre-work state
         let validation = self.validate_pre_work_state(git_ops_ref).await?;
-        
+
         // Handle uncommitted changes
         if validation.has_uncommitted {
             return Ok(CallToolResult {
@@ -1308,7 +1278,7 @@ impl McpServer {
                 is_error: Some(true),
             });
         }
-        
+
         // Check if already on the target branch
         let target_branch = format!("issue/{:06}_{}", issue.number, issue.name);
         if validation.current_branch == target_branch {
@@ -1327,10 +1297,10 @@ impl McpServer {
                 is_error: Some(false),
             });
         }
-        
+
         // Create branch identifier
         let branch_identifier = format!("{:06}_{}", issue.number, issue.name);
-        
+
         // Create and switch to work branch
         let mut git_ops = git_ops;
         let branch_name = match git_ops
@@ -1347,14 +1317,17 @@ impl McpServer {
                         let suggestions = vec![
                             "git add . && git commit -m \"Work in progress\"".to_string(),
                             "git stash".to_string(),
-                            "git checkout -- . (to discard changes)".to_string()
+                            "git checkout -- . (to discard changes)".to_string(),
                         ];
-                        ("Uncommitted changes prevent branch switch".to_string(), suggestions)
+                        (
+                            "Uncommitted changes prevent branch switch".to_string(),
+                            suggestions,
+                        )
                     }
                     SwissArmyHammerError::Other(msg) if msg.contains("already exists") => {
                         let suggestions = vec![
                             format!("git checkout {}", format!("issue/{}", branch_identifier)),
-                            "git branch -D issue/... (to delete existing branch)".to_string()
+                            "git branch -D issue/... (to delete existing branch)".to_string(),
                         ];
                         ("Branch already exists".to_string(), suggestions)
                     }
@@ -1362,19 +1335,20 @@ impl McpServer {
                         let suggestions = vec![
                             "Check git repository permissions".to_string(),
                             "Ensure you're in a git repository".to_string(),
-                            "Try: git status".to_string()
+                            "Try: git status".to_string(),
                         ];
                         (format!("Git operation failed: {}", e), suggestions)
                     }
                 };
-                
+
                 return Ok(CallToolResult {
                     content: vec![Annotated::new(
                         RawContent::Text(RawTextContent {
                             text: format!(
                                 "❌ {}\n\n🔧 Recovery Suggestions:\n{}",
                                 error_msg,
-                                recovery_suggestions.iter()
+                                recovery_suggestions
+                                    .iter()
                                     .map(|s| format!("• {}", s))
                                     .collect::<Vec<_>>()
                                     .join("\n")
@@ -1386,7 +1360,7 @@ impl McpServer {
                 });
             }
         };
-        
+
         // Format success response
         let response_text = format!(
             "🔄 Switched to branch '{}' for issue #{:06} - {}\n\n📋 Issue Details:\n• Number: {}\n• Name: {}\n• Status: Active\n• File: {}\n\n🌿 Git Branch:\n• Branch: {}\n• Status: Active work branch\n• Previous branch: Switched from previous branch\n\n💡 Next Steps:\n• Make your changes and commit them\n• Update issue progress: issue_update\n• Mark complete when done: issue_mark_complete\n• Merge back to main: issue_merge\n\n📝 Issue Content:\n{}",
@@ -1399,27 +1373,22 @@ impl McpServer {
             branch_name,
             issue.content
         );
-        
-        Ok(CallToolResult {
-            content: vec![Annotated::new(
-                RawContent::Text(RawTextContent {
-                    text: response_text,
-                }),
-                None,
-            )],
-            is_error: Some(false),
-        })
+
+        Ok(Self::create_success_response(response_text))
     }
-    
+
     /// Validate repository state before creating work branch
-    async fn validate_pre_work_state(&self, git_ops: &GitOperations) -> std::result::Result<PreWorkValidation, McpError> {
+    async fn validate_pre_work_state(
+        &self,
+        git_ops: &GitOperations,
+    ) -> std::result::Result<PreWorkValidation, McpError> {
         let current_branch = git_ops.current_branch().map_err(|e| {
             McpError::internal_error(format!("Failed to get current branch: {}", e), None)
         })?;
-        
+
         // Check for uncommitted changes
         let has_uncommitted = git_ops.has_uncommitted_changes().unwrap_or(false);
-        
+
         Ok(PreWorkValidation {
             current_branch,
             has_uncommitted,
@@ -1449,8 +1418,8 @@ impl McpServer {
             Err(_e) => {
                 return Ok(CallToolResult {
                     content: vec![Annotated::new(
-                        RawContent::Text(RawTextContent { 
-                            text: format!("❌ Issue #{:06} not found", request.number.0) 
+                        RawContent::Text(RawTextContent {
+                            text: format!("❌ Issue #{:06} not found", request.number.0),
                         }),
                         None,
                     )],
@@ -1464,7 +1433,7 @@ impl McpServer {
         if !issue.completed {
             return Ok(CallToolResult {
                 content: vec![Annotated::new(
-                    RawContent::Text(RawTextContent { 
+                    RawContent::Text(RawTextContent {
                         text: format!(
                             "⚠️ Issue #{:06} - {} is not completed\n\n📋 Issue Status:\n• Status: Active (not completed)\n• File: {}\n\n💡 Required Actions:\n• Complete the issue first: issue_mark_complete number={}\n• Then merge: issue_merge number={}",
                             issue.number,
@@ -1487,8 +1456,9 @@ impl McpServer {
             None => {
                 return Ok(CallToolResult {
                     content: vec![Annotated::new(
-                        RawContent::Text(RawTextContent { 
-                            text: "❌ Git repository error: Git operations not available".to_string()
+                        RawContent::Text(RawTextContent {
+                            text: "❌ Git repository error: Git operations not available"
+                                .to_string(),
                         }),
                         None,
                     )],
@@ -1510,7 +1480,7 @@ impl McpServer {
         if !git_ops.branch_exists(&branch_name).unwrap_or(false) {
             return Ok(CallToolResult {
                 content: vec![Annotated::new(
-                    RawContent::Text(RawTextContent { 
+                    RawContent::Text(RawTextContent {
                         text: format!(
                             "⚠️ Issue work branch '{}' does not exist\n\n📋 Branch Status:\n• Expected branch: {}\n• Exists: No\n\n💡 Possible Reasons:\n• Issue work was done on main branch\n• Branch was already merged and deleted\n• Branch name doesn't match issue",
                             branch_name,
@@ -1523,12 +1493,11 @@ impl McpServer {
             });
         }
 
-        // Get current branch before merge
-        let _current_branch = git_ops.current_branch().unwrap_or_else(|_| "unknown".to_string());
+        // Get main branch for merge
         let main_branch = git_ops.main_branch().unwrap_or_else(|_| "main".to_string());
 
         // Validate pre-merge state
-        if let Some(error_response) = self.validate_pre_merge_state(&git_ops) {
+        if let Some(error_response) = self.validate_pre_merge_state(git_ops) {
             return Ok(error_response);
         }
 
@@ -1536,13 +1505,13 @@ impl McpServer {
         match git_ops.merge_issue_branch(&branch_identifier) {
             Ok(()) => {
                 // Merge successful
-                
+
                 // Optionally delete the branch
                 let branch_deleted = if request.delete_branch {
                     match git_ops.delete_branch(&branch_name) {
                         Ok(()) => true,
                         Err(e) => {
-                            eprintln!("Warning: Failed to delete branch {}: {}", branch_name, e);
+                            tracing::warn!("Failed to delete branch {}: {}", branch_name, e);
                             false
                         }
                     }
@@ -1569,13 +1538,7 @@ impl McpServer {
                     stats
                 );
 
-                Ok(CallToolResult {
-                    content: vec![Annotated::new(
-                        RawContent::Text(RawTextContent { text: response_text }),
-                        None,
-                    )],
-                    is_error: Some(false),
-                })
+                Ok(Self::create_success_response(response_text))
             }
             Err(e) => {
                 // Merge failed
@@ -1591,26 +1554,25 @@ impl McpServer {
                     }
                 };
 
-                Ok(CallToolResult {
-                    content: vec![Annotated::new(
-                        RawContent::Text(RawTextContent { text: error_msg }),
-                        None,
-                    )],
-                    is_error: Some(true),
-                })
+                Ok(Self::create_error_response(error_msg))
             }
         }
     }
 
     /// Validate repository state before merging
-    fn validate_pre_merge_state(&self, git_ops: &crate::git::GitOperations) -> Option<CallToolResult> {
-        let current_branch = git_ops.current_branch().unwrap_or_else(|_| "unknown".to_string());
-        
+    fn validate_pre_merge_state(
+        &self,
+        git_ops: &crate::git::GitOperations,
+    ) -> Option<CallToolResult> {
+        let current_branch = git_ops
+            .current_branch()
+            .unwrap_or_else(|_| "unknown".to_string());
+
         // Check for uncommitted changes
         if git_ops.has_uncommitted_changes().unwrap_or(false) {
             return Some(CallToolResult {
                 content: vec![Annotated::new(
-                    RawContent::Text(RawTextContent { 
+                    RawContent::Text(RawTextContent {
                         text: format!(
                             "⚠️ Cannot merge with uncommitted changes\n\n📋 Current Status:\n• Branch: {}\n• Uncommitted changes: Yes\n\n💡 Required Actions:\n• Commit changes: git add . && git commit -m \"Your message\"\n• Or stash changes: git stash\n• Then try merge again",
                             current_branch
@@ -1621,7 +1583,7 @@ impl McpServer {
                 is_error: Some(true),
             });
         }
-        
+
         None
     }
 
@@ -1632,11 +1594,11 @@ impl McpServer {
             Ok(issues) => issues,
             Err(_) => return "".to_string(),
         };
-        
+
         let total_issues = all_issues.len();
         let completed_count = all_issues.iter().filter(|i| i.completed).count();
         let active_count = total_issues - completed_count;
-        
+
         if active_count == 0 && total_issues > 0 {
             format!(
                 "\n\n🎉 Project Status: ALL ISSUES COMPLETED! 🎉\n• Total issues: {}\n• Completed: {} (100%)\n• Active: 0\n\n✨ Congratulations! All tracked issues have been completed and merged.",
@@ -1649,13 +1611,10 @@ impl McpServer {
             } else {
                 0
             };
-            
+
             format!(
                 "\n\n📊 Project Status:\n• Total issues: {}\n• Completed: {} ({}%)\n• Active: {}",
-                total_issues,
-                completed_count,
-                completion_percentage,
-                active_count
+                total_issues, completed_count, completion_percentage, active_count
             )
         }
     }
@@ -1783,6 +1742,28 @@ impl McpServer {
         );
 
         Ok(())
+    }
+
+    /// Create a success response with the given text
+    fn create_success_response(text: String) -> CallToolResult {
+        CallToolResult {
+            content: vec![Annotated::new(
+                RawContent::Text(RawTextContent { text }),
+                None,
+            )],
+            is_error: Some(false),
+        }
+    }
+
+    /// Create an error response with the given text
+    fn create_error_response(text: String) -> CallToolResult {
+        CallToolResult {
+            content: vec![Annotated::new(
+                RawContent::Text(RawTextContent { text }),
+                None,
+            )],
+            is_error: Some(true),
+        }
     }
 }
 
@@ -2867,6 +2848,29 @@ mod tests {
             }
         }
 
+        /// Helper function to create an issue and return its number
+        async fn create_and_get_issue_number(server: &McpServer, name: &str, content: &str) -> u32 {
+            let create_request = CreateIssueRequest {
+                name: IssueName::new(name.to_string()).unwrap(),
+                content: content.to_string(),
+            };
+            let create_result = server.handle_issue_create(create_request).await.unwrap();
+            assert!(!create_result.is_error.unwrap_or(false));
+            extract_issue_number_from_response(&create_result)
+        }
+
+        /// Helper function to create an issue, extract its number, and commit changes
+        async fn create_issue_and_commit(
+            server: &McpServer,
+            temp_path: &std::path::Path,
+            name: &str,
+            content: &str,
+        ) -> u32 {
+            let issue_number = create_and_get_issue_number(server, name, content).await;
+            commit_changes(temp_path).await;
+            issue_number
+        }
+
         #[tokio::test]
         async fn test_mcp_create_issue() {
             let (server, _temp) = create_test_mcp_server().await;
@@ -3172,8 +3176,11 @@ mod tests {
             let complete_request = MarkCompleteRequest {
                 number: IssueNumber(issue_number),
             };
-            server.handle_issue_mark_complete(complete_request).await.unwrap();
-            
+            server
+                .handle_issue_mark_complete(complete_request)
+                .await
+                .unwrap();
+
             // Commit the issue completion
             commit_changes(_temp.path()).await;
 
@@ -3400,7 +3407,7 @@ mod tests {
             // Test 7: Verify current branch is the main branch
             let git_ops = GitOperations::with_work_dir(temp_path.to_path_buf()).unwrap();
             let expected_main_branch = git_ops.main_branch().unwrap();
-            
+
             let current_branch = Command::new("git")
                 .args(["rev-parse", "--abbrev-ref", "HEAD"])
                 .current_dir(temp_path)
@@ -3852,7 +3859,7 @@ mod tests {
             };
 
             let merge_result = server.handle_issue_merge(merge_request).await.unwrap();
-            
+
             // Should fail because issue is not completed
             assert!(merge_result.is_error.unwrap_or(false));
 
@@ -3875,7 +3882,7 @@ mod tests {
             };
 
             let merge_result = server.handle_issue_merge(merge_request).await.unwrap();
-            
+
             // Should fail because issue doesn't exist
             assert!(merge_result.is_error.unwrap_or(false));
 
@@ -3903,7 +3910,10 @@ mod tests {
             let complete_request = MarkCompleteRequest {
                 number: IssueNumber(issue_number),
             };
-            server.handle_issue_mark_complete(complete_request).await.unwrap();
+            server
+                .handle_issue_mark_complete(complete_request)
+                .await
+                .unwrap();
 
             // Try to merge without creating a branch - should fail
             let merge_request = MergeIssueRequest {
@@ -3912,7 +3922,7 @@ mod tests {
             };
 
             let merge_result = server.handle_issue_merge(merge_request).await.unwrap();
-            
+
             // Should fail because branch doesn't exist
             assert!(merge_result.is_error.unwrap_or(false));
 
@@ -3963,8 +3973,11 @@ mod tests {
             let complete_request = MarkCompleteRequest {
                 number: IssueNumber(issue_number),
             };
-            server.handle_issue_mark_complete(complete_request).await.unwrap();
-            
+            server
+                .handle_issue_mark_complete(complete_request)
+                .await
+                .unwrap();
+
             // Commit the issue completion
             commit_changes(_temp.path()).await;
 
@@ -4007,9 +4020,12 @@ mod tests {
                 let complete_request = MarkCompleteRequest {
                     number: IssueNumber(issue_number),
                 };
-                server.handle_issue_mark_complete(complete_request).await.unwrap();
+                server
+                    .handle_issue_mark_complete(complete_request)
+                    .await
+                    .unwrap();
             }
-            
+
             // Commit issue completions
             commit_changes(_temp.path()).await;
 
@@ -4037,8 +4053,11 @@ mod tests {
             let complete_request = MarkCompleteRequest {
                 number: IssueNumber(issue_numbers[0]),
             };
-            server.handle_issue_mark_complete(complete_request).await.unwrap();
-            
+            server
+                .handle_issue_mark_complete(complete_request)
+                .await
+                .unwrap();
+
             // Commit the issue completion
             commit_changes(_temp.path()).await;
 

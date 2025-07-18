@@ -5,6 +5,7 @@ mod doctor;
 mod error;
 mod exit_codes;
 mod flow;
+mod issue;
 mod list;
 // prompt_loader module removed - using SDK's PromptResolver directly
 mod prompt;
@@ -125,6 +126,10 @@ async fn main() {
             tracing::info!("Running validate command");
             run_validate(quiet, format, workflow_dirs)
         }
+        Some(Commands::Issue { subcommand }) => {
+            tracing::info!("Running issue command");
+            run_issue(subcommand).await
+        }
         None => {
             // This case is handled early above for performance
             unreachable!()
@@ -229,6 +234,18 @@ async fn run_flow(subcommand: cli::FlowSubcommand) -> i32 {
         Ok(_) => EXIT_SUCCESS,
         Err(e) => {
             tracing::error!("Flow error: {}", e);
+            EXIT_WARNING
+        }
+    }
+}
+
+async fn run_issue(subcommand: cli::IssueCommands) -> i32 {
+    use issue;
+
+    match issue::handle_issue_command(subcommand).await {
+        Ok(_) => EXIT_SUCCESS,
+        Err(e) => {
+            tracing::error!("Issue error: {}", e);
             EXIT_WARNING
         }
     }

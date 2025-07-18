@@ -239,6 +239,34 @@ Examples:
         #[arg(long = "workflow-dir", value_name = "DIR", hide = true)]
         workflow_dirs: Vec<String>,
     },
+    /// Issue management commands
+    #[command(long_about = "
+Manage issues with comprehensive CLI commands for creating, updating, and tracking work items.
+Issues are stored as markdown files in the ./issues directory with automatic numbering.
+
+Basic usage:
+  swissarmyhammer issue create <name>           # Create new issue
+  swissarmyhammer issue list                    # List all issues
+  swissarmyhammer issue show <number>           # Show issue details
+  swissarmyhammer issue update <number>         # Update issue content
+  swissarmyhammer issue complete <number>       # Mark issue as complete
+  swissarmyhammer issue work <number>           # Start working on issue (creates git branch)
+  swissarmyhammer issue merge <number>          # Merge completed issue to main
+  swissarmyhammer issue current                 # Show current issue
+  swissarmyhammer issue status                  # Show project status
+
+Examples:
+  swissarmyhammer issue create \"Bug fix\" --content \"Fix login issue\"
+  swissarmyhammer issue list --format json --active
+  swissarmyhammer issue show 123 --raw
+  swissarmyhammer issue update 123 --content \"Updated description\" --append
+  swissarmyhammer issue work 123
+  swissarmyhammer issue merge 123 --keep-branch
+")]
+    Issue {
+        #[command(subcommand)]
+        subcommand: IssueCommands,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -607,6 +635,77 @@ for better discoverability and clearer intent.
         #[arg(short, long)]
         quiet: bool,
     },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum IssueCommands {
+    /// Create a new issue
+    Create {
+        /// Issue name
+        name: String,
+        /// Issue content (use - for stdin)
+        #[arg(short, long)]
+        content: Option<String>,
+        /// Read content from file
+        #[arg(short, long)]
+        file: Option<std::path::PathBuf>,
+    },
+    /// List all issues
+    List {
+        /// Show completed issues
+        #[arg(short, long)]
+        completed: bool,
+        /// Show active issues only
+        #[arg(short, long)]
+        active: bool,
+        /// Output format (table, json, markdown)
+        #[arg(short, long, default_value = "table")]
+        format: String,
+    },
+    /// Show issue details
+    Show {
+        /// Issue number
+        number: u32,
+        /// Show raw content
+        #[arg(short, long)]
+        raw: bool,
+    },
+    /// Update an issue
+    Update {
+        /// Issue number
+        number: u32,
+        /// New content (use - for stdin)
+        #[arg(short, long)]
+        content: Option<String>,
+        /// Read content from file
+        #[arg(short, long)]
+        file: Option<std::path::PathBuf>,
+        /// Append to existing content
+        #[arg(short, long)]
+        append: bool,
+    },
+    /// Mark issue as complete
+    Complete {
+        /// Issue number
+        number: u32,
+    },
+    /// Start working on an issue
+    Work {
+        /// Issue number
+        number: u32,
+    },
+    /// Merge completed issue
+    Merge {
+        /// Issue number
+        number: u32,
+        /// Keep branch after merge
+        #[arg(short, long)]
+        keep_branch: bool,
+    },
+    /// Show current issue
+    Current,
+    /// Show project status
+    Status,
 }
 
 impl Cli {

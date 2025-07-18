@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::debug;
+use chrono::{DateTime, Utc};
 
 /// Maximum issue number supported (6 digits)
 use crate::config::Config;
@@ -20,6 +21,8 @@ pub struct Issue {
     pub completed: bool,
     /// The file path of the issue
     pub file_path: PathBuf,
+    /// When the issue was created
+    pub created_at: DateTime<Utc>,
 }
 
 /// Represents the current state of the issue system
@@ -71,6 +74,15 @@ impl FileSystemIssueStorage {
                 completed_dir,
             },
         })
+    }
+
+    /// Create a new FileSystemIssueStorage instance with default directory
+    /// 
+    /// Uses current working directory joined with "issues" as the default location
+    pub fn new_default() -> Result<Self> {
+        let current_dir = std::env::current_dir().map_err(SwissArmyHammerError::Io)?;
+        let issues_dir = current_dir.join("issues");
+        Self::new(issues_dir)
     }
 
     /// Parse issue from file path
@@ -149,12 +161,21 @@ impl FileSystemIssueStorage {
             .ancestors()
             .any(|p| p.file_name() == Some(std::ffi::OsStr::new("complete")));
 
+        // Get file creation time for created_at
+        let created_at = path
+            .metadata()
+            .and_then(|m| m.created())
+            .or_else(|_| path.metadata().and_then(|m| m.modified()))
+            .map(|t| DateTime::<Utc>::from(t))
+            .unwrap_or_else(|_| Utc::now());
+
         Ok(Issue {
             number,
             name,
             content,
             completed,
             file_path: path.to_path_buf(),
+            created_at,
         })
     }
 
@@ -406,6 +427,7 @@ impl IssueStorage for FileSystemIssueStorage {
         let number = self.get_next_issue_number()?;
         let file_path = self.create_issue_file(number, &name, &content)?;
         let sanitized_name = sanitize_issue_name(&name);
+        let created_at = Utc::now();
 
         Ok(Issue {
             number,
@@ -413,6 +435,7 @@ impl IssueStorage for FileSystemIssueStorage {
             content,
             completed: false,
             file_path,
+            created_at,
         })
     }
 
@@ -798,12 +821,14 @@ mod tests {
 
     #[test]
     fn test_issue_serialization() {
+        let created_at = Utc::now();
         let issue = Issue {
             number: 123,
             name: "test_issue".to_string(),
             content: "Test content".to_string(),
             completed: false,
             file_path: PathBuf::from("/tmp/issues/000123_test_issue.md"),
+            created_at,
         };
 
         // Test serialization
@@ -815,6 +840,7 @@ mod tests {
         assert_eq!(deserialized.name, "test_issue");
         assert_eq!(deserialized.content, "Test content");
         assert!(!deserialized.completed);
+        assert_eq!(deserialized.created_at, created_at);
     }
 
     #[test]

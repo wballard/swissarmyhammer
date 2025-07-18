@@ -114,7 +114,6 @@ pub struct McpServer {
     file_watcher: Arc<Mutex<FileWatcher>>,
     issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
     git_ops: Arc<Mutex<Option<GitOperations>>>,
-    max_pending_issues_display: usize,
 }
 
 impl McpServer {
@@ -192,7 +191,6 @@ impl McpServer {
             file_watcher: Arc::new(Mutex::new(FileWatcher::new())),
             issue_storage: Arc::new(RwLock::new(issue_storage)),
             git_ops: Arc::new(Mutex::new(git_ops)),
-            max_pending_issues_display: Config::global().max_pending_issues_in_summary,
         })
     }
 
@@ -785,7 +783,7 @@ impl McpServer {
         _request: AllCompleteRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         let issue_storage = self.issue_storage.read().await;
-        
+
         // Get all issues with comprehensive error handling
         let all_issues = match issue_storage.list_issues().await {
             Ok(issues) => issues,
@@ -801,7 +799,7 @@ impl McpServer {
                         format!("Failed to check issue status: {}", e)
                     }
                 };
-                
+
                 return Ok(CallToolResult {
                     content: vec![Annotated::new(
                         RawContent::Text(RawTextContent { text: error_msg }),
@@ -811,11 +809,11 @@ impl McpServer {
                 });
             }
         };
-        
+
         // Separate active and completed issues
         let mut active_issues = Vec::new();
         let mut completed_issues = Vec::new();
-        
+
         for issue in all_issues {
             if issue.completed {
                 completed_issues.push(issue);
@@ -823,19 +821,19 @@ impl McpServer {
                 active_issues.push(issue);
             }
         }
-        
+
         // Calculate statistics
         let total_issues = active_issues.len() + completed_issues.len();
         let completed_count = completed_issues.len();
         let active_count = active_issues.len();
         let all_complete = active_count == 0 && total_issues > 0;
-        
+
         let completion_percentage = if total_issues > 0 {
             (completed_count * 100) / total_issues
         } else {
             0
         };
-        
+
         // Generate comprehensive response text
         let response_text = if total_issues == 0 {
             "📋 No issues found in the project\n\n✨ The project has no tracked issues. You can create issues using the `issue_create` tool.".to_string()
@@ -850,20 +848,22 @@ impl McpServer {
                     .join("\n")
             )
         } else {
-            let active_list = active_issues.iter()
+            let active_list = active_issues
+                .iter()
                 .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
                 .collect::<Vec<_>>()
                 .join("\n");
-            
+
             let completed_list = if completed_count > 0 {
-                completed_issues.iter()
+                completed_issues
+                    .iter()
                     .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
                     .collect::<Vec<_>>()
                     .join("\n")
             } else {
                 "  (none)".to_string()
             };
-            
+
             format!(
                 "⏳ Project has active issues ({}% complete)\n\n📊 Project Status:\n• Total Issues: {}\n• Completed: {} ({}%)\n• Active: {}\n\n🔄 Active Issues:\n{}\n\n✅ Completed Issues:\n{}",
                 completion_percentage,
@@ -875,10 +875,12 @@ impl McpServer {
                 completed_list
             )
         };
-        
+
         Ok(CallToolResult {
             content: vec![Annotated::new(
-                RawContent::Text(RawTextContent { text: response_text }),
+                RawContent::Text(RawTextContent {
+                    text: response_text,
+                }),
                 None,
             )],
             is_error: Some(false),
@@ -3247,10 +3249,13 @@ mod tests {
             let (server, _temp) = create_test_mcp_server().await;
 
             let all_complete_request = AllCompleteRequest {};
-            let result = server.handle_issue_all_complete(all_complete_request).await.unwrap();
-            
+            let result = server
+                .handle_issue_all_complete(all_complete_request)
+                .await
+                .unwrap();
+
             assert!(!result.is_error.unwrap_or(false));
-            
+
             // Check response text
             if let RawContent::Text(text) = &result.content[0].raw {
                 assert!(text.text.contains("📋 No issues found in the project"));
@@ -3285,16 +3290,22 @@ mod tests {
                 let complete_request = MarkCompleteRequest {
                     number: issue_number,
                 };
-                let complete_result = server.handle_issue_mark_complete(complete_request).await.unwrap();
+                let complete_result = server
+                    .handle_issue_mark_complete(complete_request)
+                    .await
+                    .unwrap();
                 assert!(!complete_result.is_error.unwrap_or(false));
             }
 
             // Check all complete
             let all_complete_request = AllCompleteRequest {};
-            let result = server.handle_issue_all_complete(all_complete_request).await.unwrap();
-            
+            let result = server
+                .handle_issue_all_complete(all_complete_request)
+                .await
+                .unwrap();
+
             assert!(!result.is_error.unwrap_or(false));
-            
+
             // Check response text
             if let RawContent::Text(text) = &result.content[0].raw {
                 assert!(text.text.contains("🎉 All issues are complete!"));
@@ -3348,16 +3359,22 @@ mod tests {
                 let complete_request = MarkCompleteRequest {
                     number: issue_number,
                 };
-                let complete_result = server.handle_issue_mark_complete(complete_request).await.unwrap();
+                let complete_result = server
+                    .handle_issue_mark_complete(complete_request)
+                    .await
+                    .unwrap();
                 assert!(!complete_result.is_error.unwrap_or(false));
             }
 
             // Check all complete
             let all_complete_request = AllCompleteRequest {};
-            let result = server.handle_issue_all_complete(all_complete_request).await.unwrap();
-            
+            let result = server
+                .handle_issue_all_complete(all_complete_request)
+                .await
+                .unwrap();
+
             assert!(!result.is_error.unwrap_or(false));
-            
+
             // Check response text
             if let RawContent::Text(text) = &result.content[0].raw {
                 assert!(text.text.contains("⏳ Project has active issues"));
@@ -3398,10 +3415,13 @@ mod tests {
 
             // Check all complete
             let all_complete_request = AllCompleteRequest {};
-            let result = server.handle_issue_all_complete(all_complete_request).await.unwrap();
-            
+            let result = server
+                .handle_issue_all_complete(all_complete_request)
+                .await
+                .unwrap();
+
             assert!(!result.is_error.unwrap_or(false));
-            
+
             // Check response text
             if let RawContent::Text(text) = &result.content[0].raw {
                 assert!(text.text.contains("⏳ Project has active issues"));
@@ -3442,15 +3462,21 @@ mod tests {
             let complete_request = MarkCompleteRequest {
                 number: issue_number,
             };
-            let complete_result = server.handle_issue_mark_complete(complete_request).await.unwrap();
+            let complete_result = server
+                .handle_issue_mark_complete(complete_request)
+                .await
+                .unwrap();
             assert!(!complete_result.is_error.unwrap_or(false));
 
             // Check all complete
             let all_complete_request = AllCompleteRequest {};
-            let result = server.handle_issue_all_complete(all_complete_request).await.unwrap();
-            
+            let result = server
+                .handle_issue_all_complete(all_complete_request)
+                .await
+                .unwrap();
+
             assert!(!result.is_error.unwrap_or(false));
-            
+
             // Check response formatting
             if let RawContent::Text(text) = &result.content[0].raw {
                 // Check that it contains proper formatting
@@ -3459,10 +3485,10 @@ mod tests {
                 assert!(text.text.contains("• Completed:"));
                 assert!(text.text.contains("• Active:"));
                 assert!(text.text.contains("50%"));
-                
+
                 // Check issue numbering format
                 assert!(text.text.contains("#000001") || text.text.contains("#000002"));
-                
+
                 // Check proper emoji usage
                 assert!(text.text.contains("⏳"));
                 assert!(text.text.contains("🔄"));

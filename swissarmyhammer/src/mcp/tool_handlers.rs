@@ -1,8 +1,8 @@
 //! Tool handlers for MCP operations
 
 use super::responses::{
-    create_error_response, create_issue_response,
-    create_mark_complete_response, create_success_response,
+    create_error_response, create_issue_response, create_mark_complete_response,
+    create_success_response,
 };
 use super::types::*;
 use super::utils::validate_issue_name;
@@ -126,7 +126,7 @@ impl ToolHandlers {
         _request: AllCompleteRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         let issue_storage = self.issue_storage.read().await;
-        
+
         // Get all issues with comprehensive error handling
         let all_issues = match issue_storage.list_issues().await {
             Ok(issues) => issues,
@@ -142,21 +142,23 @@ impl ToolHandlers {
                         format!("Failed to check issue status: {}", e)
                     }
                 };
-                
+
                 return Ok(CallToolResult {
                     content: vec![Annotated::new(
-                        RawContent::Text(RawTextContent { text: error_msg.clone() }),
+                        RawContent::Text(RawTextContent {
+                            text: error_msg.clone(),
+                        }),
                         None,
                     )],
                     is_error: Some(true),
                 });
             }
         };
-        
+
         // Separate active and completed issues
         let mut active_issues = Vec::new();
         let mut completed_issues = Vec::new();
-        
+
         for issue in all_issues {
             if issue.completed {
                 completed_issues.push(issue);
@@ -164,19 +166,19 @@ impl ToolHandlers {
                 active_issues.push(issue);
             }
         }
-        
+
         // Calculate statistics
         let total_issues = active_issues.len() + completed_issues.len();
         let completed_count = completed_issues.len();
         let active_count = active_issues.len();
         let all_complete = active_count == 0 && total_issues > 0;
-        
+
         let completion_percentage = if total_issues > 0 {
             (completed_count * 100) / total_issues
         } else {
             0
         };
-        
+
         // Generate comprehensive response text
         let response_text = if total_issues == 0 {
             "📋 No issues found in the project\n\n✨ The project has no tracked issues. You can create issues using the `issue_create` tool.".to_string()
@@ -191,20 +193,22 @@ impl ToolHandlers {
                     .join("\n")
             )
         } else {
-            let active_list = active_issues.iter()
+            let active_list = active_issues
+                .iter()
                 .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
                 .collect::<Vec<_>>()
                 .join("\n");
-            
+
             let completed_list = if completed_count > 0 {
-                completed_issues.iter()
+                completed_issues
+                    .iter()
                     .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
                     .collect::<Vec<_>>()
                     .join("\n")
             } else {
                 "  (none)".to_string()
             };
-            
+
             format!(
                 "⏳ Project has active issues ({}% complete)\n\n📊 Project Status:\n• Total Issues: {}\n• Completed: {} ({}%)\n• Active: {}\n\n🔄 Active Issues:\n{}\n\n✅ Completed Issues:\n{}",
                 completion_percentage,
@@ -216,9 +220,9 @@ impl ToolHandlers {
                 completed_list
             )
         };
-        
+
         // Create comprehensive artifact with detailed data
-        let artifact = serde_json::json!({
+        let _artifact = serde_json::json!({
             "action": "all_complete",
             "status": "success",
             "all_complete": all_complete,
@@ -245,10 +249,12 @@ impl ToolHandlers {
                 }).collect::<Vec<_>>()
             }
         });
-        
+
         Ok(CallToolResult {
             content: vec![Annotated::new(
-                RawContent::Text(RawTextContent { text: response_text }),
+                RawContent::Text(RawTextContent {
+                    text: response_text,
+                }),
                 None,
             )],
             is_error: Some(false),

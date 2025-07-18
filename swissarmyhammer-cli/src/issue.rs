@@ -4,6 +4,14 @@ use crate::cli::IssueCommands;
 use colored::*;
 use std::io::{self, Read};
 
+fn format_issue_status(completed: bool) -> colored::ColoredString {
+    if completed {
+        "✅ Completed".green()
+    } else {
+        "🔄 Active".yellow()
+    }
+}
+
 pub async fn handle_issue_command(command: IssueCommands) -> Result<(), Box<dyn std::error::Error>> {
     let storage = FileSystemIssueStorage::new_default()?;
     
@@ -87,7 +95,10 @@ async fn list_issues(
         "markdown" => {
             print_issues_markdown(&filtered_issues)?;
         }
-        "table" | _ => {
+        "table" => {
+            print_issues_table(&filtered_issues)?;
+        }
+        _ => {
             print_issues_table(&filtered_issues)?;
         }
     }
@@ -105,11 +116,7 @@ fn print_issues_table(issues: &[swissarmyhammer::issues::Issue]) -> Result<(), B
     println!();
     
     for issue in issues {
-        let status = if issue.completed {
-            "✅ Completed".green()
-        } else {
-            "🔄 Active".yellow()
-        };
+        let status = format_issue_status(issue.completed);
         
         println!("{} #{:06} - {} {}", 
             status,
@@ -169,11 +176,7 @@ async fn show_issue(
     if raw {
         println!("{}", issue.content);
     } else {
-        let status = if issue.completed {
-            "✅ Completed".green()
-        } else {
-            "🔄 Active".yellow()
-        };
+        let status = format_issue_status(issue.completed);
         
         println!("{} Issue #{:06} - {}", status, issue.number, issue.name.bold());
         println!("📁 File: {}", issue.file_path.display());
@@ -316,11 +319,7 @@ async fn show_current_issue(
         if let Ok((number, _)) = swissarmyhammer::issues::parse_issue_filename(identifier) {
             match storage.get_issue(number).await {
                 Ok(issue) => {
-                    let status = if issue.completed {
-                        "✅ Completed".green()
-                    } else {
-                        "🔄 Active".yellow()
-                    };
+                    let status = format_issue_status(issue.completed);
                     
                     println!("{} Current issue: #{:06} - {}", 
                         status, 

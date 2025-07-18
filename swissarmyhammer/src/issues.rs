@@ -8,11 +8,60 @@ use chrono::{DateTime, Utc};
 /// Maximum issue number supported (6 digits)
 use crate::config::Config;
 
+/// Type-safe wrapper for issue numbers to prevent mixing with other u32 values
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct IssueNumber(u32);
+
+impl IssueNumber {
+    /// Create a new issue number with validation
+    pub fn new(number: u32) -> Result<Self> {
+        if number > Config::global().max_issue_number {
+            return Err(SwissArmyHammerError::InvalidIssueNumber(format!(
+                "Issue number {} exceeds maximum ({})",
+                number,
+                Config::global().max_issue_number
+            )));
+        }
+        Ok(Self(number))
+    }
+    
+    /// Get the raw u32 value
+    pub fn value(&self) -> u32 {
+        self.0
+    }
+}
+
+impl std::fmt::Display for IssueNumber {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:06}", self.0)
+    }
+}
+
+impl From<u32> for IssueNumber {
+    fn from(value: u32) -> Self {
+        Self(value)
+    }
+}
+
+impl From<IssueNumber> for u32 {
+    fn from(value: IssueNumber) -> Self {
+        value.0
+    }
+}
+
+impl std::ops::Add<u32> for IssueNumber {
+    type Output = IssueNumber;
+    
+    fn add(self, rhs: u32) -> Self::Output {
+        IssueNumber(self.0 + rhs)
+    }
+}
+
 /// Represents an issue in the tracking system
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Issue {
     /// The issue number (6-digit format)
-    pub number: u32,
+    pub number: IssueNumber,
     /// The issue name (derived from filename without number prefix)
     pub name: String,
     /// The full content of the issue markdown file
@@ -106,7 +155,7 @@ impl FileSystemIssueStorage {
     ///
     /// ```ignore
     /// let issue = storage.parse_issue_from_file(Path::new("./issues/000123_bug_fix.md"))?;
-    /// assert_eq!(issue.number, 123);
+    /// assert_eq!(issue.number, IssueNumber::from(123));
     /// assert_eq!(issue.name, "bug_fix");
     /// ```
     fn parse_issue_from_file(&self, path: &Path) -> Result<Issue> {
@@ -166,11 +215,11 @@ impl FileSystemIssueStorage {
             .metadata()
             .and_then(|m| m.created())
             .or_else(|_| path.metadata().and_then(|m| m.modified()))
-            .map(|t| DateTime::<Utc>::from(t))
+            .map(DateTime::<Utc>::from)
             .unwrap_or_else(|_| Utc::now());
 
         Ok(Issue {
-            number,
+            number: IssueNumber::from(number),
             name,
             content,
             completed,
@@ -269,9 +318,9 @@ impl FileSystemIssueStorage {
             .chain(completed_issues.iter())
             .max_by_key(|issue| issue.number)
             .map(|issue| issue.number)
-            .unwrap_or(0);
+            .unwrap_or(IssueNumber::from(0));
 
-        Ok(max_number + 1)
+        Ok((max_number + 1).into())
     }
 
     /// Create issue file
@@ -419,7 +468,7 @@ impl IssueStorage for FileSystemIssueStorage {
 
         all_issues
             .into_iter()
-            .find(|issue| issue.number == number)
+            .find(|issue| issue.number == IssueNumber::from(number))
             .ok_or_else(|| SwissArmyHammerError::IssueNotFound(number.to_string()))
     }
 
@@ -430,7 +479,7 @@ impl IssueStorage for FileSystemIssueStorage {
         let created_at = Utc::now();
 
         Ok(Issue {
-            number,
+            number: IssueNumber::from(number),
             name: sanitized_name,
             content,
             completed: false,
@@ -823,7 +872,7 @@ mod tests {
     fn test_issue_serialization() {
         let created_at = Utc::now();
         let issue = Issue {
-            number: 123,
+            number: IssueNumber::from(123),
             name: "test_issue".to_string(),
             content: "Test content".to_string(),
             completed: false,
@@ -836,7 +885,7 @@ mod tests {
         let deserialized: Issue = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(issue, deserialized);
-        assert_eq!(deserialized.number, 123);
+        assert_eq!(deserialized.number, IssueNumber::from(123));
         assert_eq!(deserialized.name, "test_issue");
         assert_eq!(deserialized.content, "Test content");
         assert!(!deserialized.completed);
@@ -913,7 +962,7 @@ mod tests {
         fs::write(&test_file, "# Test Issue\\n\\nThis is a test issue.").unwrap();
 
         let issue = storage.parse_issue_from_file(&test_file).unwrap();
-        assert_eq!(issue.number, 123);
+        assert_eq!(issue.number, IssueNumber::from(123));
         assert_eq!(issue.name, "test_issue");
         assert_eq!(issue.content, "# Test Issue\\n\\nThis is a test issue.");
         assert!(!issue.completed);
@@ -932,7 +981,7 @@ mod tests {
         fs::write(&test_file, "# Completed Issue\\n\\nThis is completed.").unwrap();
 
         let issue = storage.parse_issue_from_file(&test_file).unwrap();
-        assert_eq!(issue.number, 456);
+        assert_eq!(issue.number, IssueNumber::from(456));
         assert_eq!(issue.name, "completed_issue");
         assert_eq!(issue.content, "# Completed Issue\\n\\nThis is completed.");
         assert!(issue.completed);
@@ -992,7 +1041,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(issue.number, 1);
+        assert_eq!(issue.number, IssueNumber::from(1));
         assert_eq!(issue.name, "test_issue");
         assert_eq!(issue.content, "# Test\\n\\nContent");
         assert!(!issue.completed);
@@ -1014,7 +1063,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(issue.number, 1);
+        assert_eq!(issue.number, IssueNumber::from(1));
         assert_eq!(issue.name, "test/issue with spaces");
 
         // Check file was created with safe filename
@@ -1078,19 +1127,19 @@ mod tests {
         assert_eq!(issues.len(), 4);
 
         // Should be sorted by number
-        assert_eq!(issues[0].number, 1);
+        assert_eq!(issues[0].number, IssueNumber::from(1));
         assert_eq!(issues[0].name, "another");
         assert!(!issues[0].completed);
 
-        assert_eq!(issues[1].number, 2);
+        assert_eq!(issues[1].number, IssueNumber::from(2));
         assert_eq!(issues[1].name, "completed");
         assert!(issues[1].completed);
 
-        assert_eq!(issues[2].number, 3);
+        assert_eq!(issues[2].number, IssueNumber::from(3));
         assert_eq!(issues[2].name, "pending");
         assert!(!issues[2].completed);
 
-        assert_eq!(issues[3].number, 4);
+        assert_eq!(issues[3].number, IssueNumber::from(4));
         assert_eq!(issues[3].name, "done");
         assert!(issues[3].completed);
     }
@@ -1105,7 +1154,7 @@ mod tests {
         fs::write(issues_dir.join("000123_test.md"), "test content").unwrap();
 
         let issue = storage.get_issue(123).await.unwrap();
-        assert_eq!(issue.number, 123);
+        assert_eq!(issue.number, IssueNumber::from(123));
         assert_eq!(issue.name, "test");
         assert_eq!(issue.content, "test content");
     }
@@ -1135,7 +1184,7 @@ mod tests {
         .unwrap();
 
         let issue = storage.get_issue(456).await.unwrap();
-        assert_eq!(issue.number, 456);
+        assert_eq!(issue.number, IssueNumber::from(456));
         assert_eq!(issue.name, "completed");
         assert_eq!(issue.content, "completed content");
         assert!(issue.completed);
@@ -1161,9 +1210,9 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(issue1.number, 1);
-        assert_eq!(issue2.number, 2);
-        assert_eq!(issue3.number, 3);
+        assert_eq!(issue1.number, IssueNumber::from(1));
+        assert_eq!(issue2.number, IssueNumber::from(2));
+        assert_eq!(issue3.number, IssueNumber::from(3));
 
         // Check files were created
         assert!(issues_dir.join("000001_first.md").exists());
@@ -1196,8 +1245,8 @@ mod tests {
 
         let issues = storage.list_issues_in_dir(&issues_dir).unwrap();
         assert_eq!(issues.len(), 2); // Only the valid issue files
-        assert_eq!(issues[0].number, 1);
-        assert_eq!(issues[1].number, 3);
+        assert_eq!(issues[0].number, IssueNumber::from(1));
+        assert_eq!(issues[1].number, IssueNumber::from(3));
     }
 
     #[test]
@@ -1231,7 +1280,7 @@ mod tests {
         let result = storage.parse_issue_from_file(&test_file);
         assert!(result.is_ok());
         let issue = result.unwrap();
-        assert_eq!(issue.number, 123);
+        assert_eq!(issue.number, IssueNumber::from(123));
         assert_eq!(issue.name, "test_with_underscores");
     }
 
@@ -1248,7 +1297,7 @@ mod tests {
         let result = storage.parse_issue_from_file(&test_file);
         assert!(result.is_ok());
         let issue = result.unwrap();
-        assert_eq!(issue.number, 123);
+        assert_eq!(issue.number, IssueNumber::from(123));
         assert_eq!(issue.name, "");
     }
 
@@ -1283,7 +1332,7 @@ mod tests {
         let result = storage.parse_issue_from_file(&test_file);
         assert!(result.is_ok());
         let issue = result.unwrap();
-        assert_eq!(issue.number, 1);
+        assert_eq!(issue.number, IssueNumber::from(1));
         assert_eq!(issue.name, "test");
     }
 
@@ -1300,7 +1349,7 @@ mod tests {
         let result = storage.parse_issue_from_file(&test_file);
         assert!(result.is_ok());
         let issue = result.unwrap();
-        assert_eq!(issue.number, 0);
+        assert_eq!(issue.number, IssueNumber::from(0));
         assert_eq!(issue.name, "test");
     }
 
@@ -1321,7 +1370,7 @@ mod tests {
         let issues = storage.list_issues_in_dir(&issues_dir).unwrap();
         // Should only return the valid issue, ignoring corrupted ones
         assert_eq!(issues.len(), 1);
-        assert_eq!(issues[0].number, 1);
+        assert_eq!(issues[0].number, IssueNumber::from(1));
         assert_eq!(issues[0].name, "valid");
     }
 
@@ -1360,7 +1409,7 @@ mod tests {
         assert_eq!(all_issues.len(), 5);
 
         // Check that numbers are sequential (though order might vary due to concurrency)
-        let mut numbers: Vec<u32> = all_issues.iter().map(|i| i.number).collect();
+        let mut numbers: Vec<u32> = all_issues.iter().map(|i| i.number.into()).collect();
         numbers.sort();
         assert_eq!(numbers, vec![1, 2, 3, 4, 5]);
     }
@@ -1443,7 +1492,7 @@ mod tests {
         // Update the issue
         let updated_content = "Updated content with new information";
         let updated_issue = storage
-            .update_issue(issue.number, updated_content.to_string())
+            .update_issue(issue.number.into(), updated_content.to_string())
             .await
             .unwrap();
 
@@ -1484,7 +1533,7 @@ mod tests {
         assert!(!issue.completed);
 
         // Mark as complete
-        let completed_issue = storage.mark_complete(issue.number).await.unwrap();
+        let completed_issue = storage.mark_complete(issue.number.into()).await.unwrap();
 
         assert_eq!(completed_issue.number, issue.number);
         assert_eq!(completed_issue.name, issue.name);
@@ -1510,10 +1559,10 @@ mod tests {
             .await
             .unwrap();
 
-        let completed_issue = storage.mark_complete(issue.number).await.unwrap();
+        let completed_issue = storage.mark_complete(issue.number.into()).await.unwrap();
 
         // Try to mark as complete again - should be no-op
-        let completed_again = storage.mark_complete(issue.number).await.unwrap();
+        let completed_again = storage.mark_complete(issue.number.into()).await.unwrap();
 
         assert_eq!(completed_issue.file_path, completed_again.file_path);
         assert!(completed_again.completed);
@@ -1575,8 +1624,8 @@ mod tests {
             .await
             .unwrap();
 
-        storage.mark_complete(issue1.number).await.unwrap();
-        storage.mark_complete(issue2.number).await.unwrap();
+        storage.mark_complete(issue1.number.into()).await.unwrap();
+        storage.mark_complete(issue2.number.into()).await.unwrap();
 
         let result = storage.all_complete().await.unwrap();
         assert!(result); // All issues are complete
@@ -1753,7 +1802,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(issue1.number, 1);
+        assert_eq!(issue1.number, IssueNumber::from(1));
         assert_eq!(issue1.name, "test_issue");
         assert_eq!(issue1.content, "Test content");
         assert!(!issue1.completed);
@@ -1764,7 +1813,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(issue2.number, 2);
+        assert_eq!(issue2.number, IssueNumber::from(2));
     }
 
     #[tokio::test]
@@ -1787,8 +1836,8 @@ mod tests {
 
         let issues = storage.list_issues().await.unwrap();
         assert_eq!(issues.len(), 2);
-        assert_eq!(issues[0].number, 1);
-        assert_eq!(issues[1].number, 2);
+        assert_eq!(issues[0].number, IssueNumber::from(1));
+        assert_eq!(issues[1].number, IssueNumber::from(2));
     }
 
     #[tokio::test]
@@ -1802,7 +1851,7 @@ mod tests {
             .unwrap();
 
         // Get it back
-        let retrieved = storage.get_issue(created.number).await.unwrap();
+        let retrieved = storage.get_issue(created.number.into()).await.unwrap();
         assert_eq!(retrieved.number, created.number);
         assert_eq!(retrieved.name, created.name);
         assert_eq!(retrieved.content, created.content);
@@ -1827,7 +1876,7 @@ mod tests {
 
         // Update it
         let updated = storage
-            .update_issue(issue.number, "Updated content".to_string())
+            .update_issue(issue.number.into(), "Updated content".to_string())
             .await
             .unwrap();
 
@@ -1835,7 +1884,7 @@ mod tests {
         assert_eq!(updated.content, "Updated content");
 
         // Verify it's persisted
-        let retrieved = storage.get_issue(issue.number).await.unwrap();
+        let retrieved = storage.get_issue(issue.number.into()).await.unwrap();
         assert_eq!(retrieved.content, "Updated content");
     }
 
@@ -1863,7 +1912,7 @@ mod tests {
         assert!(!issue.completed);
 
         // Mark it complete
-        let completed = storage.mark_complete(issue.number).await.unwrap();
+        let completed = storage.mark_complete(issue.number.into()).await.unwrap();
         assert!(completed.completed);
 
         // Verify file was moved
@@ -1885,10 +1934,10 @@ mod tests {
             .await
             .unwrap();
 
-        storage.mark_complete(issue.number).await.unwrap();
+        storage.mark_complete(issue.number.into()).await.unwrap();
 
         // Mark complete again - should be idempotent
-        let result = storage.mark_complete(issue.number).await;
+        let result = storage.mark_complete(issue.number.into()).await;
         assert!(result.is_ok());
         assert!(result.unwrap().completed);
     }
@@ -1914,11 +1963,11 @@ mod tests {
         assert!(!storage.all_complete().await.unwrap());
 
         // Complete one
-        storage.mark_complete(issue1.number).await.unwrap();
+        storage.mark_complete(issue1.number.into()).await.unwrap();
         assert!(!storage.all_complete().await.unwrap());
 
         // Complete both
-        storage.mark_complete(issue2.number).await.unwrap();
+        storage.mark_complete(issue2.number.into()).await.unwrap();
         assert!(storage.all_complete().await.unwrap());
     }
 

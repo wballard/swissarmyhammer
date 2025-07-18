@@ -38,13 +38,16 @@ use types::IssueName;
 use utils::validate_issue_name;
 
 /// Validation state for pre-work operations
+/// 
+/// This struct captures the essential repository state information
+/// needed to make informed decisions about branch switching and
+/// work preparation for issue workflow operations.
 #[derive(Debug)]
 struct PreWorkValidation {
+    /// The name of the current git branch
     current_branch: String,
-    main_branch: String,
-    on_issue_branch: bool,
+    /// Whether there are uncommitted changes in the working directory
     has_uncommitted: bool,
-    is_clean: bool,
 }
 
 /// Constants for issue branch management
@@ -1421,15 +1424,6 @@ impl McpServer {
             }
         };
         
-        // Verify we're on the correct branch
-        let current_branch = git_ops
-            .as_ref()
-            .ok_or_else(|| {
-                McpError::internal_error("Git operations not available".to_string(), None)
-            })?
-            .current_branch()
-            .unwrap_or_else(|_| "unknown".to_string());
-        
         // Format success response
         let response_text = format!(
             "🔄 Switched to branch '{}' for issue #{:06} - {}\n\n📋 Issue Details:\n• Number: {}\n• Name: {}\n• Status: Active\n• File: {}\n\n🌿 Git Branch:\n• Branch: {}\n• Status: Active work branch\n• Previous branch: Switched from previous branch\n\n💡 Next Steps:\n• Make your changes and commit them\n• Update issue progress: issue_update\n• Mark complete when done: issue_mark_complete\n• Merge back to main: issue_merge\n\n📝 Issue Content:\n{}",
@@ -1460,23 +1454,12 @@ impl McpServer {
             McpError::internal_error(format!("Failed to get current branch: {}", e), None)
         })?;
         
-        let main_branch = git_ops.main_branch().unwrap_or_else(|_| "main".to_string());
-        
         // Check for uncommitted changes
         let has_uncommitted = git_ops.has_uncommitted_changes().unwrap_or(false);
         
-        // Check if already on an issue branch
-        let on_issue_branch = current_branch.starts_with("issue/");
-        
-        // Check if working directory is clean
-        let is_clean = !has_uncommitted;
-        
         Ok(PreWorkValidation {
             current_branch,
-            main_branch,
-            on_issue_branch,
             has_uncommitted,
-            is_clean,
         })
     }
 
@@ -1535,26 +1518,6 @@ impl McpServer {
         }
     }
 
-    /// Check if working directory is clean
-    async fn check_working_directory_clean(&self, git_ops: &GitOperations) -> Result<()> {
-        let changes = git_ops.is_working_directory_clean()?;
-
-        if !changes.is_empty() {
-            return Err(SwissArmyHammerError::Other(format!(
-                "You have uncommitted changes in: {}. Please commit or stash them first.",
-                changes.join(", ")
-            )));
-        }
-
-        Ok(())
-    }
-
-    /// Get stash suggestion for uncommitted changes
-    fn get_stash_suggestion(&self) -> String {
-        "Tip: You can stash your changes with 'git stash', \
-         switch branches, and then 'git stash pop' to restore them."
-            .to_string()
-    }
 
     /// Parse issue information from branch name
     fn parse_issue_branch(

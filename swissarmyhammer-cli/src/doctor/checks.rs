@@ -80,9 +80,7 @@ pub fn check_installation(checks: &mut Vec<Check>) -> Result<()> {
     checks.push(Check {
         name: check_names::INSTALLATION_METHOD.to_string(),
         status: CheckStatus::Ok,
-        message: format!(
-            "{installation_method} (v{version}, {build_info}) at {exe_path}"
-        ),
+        message: format!("{installation_method} (v{version}, {build_info}) at {exe_path}"),
         fix: None,
     });
 
@@ -824,9 +822,7 @@ fn check_name_conflicts(
             checks.push(Check {
                 name: format!("Workflow name conflict: {name}"),
                 status: CheckStatus::Warning,
-                message: format!(
-                    "Workflow '{name}' exists in multiple locations: {locations}"
-                ),
+                message: format!("Workflow '{name}' exists in multiple locations: {locations}"),
                 fix: Some("Rename or remove duplicate workflows to avoid conflicts".to_string()),
             });
         }

@@ -146,9 +146,7 @@ fn test_all_doc_example_prompts_are_valid() {
         );
     }
 
-    println!(
-        "Successfully validated {tested_files} documentation example prompts"
-    );
+    println!("Successfully validated {tested_files} documentation example prompts");
 }
 
 #[test]

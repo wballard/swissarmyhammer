@@ -2621,10 +2621,7 @@ mod tests {
 
         for name in valid_names {
             let result = validate_issue_name(name);
-            assert!(
-                result.is_ok(),
-                "Valid name '{name}' should pass validation"
-            );
+            assert!(result.is_ok(), "Valid name '{name}' should pass validation");
             assert_eq!(result.unwrap(), name.trim());
         }
 
@@ -3263,8 +3260,9 @@ mod tests {
                 .expect("Failed to list git branches");
 
             let branches_output = String::from_utf8_lossy(&git_branches.stdout);
-            assert!(branches_output
-                .contains(&format!("issue/{issue_number:06}_git_integration_test")));
+            assert!(
+                branches_output.contains(&format!("issue/{issue_number:06}_git_integration_test"))
+            );
 
             // Test 3: Update the issue content
             let update_request = UpdateIssueRequest {

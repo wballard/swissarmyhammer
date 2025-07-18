@@ -143,10 +143,7 @@ fn test_completion_command() -> Result<()> {
             .args(["completion", shell])
             .output()?;
 
-        assert!(
-            output.status.success(),
-            "{shell} completion should succeed"
-        );
+        assert!(output.status.success(), "{shell} completion should succeed");
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(

@@ -704,9 +704,7 @@ async fn logs_workflow_command(
     let run = storage.get_run(&run_id_typed)?;
 
     if follow {
-        println!(
-            "📄 Following logs for run {run_id} (Press Ctrl+C to stop)..."
-        );
+        println!("📄 Following logs for run {run_id} (Press Ctrl+C to stop)...");
 
         loop {
             let updated_run = storage.get_run(&run_id_typed)?;
@@ -900,8 +898,8 @@ fn parse_duration(s: &str) -> Result<Duration> {
         "h" => Duration::from_secs(value * 3600),
         _ => {
             return Err(SwissArmyHammerError::Other(format!(
-                "Invalid duration unit: '{unit}'. Supported units: s (seconds), m (minutes), h (hours)"
-            )))
+            "Invalid duration unit: '{unit}'. Supported units: s (seconds), m (minutes), h (hours)"
+        )))
         }
     };
 

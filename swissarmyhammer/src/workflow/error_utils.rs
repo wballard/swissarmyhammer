@@ -277,9 +277,8 @@ mod tests {
             .output()
             .unwrap();
 
-        let result = handle_command_error_with_mapper(output, "false", |msg| {
-            format!("Custom error: {msg}")
-        });
+        let result =
+            handle_command_error_with_mapper(output, "false", |msg| format!("Custom error: {msg}"));
 
         assert!(result.is_err());
         let error_msg = result.unwrap_err();

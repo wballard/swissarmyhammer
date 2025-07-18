@@ -335,9 +335,7 @@ async fn merge_issue(
             "⚠️ Issue #{:06} - {} is not completed",
             issue.number, issue.name
         );
-        println!(
-            "Complete the issue first with: swissarmyhammer issue complete {number}"
-        );
+        println!("Complete the issue first with: swissarmyhammer issue complete {number}");
         return Ok(());
     }
 
@@ -389,15 +387,11 @@ async fn show_current_issue(
                     println!("📁 File: {}", issue.file_path.display());
                 }
                 Err(_) => {
-                    println!(
-                        "⚠️ On issue branch '{current_branch}' but issue not found"
-                    );
+                    println!("⚠️ On issue branch '{current_branch}' but issue not found");
                 }
             }
         } else {
-            println!(
-                "⚠️ On issue branch '{current_branch}' but cannot parse issue number"
-            );
+            println!("⚠️ On issue branch '{current_branch}' but cannot parse issue number");
         }
     } else {
         println!("ℹ️ Not currently working on a specific issue");
@@ -430,9 +424,7 @@ async fn show_status(storage: FileSystemIssueStorage) -> Result<(), Box<dyn std:
     };
 
     println!("📊 Issues: {total_issues} total");
-    println!(
-        "✅ Completed: {completed_count} ({completion_percentage}%)"
-    );
+    println!("✅ Completed: {completed_count} ({completion_percentage}%)");
     println!("🔄 Active: {active_count}");
 
     if active_count > 0 {

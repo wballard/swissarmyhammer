@@ -3406,6 +3406,7 @@ dependencies = [
  "criterion",
  "dashmap",
  "dirs",
+ "futures",
  "fuzzy-matcher",
  "liquid",
  "liquid-core",

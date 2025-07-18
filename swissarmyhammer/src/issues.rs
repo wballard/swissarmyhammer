@@ -405,10 +405,11 @@ impl IssueStorage for FileSystemIssueStorage {
     async fn create_issue(&self, name: String, content: String) -> Result<Issue> {
         let number = self.get_next_issue_number()?;
         let file_path = self.create_issue_file(number, &name, &content)?;
+        let sanitized_name = sanitize_issue_name(&name);
 
         Ok(Issue {
             number,
-            name,
+            name: sanitized_name,
             content,
             completed: false,
             file_path,
@@ -709,6 +710,16 @@ fn validate_against_reserved_names(name: &str) -> String {
         return name.chars().take(250).collect::<String>() + "_trunc";
     }
 
+    name.to_string()
+}
+
+/// Sanitize issue name for security while preserving most names
+pub fn sanitize_issue_name(name: &str) -> String {
+    // Only sanitize dangerous path traversal attempts
+    if name.contains("../") || name.contains("..\\") || name.contains("./") || name.contains(".\\") {
+        return "path_traversal_attempted".to_string();
+    }
+    // Preserve all other names, including empty names
     name.to_string()
 }
 

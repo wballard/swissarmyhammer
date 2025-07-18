@@ -2848,29 +2848,6 @@ mod tests {
             }
         }
 
-        /// Helper function to create an issue and return its number
-        async fn create_and_get_issue_number(server: &McpServer, name: &str, content: &str) -> u32 {
-            let create_request = CreateIssueRequest {
-                name: IssueName::new(name.to_string()).unwrap(),
-                content: content.to_string(),
-            };
-            let create_result = server.handle_issue_create(create_request).await.unwrap();
-            assert!(!create_result.is_error.unwrap_or(false));
-            extract_issue_number_from_response(&create_result)
-        }
-
-        /// Helper function to create an issue, extract its number, and commit changes
-        async fn create_issue_and_commit(
-            server: &McpServer,
-            temp_path: &std::path::Path,
-            name: &str,
-            content: &str,
-        ) -> u32 {
-            let issue_number = create_and_get_issue_number(server, name, content).await;
-            commit_changes(temp_path).await;
-            issue_number
-        }
-
         #[tokio::test]
         async fn test_mcp_create_issue() {
             let (server, _temp) = create_test_mcp_server().await;

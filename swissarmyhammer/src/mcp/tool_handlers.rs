@@ -1,12 +1,12 @@
 //! Tool handlers for MCP operations
 
-use crate::config::Config;
 use super::responses::{
     create_all_complete_response, create_error_response, create_issue_response,
     create_mark_complete_response, create_success_response,
 };
 use super::types::*;
 use super::utils::validate_issue_name;
+use crate::config::Config;
 use crate::git::GitOperations;
 use crate::issues::IssueStorage;
 use crate::Result;
@@ -390,7 +390,10 @@ impl ToolHandlers {
             .args(["status", "--porcelain"])
             .output()
             .map_err(|e| {
-                crate::SwissArmyHammerError::git_operation_failed("git status check", &e.to_string())
+                crate::SwissArmyHammerError::git_operation_failed(
+                    "git status check",
+                    &e.to_string(),
+                )
             })?;
 
         let status = String::from_utf8_lossy(&output.stdout);

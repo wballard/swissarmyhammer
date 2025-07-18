@@ -116,8 +116,8 @@ pub mod error;
 /// Configuration management
 pub mod config;
 
-pub use error::{ErrorChainExt, ErrorContext, Result, SwissArmyHammerError};
 pub use config::Config;
+pub use error::{ErrorChainExt, ErrorContext, Result, SwissArmyHammerError};
 
 /// Prelude module for convenient imports
 pub mod prelude {

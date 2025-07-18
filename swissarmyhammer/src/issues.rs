@@ -134,7 +134,8 @@ impl FileSystemIssueStorage {
         if number > Config::global().max_issue_number {
             return Err(SwissArmyHammerError::InvalidIssueNumber(format!(
                 "Issue number {} exceeds maximum ({})",
-                number, Config::global().max_issue_number
+                number,
+                Config::global().max_issue_number
             )));
         }
 
@@ -449,7 +450,9 @@ pub fn parse_issue_number(s: &str) -> Result<u32> {
     if number > Config::global().max_issue_number {
         return Err(SwissArmyHammerError::InvalidIssueNumber(format!(
             "Issue number {} exceeds maximum allowed value ({}). Use 6-digit format: 000001-{}",
-            number, Config::global().max_issue_number, Config::global().max_issue_number
+            number,
+            Config::global().max_issue_number,
+            Config::global().max_issue_number
         )));
     }
 
@@ -806,7 +809,14 @@ mod tests {
     #[test]
     fn test_issue_number_validation() {
         // Valid 6-digit numbers
-        let valid_numbers = vec![1, 999, 1000, 99999, 100000, Config::global().max_issue_number];
+        let valid_numbers = vec![
+            1,
+            999,
+            1000,
+            99999,
+            100000,
+            Config::global().max_issue_number,
+        ];
         for num in valid_numbers {
             assert!(
                 num <= Config::global().max_issue_number,

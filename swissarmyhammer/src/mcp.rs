@@ -8,7 +8,6 @@ use crate::workflow::{
     WorkflowStorage, WorkflowStorageBackend,
 };
 use crate::{PromptLibrary, PromptResolver, Result, SwissArmyHammerError};
-use chrono::Local;
 use rmcp::model::*;
 use rmcp::service::RequestContext;
 use rmcp::{Error as McpError, RoleServer, ServerHandler};
@@ -18,7 +17,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-
 
 /// MCP module structure
 pub mod error_handling;
@@ -30,7 +28,7 @@ pub mod utils;
 
 // Re-export commonly used items from submodules
 use responses::create_issue_response;
-use utils::{validate_issue_content_size, validate_issue_name};
+use utils::validate_issue_name;
 
 /// Constants for issue branch management
 use crate::config::Config;
@@ -891,6 +889,86 @@ impl McpServer {
         summary
     }
 
+    /// Validate issue content for common issues
+    fn validate_issue_content(content: &str) -> std::result::Result<(), McpError> {
+        // Check length
+        if content.len() > 50000 {
+            return Err(McpError::invalid_params(
+                "Issue content cannot exceed 50,000 characters".to_string(),
+                None,
+            ));
+        }
+
+        // Check for binary content (basic check)
+        if content
+            .chars()
+            .any(|c| c.is_control() && c != '\n' && c != '\r' && c != '\t')
+        {
+            return Err(McpError::invalid_params(
+                "Issue content cannot contain binary data".to_string(),
+                None,
+            ));
+        }
+
+        // Check for extremely long lines
+        if content.lines().any(|line| line.len() > 10000) {
+            return Err(McpError::invalid_params(
+                "Issue content lines cannot exceed 10,000 characters".to_string(),
+                None,
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Smart merge content with duplicate detection
+    fn smart_merge_content(original: &str, new_content: &str, append: bool) -> String {
+        if !append {
+            return new_content.to_string();
+        }
+
+        if original.is_empty() {
+            return new_content.to_string();
+        }
+
+        // Check if new content is already present in original
+        if original.contains(new_content) {
+            return original.to_string();
+        }
+
+        // Smart append with proper spacing
+        let separator = if original.ends_with('\n') {
+            "\n"
+        } else {
+            "\n\n"
+        };
+        format!("{}{}{}", original, separator, new_content)
+    }
+
+    /// Generate change summary for issue update
+    fn generate_change_summary(original: &str, updated: &str, append: bool) -> String {
+        if append {
+            let added_content = updated
+                .strip_prefix(original)
+                .unwrap_or(&updated[original.len()..])
+                .trim_start_matches(['\n', ' ', '\t']);
+
+            format!("Appended {} characters of new content", added_content.len())
+        } else {
+            let original_lines = original.lines().count();
+            let updated_lines = updated.lines().count();
+            let line_diff = (updated_lines as i64) - (original_lines as i64);
+
+            format!(
+                "Replaced entire content ({} lines → {} lines, {} {})",
+                original_lines,
+                updated_lines,
+                if line_diff >= 0 { "+" } else { "" },
+                line_diff
+            )
+        }
+    }
+
     /// Handle the issue_update tool operation.
     ///
     /// Updates the content of an existing issue with new markdown content.
@@ -918,8 +996,8 @@ impl McpServer {
             ));
         }
 
-        // Validate content size
-        validate_issue_content_size(&request.content)?;
+        // Enhanced content validation
+        Self::validate_issue_content(&request.content)?;
 
         // Get current issue first to check it exists and calculate final content
         let (current_issue, final_content) = {
@@ -936,72 +1014,110 @@ impl McpServer {
                         _ => McpError::internal_error(format!("Failed to get issue: {}", e), None),
                     })?;
 
-            // Determine final content based on append mode
-            let final_content = if request.append {
-                // Append with separator and timestamp
-                format!(
-                    "{}\n\n---\n\n## Update: {}\n\n{}",
-                    current_issue.content,
-                    Local::now().format("%Y-%m-%d %H:%M:%S"),
-                    request.content
-                )
-            } else {
-                request.content.clone()
-            };
+            // Smart merge content
+            let final_content =
+                Self::smart_merge_content(&current_issue.content, &request.content, request.append);
+
+            // Check if content actually changed
+            if final_content == current_issue.content {
+                return Ok(CallToolResult {
+                    content: vec![Annotated::new(
+                        RawContent::Text(RawTextContent {
+                            text: format!(
+                                "ℹ️ Issue #{:06} - {} content unchanged\n\n📋 Current content:\n{}",
+                                current_issue.number, current_issue.name, current_issue.content
+                            ),
+                        }),
+                        None,
+                    )],
+                    is_error: Some(false),
+                });
+            }
 
             (current_issue, final_content)
         }; // Drop the lock here
 
-        // Update the issue with a new lock
+        // Update the issue with enhanced error handling
         let updated_issue = {
             let issue_storage = self.issue_storage.write().await;
             issue_storage
                 .update_issue(request.number, final_content)
                 .await
                 .map_err(|e| {
-                    McpError::internal_error(format!("Failed to update issue: {}", e), None)
+                    let error_msg = match &e {
+                        SwissArmyHammerError::Io(io_err) => {
+                            format!("Failed to update issue file: {}", io_err)
+                        }
+                        SwissArmyHammerError::IssueNotFound(_) => {
+                            "Issue not found or was deleted during update".to_string()
+                        }
+                        SwissArmyHammerError::Other(msg) if msg.contains("permission") => {
+                            "Permission denied: Unable to update issue file. Check file permissions.".to_string()
+                        }
+                        SwissArmyHammerError::Other(msg) if msg.contains("space") => {
+                            "Not enough disk space to update issue file.".to_string()
+                        }
+                        _ => {
+                            format!("Failed to update issue: {}", e)
+                        }
+                    };
+                    McpError::internal_error(error_msg, None)
                 })?
         };
 
-        // Calculate content change statistics
-        let old_lines = current_issue.content.lines().count();
-        let new_lines = updated_issue.content.lines().count();
-        let lines_changed = (new_lines as i32 - old_lines as i32).abs();
+        // Calculate content change metrics
+        let original_length = current_issue.content.len();
+        let new_length = updated_issue.content.len();
+        let change_type = if request.append {
+            "appended"
+        } else {
+            "replaced"
+        };
 
-        // Format response with detailed statistics
-        let response = serde_json::json!({
-            "number": updated_issue.number,
-            "name": updated_issue.name,
-            "file_path": updated_issue.file_path.to_string_lossy(),
-            "completed": updated_issue.completed,
-            "append_mode": request.append,
-            "content_stats": {
-                "old_lines": old_lines,
-                "new_lines": new_lines,
-                "lines_changed": lines_changed,
-                "old_size_bytes": current_issue.content.len(),
-                "new_size_bytes": updated_issue.content.len(),
+        // Generate change summary
+        let change_summary = Self::generate_change_summary(
+            &current_issue.content,
+            &updated_issue.content,
+            request.append,
+        );
+
+        // Enhanced response with better formatting
+        let response_text = format!(
+            "✅ Successfully updated issue #{:06} - {}\n\n📋 Issue Details:\n• Number: {}\n• Name: {}\n• File: {}\n• Status: {}\n\n📊 Changes:\n• {}\n\n📝 Updated Content:\n{}",
+            updated_issue.number,
+            updated_issue.name,
+            updated_issue.number,
+            updated_issue.name,
+            updated_issue.file_path.display(),
+            if updated_issue.completed { "Completed" } else { "Active" },
+            change_summary,
+            updated_issue.content
+        );
+
+        // Create structured artifact (for future use)
+        let _artifact = serde_json::json!({
+            "action": "update",
+            "status": "success",
+            "update_type": change_type,
+            "changes": {
+                "original_length": original_length,
+                "new_length": new_length,
+                "length_change": (new_length as i64) - (original_length as i64),
+                "appended": request.append
             },
-            "message": format!(
-                "Updated issue #{:06} - {}. Content changed: {} lines ({} mode)",
-                updated_issue.number,
-                updated_issue.name,
-                match new_lines.cmp(&old_lines) {
-                    std::cmp::Ordering::Greater => format!("+{}", new_lines - old_lines),
-                    std::cmp::Ordering::Less => format!("-{}", old_lines - new_lines),
-                    std::cmp::Ordering::Equal => "0".to_string(),
-                },
-                if request.append { "append" } else { "replace" }
-            )
+            "issue": {
+                "number": updated_issue.number,
+                "name": updated_issue.name,
+                "content": updated_issue.content,
+                "file_path": updated_issue.file_path.to_string_lossy(),
+                "completed": updated_issue.completed
+            }
         });
 
         Ok(CallToolResult {
             content: vec![Annotated::new(
                 RawContent::Text(RawTextContent {
-                    text: response["message"]
-                        .as_str()
-                        .unwrap_or("Issue updated")
-                        .to_string(),
+                    text: response_text,
                 }),
                 None,
             )],

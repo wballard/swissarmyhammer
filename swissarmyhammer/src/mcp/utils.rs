@@ -171,11 +171,11 @@ pub fn validate_issue_content_size(content: &str) -> std::result::Result<(), Mcp
 /// This provides comprehensive HTML sanitization using regex patterns and context-aware validation
 fn validate_html_security(content: &str) -> std::result::Result<(), McpError> {
     use regex::Regex;
-    
+
     // Pattern for dangerous HTML tags (more comprehensive than simple string matching)
     static DANGEROUS_TAG_PATTERNS: &[&str] = &[
         r"<\s*script[^>]*>",
-        r"<\s*iframe[^>]*>", 
+        r"<\s*iframe[^>]*>",
         r"<\s*object[^>]*>",
         r"<\s*embed[^>]*>",
         r"<\s*link[^>]*>",
@@ -203,7 +203,7 @@ fn validate_html_security(content: &str) -> std::result::Result<(), McpError> {
     // Pattern for event handlers (more comprehensive)
     static EVENT_HANDLER_PATTERNS: &[&str] = &[
         r"on\w+\s*=",
-        r"@\w+\s*=", // Vue.js style events
+        r"@\w+\s*=",   // Vue.js style events
         r"ng-\w+\s*=", // Angular style events
     ];
 
@@ -289,8 +289,8 @@ fn validate_encoded_content(content: &str) -> std::result::Result<(), McpError> 
     // Check for HTML entities that could be used to bypass validation
     let suspicious_entities = [
         "&#x6a;&#x61;&#x76;&#x61;&#x73;&#x63;&#x72;&#x69;&#x70;&#x74;", // javascript
-        "&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;", // javascript
-        "&lt;script", // encoded script tags
+        "&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;",    // javascript
+        "&lt;script",                                                   // encoded script tags
         "&lt;iframe",
         "&lt;object",
         "%3cscript", // URL encoded script

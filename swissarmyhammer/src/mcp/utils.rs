@@ -1,5 +1,6 @@
 //! Utility functions for MCP operations
 
+use crate::config::Config;
 use rmcp::Error as McpError;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -50,7 +51,7 @@ where
 ///
 /// This function performs comprehensive validation including:
 /// - Empty/whitespace checks
-/// - Length limits (max 100 characters)
+/// - Length limits (configurable maximum)
 /// - Invalid filesystem character checks
 /// - Additional validation using the existing issues module
 ///
@@ -70,9 +71,10 @@ pub fn validate_issue_name(name: &str) -> std::result::Result<String, McpError> 
         return Err(McpError::invalid_params("Issue name cannot be empty", None));
     }
 
-    if trimmed.len() > 100 {
+    let config = Config::global();
+    if trimmed.len() > config.max_issue_name_length {
         return Err(McpError::invalid_params(
-            "Issue name too long (max 100 characters)",
+            format!("Issue name too long (max {} characters)", config.max_issue_name_length),
             None,
         ));
     }
@@ -105,37 +107,24 @@ pub fn validate_issue_name(name: &str) -> std::result::Result<String, McpError> 
 ///
 /// * `Result<(), McpError>` - Success or validation error
 pub fn validate_issue_content_size(content: &str) -> std::result::Result<(), McpError> {
-    // Configurable limits via environment variables with sensible defaults
-    let max_content_size = std::env::var("SWISSARMYHAMMER_MAX_CONTENT_SIZE")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(1024 * 1024); // 1MB default
-
-    let max_content_lines = std::env::var("SWISSARMYHAMMER_MAX_CONTENT_LINES")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(10000); // 10k lines default
-
+    let config = Config::global();
+    
     // Check content size in bytes
-    if content.len() > max_content_size {
+    if content.len() > config.max_content_length {
         return Err(McpError::invalid_params(
             format!(
                 "Issue content too large: {} bytes (max {} bytes)",
                 content.len(),
-                max_content_size
+                config.max_content_length
             ),
             None,
         ));
     }
 
-    // Check line count
-    let line_count = content.lines().count();
-    if line_count > max_content_lines {
+    // Check for extremely long lines
+    if content.lines().any(|line| line.len() > config.max_line_length) {
         return Err(McpError::invalid_params(
-            format!(
-                "Issue content has too many lines: {} lines (max {} lines)",
-                line_count, max_content_lines
-            ),
+            format!("Issue content lines cannot exceed {} characters", config.max_line_length),
             None,
         ));
     }
@@ -167,12 +156,10 @@ pub fn validate_issue_content_size(content: &str) -> std::result::Result<(), Mcp
     Ok(())
 }
 
-/// Validate content against potential XSS vectors and dangerous HTML
-/// This provides comprehensive HTML sanitization using regex patterns and context-aware validation
-fn validate_html_security(content: &str) -> std::result::Result<(), McpError> {
+/// Validate content against dangerous HTML tags
+fn validate_dangerous_html_tags(content: &str) -> std::result::Result<(), McpError> {
     use regex::Regex;
-
-    // Pattern for dangerous HTML tags (more comprehensive than simple string matching)
+    
     static DANGEROUS_TAG_PATTERNS: &[&str] = &[
         r"<\s*script[^>]*>",
         r"<\s*iframe[^>]*>",
@@ -191,37 +178,9 @@ fn validate_html_security(content: &str) -> std::result::Result<(), McpError> {
         r"<\s*dialog[^>]*>",
     ];
 
-    // Pattern for dangerous protocols
-    static DANGEROUS_PROTOCOLS: &[&str] = &[
-        r"javascript\s*:",
-        r"data\s*:",
-        r"vbscript\s*:",
-        r"file\s*:",
-        r"ftp\s*:",
-    ];
-
-    // Pattern for event handlers (more comprehensive)
-    static EVENT_HANDLER_PATTERNS: &[&str] = &[
-        r"on\w+\s*=",
-        r"@\w+\s*=",   // Vue.js style events
-        r"ng-\w+\s*=", // Angular style events
-    ];
-
-    // Pattern for dangerous attributes
-    static DANGEROUS_ATTRIBUTE_PATTERNS: &[&str] = &[
-        r"srcdoc\s*=",
-        r"formaction\s*=",
-        r"action\s*=",
-        r"background\s*=",
-        r"poster\s*=",
-    ];
-
-    let content_lower = content.to_lowercase();
-
-    // Check for dangerous HTML tags
     for pattern in DANGEROUS_TAG_PATTERNS {
         if let Ok(regex) = Regex::new(pattern) {
-            if regex.is_match(&content_lower) {
+            if regex.is_match(content) {
                 return Err(McpError::invalid_params(
                     format!(
                         "Issue content contains potentially dangerous HTML tag matching pattern: '{}'",
@@ -232,11 +191,24 @@ fn validate_html_security(content: &str) -> std::result::Result<(), McpError> {
             }
         }
     }
+    Ok(())
+}
 
-    // Check for dangerous protocols
+/// Validate content against dangerous protocols
+fn validate_dangerous_protocols(content: &str) -> std::result::Result<(), McpError> {
+    use regex::Regex;
+    
+    static DANGEROUS_PROTOCOLS: &[&str] = &[
+        r"javascript\s*:",
+        r"data\s*:",
+        r"vbscript\s*:",
+        r"file\s*:",
+        r"ftp\s*:",
+    ];
+
     for pattern in DANGEROUS_PROTOCOLS {
         if let Ok(regex) = Regex::new(pattern) {
-            if regex.is_match(&content_lower) {
+            if regex.is_match(content) {
                 return Err(McpError::invalid_params(
                     format!(
                         "Issue content contains potentially dangerous protocol: '{}'",
@@ -247,11 +219,22 @@ fn validate_html_security(content: &str) -> std::result::Result<(), McpError> {
             }
         }
     }
+    Ok(())
+}
 
-    // Check for event handlers
+/// Validate content against dangerous event handlers
+fn validate_event_handlers(content: &str) -> std::result::Result<(), McpError> {
+    use regex::Regex;
+    
+    static EVENT_HANDLER_PATTERNS: &[&str] = &[
+        r"on\w+\s*=",
+        r"@\w+\s*=",   // Vue.js style events
+        r"ng-\w+\s*=", // Angular style events
+    ];
+
     for pattern in EVENT_HANDLER_PATTERNS {
         if let Ok(regex) = Regex::new(pattern) {
-            if regex.is_match(&content_lower) {
+            if regex.is_match(content) {
                 return Err(McpError::invalid_params(
                     format!(
                         "Issue content contains potentially dangerous event handler: '{}'",
@@ -262,11 +245,24 @@ fn validate_html_security(content: &str) -> std::result::Result<(), McpError> {
             }
         }
     }
+    Ok(())
+}
 
-    // Check for dangerous attributes
+/// Validate content against dangerous attributes
+fn validate_dangerous_attributes(content: &str) -> std::result::Result<(), McpError> {
+    use regex::Regex;
+    
+    static DANGEROUS_ATTRIBUTE_PATTERNS: &[&str] = &[
+        r"srcdoc\s*=",
+        r"formaction\s*=",
+        r"action\s*=",
+        r"background\s*=",
+        r"poster\s*=",
+    ];
+
     for pattern in DANGEROUS_ATTRIBUTE_PATTERNS {
         if let Ok(regex) = Regex::new(pattern) {
-            if regex.is_match(&content_lower) {
+            if regex.is_match(content) {
                 return Err(McpError::invalid_params(
                     format!(
                         "Issue content contains potentially dangerous attribute: '{}'",
@@ -277,10 +273,29 @@ fn validate_html_security(content: &str) -> std::result::Result<(), McpError> {
             }
         }
     }
+    Ok(())
+}
 
+/// Validate content against potential XSS vectors and dangerous HTML
+/// This provides comprehensive HTML sanitization using regex patterns and context-aware validation
+fn validate_html_security(content: &str) -> std::result::Result<(), McpError> {
+    let content_lower = content.to_lowercase();
+    
+    // Check for dangerous HTML tags
+    validate_dangerous_html_tags(&content_lower)?;
+    
+    // Check for dangerous protocols
+    validate_dangerous_protocols(&content_lower)?;
+    
+    // Check for event handlers
+    validate_event_handlers(&content_lower)?;
+    
+    // Check for dangerous attributes
+    validate_dangerous_attributes(&content_lower)?;
+    
     // Additional validation for encoded content
     validate_encoded_content(&content_lower)?;
-
+    
     Ok(())
 }
 

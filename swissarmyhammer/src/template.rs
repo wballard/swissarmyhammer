@@ -1,4 +1,74 @@
 //! Template engine and rendering functionality
+//!
+//! This module provides the core template engine for SwissArmyHammer, built on top of the
+//! Liquid template language. It handles template parsing, rendering, and custom tag support.
+//!
+//! ## Features
+//!
+//! - **Liquid Template Engine**: Full support for Liquid syntax with variables, conditionals, loops
+//! - **Custom Filters**: Extensible filter system for domain-specific transformations
+//! - **Partial Templates**: Support for template composition with the `{% partial %}` tag
+//! - **Plugin Integration**: Seamless integration with the plugin system for custom functionality
+//!
+//! ## Basic Usage
+//!
+//! ```rust
+//! use swissarmyhammer::template::Template;
+//! use std::collections::HashMap;
+//!
+//! // Create a template
+//! let template = Template::new("Hello {{name}}! You have {{count}} messages.")?;
+//!
+//! // Prepare template variables
+//! let mut variables = HashMap::new();
+//! variables.insert("name".to_string(), "Alice".to_string());
+//! variables.insert("count".to_string(), "5".to_string());
+//!
+//! // Render the template
+//! let result = template.render(&variables)?;
+//! assert_eq!(result, "Hello Alice! You have 5 messages.");
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Advanced Template Features
+//!
+//! ```rust
+//! use swissarmyhammer::template::Template;
+//! use std::collections::HashMap;
+//!
+//! // Template with conditionals and loops
+//! let template_text = r#"
+//! {% if user.is_admin %}
+//!   Admin Dashboard
+//! {% else %}
+//!   User Dashboard
+//! {% endif %}
+//!
+//! Recent items:
+//! {% for item in items %}
+//!   - {{ item.name }} ({{ item.date | date: "%Y-%m-%d" }})
+//! {% endfor %}
+//! "#;
+//!
+//! let template = Template::new(template_text)?;
+//! // ... render with complex data structures
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Custom Filters
+//!
+//! The template engine supports custom filters through the plugin system:
+//!
+//! ```rust
+//! use swissarmyhammer::{template::Template, plugins::PluginRegistry};
+//!
+//! // Register custom filters with the plugin registry
+//! let mut registry = PluginRegistry::new();
+//! // registry.register_filter("capitalize", my_capitalize_filter);
+//!
+//! // Use in templates: {{ text | capitalize }}
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 
 use crate::{plugins::PluginRegistry, PromptLibrary, Result, SwissArmyHammerError};
 use liquid::{Object, Parser};

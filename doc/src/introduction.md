@@ -155,7 +155,7 @@ SwissArmyHammer follows a simple but powerful architecture:
 
 ## Why Choose SwissArmyHammer?
 
-**Proven Architecture**: Built on battle-tested technologies like Rust, Liquid templating, and the MCP protocol.
+**Proven Architecture**: Built on well-tested technologies like Rust, Liquid templating, and the MCP protocol.
 
 **Active Development**: Regular updates, bug fixes, and new features based on community feedback.
 

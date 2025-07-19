@@ -7,6 +7,7 @@ mod exit_codes;
 mod flow;
 mod issue;
 mod list;
+mod logging;
 // prompt_loader module removed - using SDK's PromptResolver directly
 mod prompt;
 mod search;
@@ -17,35 +18,7 @@ mod validate;
 use clap::CommandFactory;
 use cli::{Cli, Commands};
 use exit_codes::{EXIT_ERROR, EXIT_SUCCESS, EXIT_WARNING};
-
-/// A writer guard that flushes on every write for MCP logging
-struct FileWriterGuard {
-    file: std::sync::Arc<std::sync::Mutex<std::fs::File>>,
-}
-
-impl FileWriterGuard {
-    fn new(file: std::sync::Arc<std::sync::Mutex<std::fs::File>>) -> Self {
-        Self { file }
-    }
-}
-
-impl std::io::Write for FileWriterGuard {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let mut file = self.file.lock().unwrap();
-        let result = file.write(buf)?;
-        file.flush()?; // Flush immediately for MCP mode
-        // Ensure data is written to disk immediately
-        file.sync_all()?;
-        Ok(result)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        let mut file = self.file.lock().unwrap();
-        file.flush()?;
-        file.sync_all()?; // Force sync to disk
-        Ok(())
-    }
-}
+use logging::FileWriterGuard;
 
 #[tokio::main]
 async fn main() {
@@ -103,7 +76,7 @@ async fn main() {
                 // Use Arc<Mutex<File>> for thread-safe, unbuffered writing
                 use std::sync::{Arc, Mutex};
                 let shared_file = Arc::new(Mutex::new(file));
-                
+
                 tracing_subscriber::fmt()
                     .with_writer(move || {
                         let file = shared_file.clone();

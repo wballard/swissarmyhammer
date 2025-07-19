@@ -15,10 +15,10 @@ async fn test_mcp_logging_to_current_directory() {
             let _ = std::fs::remove_file(&home_log_file);
         }
     }
-    
+
     let temp_dir = TempDir::new().unwrap();
     let work_dir = temp_dir.path();
-    
+
     // Start MCP server in temp directory with stdin piped (to trigger MCP mode)
     // Use the compiled binary instead of cargo run
     let binary_path = std::env::current_exe()
@@ -28,10 +28,10 @@ async fn test_mcp_logging_to_current_directory() {
         .parent()
         .unwrap()
         .join("swissarmyhammer");
-    
+
     let mut child = Command::new(&binary_path)
         .args(["serve"])
-        .current_dir(work_dir) // Run in the temp directory  
+        .current_dir(work_dir) // Run in the temp directory
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -55,32 +55,40 @@ async fn test_mcp_logging_to_current_directory() {
     // Verify log file was created in current directory
     let expected_log_dir = work_dir.join(".swissarmyhammer");
     let expected_log_file = expected_log_dir.join("mcp.log");
-    
+
     // Logs should be created in .swissarmyhammer directory in current working directory
-    assert!(expected_log_file.exists(), 
-        "Log file should be created at {:?}", expected_log_file);
-    
+    assert!(
+        expected_log_file.exists(),
+        "Log file should be created at {expected_log_file:?}"
+    );
+
     // Verify logs contain MCP server startup messages
     let log_content = std::fs::read_to_string(&expected_log_file).unwrap();
-    assert!(log_content.contains("MCP server"), 
-        "Log should contain MCP server messages");
-    
+    assert!(
+        log_content.contains("MCP server"),
+        "Log should contain MCP server messages"
+    );
+
     // Verify no logs in home directory
     if let Some(home_dir) = dirs::home_dir() {
         let home_log_file = home_dir.join(".swissarmyhammer").join("mcp.log");
-        assert!(!home_log_file.exists() || 
-                std::fs::read_to_string(&home_log_file).unwrap_or_default().is_empty(),
-            "Home directory should not contain MCP logs");
+        assert!(
+            !home_log_file.exists()
+                || std::fs::read_to_string(&home_log_file)
+                    .unwrap_or_default()
+                    .is_empty(),
+            "Home directory should not contain MCP logs"
+        );
     }
 }
 
 /// Test that SWISSARMYHAMMER_LOG_FILE environment variable overrides log filename
-#[tokio::test] 
+#[tokio::test]
 async fn test_mcp_logging_env_var_override() {
     let temp_dir = TempDir::new().unwrap();
     let work_dir = temp_dir.path();
     let custom_log_name = "custom-test.log";
-    
+
     // Start MCP server with custom log file name
     // Use the compiled binary instead of cargo run
     let binary_path = std::env::current_exe()
@@ -90,7 +98,7 @@ async fn test_mcp_logging_env_var_override() {
         .parent()
         .unwrap()
         .join("swissarmyhammer");
-        
+
     let child = Command::new(&binary_path)
         .args(["serve"])
         .current_dir(work_dir)
@@ -109,14 +117,18 @@ async fn test_mcp_logging_env_var_override() {
     // Verify custom log file was created
     let expected_log_dir = work_dir.join(".swissarmyhammer");
     let expected_log_file = expected_log_dir.join(custom_log_name);
-    
-    assert!(expected_log_file.exists(), 
-        "Custom log file should be created at {:?}", expected_log_file);
-    
+
+    assert!(
+        expected_log_file.exists(),
+        "Custom log file should be created at {expected_log_file:?}"
+    );
+
     // Verify default log file was NOT created
     let default_log_file = expected_log_dir.join("mcp.log");
-    assert!(!default_log_file.exists(), 
-        "Default log file should not exist when custom name is used");
+    assert!(
+        !default_log_file.exists(),
+        "Default log file should not exist when custom name is used"
+    );
 }
 
 /// Test that log directory is created if it doesn't exist
@@ -124,11 +136,14 @@ async fn test_mcp_logging_env_var_override() {
 async fn test_mcp_logging_creates_directory() {
     let temp_dir = TempDir::new().unwrap();
     let work_dir = temp_dir.path();
-    
+
     // Ensure .swissarmyhammer directory doesn't exist initially
     let log_dir = work_dir.join(".swissarmyhammer");
-    assert!(!log_dir.exists(), "Log directory should not exist initially");
-    
+    assert!(
+        !log_dir.exists(),
+        "Log directory should not exist initially"
+    );
+
     // Start MCP server
     // Use the compiled binary instead of cargo run
     let binary_path = std::env::current_exe()
@@ -138,7 +153,7 @@ async fn test_mcp_logging_creates_directory() {
         .parent()
         .unwrap()
         .join("swissarmyhammer");
-        
+
     let child = Command::new(&binary_path)
         .args(["serve"])
         .current_dir(work_dir)
@@ -156,7 +171,7 @@ async fn test_mcp_logging_creates_directory() {
     // Verify directory was created
     assert!(log_dir.exists(), "Log directory should be created");
     assert!(log_dir.is_dir(), "Log directory should be a directory");
-    
+
     // Verify log file was created
     let log_file = log_dir.join("mcp.log");
     assert!(log_file.exists(), "Log file should be created");

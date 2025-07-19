@@ -33,7 +33,7 @@
 //! println!("Found {} issues", issues.len());
 //!
 //! // Mark as complete
-//! let completed = storage.mark_complete(issue.number).await?;
+//! let completed = storage.mark_complete(issue.number.into()).await?;
 //! println!("Issue completed and moved to: {}", completed.file_path.display());
 //! # Ok(())
 //! # }
@@ -57,10 +57,10 @@
 //!
 //! // 3. Work on the issue...
 //! // 4. Update issue with progress
-//! let updated = storage.update_issue(issue.number, "# New Feature\n\nDescription\n\n## Progress\n\nCompleted basic structure".to_string()).await?;
+//! let updated = storage.update_issue(issue.number.into(), "# New Feature\n\nDescription\n\n## Progress\n\nCompleted basic structure".to_string()).await?;
 //!
 //! // 5. Mark complete
-//! let completed = storage.mark_complete(issue.number).await?;
+//! let completed = storage.mark_complete(issue.number.into()).await?;
 //!
 //! // 6. Merge branch
 //! git_ops.merge_issue_branch(&format!("{:06}_{}", issue.number, issue.name))?;

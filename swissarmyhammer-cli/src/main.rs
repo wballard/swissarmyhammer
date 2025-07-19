@@ -18,6 +18,35 @@ use clap::CommandFactory;
 use cli::{Cli, Commands};
 use exit_codes::{EXIT_ERROR, EXIT_SUCCESS, EXIT_WARNING};
 
+/// A writer guard that flushes on every write for MCP logging
+struct FileWriterGuard {
+    file: std::sync::Arc<std::sync::Mutex<std::fs::File>>,
+}
+
+impl FileWriterGuard {
+    fn new(file: std::sync::Arc<std::sync::Mutex<std::fs::File>>) -> Self {
+        Self { file }
+    }
+}
+
+impl std::io::Write for FileWriterGuard {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let mut file = self.file.lock().unwrap();
+        let result = file.write(buf)?;
+        file.flush()?; // Flush immediately for MCP mode
+        // Ensure data is written to disk immediately
+        file.sync_all()?;
+        Ok(result)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        let mut file = self.file.lock().unwrap();
+        file.flush()?;
+        file.sync_all()?; // Force sync to disk
+        Ok(())
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse_args();
@@ -53,11 +82,7 @@ async fn main() {
         use std::fs;
         use std::path::PathBuf;
 
-        let log_dir = if let Some(home) = dirs::home_dir() {
-            home.join(".swissarmyhammer")
-        } else {
-            PathBuf::from(".swissarmyhammer")
-        };
+        let log_dir = PathBuf::from(".swissarmyhammer");
 
         // Ensure the directory exists
         if let Err(e) = fs::create_dir_all(&log_dir) {
@@ -68,15 +93,22 @@ async fn main() {
             std::env::var("SWISSARMYHAMMER_LOG_FILE").unwrap_or_else(|_| "mcp.log".to_string());
         let log_file = log_dir.join(log_filename);
 
-        // Try to open the log file
+        // Try to open the log file - use unbuffered writing for immediate flushing
         match std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&log_file)
         {
             Ok(file) => {
+                // Use Arc<Mutex<File>> for thread-safe, unbuffered writing
+                use std::sync::{Arc, Mutex};
+                let shared_file = Arc::new(Mutex::new(file));
+                
                 tracing_subscriber::fmt()
-                    .with_writer(file)
+                    .with_writer(move || {
+                        let file = shared_file.clone();
+                        Box::new(FileWriterGuard::new(file)) as Box<dyn std::io::Write>
+                    })
                     .with_max_level(log_level)
                     .with_ansi(false) // No color codes in file
                     .init();
@@ -135,6 +167,12 @@ async fn main() {
             unreachable!()
         }
     };
+
+    // Ensure all logs are flushed before process exit
+    if is_mcp_mode {
+        // Give tracing sufficient time to flush any pending logs
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
 
     process::exit(exit_code);
 }

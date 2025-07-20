@@ -1723,8 +1723,8 @@ mod tests {
         assert_eq!(sorted_issues[0].name, "valid");
 
         // The other 3 should be non-numbered with virtual numbers >= virtual_base
-        for i in 1..4 {
-            assert!(sorted_issues[i].number.value() >= Config::global().virtual_issue_number_base);
+        for issue in sorted_issues.iter().take(4).skip(1) {
+            assert!(issue.number.value() >= Config::global().virtual_issue_number_base);
         }
     }
 
@@ -2299,7 +2299,7 @@ mod tests {
         let config = Config::global();
 
         // Test the virtual number calculation directly
-        let test_filenames = vec![
+        let test_filenames = [
             "", // Edge case - empty (should be handled elsewhere)
             "a", // Single character
             "very_long_filename_that_might_cause_issues_with_hashing_and_boundary_calculations_test",
@@ -2354,8 +2354,7 @@ mod tests {
         // This should actually work - filename is "..." which is non-empty
         assert!(
             result.is_ok(),
-            "Filename with dots should parse as non-numbered: {:?}",
-            result
+            "Filename with dots should parse as non-numbered: {result:?}"
         );
         if let Ok(issue) = result {
             assert_eq!(issue.name, "...");
@@ -2410,7 +2409,7 @@ mod tests {
 
         // Test file with invalid UTF-8 in content (might fail content reading)
         let utf8_path = issues_dir.join("utf8_test.md");
-        std::fs::write(&utf8_path, &[0xFF, 0xFE, 0xFD, 0xFC]).unwrap(); // Invalid UTF-8
+        std::fs::write(&utf8_path, [0xFF, 0xFE, 0xFD, 0xFC]).unwrap(); // Invalid UTF-8
         let result = storage.parse_issue_from_file(&utf8_path);
         // Invalid UTF-8 content might cause parsing to fail, which is expected behavior
         match result {
@@ -2418,11 +2417,7 @@ mod tests {
                 // If it succeeds, the system handled invalid UTF-8 gracefully
             }
             Err(_) => {
-                // If it fails, that's expected due to invalid UTF-8 content
-                assert!(
-                    true,
-                    "Invalid UTF-8 content caused parsing to fail, which is acceptable"
-                );
+                // If it fails, that's expected due to invalid UTF-8 content - this is acceptable
             }
         }
     }
@@ -3136,9 +3131,7 @@ mod tests {
             // Verify each filename gets a unique virtual number (no collisions in this small set)
             assert!(
                 virtual_numbers.insert(virtual_number),
-                "Collision detected: filename '{}' got virtual number {} which was already used",
-                filename,
-                virtual_number
+                "Collision detected: filename '{filename}' got virtual number {virtual_number} which was already used"
             );
 
             // Verify virtual numbers are in valid range
@@ -3178,13 +3171,11 @@ mod tests {
 
             assert_eq!(
                 first_call, second_call,
-                "Virtual number generation is not deterministic for filename '{}'",
-                filename
+                "Virtual number generation is not deterministic for filename '{filename}'"
             );
             assert_eq!(
                 second_call, third_call,
-                "Virtual number generation is not deterministic for filename '{}'",
-                filename
+                "Virtual number generation is not deterministic for filename '{filename}'"
             );
         }
     }
@@ -3215,8 +3206,7 @@ mod tests {
         for i in 1..numbers.len() {
             assert!(
                 numbers[i - 1] <= numbers[i],
-                "Issues not properly sorted: {:?}",
-                numbers
+                "Issues not properly sorted: {numbers:?}"
             );
         }
 
@@ -3242,8 +3232,7 @@ mod tests {
         for virtual_num in virtual_numbers {
             assert!(
                 virtual_num < config.virtual_issue_number_base + config.virtual_issue_number_range,
-                "Virtual number {} outside expected range",
-                virtual_num
+                "Virtual number {virtual_num} outside expected range"
             );
         }
     }

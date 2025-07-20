@@ -56,10 +56,7 @@ async fn debug_issue_completion_detection() {
     let completed_count = all_issues.iter().filter(|i| i.completed).count();
     let active_count = all_issues.iter().filter(|i| !i.completed).count();
 
-    println!(
-        "Completed count: {}, Active count: {}",
-        completed_count, active_count
-    );
+    println!("Completed count: {completed_count}, Active count: {active_count}");
 
     // We should have 1 completed (direct in complete dir) and 1 active (regular issue)
     assert_eq!(completed_count, 1, "Should have exactly 1 completed issue");

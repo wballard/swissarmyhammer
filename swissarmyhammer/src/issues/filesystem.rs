@@ -2417,7 +2417,7 @@ mod tests {
                 // If it succeeds, the system handled invalid UTF-8 gracefully
             }
             Err(_) => {
-                // If it fails, that's expected due to invalid UTF-8 content - this is acceptable
+                // If it fails, that's expected due to invalid UTF-8 content
             }
         }
     }

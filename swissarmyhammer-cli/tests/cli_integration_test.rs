@@ -1381,3 +1381,75 @@ fn test_root_validate_special_chars_in_paths() -> Result<()> {
 
     Ok(())
 }
+
+/// Test CLI issue creation with optional names
+#[test]
+fn test_issue_create_with_optional_names() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let issues_dir = temp_dir.path().join("issues");
+
+    // Test creating a named issue
+    let output = Command::cargo_bin("swissarmyhammer")
+        .unwrap()
+        .args([
+            "issue",
+            "create",
+            "test_issue",
+            "--content",
+            "This is a test issue with a name",
+        ])
+        .current_dir(&temp_dir)
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "named issue creation should succeed: stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Created issue"),
+        "should show creation confirmation"
+    );
+    assert!(stdout.contains("test_issue"), "should show the issue name");
+
+    // Test creating a nameless issue (empty content allowed now)
+    let output = Command::cargo_bin("swissarmyhammer")
+        .unwrap()
+        .args(["issue", "create"])
+        .current_dir(&temp_dir)
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "nameless issue creation should succeed: stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Created issue"),
+        "should show creation confirmation for nameless issue"
+    );
+
+    // Test creating a nameless issue with content
+    let output = Command::cargo_bin("swissarmyhammer")
+        .unwrap()
+        .args([
+            "issue",
+            "create",
+            "--content",
+            "This is a nameless issue with content",
+        ])
+        .current_dir(&temp_dir)
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "nameless issue with content should succeed: stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    Ok(())
+}

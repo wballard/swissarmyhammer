@@ -4,6 +4,8 @@ use std::io::{self, Read};
 use swissarmyhammer::git::GitOperations;
 use swissarmyhammer::issues::{FileSystemIssueStorage, IssueStorage};
 
+const NAMELESS_ISSUE_NAME: &str = "";
+
 fn format_issue_status(completed: bool) -> colored::ColoredString {
     if completed {
         "✅ Completed".green()
@@ -75,7 +77,7 @@ async fn create_issue(
     let content = get_content_from_args(content, file)?;
 
     // Use empty string for nameless issues (matches MCP behavior)
-    let issue_name = name.unwrap_or_default();
+    let issue_name = name.unwrap_or(NAMELESS_ISSUE_NAME.to_string());
     let issue = storage.create_issue(issue_name, content).await?;
 
     println!(
@@ -310,7 +312,12 @@ async fn work_issue(
     }
 
     let git_ops = GitOperations::new()?;
-    let branch_identifier = format!("{:06}_{}", issue.number, issue.name);
+    // Use a descriptive fallback for nameless issues
+    let branch_identifier = if issue.name.is_empty() {
+        format!("{:06}", issue.number) // Just the number for nameless issues
+    } else {
+        format!("{:06}_{}", issue.number, issue.name)
+    };
     let branch_name = git_ops.create_work_branch(&branch_identifier)?;
 
     println!(
@@ -468,6 +475,6 @@ fn get_content_from_args(
         }
         (None, Some(file)) => Ok(std::fs::read_to_string(file)?),
         (Some(_), Some(_)) => Err("Cannot specify both --content and --file".into()),
-        (None, None) => Err("Must specify either --content or --file".into()),
+        (None, None) => Ok(String::new()), // Allow empty issues that can be edited later
     }
 }

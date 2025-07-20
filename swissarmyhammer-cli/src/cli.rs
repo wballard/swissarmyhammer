@@ -245,7 +245,7 @@ Manage issues with comprehensive CLI commands for creating, updating, and tracki
 Issues are stored as markdown files in the ./issues directory with automatic numbering.
 
 Basic usage:
-  swissarmyhammer issue create <name>           # Create new issue
+  swissarmyhammer issue create [name]           # Create new issue
   swissarmyhammer issue list                    # List all issues
   swissarmyhammer issue show <number>           # Show issue details
   swissarmyhammer issue update <number>         # Update issue content
@@ -257,6 +257,7 @@ Basic usage:
 
 Examples:
   swissarmyhammer issue create \"Bug fix\" --content \"Fix login issue\"
+  swissarmyhammer issue create --content \"Quick fix needed\"
   swissarmyhammer issue list --format json --active
   swissarmyhammer issue show 123 --raw
   swissarmyhammer issue update 123 --content \"Updated description\" --append
@@ -641,8 +642,8 @@ for better discoverability and clearer intent.
 pub enum IssueCommands {
     /// Create a new issue
     Create {
-        /// Issue name
-        name: String,
+        /// Issue name (optional)
+        name: Option<String>,
         /// Issue content (use - for stdin)
         #[arg(short, long)]
         content: Option<String>,
@@ -1384,5 +1385,122 @@ mod tests {
         assert!(cli.debug);
         assert!(cli.verbose);
         assert!(!cli.quiet);
+    }
+
+    #[test]
+    fn test_issue_create_with_name() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer",
+            "issue",
+            "create",
+            "bug_fix",
+            "--content",
+            "Fix login bug",
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Issue { subcommand }) = cli.command {
+            if let IssueCommands::Create {
+                name,
+                content,
+                file,
+            } = subcommand
+            {
+                assert_eq!(name, Some("bug_fix".to_string()));
+                assert_eq!(content, Some("Fix login bug".to_string()));
+                assert_eq!(file, None);
+            } else {
+                panic!("Expected Create subcommand");
+            }
+        } else {
+            panic!("Expected Issue command");
+        }
+    }
+
+    #[test]
+    fn test_issue_create_without_name() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer",
+            "issue",
+            "create",
+            "--content",
+            "Quick fix needed",
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Issue { subcommand }) = cli.command {
+            if let IssueCommands::Create {
+                name,
+                content,
+                file,
+            } = subcommand
+            {
+                assert_eq!(name, None);
+                assert_eq!(content, Some("Quick fix needed".to_string()));
+                assert_eq!(file, None);
+            } else {
+                panic!("Expected Create subcommand");
+            }
+        } else {
+            panic!("Expected Issue command");
+        }
+    }
+
+    #[test]
+    fn test_issue_create_with_file() {
+        let result =
+            Cli::try_parse_from_args(["swissarmyhammer", "issue", "create", "--file", "issue.md"]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Issue { subcommand }) = cli.command {
+            if let IssueCommands::Create {
+                name,
+                content,
+                file,
+            } = subcommand
+            {
+                assert_eq!(name, None);
+                assert_eq!(content, None);
+                assert_eq!(file, Some(std::path::PathBuf::from("issue.md")));
+            } else {
+                panic!("Expected Create subcommand");
+            }
+        } else {
+            panic!("Expected Issue command");
+        }
+    }
+
+    #[test]
+    fn test_issue_create_named_with_file() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer",
+            "issue",
+            "create",
+            "feature_name",
+            "--file",
+            "feature.md",
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Issue { subcommand }) = cli.command {
+            if let IssueCommands::Create {
+                name,
+                content,
+                file,
+            } = subcommand
+            {
+                assert_eq!(name, Some("feature_name".to_string()));
+                assert_eq!(content, None);
+                assert_eq!(file, Some(std::path::PathBuf::from("feature.md")));
+            } else {
+                panic!("Expected Create subcommand");
+            }
+        } else {
+            panic!("Expected Issue command");
+        }
     }
 }

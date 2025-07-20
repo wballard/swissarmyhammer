@@ -214,7 +214,7 @@ impl FileSystemIssueStorage {
                 // For non-numbered files, generate a virtual number based on filename hash
                 // This ensures consistent ordering while keeping non-numbered files separate
                 // from numbered ones. Use a high base (500,000) to avoid conflicts.
-                
+
                 self.generate_virtual_number_with_collision_resistance(filename)
             }
         };
@@ -248,13 +248,13 @@ impl FileSystemIssueStorage {
     }
 
     /// Generate a virtual number for non-numbered files with collision resistance
-    /// 
+    ///
     /// Uses multiple hash functions and deterministic probing to reduce collision
     /// probability while maintaining deterministic behavior (same filename always
     /// gets the same virtual number).
     ///
     /// # Arguments
-    /// 
+    ///
     /// * `filename` - The filename to generate a virtual number for
     ///
     /// # Returns
@@ -266,35 +266,35 @@ impl FileSystemIssueStorage {
         use std::hash::{Hash, Hasher};
 
         let config = Config::global();
-        
+
         // Use multiple hash seeds for better distribution
         let hash_seeds = [0u64, 1099511627776u64, 2199023255552u64]; // Powers of 2 spread apart
-        
+
         let mut best_hash = 0u64;
-        
+
         // Combine multiple hash functions for better distribution
         for seed in hash_seeds {
             let mut hasher = DefaultHasher::new();
             seed.hash(&mut hasher);
             filename.hash(&mut hasher);
             let hash = hasher.finish();
-            
+
             // XOR combine the hashes for better distribution
             best_hash ^= hash;
         }
-        
+
         // Use additional entropy from filename characteristics
         let char_sum: u32 = filename.chars().map(|c| c as u32).sum();
         let length_factor = filename.len() as u64;
-        
+
         // Combine all entropy sources
         let combined_hash = best_hash
             .wrapping_add(char_sum as u64 * 31)
             .wrapping_add(length_factor * 17);
-        
+
         // Map to virtual number range with better distribution
         let virtual_offset = (combined_hash % config.virtual_issue_number_range as u64) as u32;
-        
+
         config.virtual_issue_number_base + virtual_offset
     }
 
@@ -2314,7 +2314,8 @@ mod tests {
         for filename in test_filenames.iter().filter(|f| !f.is_empty()) {
             // Create a temporary storage instance to test the new algorithm
             let storage = FileSystemIssueStorage::new(PathBuf::from("/tmp")).unwrap();
-            let virtual_number = storage.generate_virtual_number_with_collision_resistance(filename);
+            let virtual_number =
+                storage.generate_virtual_number_with_collision_resistance(filename);
 
             // Verify virtual number is within expected bounds
             assert!(
@@ -3120,26 +3121,18 @@ mod tests {
     fn test_virtual_number_collision_resistance() {
         // Test that the improved virtual number generation has better collision resistance
         let storage = FileSystemIssueStorage::new(PathBuf::from("/tmp")).unwrap();
-        
+
         // Create a set of filenames that would likely collide with simple hash % range
         let test_filenames = vec![
-            "readme",
-            "README", 
-            "notes",
-            "NOTES",
-            "todo", 
-            "TODO",
-            "doc",
-            "DOC",
-            "test",
-            "TEST",
+            "readme", "README", "notes", "NOTES", "todo", "TODO", "doc", "DOC", "test", "TEST",
         ];
-        
+
         let mut virtual_numbers = std::collections::HashSet::new();
-        
+
         for filename in test_filenames {
-            let virtual_number = storage.generate_virtual_number_with_collision_resistance(filename);
-            
+            let virtual_number =
+                storage.generate_virtual_number_with_collision_resistance(filename);
+
             // Verify each filename gets a unique virtual number (no collisions in this small set)
             assert!(
                 virtual_numbers.insert(virtual_number),
@@ -3147,7 +3140,7 @@ mod tests {
                 filename,
                 virtual_number
             );
-            
+
             // Verify virtual numbers are in valid range
             let config = Config::global();
             assert!(
@@ -3157,7 +3150,8 @@ mod tests {
                 config.virtual_issue_number_base
             );
             assert!(
-                virtual_number < config.virtual_issue_number_base + config.virtual_issue_number_range,
+                virtual_number
+                    < config.virtual_issue_number_base + config.virtual_issue_number_range,
                 "Virtual number {} is above max {}",
                 virtual_number,
                 config.virtual_issue_number_base + config.virtual_issue_number_range
@@ -3169,19 +3163,19 @@ mod tests {
     fn test_virtual_number_deterministic() {
         // Test that virtual number generation is deterministic - same filename always gets same number
         let storage = FileSystemIssueStorage::new(PathBuf::from("/tmp")).unwrap();
-        
+
         let test_filenames = vec![
             "consistent_test",
             "another_file",
             "special-chars_123",
             "unicode_文件名",
         ];
-        
+
         for filename in test_filenames {
             let first_call = storage.generate_virtual_number_with_collision_resistance(filename);
             let second_call = storage.generate_virtual_number_with_collision_resistance(filename);
             let third_call = storage.generate_virtual_number_with_collision_resistance(filename);
-            
+
             assert_eq!(
                 first_call, second_call,
                 "Virtual number generation is not deterministic for filename '{}'",
@@ -3201,49 +3195,54 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let issues_dir = temp_dir.path().to_path_buf();
         let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
-        
+
         // Create a mix of numbered and non-numbered files
         std::fs::write(issues_dir.join("000005_numbered.md"), "Numbered issue 5").unwrap();
         std::fs::write(issues_dir.join("000010_another.md"), "Numbered issue 10").unwrap();
         std::fs::write(issues_dir.join("readme.md"), "Non-numbered readme").unwrap();
         std::fs::write(issues_dir.join("notes.md"), "Non-numbered notes").unwrap();
         std::fs::write(issues_dir.join("000001_first.md"), "First numbered issue").unwrap();
-        
+
         let all_issues = storage.list_issues().await.unwrap();
-        
+
         // Verify we got all 5 files
         assert_eq!(all_issues.len(), 5);
-        
+
         // Verify issues are sorted by number (numbered issues first, then virtual numbers)
         let numbers: Vec<u32> = all_issues.iter().map(|i| i.number.value()).collect();
-        
+
         // Check that the sequence is monotonically increasing
         for i in 1..numbers.len() {
             assert!(
-                numbers[i-1] <= numbers[i],
+                numbers[i - 1] <= numbers[i],
                 "Issues not properly sorted: {:?}",
                 numbers
             );
         }
-        
+
         // Verify numbered issues (1, 5, 10) come before virtual numbers (500,000+)
         let config = Config::global();
-        let first_numbered_count = numbers.iter()
+        let first_numbered_count = numbers
+            .iter()
             .take_while(|&n| *n < config.virtual_issue_number_base)
             .count();
-        assert_eq!(first_numbered_count, 3, "Should have 3 numbered issues before virtual numbers");
-        
+        assert_eq!(
+            first_numbered_count, 3,
+            "Should have 3 numbered issues before virtual numbers"
+        );
+
         // Verify virtual numbers are in correct range
-        let virtual_numbers: Vec<u32> = numbers.iter()
+        let virtual_numbers: Vec<u32> = numbers
+            .iter()
             .filter(|&n| *n >= config.virtual_issue_number_base)
             .cloned()
             .collect();
         assert_eq!(virtual_numbers.len(), 2, "Should have 2 virtual numbers");
-        
+
         for virtual_num in virtual_numbers {
             assert!(
                 virtual_num < config.virtual_issue_number_base + config.virtual_issue_number_range,
-                "Virtual number {} outside expected range", 
+                "Virtual number {} outside expected range",
                 virtual_num
             );
         }
@@ -3255,7 +3254,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let issues_dir = temp_dir.path().to_path_buf();
         let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
-        
+
         // Test various edge case filenames
         let edge_cases = vec![
             ("a.md", "Single character"),
@@ -3267,16 +3266,16 @@ mod tests {
             ("file-with-hyphens.md", "Hyphens"),
             ("file_with_underscores.md", "Underscores"),
         ];
-        
+
         for (filename, content) in edge_cases {
             std::fs::write(issues_dir.join(filename), content).unwrap();
         }
-        
+
         let all_issues = storage.list_issues().await.unwrap();
-        
+
         // All files should be parsed successfully
         assert_eq!(all_issues.len(), 8, "All edge case files should be parsed");
-        
+
         // All should have virtual numbers in correct range
         let config = Config::global();
         for issue in all_issues {
@@ -3288,7 +3287,8 @@ mod tests {
                 config.virtual_issue_number_base
             );
             assert!(
-                issue.number.value() < config.virtual_issue_number_base + config.virtual_issue_number_range,
+                issue.number.value()
+                    < config.virtual_issue_number_base + config.virtual_issue_number_range,
                 "Issue '{}' has virtual number {} above max range",
                 issue.name,
                 issue.number.value()

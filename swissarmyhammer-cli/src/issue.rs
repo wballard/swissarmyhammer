@@ -68,13 +68,15 @@ pub async fn handle_issue_command(
 
 async fn create_issue(
     storage: FileSystemIssueStorage,
-    name: String,
+    name: Option<String>,
     content: Option<String>,
     file: Option<std::path::PathBuf>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = get_content_from_args(content, file)?;
 
-    let issue = storage.create_issue(name, content).await?;
+    // Use empty string for nameless issues (matches MCP behavior)
+    let issue_name = name.unwrap_or_default();
+    let issue = storage.create_issue(issue_name, content).await?;
 
     println!(
         "{} Created issue #{:06} - {}",

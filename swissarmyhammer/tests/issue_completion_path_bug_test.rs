@@ -131,7 +131,7 @@ async fn test_path_completion_detection_precision() {
     for (path, _expected_completed) in scenarios {
         let full_path = issues_dir.join(path);
         fs::create_dir_all(full_path.parent().unwrap()).unwrap();
-        fs::write(&full_path, format!("# Issue\n\nTest issue in {}", path)).unwrap();
+        fs::write(&full_path, format!("# Issue\n\nTest issue in {path}")).unwrap();
     }
 
     // List all issues and verify completion detection

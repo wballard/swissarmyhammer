@@ -40,7 +40,7 @@ async fn test_precise_completion_detection() {
             .write()
             .await
             .create_issue(
-                format!("{}_active", test_name),
+                format!("{test_name}_active"),
                 "This is an active issue".to_string(),
             )
             .await
@@ -51,17 +51,17 @@ async fn test_precise_completion_detection() {
         fs::create_dir_all(&complete_dir).unwrap();
 
         // Create a properly completed issue
-        let completed_issue_file = complete_dir.join(format!("000099_{}_completed.md", test_name));
+        let completed_issue_file = complete_dir.join(format!("000099_{test_name}_completed.md"));
         fs::write(
             &completed_issue_file,
-            format!("# Completed {}\n\nThis is completed", test_name),
+            format!("# Completed {test_name}\n\nThis is completed"),
         )
         .unwrap();
 
         // List issues and analyze completion detection
         let all_issues = issue_storage.read().await.list_issues().await.unwrap();
 
-        println!("\n=== Test: {} (directory: {}) ===", test_name, dir_name);
+        println!("\n=== Test: {test_name} (directory: {dir_name}) ===");
         for issue in &all_issues {
             let issue_num: u32 = issue.number.into();
             println!(
@@ -77,20 +77,18 @@ async fn test_precise_completion_detection() {
         let completed_count = all_issues.iter().filter(|i| i.completed).count();
         let active_count = all_issues.iter().filter(|i| !i.completed).count();
 
-        println!("  Completed: {}, Active: {}", completed_count, active_count);
+        println!("  Completed: {completed_count}, Active: {active_count}");
 
         // Verify correct detection regardless of directory name containing "complete"
         // The key insight: completion should be based on immediate parent directory name,
         // not whether "complete" appears anywhere in the path
         assert_eq!(
             completed_count, 1,
-            "Should have exactly 1 completed issue for test {}",
-            test_name
+            "Should have exactly 1 completed issue for test {test_name}"
         );
         assert_eq!(
             active_count, 1,
-            "Should have exactly 1 active issue for test {}",
-            test_name
+            "Should have exactly 1 active issue for test {test_name}"
         );
 
         // Verify specific issues have correct completion status
@@ -105,13 +103,11 @@ async fn test_precise_completion_detection() {
 
         assert!(
             !active.completed,
-            "Active issue should not be completed for test {}",
-            test_name
+            "Active issue should not be completed for test {test_name}"
         );
         assert!(
             completed.completed,
-            "Issue in 'complete' directory should be completed for test {}",
-            test_name
+            "Issue in 'complete' directory should be completed for test {test_name}"
         );
 
         // Test all_complete functionality
@@ -126,24 +122,21 @@ async fn test_precise_completion_detection() {
             // Should show active issues (not all complete) for all scenarios
             assert!(
                 text.text.contains("⏳ Project has active issues"),
-                "Should show active issues for test {}",
-                test_name
+                "Should show active issues for test {test_name}"
             );
             assert!(
                 text.text.contains("Active: 1"),
-                "Should show 1 active issue for test {}",
-                test_name
+                "Should show 1 active issue for test {test_name}"
             );
             assert!(
                 text.text.contains("Completed: 1"),
-                "Should show 1 completed issue for test {}",
-                test_name
+                "Should show 1 completed issue for test {test_name}"
             );
         } else {
-            panic!("Expected text response for test {}", test_name);
+            panic!("Expected text response for test {test_name}");
         }
 
-        println!("  ✅ Test {} passed", test_name);
+        println!("  ✅ Test {test_name} passed");
     }
 
     println!("\n🎉 All path completion precision tests passed!");

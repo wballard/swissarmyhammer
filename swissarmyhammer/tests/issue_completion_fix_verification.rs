@@ -81,7 +81,7 @@ async fn test_completion_detection_fix() {
     let completed_count = all_issues.iter().filter(|i| i.completed).count();
     let active_count = all_issues.iter().filter(|i| !i.completed).count();
 
-    println!("Completed: {}, Active: {}", completed_count, active_count);
+    println!("Completed: {completed_count}, Active: {active_count}");
 
     // We should have:
     // - 1 completed issue (issue1 that we explicitly completed)

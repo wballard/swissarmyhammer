@@ -163,15 +163,15 @@ mod tests {
 
         // Test with missing environment variable
         env::remove_var(key);
-        assert_eq!(load_env_validated(key, default, &validator), default);
+        assert_eq!(load_env_validated(key, default, validator), default);
 
         // Test with valid value
         env::set_var(key, "50");
-        assert_eq!(load_env_validated(key, default, &validator), 50);
+        assert_eq!(load_env_validated(key, default, validator), 50);
 
         // Test with invalid value (out of range)
         env::set_var(key, "150");
-        assert_eq!(load_env_validated(key, default, &validator), default);
+        assert_eq!(load_env_validated(key, default, validator), default);
 
         // Clean up
         env::remove_var(key);
@@ -218,15 +218,15 @@ mod tests {
         env::remove_var(key);
 
         // Test with missing var (should use default)
-        assert_eq!(loader.load_validated("VALIDATED", 5u32, &validator), 5);
+        assert_eq!(loader.load_validated("VALIDATED", 5u32, validator), 5);
 
         // Test with valid value
         env::set_var(key, "7");
-        assert_eq!(loader.load_validated("VALIDATED", 5u32, &validator), 7);
+        assert_eq!(loader.load_validated("VALIDATED", 5u32, validator), 7);
 
         // Test with invalid value (should use default)
         env::set_var(key, "15");
-        assert_eq!(loader.load_validated("VALIDATED", 5u32, &validator), 5);
+        assert_eq!(loader.load_validated("VALIDATED", 5u32, validator), 5);
 
         // Clean up
         env::remove_var(key);

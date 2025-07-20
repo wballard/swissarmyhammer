@@ -4048,7 +4048,7 @@ mod tests {
             // Verify the filename is in the nameless format (e.g., "000123.md")
             // and not the named format (e.g., "000123_unnamed.md")
             assert!(
-                text.text.contains(&format!("{}.md", issue_number_str)),
+                text.text.contains(&format!("{issue_number_str}.md")),
                 "Nameless issue should create filename like 000123.md, got: {}",
                 text.text
             );

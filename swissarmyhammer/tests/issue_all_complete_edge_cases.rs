@@ -180,7 +180,7 @@ async fn test_concurrent_file_operations() {
                 let _create_result = storage_clone
                     .write()
                     .await
-                    .create_issue(format!("concurrent_issue_{}", i), "Content".to_string())
+                    .create_issue(format!("concurrent_issue_{i}"), "Content".to_string())
                     .await;
                 tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
             }

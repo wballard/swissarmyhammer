@@ -1386,7 +1386,6 @@ fn test_root_validate_special_chars_in_paths() -> Result<()> {
 #[test]
 fn test_issue_create_with_optional_names() -> Result<()> {
     let temp_dir = TempDir::new()?;
-    let issues_dir = temp_dir.path().join("issues");
 
     // Test creating a named issue
     let output = Command::cargo_bin("swissarmyhammer")

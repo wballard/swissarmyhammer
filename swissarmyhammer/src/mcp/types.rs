@@ -142,9 +142,29 @@ pub struct ListPromptsRequest {
 }
 
 /// Request to create a new issue
+///
+/// # Examples
+///
+/// Create a named issue (will create file like `000123_feature_name.md`):
+/// ```ignore
+/// CreateIssueRequest {
+///     name: Some(IssueName("feature_name".to_string())),
+///     content: "# Implement new feature\n\nDetails...".to_string(),
+/// }
+/// ```
+///
+/// Create a nameless issue (will create file like `000123.md`):
+/// ```ignore
+/// CreateIssueRequest {
+///     name: None,
+///     content: "# Quick fix needed\n\nDetails...".to_string(),
+/// }
+/// ```
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct CreateIssueRequest {
     /// Name of the issue (will be used in filename) - optional
+    /// When `Some(name)`, creates files like `000123_name.md`
+    /// When `None`, creates files like `000123.md`
     pub name: Option<IssueName>,
     /// Markdown content of the issue
     pub content: String,

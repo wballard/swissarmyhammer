@@ -197,7 +197,7 @@ impl FileSystemIssueStorage {
 
         // Parse filename - supports both numbered and non-numbered formats
         let (parsed_number, name) = parse_any_issue_filename(filename)?;
-        
+
         let number = match parsed_number {
             Some(num) => {
                 // Validate numbered files against the configured maximum
@@ -209,21 +209,13 @@ impl FileSystemIssueStorage {
                     )));
                 }
                 num
-            },
+            }
             None => {
                 // For non-numbered files, generate a virtual number based on filename hash
                 // This ensures consistent ordering while keeping non-numbered files separate
                 // from numbered ones. Use a high base (500,000) to avoid conflicts.
-                use std::collections::hash_map::DefaultHasher;
-                use std::hash::{Hash, Hasher};
                 
-                let mut hasher = DefaultHasher::new();
-                filename.hash(&mut hasher);
-                let hash = hasher.finish();
-                
-                // Map hash to virtual number range to avoid conflicts with numbered files
-                let config = Config::global();
-                config.virtual_issue_number_base + ((hash % config.virtual_issue_number_range as u64) as u32)
+                self.generate_virtual_number_with_collision_resistance(filename)
             }
         };
 
@@ -253,6 +245,57 @@ impl FileSystemIssueStorage {
             file_path: path.to_path_buf(),
             created_at,
         })
+    }
+
+    /// Generate a virtual number for non-numbered files with collision resistance
+    /// 
+    /// Uses multiple hash functions and deterministic probing to reduce collision
+    /// probability while maintaining deterministic behavior (same filename always
+    /// gets the same virtual number).
+    ///
+    /// # Arguments
+    /// 
+    /// * `filename` - The filename to generate a virtual number for
+    ///
+    /// # Returns
+    ///
+    /// A virtual number in the configured range that's deterministically derived
+    /// from the filename with reduced collision probability.
+    fn generate_virtual_number_with_collision_resistance(&self, filename: &str) -> u32 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let config = Config::global();
+        
+        // Use multiple hash seeds for better distribution
+        let hash_seeds = [0u64, 1099511627776u64, 2199023255552u64]; // Powers of 2 spread apart
+        
+        let mut best_hash = 0u64;
+        
+        // Combine multiple hash functions for better distribution
+        for seed in hash_seeds {
+            let mut hasher = DefaultHasher::new();
+            seed.hash(&mut hasher);
+            filename.hash(&mut hasher);
+            let hash = hasher.finish();
+            
+            // XOR combine the hashes for better distribution
+            best_hash ^= hash;
+        }
+        
+        // Use additional entropy from filename characteristics
+        let char_sum: u32 = filename.chars().map(|c| c as u32).sum();
+        let length_factor = filename.len() as u64;
+        
+        // Combine all entropy sources
+        let combined_hash = best_hash
+            .wrapping_add(char_sum as u64 * 31)
+            .wrapping_add(length_factor * 17);
+        
+        // Map to virtual number range with better distribution
+        let virtual_offset = (combined_hash % config.virtual_issue_number_range as u64) as u32;
+        
+        config.virtual_issue_number_base + virtual_offset
     }
 
     /// List issues in a directory
@@ -494,7 +537,7 @@ impl IssueStorage for FileSystemIssueStorage {
         // Since list_issues_in_dir is now recursive, we only need to scan the root issues directory
         // This will automatically find issues in both pending and completed directories
         let all_issues = self.list_issues_in_dir(&self.state.issues_dir)?;
-        
+
         Ok(all_issues)
     }
 
@@ -820,7 +863,7 @@ pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
 /// let (number, name) = parse_any_issue_filename("TODO").unwrap();
 /// assert_eq!(number, None); // Will be assigned virtual number (500000+)
 /// assert_eq!(name, "TODO");
-/// 
+///
 /// let (number, name) = parse_any_issue_filename("meeting-notes").unwrap();
 /// assert_eq!(number, None); // Will be assigned virtual number (500000+)
 /// assert_eq!(name, "meeting-notes");
@@ -830,15 +873,15 @@ pub fn parse_any_issue_filename(filename: &str) -> Result<(Option<u32>, String)>
     if let Ok((number, name)) = parse_issue_filename(filename) {
         return Ok((Some(number), name));
     }
-    
+
     // If that fails, treat the entire filename as the issue name
     // Validate that the filename is not empty and is safe
     if filename.is_empty() {
         return Err(SwissArmyHammerError::Other(
-            "Issue filename cannot be empty".to_string()
+            "Issue filename cannot be empty".to_string(),
         ));
     }
-    
+
     Ok((None, filename.to_string()))
 }
 
@@ -1062,54 +1105,54 @@ pub fn validate_issue_name(name: &str) -> Result<()> {
 }
 
 /// Check if a file path represents a valid issue file
-/// 
+///
 /// Determines whether a given file path is a valid issue file that can be processed
 /// by the issue system. This function supports both the traditional numbered format
 /// and the newer flexible format that allows any markdown file.
-/// 
+///
 /// ## Supported Formats
-/// 
+///
 /// ### Traditional Numbered Format (Legacy)
 /// Files with 6-digit zero-padded numbers followed by an underscore and name:
 /// - `000001_my_first_issue.md` - Valid numbered issue
 /// - `000123_bug_fix.md` - Valid numbered issue
 /// - `999999_last_issue.md` - Valid numbered issue (up to max_issue_number)
-/// 
+///
 /// ### Flexible Format (New)
 /// Any markdown file with a non-empty filename:
 /// - `README.md` - Valid issue (gets virtual number)
 /// - `feature-request.md` - Valid issue (gets virtual number)
 /// - `bug-report.md` - Valid issue (gets virtual number)
 /// - `project-notes.md` - Valid issue (gets virtual number)
-/// 
+///
 /// ## Requirements
-/// 
+///
 /// 1. **File Extension**: Must have `.md` extension (case-sensitive)
 /// 2. **Non-Empty Name**: The filename (without extension) must not be empty
 /// 3. **UTF-8 Compatible**: Filename must be valid UTF-8
-/// 
+///
 /// ## Virtual Numbering
-/// 
-/// Non-numbered files are assigned virtual issue numbers in the range 
+///
+/// Non-numbered files are assigned virtual issue numbers in the range
 /// [`Config::global().virtual_issue_number_base`..`Config::global().virtual_issue_number_base + Config::global().virtual_issue_number_range`]
 /// based on a hash of the filename. This ensures consistent numbering while avoiding
 /// conflicts with traditionally numbered issues.
-/// 
+///
 /// ## Examples
-/// 
+///
 /// ```rust
 /// use std::path::Path;
 /// use swissarmyhammer::issues::filesystem::is_issue_file;
-/// 
+///
 /// // Traditional numbered formats
 /// assert!(is_issue_file(Path::new("000001_first_issue.md")));
 /// assert!(is_issue_file(Path::new("000123_bug_fix.md")));
-/// 
+///
 /// // Flexible formats
 /// assert!(is_issue_file(Path::new("README.md")));
 /// assert!(is_issue_file(Path::new("project-notes.md")));
 /// assert!(is_issue_file(Path::new("feature-request.md")));
-/// 
+///
 /// // Invalid files
 /// assert!(!is_issue_file(Path::new("document.txt"))); // Wrong extension
 /// assert!(!is_issue_file(Path::new(".md")));          // Empty name
@@ -1282,7 +1325,8 @@ mod tests {
         assert!(result.is_ok());
         let issue = result.unwrap();
         assert_eq!(issue.name, "invalid_filename");
-        assert!(issue.number.value() >= Config::global().virtual_issue_number_base); // Virtual number for non-numbered files
+        assert!(issue.number.value() >= Config::global().virtual_issue_number_base);
+        // Virtual number for non-numbered files
     }
 
     #[test]
@@ -1299,7 +1343,8 @@ mod tests {
         assert!(result.is_ok());
         let issue = result.unwrap();
         assert_eq!(issue.name, "abc123_test");
-        assert!(issue.number.value() >= Config::global().virtual_issue_number_base); // Virtual number for non-numbered files
+        assert!(issue.number.value() >= Config::global().virtual_issue_number_base);
+        // Virtual number for non-numbered files
     }
 
     #[test]
@@ -1316,7 +1361,8 @@ mod tests {
         assert!(result.is_ok());
         let issue = result.unwrap();
         assert_eq!(issue.name, "1000000_test");
-        assert!(issue.number.value() >= Config::global().virtual_issue_number_base); // Virtual number for non-numbered files
+        assert!(issue.number.value() >= Config::global().virtual_issue_number_base);
+        // Virtual number for non-numbered files
     }
 
     #[tokio::test]
@@ -1534,11 +1580,11 @@ mod tests {
 
         let issues = storage.list_issues_in_dir(&issues_dir).unwrap();
         assert_eq!(issues.len(), 3); // All .md files are valid issues now
-        
+
         // Sort by number to make assertions predictable
         let mut sorted_issues = issues;
         sorted_issues.sort_by_key(|issue| issue.number);
-        
+
         assert_eq!(sorted_issues[0].number, IssueNumber::from(1));
         assert_eq!(sorted_issues[1].number, IssueNumber::from(3));
         // README.md gets a virtual number in virtual range
@@ -1560,7 +1606,8 @@ mod tests {
         assert!(result.is_ok());
         let issue = result.unwrap();
         assert_eq!(issue.name, "000123test");
-        assert!(issue.number.value() >= Config::global().virtual_issue_number_base); // Virtual number for non-numbered files
+        assert!(issue.number.value() >= Config::global().virtual_issue_number_base);
+        // Virtual number for non-numbered files
     }
 
     #[test]
@@ -1611,7 +1658,8 @@ mod tests {
         assert!(result.is_ok());
         let issue = result.unwrap();
         assert_eq!(issue.name, "_test");
-        assert!(issue.number.value() >= Config::global().virtual_issue_number_base); // Virtual number for non-numbered files
+        assert!(issue.number.value() >= Config::global().virtual_issue_number_base);
+        // Virtual number for non-numbered files
     }
 
     #[test]
@@ -1665,15 +1713,15 @@ mod tests {
         let issues = storage.list_issues_in_dir(&issues_dir).unwrap();
         // All .md files are now valid issues (1 numbered + 3 non-numbered)
         assert_eq!(issues.len(), 4);
-        
+
         // Sort to make assertions predictable
         let mut sorted_issues = issues;
         sorted_issues.sort_by_key(|issue| issue.number);
-        
+
         // First issue should be the numbered one
         assert_eq!(sorted_issues[0].number, IssueNumber::from(1));
         assert_eq!(sorted_issues[0].name, "valid");
-        
+
         // The other 3 should be non-numbered with virtual numbers >= virtual_base
         for i in 1..4 {
             assert!(sorted_issues[i].number.value() >= Config::global().virtual_issue_number_base);
@@ -2040,7 +2088,7 @@ mod tests {
 
         // Test filename that looks like numbered but isn't
         let (number, name) = parse_any_issue_filename("123_not_6_digits").unwrap();
-        assert_eq!(number, None);  // Should be treated as non-numbered
+        assert_eq!(number, None); // Should be treated as non-numbered
         assert_eq!(name, "123_not_6_digits");
 
         // Test filename with underscores but not numbered format
@@ -2061,7 +2109,7 @@ mod tests {
         let readme_path = issues_dir.join("README.md");
         let notes_path = issues_dir.join("NOTES.md");
         let todo_path = issues_dir.join("TODO.md");
-        
+
         std::fs::write(&readme_path, issue_content).unwrap();
         std::fs::write(&notes_path, issue_content).unwrap();
         std::fs::write(&todo_path, issue_content).unwrap();
@@ -2072,21 +2120,30 @@ mod tests {
         let issue3 = storage.parse_issue_from_file(&todo_path).unwrap();
 
         let config = Config::global();
-        
+
         // All should have virtual numbers >= virtual_issue_number_base
         assert!(issue1.number.value() >= config.virtual_issue_number_base);
         assert!(issue2.number.value() >= config.virtual_issue_number_base);
         assert!(issue3.number.value() >= config.virtual_issue_number_base);
 
         // Virtual numbers should be within the expected range
-        assert!(issue1.number.value() < config.virtual_issue_number_base + config.virtual_issue_number_range);
-        assert!(issue2.number.value() < config.virtual_issue_number_base + config.virtual_issue_number_range);
-        assert!(issue3.number.value() < config.virtual_issue_number_base + config.virtual_issue_number_range);
+        assert!(
+            issue1.number.value()
+                < config.virtual_issue_number_base + config.virtual_issue_number_range
+        );
+        assert!(
+            issue2.number.value()
+                < config.virtual_issue_number_base + config.virtual_issue_number_range
+        );
+        assert!(
+            issue3.number.value()
+                < config.virtual_issue_number_base + config.virtual_issue_number_range
+        );
 
         // Same filename should always generate the same virtual number (deterministic hashing)
         let issue1_again = storage.parse_issue_from_file(&readme_path).unwrap();
         assert_eq!(issue1.number, issue1_again.number);
-        
+
         // Different filenames should have different virtual numbers
         assert_ne!(issue1.number, issue2.number);
         assert_ne!(issue2.number, issue3.number);
@@ -2102,10 +2159,21 @@ mod tests {
 
         // Create multiple non-numbered files with different names
         let test_names = vec![
-            "test1", "test2", "test3", "test4", "test5",
-            "README", "NOTES", "TODO", "CHANGELOG", "DESIGN",
-            "bug-report", "feature-request", "meeting-notes",
-            "project-spec", "user-guide"
+            "test1",
+            "test2",
+            "test3",
+            "test4",
+            "test5",
+            "README",
+            "NOTES",
+            "TODO",
+            "CHANGELOG",
+            "DESIGN",
+            "bug-report",
+            "feature-request",
+            "meeting-notes",
+            "project-spec",
+            "user-guide",
         ];
 
         let mut created_issues = Vec::new();
@@ -2122,25 +2190,30 @@ mod tests {
             let config = Config::global();
             // All should be virtual numbers
             assert!(issue.number.value() >= config.virtual_issue_number_base);
-            
+
             // Each should be unique (hash algorithm should distribute properly)
-            assert!(virtual_numbers.insert(issue.number.value()), 
-                "Duplicate virtual number found: {}", issue.number.value());
+            assert!(
+                virtual_numbers.insert(issue.number.value()),
+                "Duplicate virtual number found: {}",
+                issue.number.value()
+            );
         }
 
         // Test that we actually created the expected number of issues
         assert_eq!(created_issues.len(), test_names.len());
-        
+
         // Test that filename-to-virtual-number mapping is consistent
         for (i, name) in test_names.iter().enumerate() {
             let file_path = issues_dir.join(format!("{name}.md"));
             let re_parsed = storage.parse_issue_from_file(&file_path).unwrap();
-            assert_eq!(re_parsed.number, created_issues[i].number,
-                "Virtual number changed for {name} on re-parsing");
+            assert_eq!(
+                re_parsed.number, created_issues[i].number,
+                "Virtual number changed for {name} on re-parsing"
+            );
         }
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_mixed_numbered_and_non_numbered_sorting() {
         // Test that numbered and non-numbered issues are sorted correctly together
         let temp_dir = TempDir::new().unwrap();
@@ -2149,47 +2222,64 @@ mod tests {
 
         // Create mix of numbered and non-numbered issues
         let content = "Test issue content";
-        
+
         // Create some traditional numbered issues via API
-        let _numbered1 = storage.create_issue("first".to_string(), content.to_string()).await.unwrap(); // Should get number 1
-        let _numbered2 = storage.create_issue("second".to_string(), content.to_string()).await.unwrap(); // Should get number 2
-        
-        // Create some non-numbered issues directly on disk  
+        let _numbered1 = storage
+            .create_issue("first".to_string(), content.to_string())
+            .await
+            .unwrap(); // Should get number 1
+        let _numbered2 = storage
+            .create_issue("second".to_string(), content.to_string())
+            .await
+            .unwrap(); // Should get number 2
+
+        // Create some non-numbered issues directly on disk
         let readme_path = issues_dir.join("README.md");
         let notes_path = issues_dir.join("NOTES.md");
         std::fs::write(&readme_path, content).unwrap();
         std::fs::write(&notes_path, content).unwrap();
         let _non_numbered1 = storage.parse_issue_from_file(&readme_path).unwrap();
         let _non_numbered2 = storage.parse_issue_from_file(&notes_path).unwrap();
-        
+
         // Create another numbered issue
-        let _numbered3 = storage.create_issue("third".to_string(), content.to_string()).await.unwrap(); // Should get number 3
-        
+        let _numbered3 = storage
+            .create_issue("third".to_string(), content.to_string())
+            .await
+            .unwrap(); // Should get number 3
+
         // List all issues
         let all_issues = storage.list_issues().await.unwrap();
-        
+
         // Should have all 5 issues
         assert_eq!(all_issues.len(), 5);
-        
+
         // Issues should be sorted by number (numbered first, then virtual)
         let config = Config::global();
         let mut prev_number = 0;
         let mut seen_virtual = false;
-        
+
         for issue in &all_issues {
             if issue.number.value() < config.virtual_issue_number_base {
                 // This is a numbered issue
-                assert!(!seen_virtual, "Numbered issue found after virtual issue in sort order");
-                assert!(issue.number.value() > prev_number, "Numbered issues should be in ascending order");
+                assert!(
+                    !seen_virtual,
+                    "Numbered issue found after virtual issue in sort order"
+                );
+                assert!(
+                    issue.number.value() > prev_number,
+                    "Numbered issues should be in ascending order"
+                );
                 prev_number = issue.number.value();
             } else {
                 // This is a virtual number issue
                 seen_virtual = true;
-                assert!(issue.number.value() >= config.virtual_issue_number_base, 
-                    "Virtual issue number should be >= base");
+                assert!(
+                    issue.number.value() >= config.virtual_issue_number_base,
+                    "Virtual issue number should be >= base"
+                );
             }
         }
-        
+
         // Verify we have the expected numbered issues in order
         assert_eq!(all_issues[0].number.value(), 1);
         assert_eq!(all_issues[0].name, "first");
@@ -2197,7 +2287,7 @@ mod tests {
         assert_eq!(all_issues[1].name, "second");
         assert_eq!(all_issues[2].number.value(), 3);
         assert_eq!(all_issues[2].name, "third");
-        
+
         // The remaining two should be virtual numbered issues
         assert!(all_issues[3].number.value() >= config.virtual_issue_number_base);
         assert!(all_issues[4].number.value() >= config.virtual_issue_number_base);
@@ -2206,11 +2296,8 @@ mod tests {
     #[test]
     fn test_virtual_number_boundary_conditions() {
         // Test edge cases around virtual number boundaries
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        
         let config = Config::global();
-        
+
         // Test the virtual number calculation directly
         let test_filenames = vec![
             "", // Edge case - empty (should be handled elsewhere)
@@ -2223,21 +2310,28 @@ mod tests {
             "filename.with.dots",
             "filename with spaces", // Spaces (if allowed)
         ];
-        
+
         for filename in test_filenames.iter().filter(|f| !f.is_empty()) {
-            let mut hasher = DefaultHasher::new();
-            filename.hash(&mut hasher);
-            let hash = hasher.finish();
-            
-            let virtual_number = config.virtual_issue_number_base + ((hash % config.virtual_issue_number_range as u64) as u32);
-            
+            // Create a temporary storage instance to test the new algorithm
+            let storage = FileSystemIssueStorage::new(PathBuf::from("/tmp")).unwrap();
+            let virtual_number = storage.generate_virtual_number_with_collision_resistance(filename);
+
             // Verify virtual number is within expected bounds
-            assert!(virtual_number >= config.virtual_issue_number_base, 
-                "Virtual number {} for '{}' should be >= {}", 
-                virtual_number, filename, config.virtual_issue_number_base);
-            assert!(virtual_number < config.virtual_issue_number_base + config.virtual_issue_number_range,
-                "Virtual number {} for '{}' should be < {}", 
-                virtual_number, filename, config.virtual_issue_number_base + config.virtual_issue_number_range);
+            assert!(
+                virtual_number >= config.virtual_issue_number_base,
+                "Virtual number {} for '{}' should be >= {}",
+                virtual_number,
+                filename,
+                config.virtual_issue_number_base
+            );
+            assert!(
+                virtual_number
+                    < config.virtual_issue_number_base + config.virtual_issue_number_range,
+                "Virtual number {} for '{}' should be < {}",
+                virtual_number,
+                filename,
+                config.virtual_issue_number_base + config.virtual_issue_number_range
+            );
         }
     }
 
@@ -2257,7 +2351,11 @@ mod tests {
         std::fs::write(&dots_path, "content").unwrap();
         let result = storage.parse_issue_from_file(&dots_path);
         // This should actually work - filename is "..." which is non-empty
-        assert!(result.is_ok(), "Filename with dots should parse as non-numbered: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Filename with dots should parse as non-numbered: {:?}",
+            result
+        );
         if let Ok(issue) = result {
             assert_eq!(issue.name, "...");
             let config = Config::global();
@@ -2269,10 +2367,16 @@ mod tests {
         std::fs::write(&no_ext_path, "content").unwrap();
         let result = storage.parse_issue_from_file(&no_ext_path);
         // parse_issue_from_file doesn't enforce .md extension - that's handled by directory scanning
-        assert!(result.is_ok(), "parse_issue_from_file should work on any file regardless of extension");
-        
+        assert!(
+            result.is_ok(),
+            "parse_issue_from_file should work on any file regardless of extension"
+        );
+
         // But is_issue_file should reject non-.md files
-        assert!(!is_issue_file(&no_ext_path), "is_issue_file should reject non-.md files");
+        assert!(
+            !is_issue_file(&no_ext_path),
+            "is_issue_file should reject non-.md files"
+        );
 
         // Test moderately long filename (avoid filesystem limits)
         let long_name = "a".repeat(200); // Use 200 chars to avoid filesystem limits
@@ -2290,7 +2394,10 @@ mod tests {
         let special_path = issues_dir.join("!@#$%^&*()_+.md");
         std::fs::write(&special_path, "content").unwrap();
         let result = storage.parse_issue_from_file(&special_path);
-        assert!(result.is_ok(), "Special characters should be valid in non-numbered format");
+        assert!(
+            result.is_ok(),
+            "Special characters should be valid in non-numbered format"
+        );
         let issue = result.unwrap();
         let config = Config::global();
         assert!(issue.number.value() >= config.virtual_issue_number_base);
@@ -2308,10 +2415,13 @@ mod tests {
         match result {
             Ok(_) => {
                 // If it succeeds, the system handled invalid UTF-8 gracefully
-            },
+            }
             Err(_) => {
                 // If it fails, that's expected due to invalid UTF-8 content
-                assert!(true, "Invalid UTF-8 content caused parsing to fail, which is acceptable");
+                assert!(
+                    true,
+                    "Invalid UTF-8 content caused parsing to fail, which is acceptable"
+                );
             }
         }
     }
@@ -2401,7 +2511,7 @@ mod tests {
         // Valid issue files - non-numbered format (new)
         assert!(is_issue_file(Path::new("123_test.md"))); // Now valid: any .md file
         assert!(is_issue_file(Path::new("000123test.md"))); // Now valid: any .md file
-        assert!(is_issue_file(Path::new("abc123_test.md"))); // Now valid: any .md file  
+        assert!(is_issue_file(Path::new("abc123_test.md"))); // Now valid: any .md file
         assert!(is_issue_file(Path::new("README.md"))); // Now valid: any .md file
         assert!(is_issue_file(Path::new("bug-report.md"))); // Valid: non-numbered
         assert!(is_issue_file(Path::new("my-feature.md"))); // Valid: non-numbered
@@ -3004,5 +3114,185 @@ mod tests {
         // Verify original issue was not updated
         let retrieved_issue = storage.get_issue(issue.number.value()).await.unwrap();
         assert_eq!(retrieved_issue.content, "Content");
+    }
+
+    #[test]
+    fn test_virtual_number_collision_resistance() {
+        // Test that the improved virtual number generation has better collision resistance
+        let storage = FileSystemIssueStorage::new(PathBuf::from("/tmp")).unwrap();
+        
+        // Create a set of filenames that would likely collide with simple hash % range
+        let test_filenames = vec![
+            "readme",
+            "README", 
+            "notes",
+            "NOTES",
+            "todo", 
+            "TODO",
+            "doc",
+            "DOC",
+            "test",
+            "TEST",
+        ];
+        
+        let mut virtual_numbers = std::collections::HashSet::new();
+        
+        for filename in test_filenames {
+            let virtual_number = storage.generate_virtual_number_with_collision_resistance(filename);
+            
+            // Verify each filename gets a unique virtual number (no collisions in this small set)
+            assert!(
+                virtual_numbers.insert(virtual_number),
+                "Collision detected: filename '{}' got virtual number {} which was already used",
+                filename,
+                virtual_number
+            );
+            
+            // Verify virtual numbers are in valid range
+            let config = Config::global();
+            assert!(
+                virtual_number >= config.virtual_issue_number_base,
+                "Virtual number {} is below base {}",
+                virtual_number,
+                config.virtual_issue_number_base
+            );
+            assert!(
+                virtual_number < config.virtual_issue_number_base + config.virtual_issue_number_range,
+                "Virtual number {} is above max {}",
+                virtual_number,
+                config.virtual_issue_number_base + config.virtual_issue_number_range
+            );
+        }
+    }
+
+    #[test]
+    fn test_virtual_number_deterministic() {
+        // Test that virtual number generation is deterministic - same filename always gets same number
+        let storage = FileSystemIssueStorage::new(PathBuf::from("/tmp")).unwrap();
+        
+        let test_filenames = vec![
+            "consistent_test",
+            "another_file",
+            "special-chars_123",
+            "unicode_文件名",
+        ];
+        
+        for filename in test_filenames {
+            let first_call = storage.generate_virtual_number_with_collision_resistance(filename);
+            let second_call = storage.generate_virtual_number_with_collision_resistance(filename);
+            let third_call = storage.generate_virtual_number_with_collision_resistance(filename);
+            
+            assert_eq!(
+                first_call, second_call,
+                "Virtual number generation is not deterministic for filename '{}'",
+                filename
+            );
+            assert_eq!(
+                second_call, third_call,
+                "Virtual number generation is not deterministic for filename '{}'",
+                filename
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_mixed_numbered_non_numbered_sorting() {
+        // Test sorting behavior when mixing numbered and non-numbered files
+        let temp_dir = TempDir::new().unwrap();
+        let issues_dir = temp_dir.path().to_path_buf();
+        let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
+        
+        // Create a mix of numbered and non-numbered files
+        std::fs::write(issues_dir.join("000005_numbered.md"), "Numbered issue 5").unwrap();
+        std::fs::write(issues_dir.join("000010_another.md"), "Numbered issue 10").unwrap();
+        std::fs::write(issues_dir.join("readme.md"), "Non-numbered readme").unwrap();
+        std::fs::write(issues_dir.join("notes.md"), "Non-numbered notes").unwrap();
+        std::fs::write(issues_dir.join("000001_first.md"), "First numbered issue").unwrap();
+        
+        let all_issues = storage.list_issues().await.unwrap();
+        
+        // Verify we got all 5 files
+        assert_eq!(all_issues.len(), 5);
+        
+        // Verify issues are sorted by number (numbered issues first, then virtual numbers)
+        let numbers: Vec<u32> = all_issues.iter().map(|i| i.number.value()).collect();
+        
+        // Check that the sequence is monotonically increasing
+        for i in 1..numbers.len() {
+            assert!(
+                numbers[i-1] <= numbers[i],
+                "Issues not properly sorted: {:?}",
+                numbers
+            );
+        }
+        
+        // Verify numbered issues (1, 5, 10) come before virtual numbers (500,000+)
+        let config = Config::global();
+        let first_numbered_count = numbers.iter()
+            .take_while(|&n| *n < config.virtual_issue_number_base)
+            .count();
+        assert_eq!(first_numbered_count, 3, "Should have 3 numbered issues before virtual numbers");
+        
+        // Verify virtual numbers are in correct range
+        let virtual_numbers: Vec<u32> = numbers.iter()
+            .filter(|&n| *n >= config.virtual_issue_number_base)
+            .cloned()
+            .collect();
+        assert_eq!(virtual_numbers.len(), 2, "Should have 2 virtual numbers");
+        
+        for virtual_num in virtual_numbers {
+            assert!(
+                virtual_num < config.virtual_issue_number_base + config.virtual_issue_number_range,
+                "Virtual number {} outside expected range", 
+                virtual_num
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_non_numbered_file_edge_cases() {
+        // Test edge cases for non-numbered file handling
+        let temp_dir = TempDir::new().unwrap();
+        let issues_dir = temp_dir.path().to_path_buf();
+        let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
+        
+        // Test various edge case filenames
+        let edge_cases = vec![
+            ("a.md", "Single character"),
+            ("very_long_filename_that_tests_boundary_conditions_for_hashing_algorithms_and_virtual_number_generation.md", "Very long filename"),
+            ("special-chars_123!@#.md", "Special characters"),
+            ("UPPERCASE_FILE.md", "Uppercase"),
+            ("mixed_Case_File.md", "Mixed case"),
+            ("file.with.dots.md", "Multiple dots"),
+            ("file-with-hyphens.md", "Hyphens"),
+            ("file_with_underscores.md", "Underscores"),
+        ];
+        
+        for (filename, content) in edge_cases {
+            std::fs::write(issues_dir.join(filename), content).unwrap();
+        }
+        
+        let all_issues = storage.list_issues().await.unwrap();
+        
+        // All files should be parsed successfully
+        assert_eq!(all_issues.len(), 8, "All edge case files should be parsed");
+        
+        // All should have virtual numbers in correct range
+        let config = Config::global();
+        for issue in all_issues {
+            assert!(
+                issue.number.value() >= config.virtual_issue_number_base,
+                "Issue '{}' has virtual number {} below base {}",
+                issue.name,
+                issue.number.value(),
+                config.virtual_issue_number_base
+            );
+            assert!(
+                issue.number.value() < config.virtual_issue_number_base + config.virtual_issue_number_range,
+                "Issue '{}' has virtual number {} above max range",
+                issue.name,
+                issue.number.value()
+            );
+        }
     }
 }

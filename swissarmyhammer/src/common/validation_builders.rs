@@ -60,7 +60,8 @@ impl ValidationErrorBuilder {
 
     /// Add multiple suggestions
     pub fn suggestions(mut self, suggestions: Vec<impl Into<String>>) -> Self {
-        self.suggestions.extend(suggestions.into_iter().map(|s| s.into()));
+        self.suggestions
+            .extend(suggestions.into_iter().map(|s| s.into()));
         self
     }
 
@@ -126,10 +127,10 @@ pub mod quick {
 
     /// Create a range validation error
     pub fn out_of_range<T: std::fmt::Display>(
-        field: &str, 
-        value: T, 
-        min: T, 
-        max: T
+        field: &str,
+        value: T,
+        min: T,
+        max: T,
     ) -> SwissArmyHammerError {
         ValidationErrorBuilder::new()
             .field(field)
@@ -139,15 +140,13 @@ pub mod quick {
     }
 
     /// Create a format validation error
-    pub fn invalid_format(
-        field: &str, 
-        value: &str, 
-        expected_format: &str
-    ) -> SwissArmyHammerError {
+    pub fn invalid_format(field: &str, value: &str, expected_format: &str) -> SwissArmyHammerError {
         ValidationErrorBuilder::new()
             .field(field)
             .value(value)
-            .reason(format!("value does not match expected format: {expected_format}"))
+            .reason(format!(
+                "value does not match expected format: {expected_format}"
+            ))
             .build()
     }
 
@@ -156,7 +155,7 @@ pub mod quick {
         field: &str,
         actual_length: usize,
         min_length: Option<usize>,
-        max_length: Option<usize>
+        max_length: Option<usize>,
     ) -> SwissArmyHammerError {
         let reason = match (min_length, max_length) {
             (Some(min), Some(max)) => format!("length must be between {min} and {max}"),
@@ -193,9 +192,9 @@ pub mod quick {
 
     /// Create a dependency validation error
     pub fn missing_dependency(
-        field: &str, 
-        dependency: &str, 
-        suggestion: Option<&str>
+        field: &str,
+        dependency: &str,
+        suggestion: Option<&str>,
     ) -> SwissArmyHammerError {
         let mut builder = ValidationErrorBuilder::new()
             .field(field)
@@ -250,7 +249,7 @@ impl<T> ValidationChain<T> {
                 .map(|e| e.to_string())
                 .collect::<Vec<_>>()
                 .join("; ");
-            
+
             Err(SwissArmyHammerError::Other(format!(
                 "Multiple validation errors: {combined_message}"
             )))
@@ -325,7 +324,7 @@ mod tests {
     fn test_file_error_validator() {
         let path = Path::new("/nonexistent/file.txt");
         let error = quick::file_error(path, "file does not exist");
-        
+
         assert!(error.to_string().contains("file validation"));
         assert!(error.to_string().contains("/nonexistent/file.txt"));
         assert!(error.to_string().contains("does not exist"));
@@ -383,13 +382,28 @@ mod tests {
 
     #[test]
     fn test_validation_chain_inspection() {
-        let chain = ValidationChain::new(42)
-            .validate(|n| if *n > 0 { Ok(()) } else { Err(quick::invalid_value("number", &n.to_string(), "must be positive")) });
+        let chain = ValidationChain::new(42).validate(|n| {
+            if *n > 0 {
+                Ok(())
+            } else {
+                Err(quick::invalid_value(
+                    "number",
+                    &n.to_string(),
+                    "must be positive",
+                ))
+            }
+        });
 
         assert_eq!(*chain.value(), 42);
         assert!(!chain.has_errors());
 
-        let chain = chain.validate(|n| if *n < 100 { Ok(()) } else { Err(quick::out_of_range("number", *n, 0, 99)) });
+        let chain = chain.validate(|n| {
+            if *n < 100 {
+                Ok(())
+            } else {
+                Err(quick::out_of_range("number", *n, 0, 99))
+            }
+        });
         assert!(!chain.has_errors());
 
         let result = chain.finish();
@@ -399,8 +413,12 @@ mod tests {
 
     #[test]
     fn test_missing_dependency_validator() {
-        let error = quick::missing_dependency("database_url", "database_driver", Some("install the database driver first"));
-        
+        let error = quick::missing_dependency(
+            "database_url",
+            "database_driver",
+            Some("install the database driver first"),
+        );
+
         let message = error.to_string();
         assert!(message.contains("field 'database_url'"));
         assert!(message.contains("requires 'database_driver'"));
@@ -410,7 +428,7 @@ mod tests {
     #[test]
     fn test_duplicate_value_validator() {
         let error = quick::duplicate_value("username", "admin");
-        
+
         let message = error.to_string();
         assert!(message.contains("field 'username'"));
         assert!(message.contains("value 'admin'"));

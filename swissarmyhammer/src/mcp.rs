@@ -4039,18 +4039,23 @@ mod tests {
         let text_content = &call_result.content[0];
         if let RawContent::Text(text) = &text_content.raw {
             assert!(text.text.contains("Created issue #"));
-            
+
             // Extract the issue number to verify filename format
             let start = text.text.find("Created issue #").unwrap() + "Created issue #".len();
             let end = text.text[start..].find(' ').unwrap() + start;
             let issue_number_str = &text.text[start..end];
-            
+
             // Verify the filename is in the nameless format (e.g., "000123.md")
             // and not the named format (e.g., "000123_unnamed.md")
-            assert!(text.text.contains(&format!("{}.md", issue_number_str)), 
-                    "Nameless issue should create filename like 000123.md, got: {}", text.text);
-            assert!(!text.text.contains("_unnamed"), 
-                    "Nameless issue should not contain '_unnamed' in filename");
+            assert!(
+                text.text.contains(&format!("{}.md", issue_number_str)),
+                "Nameless issue should create filename like 000123.md, got: {}",
+                text.text
+            );
+            assert!(
+                !text.text.contains("_unnamed"),
+                "Nameless issue should not contain '_unnamed' in filename"
+            );
         } else {
             panic!("Expected text content, got: {:?}", text_content.raw);
         }

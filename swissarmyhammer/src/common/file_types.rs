@@ -9,12 +9,8 @@ use std::path::Path;
 pub const PROMPT_EXTENSIONS: &[&str] = &["md", "yaml", "yml", "markdown"];
 
 /// Compound prompt file extensions (checked first due to specificity)
-pub const COMPOUND_PROMPT_EXTENSIONS: &[&str] = &[
-    "md.liquid",
-    "markdown.liquid",
-    "yaml.liquid", 
-    "yml.liquid",
-];
+pub const COMPOUND_PROMPT_EXTENSIONS: &[&str] =
+    &["md.liquid", "markdown.liquid", "yaml.liquid", "yml.liquid"];
 
 /// All supported prompt extensions (compound first, then simple)
 pub fn all_prompt_extensions() -> Vec<&'static str> {
@@ -123,21 +119,23 @@ impl ExtensionMatcher {
     /// Check if a path matches any of the configured extensions
     pub fn matches<P: AsRef<Path>>(&self, path: P) -> bool {
         let path_str = path.as_ref().to_string_lossy().to_lowercase();
-        
+
         // Check compound extensions first (more specific)
         for ext in &self.extensions {
-            if ext.contains('.')
-                && path_str.ends_with(&format!(".{ext}")) {
-                    return true;
-                }
+            if ext.contains('.') && path_str.ends_with(&format!(".{ext}")) {
+                return true;
+            }
         }
-        
+
         // Check simple extensions
         if let Some(ext) = path.as_ref().extension() {
             let ext_str = ext.to_string_lossy().to_lowercase();
-            return self.extensions.iter().any(|e| !e.contains('.') && e == &ext_str);
+            return self
+                .extensions
+                .iter()
+                .any(|e| !e.contains('.') && e == &ext_str);
         }
-        
+
         false
     }
 
@@ -187,16 +185,31 @@ mod tests {
     fn test_extract_base_name() {
         assert_eq!(extract_base_name(Path::new("test.md")), "test");
         assert_eq!(extract_base_name(Path::new("test.md.liquid")), "test");
-        assert_eq!(extract_base_name(Path::new("complex-name.yaml.liquid")), "complex-name");
-        assert_eq!(extract_base_name(Path::new("config.prod.yml")), "config.prod");
+        assert_eq!(
+            extract_base_name(Path::new("complex-name.yaml.liquid")),
+            "complex-name"
+        );
+        assert_eq!(
+            extract_base_name(Path::new("config.prod.yml")),
+            "config.prod"
+        );
         assert_eq!(extract_base_name(Path::new("README")), "README"); // No extension
     }
 
     #[test]
     fn test_get_prompt_extension() {
-        assert_eq!(get_prompt_extension(Path::new("test.md")), Some("md".to_string()));
-        assert_eq!(get_prompt_extension(Path::new("test.md.liquid")), Some("md.liquid".to_string()));
-        assert_eq!(get_prompt_extension(Path::new("test.yaml.liquid")), Some("yaml.liquid".to_string()));
+        assert_eq!(
+            get_prompt_extension(Path::new("test.md")),
+            Some("md".to_string())
+        );
+        assert_eq!(
+            get_prompt_extension(Path::new("test.md.liquid")),
+            Some("md.liquid".to_string())
+        );
+        assert_eq!(
+            get_prompt_extension(Path::new("test.yaml.liquid")),
+            Some("yaml.liquid".to_string())
+        );
         assert_eq!(get_prompt_extension(Path::new("test.txt")), None);
         assert_eq!(get_prompt_extension(Path::new("README")), None);
     }
@@ -204,7 +217,7 @@ mod tests {
     #[test]
     fn test_extension_matcher() {
         let matcher = ExtensionMatcher::new(&["md", "yaml", "txt"]);
-        
+
         assert!(matcher.matches(Path::new("test.md")));
         assert!(matcher.matches(Path::new("test.yaml")));
         assert!(matcher.matches(Path::new("test.txt")));
@@ -214,7 +227,7 @@ mod tests {
     #[test]
     fn test_extension_matcher_for_prompts() {
         let matcher = ExtensionMatcher::for_prompts();
-        
+
         assert!(matcher.matches(Path::new("test.md")));
         assert!(matcher.matches(Path::new("test.md.liquid")));
         assert!(matcher.matches(Path::new("test.yaml")));
@@ -232,11 +245,13 @@ mod tests {
             PathBuf::from("test.txt"),
             PathBuf::from("README"),
         ];
-        
+
         let filtered = matcher.filter_files(paths);
         assert_eq!(filtered.len(), 2);
         assert!(filtered.iter().any(|p| p.file_name().unwrap() == "test.md"));
-        assert!(filtered.iter().any(|p| p.file_name().unwrap() == "test.yaml"));
+        assert!(filtered
+            .iter()
+            .any(|p| p.file_name().unwrap() == "test.yaml"));
     }
 
     #[test]
@@ -244,8 +259,8 @@ mod tests {
         // Extensions should be case-insensitive when matching (our current implementation)
         assert!(is_prompt_file(Path::new("file.MD")));
         assert!(is_prompt_file(Path::new("file.YAML")));
-        
-        // The matcher should also handle case insensitivity  
+
+        // The matcher should also handle case insensitivity
         let matcher = ExtensionMatcher::new(&["md", "yaml"]);
         assert!(matcher.matches(Path::new("file.MD")));
         assert!(matcher.matches(Path::new("file.YAML")));
@@ -261,7 +276,10 @@ mod tests {
     #[test]
     fn test_multiple_dots_in_filename() {
         assert_eq!(extract_base_name(Path::new("file.test.md")), "file.test");
-        assert_eq!(extract_base_name(Path::new("config.prod.yaml.liquid")), "config.prod");
+        assert_eq!(
+            extract_base_name(Path::new("config.prod.yaml.liquid")),
+            "config.prod"
+        );
         assert!(is_any_prompt_file(Path::new("my.config.file.yml")));
     }
 }

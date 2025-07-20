@@ -67,4 +67,3 @@ impl std::io::Write for FileWriterGuard {
         Ok(())
     }
 }
-

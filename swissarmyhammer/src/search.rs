@@ -1,6 +1,7 @@
 //! Search functionality for prompts
 
 use crate::{Prompt, Result, SwissArmyHammerError};
+use crate::common::mcp_errors::McpResultExt;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 use std::path::Path;
@@ -50,7 +51,7 @@ impl SearchEngine {
 
         let writer = index
             .writer(50_000_000)
-            .map_err(|e| SwissArmyHammerError::Other(e.to_string()))?;
+            .with_tantivy_context()?;
 
         Ok(Self {
             index,
@@ -80,14 +81,14 @@ impl SearchEngine {
         let schema = schema_builder.build();
 
         let directory =
-            MmapDirectory::open(path).map_err(|e| SwissArmyHammerError::Other(e.to_string()))?;
+            MmapDirectory::open(path).with_tantivy_context()?;
 
         let index = Index::open_or_create(directory, schema)
-            .map_err(|e| SwissArmyHammerError::Other(e.to_string()))?;
+            .with_tantivy_context()?;
 
         let writer = index
             .writer(50_000_000)
-            .map_err(|e| SwissArmyHammerError::Other(e.to_string()))?;
+            .with_tantivy_context()?;
 
         Ok(Self {
             index,

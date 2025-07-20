@@ -5,6 +5,7 @@
 //! `std::fs` usage.
 
 use crate::error::{Result, SwissArmyHammerError};
+use crate::common::error_context::IoResultExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -44,12 +45,7 @@ pub struct StdFileSystem;
 
 impl FileSystem for StdFileSystem {
     fn read_to_string(&self, path: &Path) -> Result<String> {
-        std::fs::read_to_string(path).map_err(|e| {
-            SwissArmyHammerError::Io(std::io::Error::new(
-                e.kind(),
-                format!("Failed to read file '{}': {}", path.display(), e),
-            ))
-        })
+        std::fs::read_to_string(path).with_io_context(path, "Failed to read file")
     }
 
     fn write(&self, path: &Path, content: &str) -> Result<()> {
@@ -64,12 +60,7 @@ impl FileSystem for StdFileSystem {
             path.extension().and_then(|s| s.to_str()).unwrap_or("")
         ));
 
-        std::fs::write(&temp_path, content).map_err(|e| {
-            SwissArmyHammerError::Io(std::io::Error::new(
-                e.kind(),
-                format!("Failed to write temp file '{}': {}", temp_path.display(), e),
-            ))
-        })?;
+        std::fs::write(&temp_path, content).with_io_context(&temp_path, "Failed to write temp file")?;
 
         std::fs::rename(&temp_path, path).map_err(|e| {
             // Clean up temp file on rename failure
@@ -99,34 +90,18 @@ impl FileSystem for StdFileSystem {
     }
 
     fn create_dir_all(&self, path: &Path) -> Result<()> {
-        std::fs::create_dir_all(path).map_err(|e| {
-            SwissArmyHammerError::Io(std::io::Error::new(
-                e.kind(),
-                format!("Failed to create directory '{}': {}", path.display(), e),
-            ))
-        })
+        std::fs::create_dir_all(path).with_io_context(path, "Failed to create directory")
     }
 
     fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>> {
-        let entries = std::fs::read_dir(path).map_err(|e| {
-            SwissArmyHammerError::Io(std::io::Error::new(
-                e.kind(),
-                format!("Failed to read directory '{}': {}", path.display(), e),
-            ))
-        })?;
+        let entries = std::fs::read_dir(path).with_io_context(path, "Failed to read directory")?;
 
         let mut paths = Vec::new();
         for entry in entries {
-            let entry = entry.map_err(|e| {
-                SwissArmyHammerError::Io(std::io::Error::new(
-                    e.kind(),
-                    format!(
-                        "Failed to read directory entry in '{}': {}",
-                        path.display(),
-                        e
-                    ),
-                ))
-            })?;
+            let entry = entry.with_io_message(format!(
+                "Failed to read directory entry in '{}'",
+                path.display()
+            ))?;
             paths.push(entry.path());
         }
 
@@ -134,12 +109,7 @@ impl FileSystem for StdFileSystem {
     }
 
     fn remove_file(&self, path: &Path) -> Result<()> {
-        std::fs::remove_file(path).map_err(|e| {
-            SwissArmyHammerError::Io(std::io::Error::new(
-                e.kind(),
-                format!("Failed to remove file '{}': {}", path.display(), e),
-            ))
-        })
+        std::fs::remove_file(path).with_io_context(path, "Failed to remove file")
     }
 }
 

@@ -28,9 +28,8 @@ impl FileWatcherCallback for McpFileWatcherCallback {
         if let Err(e) = self.server.reload_prompts().await {
             tracing::error!("❌ Failed to reload prompts: {}", e);
             return Err(e);
-        } else {
-            tracing::info!("✅ Prompts reloaded successfully");
         }
+        tracing::info!("✅ Prompts reloaded successfully");
 
         // Send notification to client about prompt list change
         let peer_clone = self.peer.clone();

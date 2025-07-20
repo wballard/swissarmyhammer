@@ -3,7 +3,7 @@
 //! This module provides centralized configuration management with environment variable support
 //! and sensible defaults for all configurable constants throughout the application.
 
-use std::env;
+use crate::common::env_loader::EnvLoader;
 
 /// Configuration settings for the SwissArmyHammer application
 #[derive(Debug, Clone)]
@@ -39,7 +39,7 @@ impl Default for Config {
             issue_number_width: 6,
             max_pending_issues_in_summary: 5,
             min_issue_number: 1,
-            max_issue_number: 999999,
+            max_issue_number: 999_999,
             issue_number_digits: 6,
             max_content_length: 50000,
             max_line_length: 10000,
@@ -54,51 +54,20 @@ impl Config {
     /// Create a new configuration instance with values from environment variables
     /// or defaults if environment variables are not set
     pub fn new() -> Self {
+        let loader = EnvLoader::new("SWISSARMYHAMMER");
+        
         Self {
-            issue_branch_prefix: env::var("SWISSARMYHAMMER_ISSUE_BRANCH_PREFIX")
-                .unwrap_or_else(|_| "issue/".to_string()),
-            issue_number_width: env::var("SWISSARMYHAMMER_ISSUE_NUMBER_WIDTH")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(6),
-            max_pending_issues_in_summary: env::var(
-                "SWISSARMYHAMMER_MAX_PENDING_ISSUES_IN_SUMMARY",
-            )
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(5),
-            min_issue_number: env::var("SWISSARMYHAMMER_MIN_ISSUE_NUMBER")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(1),
-            max_issue_number: env::var("SWISSARMYHAMMER_MAX_ISSUE_NUMBER")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(999999),
-            issue_number_digits: env::var("SWISSARMYHAMMER_ISSUE_NUMBER_DIGITS")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(6),
-            max_content_length: env::var("SWISSARMYHAMMER_MAX_CONTENT_LENGTH")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(50000),
-            max_line_length: env::var("SWISSARMYHAMMER_MAX_LINE_LENGTH")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(10000),
-            max_issue_name_length: env::var("SWISSARMYHAMMER_MAX_ISSUE_NAME_LENGTH")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(100),
-            cache_ttl_seconds: env::var("SWISSARMYHAMMER_CACHE_TTL_SECONDS")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(300),
-            cache_max_size: env::var("SWISSARMYHAMMER_CACHE_MAX_SIZE")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(1000),
+            issue_branch_prefix: loader.load_string("ISSUE_BRANCH_PREFIX", "issue/"),
+            issue_number_width: loader.load_parsed("ISSUE_NUMBER_WIDTH", 6),
+            max_pending_issues_in_summary: loader.load_parsed("MAX_PENDING_ISSUES_IN_SUMMARY", 5),
+            min_issue_number: loader.load_parsed("MIN_ISSUE_NUMBER", 1),
+            max_issue_number: loader.load_parsed("MAX_ISSUE_NUMBER", 999_999),
+            issue_number_digits: loader.load_parsed("ISSUE_NUMBER_DIGITS", 6),
+            max_content_length: loader.load_parsed("MAX_CONTENT_LENGTH", 50000),
+            max_line_length: loader.load_parsed("MAX_LINE_LENGTH", 10000),
+            max_issue_name_length: loader.load_parsed("MAX_ISSUE_NAME_LENGTH", 100),
+            cache_ttl_seconds: loader.load_parsed("CACHE_TTL_SECONDS", 300),
+            cache_max_size: loader.load_parsed("CACHE_MAX_SIZE", 1000),
         }
     }
 

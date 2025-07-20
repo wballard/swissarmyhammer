@@ -1411,23 +1411,23 @@ fn highlight_source_code(content: &str, language: &str) -> String {
         .unwrap_or_else(|| syntax_set.find_syntax_plain_text());
 
     let mut highlighter = HighlightLines::new(syntax, theme);
-    let mut highlighted = String::new();
+    let mut output = String::new();
 
     for line in content.lines() {
         if let Ok(highlighted_line) = highlighter.highlight_line(line, &syntax_set) {
             let escaped = as_24_bit_terminal_escaped(&highlighted_line[..], false);
-            highlighted.push_str(&escaped);
-            highlighted.push('\n');
+            output.push_str(&escaped);
+            output.push('\n');
         } else {
             // Fallback to unhighlighted line
-            highlighted.push_str(line);
-            highlighted.push('\n');
+            output.push_str(line);
+            output.push('\n');
         }
     }
 
     // Reset terminal colors at the end
-    highlighted.push_str("\x1b[0m");
-    highlighted.trim_end().to_string()
+    output.push_str("\x1b[0m");
+    output.trim_end().to_string()
 }
 
 /// Parse action from state description text with liquid template rendering

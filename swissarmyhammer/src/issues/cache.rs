@@ -50,10 +50,9 @@ impl IssueCache {
 
                 *self.hits.write().unwrap() += 1;
                 return Some(entry.issue.clone());
-            } else {
-                // Entry expired, remove it
-                entries.remove(&issue_number);
             }
+            // Entry expired, remove it
+            entries.remove(&issue_number);
         }
 
         *self.misses.write().unwrap() += 1;

@@ -1,4 +1,4 @@
-//! # SwissArmyHammer
+//! # `SwissArmyHammer`
 //!
 //! A flexible prompt management library for AI assistants.
 //!
@@ -136,7 +136,19 @@ pub mod prelude {
         State, StateId, Transition, Workflow, WorkflowName, WorkflowRun, WorkflowRunId,
         WorkflowRunStatus,
     };
+    
+    // Common utilities for easy access
+    pub use crate::common::{
+        error_context::IoResultExt,
+        env_loader::EnvLoader,
+        file_types::{is_prompt_file, ExtensionMatcher},
+        mcp_errors::{ToSwissArmyHammerError, McpResultExt},
+        validation_builders::{ValidationErrorBuilder, ValidationChain, quick},
+    };
 }
 
 /// Test utilities module for testing support
 pub mod test_utils;
+
+/// Common utilities module for code reuse
+pub mod common;

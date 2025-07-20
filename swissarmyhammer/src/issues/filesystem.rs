@@ -223,10 +223,12 @@ impl FileSystemIssueStorage {
         // Read file content
         let content = fs::read_to_string(path).map_err(SwissArmyHammerError::Io)?;
 
-        // Determine if completed based on path
+        // Determine if completed based on path - only mark as completed if directly in the
+        // specific completed directory, not just any directory named "complete"
         let completed = path
-            .ancestors()
-            .any(|p| p.file_name() == Some(std::ffi::OsStr::new("complete")));
+            .parent()
+            .map(|parent| parent == self.state.completed_dir)
+            .unwrap_or(false);
 
         // Get file creation time for created_at
         let created_at = path
@@ -290,6 +292,14 @@ impl FileSystemIssueStorage {
                     Ok(issue) => issues.push(issue),
                     Err(e) => {
                         debug!("Failed to parse issue from {}: {}", path.display(), e);
+                    }
+                }
+            } else if path.is_dir() {
+                // Recursively scan subdirectories
+                match self.list_issues_in_dir(&path) {
+                    Ok(sub_issues) => issues.extend(sub_issues),
+                    Err(e) => {
+                        debug!("Failed to scan subdirectory {}: {}", path.display(), e);
                     }
                 }
             }
@@ -464,19 +474,10 @@ impl FileSystemIssueStorage {
 #[async_trait::async_trait]
 impl IssueStorage for FileSystemIssueStorage {
     async fn list_issues(&self) -> Result<Vec<Issue>> {
-        let mut all_issues = Vec::new();
-
-        // List from pending directory
-        let pending_issues = self.list_issues_in_dir(&self.state.issues_dir)?;
-        all_issues.extend(pending_issues);
-
-        // List from completed directory
-        let completed_issues = self.list_issues_in_dir(&self.state.completed_dir)?;
-        all_issues.extend(completed_issues);
-
-        // Sort by number
-        all_issues.sort_by_key(|issue| issue.number);
-
+        // Since list_issues_in_dir is now recursive, we only need to scan the root issues directory
+        // This will automatically find issues in both pending and completed directories
+        let all_issues = self.list_issues_in_dir(&self.state.issues_dir)?;
+        
         Ok(all_issues)
     }
 

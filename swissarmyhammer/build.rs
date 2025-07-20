@@ -1,4 +1,5 @@
 use std::env;
+use std::fmt::Write;
 use std::fs;
 use std::path::Path;
 
@@ -105,7 +106,7 @@ fn collect_prompts(dir: &Path, prefix: &str, code: &mut String) {
 
                 // Read the file content at build time and embed it as a string literal
                 if let Ok(content) = fs::read_to_string(&path) {
-                    code.push_str(&format!("        (\"{prompt_name}\", r#\"{content}\"#),\n"));
+                    writeln!(code, "        (\"{prompt_name}\", r#\"{content}\"#),").unwrap();
                 }
             }
         }
@@ -139,9 +140,7 @@ fn collect_workflows(dir: &Path, prefix: &str, code: &mut String) {
 
                 // Read the file content at build time and embed it as a string literal
                 if let Ok(content) = fs::read_to_string(&path) {
-                    code.push_str(&format!(
-                        "        (\"{workflow_name}\", r#\"{content}\"#),\n"
-                    ));
+                    writeln!(code, "        (\"{workflow_name}\", r#\"{content}\"#),").unwrap();
                 }
             }
         }

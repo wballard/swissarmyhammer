@@ -4,11 +4,11 @@
 //! prompt directories for changes and trigger appropriate reload actions.
 
 use crate::{PromptResolver, Result};
+use crate::common::{mcp_errors::ToSwissArmyHammerError, file_types::is_any_prompt_file};
 use notify::{
     event::{Event, EventKind},
     RecommendedWatcher, RecursiveMode, Watcher,
 };
-use std::path::Path;
 use tokio::sync::mpsc;
 
 /// File watcher for monitoring prompt directories
@@ -105,9 +105,7 @@ impl FileWatcher {
             },
             notify::Config::default(),
         )
-        .map_err(|e| {
-            crate::SwissArmyHammerError::Other(format!("Failed to create file watcher: {e}"))
-        })?;
+        .to_swiss_error_with_context("Failed to create file watcher")?;
 
         // Watch all directories
         let recursive_mode = if config.recursive {
@@ -117,11 +115,8 @@ impl FileWatcher {
         };
 
         for path in &watch_paths {
-            watcher.watch(path, recursive_mode).map_err(|e| {
-                crate::SwissArmyHammerError::Other(format!(
-                    "Failed to watch directory {path:?}: {e}"
-                ))
-            })?;
+            watcher.watch(path, recursive_mode)
+                .to_swiss_error_with_context(&format!("Failed to watch directory {path:?}"))?;
             tracing::info!("Watching directory: {:?}", path);
         }
 
@@ -137,11 +132,11 @@ impl FileWatcher {
                 // Check if this is a relevant event
                 match event.kind {
                     EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
-                        // Check if it's a prompt file (*.md, *.yaml, *.yml)
+                        // Check if it's a prompt file  
                         let relevant_paths: Vec<std::path::PathBuf> = event
                             .paths
                             .iter()
-                            .filter(|p| Self::is_prompt_file(p))
+                            .filter(|p| is_any_prompt_file(p))
                             .cloned()
                             .collect();
 
@@ -177,14 +172,7 @@ impl FileWatcher {
         }
     }
 
-    /// Check if a file is a prompt file based on its extension
-    fn is_prompt_file(path: &Path) -> bool {
-        if let Some(ext) = path.extension() {
-            matches!(ext.to_str(), Some("md") | Some("yaml") | Some("yml"))
-        } else {
-            false
-        }
-    }
+    // File type detection moved to common::file_types module
 }
 
 impl Drop for FileWatcher {
@@ -275,11 +263,13 @@ mod tests {
 
     #[test]
     fn test_is_prompt_file() {
-        assert!(FileWatcher::is_prompt_file(Path::new("test.md")));
-        assert!(FileWatcher::is_prompt_file(Path::new("test.yaml")));
-        assert!(FileWatcher::is_prompt_file(Path::new("test.yml")));
-        assert!(!FileWatcher::is_prompt_file(Path::new("test.txt")));
-        assert!(!FileWatcher::is_prompt_file(Path::new("test")));
+        use std::path::Path;
+        
+        assert!(is_any_prompt_file(Path::new("test.md")));
+        assert!(is_any_prompt_file(Path::new("test.yaml")));
+        assert!(is_any_prompt_file(Path::new("test.yml")));
+        assert!(!is_any_prompt_file(Path::new("test.txt")));
+        assert!(!is_any_prompt_file(Path::new("test")));
     }
 
     #[test]
@@ -444,22 +434,24 @@ mod tests {
 
     #[test]
     fn test_is_prompt_file_edge_cases() {
+        use std::path::Path;
+        
         // Test file without extension
-        assert!(!FileWatcher::is_prompt_file(Path::new("README")));
+        assert!(!is_any_prompt_file(Path::new("README")));
 
         // Test hidden files
-        assert!(FileWatcher::is_prompt_file(Path::new(".test.md")));
-        assert!(FileWatcher::is_prompt_file(Path::new(".config.yaml")));
-        assert!(!FileWatcher::is_prompt_file(Path::new(".gitignore")));
+        assert!(is_any_prompt_file(Path::new(".test.md")));
+        assert!(is_any_prompt_file(Path::new(".config.yaml")));
+        assert!(!is_any_prompt_file(Path::new(".gitignore")));
 
         // Test files with multiple dots
-        assert!(FileWatcher::is_prompt_file(Path::new("file.test.md")));
-        assert!(FileWatcher::is_prompt_file(Path::new("config.prod.yaml")));
+        assert!(is_any_prompt_file(Path::new("file.test.md")));
+        assert!(is_any_prompt_file(Path::new("config.prod.yaml")));
 
-        // Test case sensitivity (extensions should be case-sensitive)
-        assert!(!FileWatcher::is_prompt_file(Path::new("file.MD")));
-        assert!(!FileWatcher::is_prompt_file(Path::new("file.YML")));
-        assert!(!FileWatcher::is_prompt_file(Path::new("file.YAML")));
+        // Test case insensitivity (our implementation is case-insensitive for user-friendliness)
+        assert!(is_any_prompt_file(Path::new("file.MD")));
+        assert!(is_any_prompt_file(Path::new("file.YML")));
+        assert!(is_any_prompt_file(Path::new("file.YAML")));
     }
 
     #[tokio::test]

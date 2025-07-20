@@ -520,6 +520,7 @@ impl Prompt {
     /// assert_eq!(prompt.arguments.len(), 1);
     /// assert_eq!(prompt.arguments[0].name, "file");
     /// ```
+    #[must_use]
     pub fn add_argument(mut self, arg: ArgumentSpec) -> Self {
         self.arguments.push(arg);
         self
@@ -544,6 +545,7 @@ impl Prompt {
     ///
     /// assert_eq!(prompt.description, Some("Helps analyze and debug programming errors".to_string()));
     /// ```
+    #[must_use]
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
@@ -568,6 +570,7 @@ impl Prompt {
     ///
     /// assert_eq!(prompt.category, Some("development".to_string()));
     /// ```
+    #[must_use]
     pub fn with_category(mut self, category: impl Into<String>) -> Self {
         self.category = Some(category.into());
         self
@@ -598,6 +601,7 @@ impl Prompt {
     /// assert_eq!(prompt.tags.len(), 3);
     /// assert!(prompt.tags.contains(&"sql".to_string()));
     /// ```
+    #[must_use]
     pub fn with_tags(mut self, tags: Vec<String>) -> Self {
         self.tags = tags;
         self
@@ -648,6 +652,7 @@ impl PromptLibrary {
     /// let library = PromptLibrary::new();
     /// // Library is ready to use with in-memory storage
     /// ```
+    #[must_use]
     pub fn new() -> Self {
         Self {
             storage: Box::new(crate::storage::MemoryStorage::new()),
@@ -671,6 +676,7 @@ impl PromptLibrary {
     /// let storage = Box::new(MemoryStorage::new());
     /// let library = PromptLibrary::with_storage(storage);
     /// ```
+    #[must_use]
     pub fn with_storage(storage: Box<dyn crate::StorageBackend>) -> Self {
         Self { storage }
     }
@@ -792,7 +798,7 @@ impl PromptLibrary {
         let prompt = self.get(name)?;
         prompt.render_with_partials(
             args,
-            Arc::new(PromptLibrary {
+            Arc::new(Self {
                 storage: self.storage.clone_box(),
             }),
         )
@@ -835,7 +841,7 @@ impl PromptLibrary {
         let prompt = self.get(name)?;
         prompt.render_with_partials_and_env(
             args,
-            Arc::new(PromptLibrary {
+            Arc::new(Self {
                 storage: self.storage.clone_box(),
             }),
         )
@@ -877,12 +883,12 @@ impl PromptLibrary {
     ///
     /// This method provides a flexible way to filter prompts based on various criteria
     /// such as source, category, search terms, and argument requirements. It works
-    /// with a PromptResolver to determine prompt sources.
+    /// with a `PromptResolver` to determine prompt sources.
     ///
     /// # Arguments
     ///
-    /// * `filter` - A PromptFilter specifying the filtering criteria
-    /// * `sources` - A HashMap mapping prompt names to their sources
+    /// * `filter` - A `PromptFilter` specifying the filtering criteria
+    /// * `sources` - A `HashMap` mapping prompt names to their sources
     ///
     /// # Returns
     ///
@@ -978,6 +984,7 @@ pub struct PromptLoader {
 
 impl PromptLoader {
     /// Create a new prompt loader
+    #[must_use]
     pub fn new() -> Self {
         Self {
             extensions: vec![
@@ -1006,7 +1013,7 @@ impl PromptLoader {
 
         for entry in walkdir::WalkDir::new(path)
             .into_iter()
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
         {
             let entry_path = entry.path();
             if entry_path.is_file() && self.is_prompt_file(entry_path) {
@@ -1023,7 +1030,7 @@ impl PromptLoader {
     pub fn load_file(&self, path: impl AsRef<Path>) -> Result<Prompt> {
         self.load_file_with_base(
             path.as_ref(),
-            path.as_ref().parent().unwrap_or(path.as_ref()),
+            path.as_ref().parent().unwrap_or_else(|| path.as_ref()),
         )
     }
 
@@ -1031,7 +1038,7 @@ impl PromptLoader {
     fn load_file_with_base(&self, path: &Path, base_path: &Path) -> Result<Prompt> {
         let content = std::fs::read_to_string(path)?;
 
-        let (metadata, template) = self.parse_front_matter(&content)?;
+        let (metadata, template) = Self::parse_front_matter(&content)?;
 
         let name = self.extract_prompt_name_with_base(path, base_path);
 
@@ -1043,16 +1050,16 @@ impl PromptLoader {
 
         // Parse metadata
         if let Some(ref metadata_value) = metadata {
-            if let Some(title) = metadata_value.get("title").and_then(|v| v.as_str()) {
+            if let Some(title) = metadata_value.get("title").and_then(serde_json::Value::as_str) {
                 prompt.metadata.insert(
                     "title".to_string(),
                     serde_json::Value::String(title.to_string()),
                 );
             }
-            if let Some(desc) = metadata_value.get("description").and_then(|v| v.as_str()) {
+            if let Some(desc) = metadata_value.get("description").and_then(serde_json::Value::as_str) {
                 prompt.description = Some(desc.to_string());
             }
-            if let Some(cat) = metadata_value.get("category").and_then(|v| v.as_str()) {
+            if let Some(cat) = metadata_value.get("category").and_then(serde_json::Value::as_str) {
                 prompt.category = Some(cat.to_string());
             }
             if let Some(tags) = metadata_value.get("tags").and_then(|v| v.as_array()) {
@@ -1067,7 +1074,7 @@ impl PromptLoader {
                     if let Some(arg_obj) = arg.as_object() {
                         let name = arg_obj
                             .get("name")
-                            .and_then(|v| v.as_str())
+                            .and_then(serde_json::Value::as_str)
                             .unwrap_or_default()
                             .to_string();
 
@@ -1075,19 +1082,19 @@ impl PromptLoader {
                             name,
                             description: arg_obj
                                 .get("description")
-                                .and_then(|v| v.as_str())
+                                .and_then(serde_json::Value::as_str)
                                 .map(String::from),
                             required: arg_obj
                                 .get("required")
-                                .and_then(|v| v.as_bool())
+                                .and_then(serde_json::Value::as_bool)
                                 .unwrap_or(false),
                             default: arg_obj
                                 .get("default")
-                                .and_then(|v| v.as_str())
+                                .and_then(serde_json::Value::as_str)
                                 .map(String::from),
                             type_hint: arg_obj
                                 .get("type")
-                                .and_then(|v| v.as_str())
+                                .and_then(serde_json::Value::as_str)
                                 .map(String::from),
                         };
 
@@ -1099,7 +1106,7 @@ impl PromptLoader {
 
         // If this is a partial template (no metadata), set appropriate description
         if prompt.description.is_none()
-            && (has_partial_marker || self.is_likely_partial(&prompt.name, &content))
+            && (has_partial_marker || Self::is_likely_partial(&prompt.name, &content))
         {
             prompt.description = Some("Partial template for reuse in other prompts".to_string());
         }
@@ -1108,10 +1115,10 @@ impl PromptLoader {
     }
 
     /// Determine if a prompt is likely a partial template
-    fn is_likely_partial(&self, name: &str, content: &str) -> bool {
+    fn is_likely_partial(name: &str, content: &str) -> bool {
         // Check if the name suggests it's a partial (common naming patterns)
         let name_lower = name.to_lowercase();
-        if name_lower.contains("partial") || name_lower.starts_with("_") {
+        if name_lower.contains("partial") || name_lower.starts_with('_') {
             return true;
         }
 
@@ -1150,7 +1157,7 @@ impl PromptLoader {
 
     /// Load a prompt from a string
     pub fn load_from_string(&self, name: &str, content: &str) -> Result<Prompt> {
-        let (metadata, template) = self.parse_front_matter(content)?;
+        let (metadata, template) = Self::parse_front_matter(content)?;
 
         let mut prompt = Prompt::new(name, template);
 
@@ -1159,16 +1166,16 @@ impl PromptLoader {
 
         // Parse metadata
         if let Some(ref metadata_value) = metadata {
-            if let Some(title) = metadata_value.get("title").and_then(|v| v.as_str()) {
+            if let Some(title) = metadata_value.get("title").and_then(serde_json::Value::as_str) {
                 prompt.metadata.insert(
                     "title".to_string(),
                     serde_json::Value::String(title.to_string()),
                 );
             }
-            if let Some(desc) = metadata_value.get("description").and_then(|v| v.as_str()) {
+            if let Some(desc) = metadata_value.get("description").and_then(serde_json::Value::as_str) {
                 prompt.description = Some(desc.to_string());
             }
-            if let Some(cat) = metadata_value.get("category").and_then(|v| v.as_str()) {
+            if let Some(cat) = metadata_value.get("category").and_then(serde_json::Value::as_str) {
                 prompt.category = Some(cat.to_string());
             }
             if let Some(tags) = metadata_value.get("tags").and_then(|v| v.as_array()) {
@@ -1185,24 +1192,24 @@ impl PromptLoader {
                         let arg_spec = ArgumentSpec {
                             name: arg_obj
                                 .get("name")
-                                .and_then(|v| v.as_str())
+                                .and_then(serde_json::Value::as_str)
                                 .unwrap_or("")
                                 .to_string(),
                             description: arg_obj
                                 .get("description")
-                                .and_then(|v| v.as_str())
+                                .and_then(serde_json::Value::as_str)
                                 .map(String::from),
                             required: arg_obj
                                 .get("required")
-                                .and_then(|v| v.as_bool())
+                                .and_then(serde_json::Value::as_bool)
                                 .unwrap_or(false),
                             default: arg_obj
                                 .get("default")
-                                .and_then(|v| v.as_str())
+                                .and_then(serde_json::Value::as_str)
                                 .map(String::from),
                             type_hint: arg_obj
                                 .get("type")
-                                .and_then(|v| v.as_str())
+                                .and_then(serde_json::Value::as_str)
                                 .map(String::from),
                         };
 
@@ -1214,7 +1221,7 @@ impl PromptLoader {
 
         // If this is a partial template (no metadata), set appropriate description
         if prompt.description.is_none()
-            && (has_partial_marker || self.is_likely_partial(&prompt.name, content))
+            && (has_partial_marker || Self::is_likely_partial(&prompt.name, content))
         {
             prompt.description = Some("Partial template for reuse in other prompts".to_string());
         }
@@ -1231,7 +1238,7 @@ impl PromptLoader {
     }
 
     /// Parse front matter from content
-    fn parse_front_matter(&self, content: &str) -> Result<(Option<serde_json::Value>, String)> {
+    fn parse_front_matter(content: &str) -> Result<(Option<serde_json::Value>, String)> {
         // Check for partial marker first
         if content.trim_start().starts_with("{% partial %}") {
             // This is a partial template, no front matter expected

@@ -30,6 +30,10 @@ pub struct Config {
     pub cache_ttl_seconds: u64,
     /// Maximum cache size (default: 1000)
     pub cache_max_size: usize,
+    /// Base number for virtual issue numbering (default: 500_000)
+    pub virtual_issue_number_base: u32,
+    /// Range for virtual issue numbers (default: 500_000, so virtual numbers go from base to base+range-1)
+    pub virtual_issue_number_range: u32,
 }
 
 impl Default for Config {
@@ -46,6 +50,8 @@ impl Default for Config {
             max_issue_name_length: 100,
             cache_ttl_seconds: 300,
             cache_max_size: 1000,
+            virtual_issue_number_base: 500_000,
+            virtual_issue_number_range: 500_000,
         }
     }
 }
@@ -68,6 +74,8 @@ impl Config {
             max_issue_name_length: loader.load_parsed("MAX_ISSUE_NAME_LENGTH", 100),
             cache_ttl_seconds: loader.load_parsed("CACHE_TTL_SECONDS", 300),
             cache_max_size: loader.load_parsed("CACHE_MAX_SIZE", 1000),
+            virtual_issue_number_base: loader.load_parsed("VIRTUAL_ISSUE_NUMBER_BASE", 500_000),
+            virtual_issue_number_range: loader.load_parsed("VIRTUAL_ISSUE_NUMBER_RANGE", 500_000),
         }
     }
 
@@ -102,6 +110,8 @@ mod tests {
         assert_eq!(config.max_content_length, 50000);
         assert_eq!(config.max_line_length, 10000);
         assert_eq!(config.max_issue_name_length, 100);
+        assert_eq!(config.virtual_issue_number_base, 500_000);
+        assert_eq!(config.virtual_issue_number_range, 500_000);
     }
 
     #[test]
@@ -115,6 +125,8 @@ mod tests {
         std::env::remove_var("SWISSARMYHAMMER_MAX_CONTENT_LENGTH");
         std::env::remove_var("SWISSARMYHAMMER_MAX_LINE_LENGTH");
         std::env::remove_var("SWISSARMYHAMMER_MAX_ISSUE_NAME_LENGTH");
+        std::env::remove_var("SWISSARMYHAMMER_VIRTUAL_ISSUE_NUMBER_BASE");
+        std::env::remove_var("SWISSARMYHAMMER_VIRTUAL_ISSUE_NUMBER_RANGE");
 
         let config = Config::new();
         // Should use defaults when environment variables are not set
@@ -127,6 +139,8 @@ mod tests {
         assert_eq!(config.max_content_length, 50000);
         assert_eq!(config.max_line_length, 10000);
         assert_eq!(config.max_issue_name_length, 100);
+        assert_eq!(config.virtual_issue_number_base, 500_000);
+        assert_eq!(config.virtual_issue_number_range, 500_000);
     }
 
     #[test]
@@ -138,6 +152,8 @@ mod tests {
         let orig_max_pending = std::env::var("SWISSARMYHAMMER_MAX_PENDING_ISSUES_IN_SUMMARY").ok();
         let orig_max_number = std::env::var("SWISSARMYHAMMER_MAX_ISSUE_NUMBER").ok();
         let orig_digits = std::env::var("SWISSARMYHAMMER_ISSUE_NUMBER_DIGITS").ok();
+        let orig_virtual_base = std::env::var("SWISSARMYHAMMER_VIRTUAL_ISSUE_NUMBER_BASE").ok();
+        let orig_virtual_range = std::env::var("SWISSARMYHAMMER_VIRTUAL_ISSUE_NUMBER_RANGE").ok();
 
         // Set test values
         std::env::set_var("SWISSARMYHAMMER_ISSUE_BRANCH_PREFIX", "feature/");
@@ -145,6 +161,8 @@ mod tests {
         std::env::set_var("SWISSARMYHAMMER_MAX_PENDING_ISSUES_IN_SUMMARY", "10");
         std::env::set_var("SWISSARMYHAMMER_MAX_ISSUE_NUMBER", "9999999");
         std::env::set_var("SWISSARMYHAMMER_ISSUE_NUMBER_DIGITS", "7");
+        std::env::set_var("SWISSARMYHAMMER_VIRTUAL_ISSUE_NUMBER_BASE", "600000");
+        std::env::set_var("SWISSARMYHAMMER_VIRTUAL_ISSUE_NUMBER_RANGE", "400000");
 
         let config = Config::new();
         assert_eq!(config.issue_branch_prefix, "feature/");
@@ -153,6 +171,8 @@ mod tests {
         assert_eq!(config.min_issue_number, 1);
         assert_eq!(config.max_issue_number, 9_999_999);
         assert_eq!(config.issue_number_digits, 7);
+        assert_eq!(config.virtual_issue_number_base, 600_000);
+        assert_eq!(config.virtual_issue_number_range, 400_000);
 
         // Restore original env vars or remove if they didn't exist
         match orig_prefix {
@@ -174,6 +194,14 @@ mod tests {
         match orig_digits {
             Some(val) => std::env::set_var("SWISSARMYHAMMER_ISSUE_NUMBER_DIGITS", val),
             None => std::env::remove_var("SWISSARMYHAMMER_ISSUE_NUMBER_DIGITS"),
+        }
+        match orig_virtual_base {
+            Some(val) => std::env::set_var("SWISSARMYHAMMER_VIRTUAL_ISSUE_NUMBER_BASE", val),
+            None => std::env::remove_var("SWISSARMYHAMMER_VIRTUAL_ISSUE_NUMBER_BASE"),
+        }
+        match orig_virtual_range {
+            Some(val) => std::env::set_var("SWISSARMYHAMMER_VIRTUAL_ISSUE_NUMBER_RANGE", val),
+            None => std::env::remove_var("SWISSARMYHAMMER_VIRTUAL_ISSUE_NUMBER_RANGE"),
         }
     }
 }

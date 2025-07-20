@@ -20,7 +20,7 @@ impl<T, E: std::fmt::Display> ToSwissArmyHammerError<T> for std::result::Result<
     }
     
     fn to_swiss_error_with_context(self, context: &str) -> crate::Result<T> {
-        self.map_err(|e| SwissArmyHammerError::Other(format!("{}: {}", context, e)))
+        self.map_err(|e| SwissArmyHammerError::Other(format!("{context}: {e}")))
     }
 }
 
@@ -30,37 +30,37 @@ pub mod mcp {
 
     /// Convert tantivy errors to SwissArmyHammerError
     pub fn tantivy_error<E: std::fmt::Display>(error: E) -> SwissArmyHammerError {
-        SwissArmyHammerError::Other(format!("Search index error: {}", error))
+        SwissArmyHammerError::Other(format!("Search index error: {error}"))
     }
 
     /// Convert serde errors to SwissArmyHammerError
     pub fn serde_error<E: std::fmt::Display>(error: E) -> SwissArmyHammerError {
-        SwissArmyHammerError::Other(format!("Serialization error: {}", error))
+        SwissArmyHammerError::Other(format!("Serialization error: {error}"))
     }
 
     /// Convert JSON parsing errors to SwissArmyHammerError  
     pub fn json_error<E: std::fmt::Display>(error: E) -> SwissArmyHammerError {
-        SwissArmyHammerError::Other(format!("JSON parsing error: {}", error))
+        SwissArmyHammerError::Other(format!("JSON parsing error: {error}"))
     }
 
     /// Convert template rendering errors to SwissArmyHammerError
     pub fn template_error<E: std::fmt::Display>(error: E) -> SwissArmyHammerError {
-        SwissArmyHammerError::Other(format!("Template rendering error: {}", error))
+        SwissArmyHammerError::Other(format!("Template rendering error: {error}"))
     }
 
     /// Convert workflow errors to SwissArmyHammerError
     pub fn workflow_error<E: std::fmt::Display>(error: E) -> SwissArmyHammerError {
-        SwissArmyHammerError::Other(format!("Workflow error: {}", error))
+        SwissArmyHammerError::Other(format!("Workflow error: {error}"))
     }
 
     /// Convert validation errors to SwissArmyHammerError
     pub fn validation_error<E: std::fmt::Display>(error: E) -> SwissArmyHammerError {
-        SwissArmyHammerError::Other(format!("Validation error: {}", error))
+        SwissArmyHammerError::Other(format!("Validation error: {error}"))
     }
 
     /// Convert generic external library errors to SwissArmyHammerError
     pub fn external_error<E: std::fmt::Display>(library: &str, error: E) -> SwissArmyHammerError {
-        SwissArmyHammerError::Other(format!("{} error: {}", library, error))
+        SwissArmyHammerError::Other(format!("{library} error: {error}"))
     }
 }
 

@@ -14,7 +14,7 @@ pub fn io_error_with_context<P: AsRef<Path>>(
 ) -> SwissArmyHammerError {
     SwissArmyHammerError::Io(std::io::Error::new(
         error.kind(),
-        format!("{} '{}': {}", action, path.as_ref().display(), error),
+        format!("{action} '{}': {error}", path.as_ref().display()),
     ))
 }
 
@@ -48,7 +48,7 @@ impl<T, E: std::error::Error> IoResultExt<T> for std::result::Result<T, E> {
         self.map_err(|e| {
             SwissArmyHammerError::Io(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("{} '{}': {}", action, path.as_ref().display(), e),
+                format!("{action} '{}': {e}", path.as_ref().display()),
             ))
         })
     }
@@ -57,7 +57,7 @@ impl<T, E: std::error::Error> IoResultExt<T> for std::result::Result<T, E> {
         self.map_err(|e| {
             SwissArmyHammerError::Io(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("{}: {}", message, e),
+                format!("{message}: {e}"),
             ))
         })
     }

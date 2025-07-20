@@ -39,7 +39,7 @@ pub fn has_compound_extension<P: AsRef<Path>>(path: P) -> bool {
     let path_str = path.as_ref().to_string_lossy().to_lowercase();
     COMPOUND_PROMPT_EXTENSIONS
         .iter()
-        .any(|ext| path_str.ends_with(&format!(".{}", ext)))
+        .any(|ext| path_str.ends_with(&format!(".{ext}")))
 }
 
 /// Check if a file is any kind of prompt file (simple or compound extension)
@@ -57,7 +57,7 @@ pub fn extract_base_name<P: AsRef<Path>>(path: P) -> String {
 
     // Try compound extensions first (they're more specific)
     for ext in COMPOUND_PROMPT_EXTENSIONS {
-        let extension = format!(".{}", ext);
+        let extension = format!(".{ext}");
         if filename.ends_with(&extension) {
             return filename[..filename.len() - extension.len()].to_string();
         }
@@ -65,7 +65,7 @@ pub fn extract_base_name<P: AsRef<Path>>(path: P) -> String {
 
     // Try simple extensions
     for ext in PROMPT_EXTENSIONS {
-        let extension = format!(".{}", ext);
+        let extension = format!(".{ext}");
         if filename.ends_with(&extension) {
             return filename[..filename.len() - extension.len()].to_string();
         }
@@ -85,7 +85,7 @@ pub fn get_prompt_extension<P: AsRef<Path>>(path: P) -> Option<String> {
 
     // Check compound extensions first
     for ext in COMPOUND_PROMPT_EXTENSIONS {
-        let extension = format!(".{}", ext);
+        let extension = format!(".{ext}");
         if filename.ends_with(&extension) {
             return Some(ext.to_string());
         }
@@ -93,7 +93,7 @@ pub fn get_prompt_extension<P: AsRef<Path>>(path: P) -> Option<String> {
 
     // Check simple extensions
     for ext in PROMPT_EXTENSIONS {
-        let extension = format!(".{}", ext);
+        let extension = format!(".{ext}");
         if filename.ends_with(&extension) {
             return Some(ext.to_string());
         }
@@ -126,11 +126,10 @@ impl ExtensionMatcher {
         
         // Check compound extensions first (more specific)
         for ext in &self.extensions {
-            if ext.contains('.') {
-                if path_str.ends_with(&format!(".{}", ext)) {
+            if ext.contains('.')
+                && path_str.ends_with(&format!(".{ext}")) {
                     return true;
                 }
-            }
         }
         
         // Check simple extensions

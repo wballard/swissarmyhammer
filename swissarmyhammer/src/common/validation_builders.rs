@@ -69,21 +69,21 @@ impl ValidationErrorBuilder {
         let mut message = String::new();
 
         if let Some(context) = self.context {
-            message.push_str(&format!("Validation failed in {}", context));
+            message.push_str(&format!("Validation failed in {context}"));
         } else {
             message.push_str("Validation failed");
         }
 
         if let Some(field) = self.field {
-            message.push_str(&format!(" for field '{}'", field));
+            message.push_str(&format!(" for field '{field}'"));
         }
 
         if let Some(value) = self.value {
-            message.push_str(&format!(" with value '{}'", value));
+            message.push_str(&format!(" with value '{value}'"));
         }
 
         if let Some(reason) = self.reason {
-            message.push_str(&format!(": {}", reason));
+            message.push_str(&format!(": {reason}"));
         } else {
             message.push_str(": validation constraint not met");
         }
@@ -134,7 +134,7 @@ pub mod quick {
         ValidationErrorBuilder::new()
             .field(field)
             .value(value.to_string())
-            .reason(format!("value must be between {} and {} (inclusive)", min, max))
+            .reason(format!("value must be between {min} and {max} (inclusive)"))
             .build()
     }
 
@@ -147,7 +147,7 @@ pub mod quick {
         ValidationErrorBuilder::new()
             .field(field)
             .value(value)
-            .reason(format!("value does not match expected format: {}", expected_format))
+            .reason(format!("value does not match expected format: {expected_format}"))
             .build()
     }
 
@@ -159,16 +159,16 @@ pub mod quick {
         max_length: Option<usize>
     ) -> SwissArmyHammerError {
         let reason = match (min_length, max_length) {
-            (Some(min), Some(max)) => format!("length must be between {} and {}", min, max),
-            (Some(min), None) => format!("length must be at least {}", min),
-            (None, Some(max)) => format!("length must be at most {}", max),
+            (Some(min), Some(max)) => format!("length must be between {min} and {max}"),
+            (Some(min), None) => format!("length must be at least {min}"),
+            (None, Some(max)) => format!("length must be at most {max}"),
             (None, None) => "invalid length".to_string(),
         };
 
         ValidationErrorBuilder::new()
             .field(field)
             .value(actual_length.to_string())
-            .reason(format!("{} (actual: {})", reason, actual_length))
+            .reason(format!("{reason} (actual: {actual_length})"))
             .build()
     }
 
@@ -199,7 +199,7 @@ pub mod quick {
     ) -> SwissArmyHammerError {
         let mut builder = ValidationErrorBuilder::new()
             .field(field)
-            .reason(format!("requires '{}' to be set", dependency));
+            .reason(format!("requires '{dependency}' to be set"));
 
         if let Some(suggestion) = suggestion {
             builder = builder.suggestion(suggestion);
@@ -252,8 +252,7 @@ impl<T> ValidationChain<T> {
                 .join("; ");
             
             Err(SwissArmyHammerError::Other(format!(
-                "Multiple validation errors: {}", 
-                combined_message
+                "Multiple validation errors: {combined_message}"
             )))
         }
     }

@@ -70,6 +70,9 @@ pub mod workflow;
 /// Issue tracking and management
 pub mod issues;
 
+/// Memoranda management and storage system
+pub mod memoranda;
+
 /// Git operations for issue management
 pub mod git;
 
@@ -107,6 +110,12 @@ pub use workflow::{
     WorkflowRunStatus,
 };
 
+// Re-export memoranda types
+pub use memoranda::{
+    CreateMemoRequest, DeleteMemoRequest, GetMemoRequest, ListMemosResponse, Memo, MemoId,
+    SearchMemosRequest, SearchMemosResponse, UpdateMemoRequest,
+};
+
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -135,6 +144,12 @@ pub mod prelude {
     pub use crate::workflow::{
         State, StateId, Transition, Workflow, WorkflowName, WorkflowRun, WorkflowRunId,
         WorkflowRunStatus,
+    };
+
+    // Memoranda types for convenient access
+    pub use crate::memoranda::{
+        CreateMemoRequest, DeleteMemoRequest, GetMemoRequest, ListMemosResponse, Memo, MemoId,
+        SearchMemosRequest, SearchMemosResponse, UpdateMemoRequest,
     };
 
     // Common utilities for easy access

@@ -98,6 +98,22 @@ pub enum SwissArmyHammerError {
         details: String,
     },
 
+    /// Memo not found
+    #[error("Memo not found: {0}")]
+    MemoNotFound(String),
+
+    /// Invalid memo ID format
+    #[error("Invalid memo ID: {0}")]
+    InvalidMemoId(String),
+
+    /// Memo already exists
+    #[error("Memo already exists: {0}")]
+    MemoAlreadyExists(String),
+
+    /// Memo validation error
+    #[error("Memo validation failed: {0}")]
+    MemoValidationFailed(String),
+
     /// Other errors
     #[error("{0}")]
     Other(String),
@@ -524,6 +540,26 @@ impl SwissArmyHammerError {
         SwissArmyHammerError::Other(format!(
             "Directory operation '{operation}' failed on '{path}': {details}"
         ))
+    }
+
+    /// Create a memo not found error
+    pub fn memo_not_found(memo_id: &str) -> Self {
+        SwissArmyHammerError::MemoNotFound(memo_id.to_string())
+    }
+
+    /// Create an invalid memo ID error
+    pub fn invalid_memo_id(memo_id: &str) -> Self {
+        SwissArmyHammerError::InvalidMemoId(memo_id.to_string())
+    }
+
+    /// Create a memo already exists error
+    pub fn memo_already_exists(memo_id: &str) -> Self {
+        SwissArmyHammerError::MemoAlreadyExists(memo_id.to_string())
+    }
+
+    /// Create a memo validation error
+    pub fn memo_validation_failed(reason: &str) -> Self {
+        SwissArmyHammerError::MemoValidationFailed(reason.to_string())
     }
 }
 

@@ -628,7 +628,7 @@ pub fn parse_issue_number(s: &str) -> Result<u32> {
 /// - The filename doesn't contain exactly one underscore
 /// - The number part is not exactly 6 digits
 /// - The number part contains non-numeric characters
-/// - The number exceeds the maximum allowed value (999999)
+/// - The number exceeds the maximum allowed value (999_999)
 ///
 /// # Examples
 ///
@@ -656,7 +656,7 @@ pub fn parse_issue_number(s: &str) -> Result<u32> {
 ///
 /// // Maximum number
 /// let (number, name) = parse_issue_filename("999999_max_issue").unwrap();
-/// assert_eq!(number, 999999);
+/// assert_eq!(number, 999_999);
 /// assert_eq!(name, "max_issue");
 /// ```
 ///
@@ -674,7 +674,7 @@ pub fn parse_issue_number(s: &str) -> Result<u32> {
 /// parse_issue_filename("abc123_test").unwrap();
 ///
 /// // Invalid: number too large
-/// parse_issue_filename("1000000_test").unwrap();
+/// parse_issue_filename("1_000_000_test").unwrap();
 /// ```
 pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
     let parts: Vec<&str> = filename.splitn(2, '_').collect();
@@ -980,7 +980,7 @@ mod tests {
             999,
             1000,
             99999,
-            100000,
+            100_000,
             Config::global().max_issue_number,
         ];
         for num in valid_numbers {
@@ -991,7 +991,7 @@ mod tests {
         }
 
         // Invalid numbers (too large)
-        let invalid_numbers = vec![1000000, 9999999];
+        let invalid_numbers = vec![1_000_000, 9_999_999];
         for num in invalid_numbers {
             assert!(
                 num > Config::global().max_issue_number,
@@ -1709,7 +1709,7 @@ mod tests {
     fn test_format_issue_number() {
         assert_eq!(format_issue_number(1), "000001");
         assert_eq!(format_issue_number(123), "000123");
-        assert_eq!(format_issue_number(999999), "999999");
+        assert_eq!(format_issue_number(999_999), "999999");
         assert_eq!(format_issue_number(0), "000000");
     }
 
@@ -1717,7 +1717,7 @@ mod tests {
     fn test_parse_issue_number_valid() {
         assert_eq!(parse_issue_number("000001").unwrap(), 1);
         assert_eq!(parse_issue_number("000123").unwrap(), 123);
-        assert_eq!(parse_issue_number("999999").unwrap(), 999999);
+        assert_eq!(parse_issue_number("999999").unwrap(), 999_999);
         assert_eq!(parse_issue_number("000000").unwrap(), 0);
     }
 
@@ -1733,7 +1733,7 @@ mod tests {
         assert!(parse_issue_number("00abc1").is_err());
 
         // Too large
-        assert!(parse_issue_number("1000000").is_err());
+        assert!(parse_issue_number("1_000_000").is_err());
     }
 
     #[test]
@@ -2048,14 +2048,14 @@ mod tests {
     #[test]
     fn test_format_issue_number_comprehensive() {
         assert_eq!(format_issue_number(1), "000001");
-        assert_eq!(format_issue_number(999999), "999999");
+        assert_eq!(format_issue_number(999_999), "999999");
         assert_eq!(format_issue_number(42), "000042");
     }
 
     #[test]
     fn test_parse_issue_number_comprehensive() {
         assert_eq!(parse_issue_number("000001").unwrap(), 1);
-        assert_eq!(parse_issue_number("999999").unwrap(), 999999);
+        assert_eq!(parse_issue_number("999999").unwrap(), 999_999);
         assert_eq!(parse_issue_number("000042").unwrap(), 42);
 
         // Invalid cases

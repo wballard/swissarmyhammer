@@ -1110,7 +1110,7 @@ mod tests {
 
         // Create a test workflow file
         let workflow_file = local_workflows_dir.join("local_workflow.md");
-        let workflow_content = r#"---
+        let workflow_content = r"---
 name: Local Test Workflow
 description: A local workflow for testing
 ---
@@ -1122,7 +1122,7 @@ stateDiagram-v2
     [*] --> Processing
     Processing --> [*]
 ```
-        "#;
+        ";
         fs::write(&workflow_file, workflow_content).unwrap();
 
         let mut resolver = WorkflowResolver::new();
@@ -1188,16 +1188,16 @@ stateDiagram-v2
         fs::create_dir_all(&local_workflows_dir).unwrap();
 
         // Create same-named workflow in both locations
-        let workflow_content_user = r#"
+        let workflow_content_user = r"
         stateDiagram-v2
             [*] --> UserState
             UserState --> [*]
-        "#;
-        let workflow_content_local = r#"
+        ";
+        let workflow_content_local = r"
         stateDiagram-v2
             [*] --> LocalState
             LocalState --> [*]
-        "#;
+        ";
 
         fs::write(
             user_workflows_dir.join("same_name.mermaid"),
@@ -1292,9 +1292,8 @@ stateDiagram-v2
                     // and don't require filesystem access
                     println!("Warning: Could not load workflows from filesystem in CI: {e}");
                     return;
-                } else {
-                    panic!("Unexpected error loading workflows: {e}");
                 }
+                panic!("Unexpected error loading workflows: {e}");
             }
         }
 

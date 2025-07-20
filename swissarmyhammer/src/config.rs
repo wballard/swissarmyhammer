@@ -16,7 +16,7 @@ pub struct Config {
     pub max_pending_issues_in_summary: usize,
     /// Minimum issue number allowed (default: 1)
     pub min_issue_number: u32,
-    /// Maximum issue number allowed (default: 999999)
+    /// Maximum issue number allowed (default: 999_999)
     pub max_issue_number: u32,
     /// Number of digits for issue numbering in filenames (default: 6)
     pub issue_number_digits: usize,
@@ -97,7 +97,7 @@ mod tests {
         assert_eq!(config.issue_number_width, 6);
         assert_eq!(config.max_pending_issues_in_summary, 5);
         assert_eq!(config.min_issue_number, 1);
-        assert_eq!(config.max_issue_number, 999999);
+        assert_eq!(config.max_issue_number, 999_999);
         assert_eq!(config.issue_number_digits, 6);
         assert_eq!(config.max_content_length, 50000);
         assert_eq!(config.max_line_length, 10000);
@@ -122,7 +122,7 @@ mod tests {
         assert_eq!(config.issue_number_width, 6);
         assert_eq!(config.max_pending_issues_in_summary, 5);
         assert_eq!(config.min_issue_number, 1);
-        assert_eq!(config.max_issue_number, 999999);
+        assert_eq!(config.max_issue_number, 999_999);
         assert_eq!(config.issue_number_digits, 6);
         assert_eq!(config.max_content_length, 50000);
         assert_eq!(config.max_line_length, 10000);
@@ -151,7 +151,7 @@ mod tests {
         assert_eq!(config.issue_number_width, 8);
         assert_eq!(config.max_pending_issues_in_summary, 10);
         assert_eq!(config.min_issue_number, 1);
-        assert_eq!(config.max_issue_number, 9999999);
+        assert_eq!(config.max_issue_number, 9_999_999);
         assert_eq!(config.issue_number_digits, 7);
 
         // Restore original env vars or remove if they didn't exist

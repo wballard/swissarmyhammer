@@ -269,10 +269,14 @@ impl Prompt {
     ///
     /// # Returns
     ///
-    /// The rendered template as a string, or an error if:
-    /// - Required arguments are missing
-    /// - Template syntax is invalid
-    /// - Template rendering fails
+    /// The rendered template as a string.
+    ///
+    /// # Errors
+    /// 
+    /// Returns an error if:
+    /// - Template parsing fails due to invalid Liquid syntax
+    /// - Required arguments are missing from the provided arguments map
+    /// - Template rendering fails during execution
     ///
     /// # Examples
     ///
@@ -401,6 +405,14 @@ impl Prompt {
     ///
     /// let result = prompt.render_with_partials(&args, Arc::new(library)).unwrap();
     /// ```
+    ///
+    /// # Errors
+    /// 
+    /// Returns an error if:
+    /// - Template parsing fails due to invalid Liquid syntax or partial resolution
+    /// - Required arguments are missing from the provided arguments map
+    /// - Template rendering fails during execution
+    /// - Referenced partials cannot be found in the provided library
     pub fn render_with_partials(
         &self,
         args: &HashMap<String, String>,
@@ -462,6 +474,14 @@ impl Prompt {
     ///
     /// let result = prompt.render_with_partials_and_env(&args, Arc::new(library)).unwrap();
     /// ```
+    ///
+    /// # Errors
+    /// 
+    /// Returns an error if:
+    /// - Template parsing fails due to invalid Liquid syntax or partial resolution
+    /// - Required arguments are missing from the provided arguments map
+    /// - Template rendering fails during execution
+    /// - Referenced partials cannot be found in the provided library
     pub fn render_with_partials_and_env(
         &self,
         args: &HashMap<String, String>,
@@ -693,8 +713,14 @@ impl PromptLibrary {
     ///
     /// # Returns
     ///
-    /// The number of prompts successfully loaded, or an error if the directory
-    /// cannot be read or prompts cannot be parsed.
+    /// The number of prompts successfully loaded.
+    ///
+    /// # Errors
+    /// 
+    /// Returns an error if:
+    /// - The directory does not exist
+    /// - I/O errors occur while reading the directory or files
+    /// - Storage backend fails to store loaded prompts
     ///
     /// # Examples
     ///
@@ -725,7 +751,13 @@ impl PromptLibrary {
     ///
     /// # Returns
     ///
-    /// The prompt if found, or a [`SwissArmyHammerError::PromptNotFound`] error.
+    /// The prompt if found.
+    ///
+    /// # Errors
+    /// 
+    /// Returns an error if:
+    /// - The prompt with the specified name is not found
+    /// - Storage backend fails to retrieve the prompt
     ///
     /// # Examples
     ///
@@ -751,6 +783,11 @@ impl PromptLibrary {
     /// # Returns
     ///
     /// A vector of all prompts currently stored in the library.
+    ///
+    /// # Errors
+    /// 
+    /// Returns an error if:
+    /// - Storage backend fails to list prompts
     ///
     /// # Examples
     ///
@@ -817,8 +854,14 @@ impl PromptLibrary {
     ///
     /// # Returns
     ///
-    /// The rendered template string, or an error if the prompt is not found
-    /// or rendering fails.
+    /// The rendered template string.
+    ///
+    /// # Errors
+    /// 
+    /// Returns an error if:
+    /// - Template parsing fails due to invalid Liquid syntax
+    /// - Required arguments are missing from the provided arguments map
+    /// - Template rendering fails during execution
     ///
     /// # Examples
     ///
@@ -1392,7 +1435,7 @@ mod tests {
 
         // Create a valid prompt that SHOULD be loaded
         let valid_prompt = temp_dir.path().join("valid.md");
-        let valid_content = r#"---
+        let valid_content = r"---
 title: Valid Prompt
 description: A valid prompt for testing
 arguments:
@@ -1404,20 +1447,20 @@ arguments:
 # Valid Prompt
 
 Discuss {{topic}}.
-"#;
+";
         fs::write(&valid_prompt, valid_content).unwrap();
 
         // Create another valid prompt in a subdirectory
         let sub_dir = temp_dir.path().join("prompts");
         fs::create_dir_all(&sub_dir).unwrap();
         let sub_prompt = sub_dir.join("another.md");
-        let sub_content = r#"---
+        let sub_content = r"---
 title: Another Prompt
 description: Another valid prompt
 ---
 
 This is another prompt.
-"#;
+";
         fs::write(&sub_prompt, sub_content).unwrap();
 
         let loader = PromptLoader::new();
@@ -1492,15 +1535,15 @@ This is another prompt.
 
         // Create another partial with underscore naming pattern
         let partial2_path = temp_dir.path().join("_footer.md");
-        let partial2_content = r#"<footer>
+        let partial2_content = r"<footer>
   Copyright {{year}} {{company}}
-</footer>"#;
+</footer>";
         fs::write(&partial2_path, partial2_content).unwrap();
 
         // Create a partial with "partial" in the name
         let partial3_path = temp_dir.path().join("header-partial.md");
-        let partial3_content = r#"## {{section_title}}
-{{section_content}}"#;
+        let partial3_content = r"## {{section_title}}
+{{section_content}}";
         fs::write(&partial3_path, partial3_content).unwrap();
 
         let loader = PromptLoader::new();

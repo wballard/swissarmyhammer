@@ -195,7 +195,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Temporarily ignoring due to pre-existing test failure
+    #[ignore = "Temporarily ignoring due to pre-existing test failure"]
     fn test_user_prompt_overrides_builtin_source_tracking() {
         let temp_dir = TempDir::new().unwrap();
         let user_prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
@@ -204,13 +204,13 @@ mod tests {
         // Create a user prompt with the same name as a builtin prompt
         let prompt_file = user_prompts_dir.join("debug").join("error.md");
         fs::create_dir_all(prompt_file.parent().unwrap()).unwrap();
-        let user_prompt_content = r#"---
+        let user_prompt_content = r"---
 title: User Debug Error
 description: User-defined error debugging prompt
 ---
 
 This is a user-defined debug/error prompt that should override the builtin one.
-"#;
+";
         fs::write(&prompt_file, user_prompt_content).unwrap();
 
         let mut resolver = PromptResolver::new();

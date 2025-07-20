@@ -1346,32 +1346,32 @@ fn detect_source_code_language(content: &str) -> Option<&'static str> {
     let patterns = [
         // Rust patterns
         (
-            r#"(fn\s+\w+|impl\s+|trait\s+|use\s+\w+::|pub\s+(fn|struct|enum|trait)|let\s+(mut\s+)?\w+\s*=)"#,
+            r"(fn\s+\w+|impl\s+|trait\s+|use\s+\w+::|pub\s+(fn|struct|enum|trait)|let\s+(mut\s+)?\w+\s*=)",
             "rust",
         ),
         // Python patterns
         (
-            r#"(def\s+\w+\s*\(|class\s+\w+\s*(\(|:)|import\s+\w+|from\s+\w+\s+import)"#,
+            r"(def\s+\w+\s*\(|class\s+\w+\s*(\(|:)|import\s+\w+|from\s+\w+\s+import)",
             "python",
         ),
         // JavaScript/TypeScript patterns
         (
-            r#"(function\s+\w+\s*\(|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=|export\s+(default\s+)?|import\s+.*from)"#,
+            r"(function\s+\w+\s*\(|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=|export\s+(default\s+)?|import\s+.*from)",
             "javascript",
         ),
         // Java patterns
         (
-            r#"(public\s+class\s+|private\s+|protected\s+|static\s+void\s+|import\s+java\.)"#,
+            r"(public\s+class\s+|private\s+|protected\s+|static\s+void\s+|import\s+java\.)",
             "java",
         ),
         // C/C++ patterns
         (
-            r#"(#include\s*<|int\s+main\s*\(|void\s+\w+\s*\(|class\s+\w+\s*\{|namespace\s+\w+)"#,
+            r"(#include\s*<|int\s+main\s*\(|void\s+\w+\s*\(|class\s+\w+\s*\{|namespace\s+\w+)",
             "cpp",
         ),
         // Go patterns
         (
-            r#"(func\s+\w+\s*\(|package\s+\w+|import\s+\(|type\s+\w+\s+struct)"#,
+            r"(func\s+\w+\s*\(|package\s+\w+|import\s+\(|type\s+\w+\s+struct)",
             "go",
         ),
         // Ruby patterns
@@ -1381,7 +1381,7 @@ fn detect_source_code_language(content: &str) -> Option<&'static str> {
         ),
         // Shell/Bash patterns
         (
-            r#"(#!/bin/(bash|sh)|function\s+\w+\s*\(\)|if\s+\[\[|\$\(|export\s+\w+=)"#,
+            r"(#!/bin/(bash|sh)|function\s+\w+\s*\(\)|if\s+\[\[|\$\(|export\s+\w+=)",
             "bash",
         ),
     ];

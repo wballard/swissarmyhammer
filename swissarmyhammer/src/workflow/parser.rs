@@ -654,12 +654,12 @@ mod tests {
 
     #[test]
     fn test_parse_simple_state_diagram() {
-        let input = r#"
+        let input = r"
         stateDiagram-v2
             [*] --> State1
             State1 --> State2: condition
             State2 --> [*]
-        "#;
+        ";
 
         let result = MermaidParser::parse(input, "test_workflow");
         assert!(result.is_ok());
@@ -693,10 +693,10 @@ mod tests {
 
     #[test]
     fn test_parse_wrong_diagram_type() {
-        let input = r#"
+        let input = r"
         flowchart TD
             A --> B
-        "#;
+        ";
 
         let result = MermaidParser::parse(input, "test_workflow");
         assert!(result.is_err());
@@ -711,14 +711,14 @@ mod tests {
 
     #[test]
     fn test_parse_state_diagram_with_actions() {
-        let input = r#"
+        let input = r"
         stateDiagram-v2
             [*] --> CheckingInput: Start workflow
             CheckingInput --> ProcessingData: Input valid
             CheckingInput --> ErrorState: Input invalid
             ProcessingData --> [*]: Complete
             ErrorState --> [*]: Abort
-        "#;
+        ";
 
         let result = MermaidParser::parse(input, "action_workflow");
         assert!(result.is_ok());
@@ -757,11 +757,11 @@ mod tests {
 
     #[test]
     fn test_no_initial_state_error() {
-        let input = r#"
+        let input = r"
         stateDiagram-v2
             State1 --> State2
             State2 --> State1
-        "#;
+        ";
 
         let result = MermaidParser::parse(input, "invalid_workflow");
         assert!(result.is_err());
@@ -777,12 +777,12 @@ mod tests {
         // This test would require a more complex setup where we manually construct
         // a workflow with unreachable states, which is hard to do with valid Mermaid syntax
         // For now, we test that normal workflows pass validation
-        let input = r#"
+        let input = r"
         stateDiagram-v2
             [*] --> State1
             State1 --> State2
             State2 --> [*]
-        "#;
+        ";
 
         let result = MermaidParser::parse(input, "valid_workflow");
         assert!(result.is_ok());
@@ -822,7 +822,7 @@ mod tests {
 
     #[test]
     fn test_parse_fork_join_diagram() {
-        let input = r#"
+        let input = r"
         stateDiagram-v2
             [*] --> Process
             state Fork1 <<fork>>
@@ -834,7 +834,7 @@ mod tests {
             Branch2 --> Join1: complete
             Join1 --> Complete
             Complete --> [*]
-        "#;
+        ";
 
         let result = MermaidParser::parse(input, "fork_join_workflow");
         assert!(result.is_ok());
@@ -900,7 +900,7 @@ stateDiagram-v2
 
     #[test]
     fn test_parse_nested_fork_join_diagram() {
-        let input = r#"
+        let input = r"
         stateDiagram-v2
             [*] --> Start
             state OuterFork <<fork>>
@@ -920,7 +920,7 @@ stateDiagram-v2
             Branch2 --> OuterJoin
             OuterJoin --> End
             End --> [*]
-        "#;
+        ";
 
         let result = MermaidParser::parse(input, "nested_fork_join_workflow");
         assert!(result.is_ok());

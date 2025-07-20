@@ -144,8 +144,8 @@ pub struct ListPromptsRequest {
 /// Request to create a new issue
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct CreateIssueRequest {
-    /// Name of the issue (will be used in filename)
-    pub name: IssueName,
+    /// Name of the issue (will be used in filename) - optional
+    pub name: Option<IssueName>,
     /// Markdown content of the issue
     pub content: String,
 }

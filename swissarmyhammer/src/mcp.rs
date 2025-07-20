@@ -529,10 +529,13 @@ impl McpServer {
         &self,
         request: CreateIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
-        tracing::debug!("Creating issue: {}", request.name);
+        tracing::debug!("Creating issue: {:?}", request.name);
 
-        // Validate issue name using shared validation logic
-        let validated_name = validate_issue_name(request.name.as_str())?;
+        // Validate issue name using shared validation logic, or use empty string for nameless issues
+        let validated_name = match &request.name {
+            Some(name) => validate_issue_name(name.as_str())?,
+            None => String::new(), // Empty name for nameless issues
+        };
 
         let issue_storage = self.issue_storage.write().await;
         match issue_storage
@@ -2414,7 +2417,7 @@ mod tests {
         let server = McpServer::new(library).unwrap();
 
         let request = CreateIssueRequest {
-            name: IssueName::new("test_issue".to_string()).unwrap(),
+            name: Some(IssueName::new("test_issue".to_string()).unwrap()),
             content: "# Test Issue\n\nThis is a test issue content.".to_string(),
         };
 
@@ -2443,7 +2446,7 @@ mod tests {
         let server = McpServer::new(library).unwrap();
 
         let request = CreateIssueRequest {
-            name: IssueName("".to_string()),
+            name: Some(IssueName("".to_string())),
             content: "Some content".to_string(),
         };
 
@@ -2464,7 +2467,7 @@ mod tests {
         let server = McpServer::new(library).unwrap();
 
         let request = CreateIssueRequest {
-            name: IssueName("   ".to_string()),
+            name: Some(IssueName("   ".to_string())),
             content: "Some content".to_string(),
         };
 
@@ -2489,7 +2492,7 @@ mod tests {
 
         let long_name = "a".repeat(101); // 101 characters, over the limit
         let request = CreateIssueRequest {
-            name: IssueName(long_name),
+            name: Some(IssueName(long_name)),
             content: "Some content".to_string(),
         };
 
@@ -2522,7 +2525,7 @@ mod tests {
 
         for invalid_name in invalid_names {
             let request = CreateIssueRequest {
-                name: IssueName(invalid_name.to_string()),
+                name: Some(IssueName(invalid_name.to_string())),
                 content: "Some content".to_string(),
             };
 
@@ -2547,7 +2550,7 @@ mod tests {
         let server = McpServer::new(library).unwrap();
 
         let request = CreateIssueRequest {
-            name: IssueName("  test_issue  ".to_string()),
+            name: Some(IssueName("  test_issue  ".to_string())),
             content: "Some content".to_string(),
         };
 
@@ -2575,7 +2578,7 @@ mod tests {
 
         // Create first issue
         let request1 = CreateIssueRequest {
-            name: IssueName::new("first_issue".to_string()).unwrap(),
+            name: Some(IssueName::new("first_issue".to_string()).unwrap()),
             content: "First issue content".to_string(),
         };
 
@@ -2587,7 +2590,7 @@ mod tests {
 
         // Create second issue
         let request2 = CreateIssueRequest {
-            name: IssueName::new("second_issue".to_string()).unwrap(),
+            name: Some(IssueName::new("second_issue".to_string()).unwrap()),
             content: "Second issue content".to_string(),
         };
 
@@ -2807,7 +2810,7 @@ mod tests {
 
             // Create issue via MCP
             let request = CreateIssueRequest {
-                name: IssueName::new("test_mcp_issue".to_string()).unwrap(),
+                name: Some(IssueName::new("test_mcp_issue".to_string()).unwrap()),
                 content: "This is a test issue created via MCP".to_string(),
             };
 
@@ -2855,7 +2858,7 @@ mod tests {
 
             // Try to create issue with empty name
             let request = CreateIssueRequest {
-                name: IssueName("".to_string()),
+                name: Some(IssueName("".to_string())),
                 content: "Content".to_string(),
             };
 
@@ -2872,7 +2875,7 @@ mod tests {
 
             // 1. Create an issue
             let create_request = CreateIssueRequest {
-                name: IssueName::new("feature_implementation".to_string()).unwrap(),
+                name: Some(IssueName::new("feature_implementation".to_string()).unwrap()),
                 content: "Implement new feature X".to_string(),
             };
 
@@ -2929,7 +2932,7 @@ mod tests {
 
             // Create an issue first
             let create_request = CreateIssueRequest {
-                name: IssueName::new("bug_fix".to_string()).unwrap(),
+                name: Some(IssueName::new("bug_fix".to_string()).unwrap()),
                 content: "Fix critical bug in parser".to_string(),
             };
             let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -2981,7 +2984,7 @@ mod tests {
 
             // Create and work on an issue
             let create_request = CreateIssueRequest {
-                name: IssueName::new("test_task".to_string()).unwrap(),
+                name: Some(IssueName::new("test_task".to_string()).unwrap()),
                 content: "Test task content".to_string(),
             };
             let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -3071,7 +3074,7 @@ mod tests {
 
             // Create an issue
             let create_request = CreateIssueRequest {
-                name: IssueName::new("merge_test".to_string()).unwrap(),
+                name: Some(IssueName::new("merge_test".to_string()).unwrap()),
                 content: "Test merge functionality".to_string(),
             };
             let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -3137,7 +3140,7 @@ mod tests {
 
             // Create an issue
             let create_request = CreateIssueRequest {
-                name: IssueName::new("append_test".to_string()).unwrap(),
+                name: Some(IssueName::new("append_test".to_string()).unwrap()),
                 content: "Initial content".to_string(),
             };
             let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -3188,7 +3191,7 @@ mod tests {
             // Create an issue with large content
             let large_content = "x".repeat(10000);
             let create_request = CreateIssueRequest {
-                name: IssueName::new("large_content_test".to_string()).unwrap(),
+                name: Some(IssueName::new("large_content_test".to_string()).unwrap()),
                 content: large_content.clone(),
             };
 
@@ -3220,7 +3223,7 @@ mod tests {
 
             // Test 1: Create an issue
             let create_request = CreateIssueRequest {
-                name: IssueName::new("git_integration_test".to_string()).unwrap(),
+                name: Some(IssueName::new("git_integration_test".to_string()).unwrap()),
                 content: "Testing git integration with MCP server".to_string(),
             };
 
@@ -3367,7 +3370,7 @@ mod tests {
             // Create all issues
             for (name, content) in &issues {
                 let create_request = CreateIssueRequest {
-                    name: IssueName::new(name.to_string()).unwrap(),
+                    name: Some(IssueName::new(name.to_string()).unwrap()),
                     content: content.to_string(),
                 };
 
@@ -3485,7 +3488,7 @@ mod tests {
 
             // Create a valid issue
             let create_request = CreateIssueRequest {
-                name: IssueName::new("error_test".to_string()).unwrap(),
+                name: Some(IssueName::new("error_test".to_string()).unwrap()),
                 content: "Testing error handling".to_string(),
             };
 
@@ -3552,7 +3555,7 @@ mod tests {
             for (name, content) in issues {
                 // Create issue
                 let create_request = CreateIssueRequest {
-                    name: IssueName(name.to_string()),
+                    name: Some(IssueName(name.to_string())),
                     content: content.to_string(),
                 };
                 let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -3606,7 +3609,7 @@ mod tests {
 
             for (name, content) in active_issues {
                 let create_request = CreateIssueRequest {
-                    name: IssueName(name.to_string()),
+                    name: Some(IssueName(name.to_string())),
                     content: content.to_string(),
                 };
                 let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -3622,7 +3625,7 @@ mod tests {
 
             for (name, content) in completed_issues {
                 let create_request = CreateIssueRequest {
-                    name: IssueName(name.to_string()),
+                    name: Some(IssueName(name.to_string())),
                     content: content.to_string(),
                 };
                 let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -3679,7 +3682,7 @@ mod tests {
 
             for (name, content) in active_issues {
                 let create_request = CreateIssueRequest {
-                    name: IssueName(name.to_string()),
+                    name: Some(IssueName(name.to_string())),
                     content: content.to_string(),
                 };
                 let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -3718,14 +3721,14 @@ mod tests {
 
             // Create one active and one completed issue
             let create_request = CreateIssueRequest {
-                name: IssueName("format_test_active".to_string()),
+                name: Some(IssueName("format_test_active".to_string())),
                 content: "Active issue content".to_string(),
             };
             let create_result = server.handle_issue_create(create_request).await.unwrap();
             assert!(!create_result.is_error.unwrap_or(false));
 
             let create_request = CreateIssueRequest {
-                name: IssueName("format_test_completed".to_string()),
+                name: Some(IssueName("format_test_completed".to_string())),
                 content: "Completed issue content".to_string(),
             };
             let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -3777,7 +3780,7 @@ mod tests {
 
             // Create an issue but don't mark it as complete
             let create_request = CreateIssueRequest {
-                name: IssueName::new("incomplete_merge_test".to_string()).unwrap(),
+                name: Some(IssueName::new("incomplete_merge_test".to_string()).unwrap()),
                 content: "Test merge of incomplete issue".to_string(),
             };
             let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -3831,7 +3834,7 @@ mod tests {
 
             // Create and complete an issue but don't create a branch
             let create_request = CreateIssueRequest {
-                name: IssueName::new("no_branch_test".to_string()).unwrap(),
+                name: Some(IssueName::new("no_branch_test".to_string()).unwrap()),
                 content: "Test merge with no branch".to_string(),
             };
             let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -3871,7 +3874,7 @@ mod tests {
 
             // Create an issue
             let create_request = CreateIssueRequest {
-                name: IssueName::new("delete_branch_test".to_string()).unwrap(),
+                name: Some(IssueName::new("delete_branch_test".to_string()).unwrap()),
                 content: "Test merge with branch deletion".to_string(),
             };
             let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -3938,7 +3941,7 @@ mod tests {
             let mut issue_numbers = Vec::new();
             for i in 0..3 {
                 let create_request = CreateIssueRequest {
-                    name: IssueName::new(format!("stats_test_{i}")).unwrap(),
+                    name: Some(IssueName::new(format!("stats_test_{i}")).unwrap()),
                     content: format!("Test issue {i}"),
                 };
                 let create_result = server.handle_issue_create(create_request).await.unwrap();
@@ -4011,6 +4014,45 @@ mod tests {
             } else {
                 panic!("Expected text response");
             }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_issue_create_nameless() {
+        // Test successful issue creation without a name
+        let library = PromptLibrary::new();
+        let server = McpServer::new(library).unwrap();
+
+        let request = CreateIssueRequest {
+            name: None,
+            content: "# Nameless Issue\n\nThis is a test issue without a name.".to_string(),
+        };
+
+        let result = server.handle_issue_create(request).await;
+        assert!(result.is_ok(), "Nameless issue creation should succeed");
+
+        let call_result = result.unwrap();
+        assert_eq!(call_result.is_error, Some(false));
+        assert!(!call_result.content.is_empty());
+
+        // Check that the response contains expected information
+        let text_content = &call_result.content[0];
+        if let RawContent::Text(text) = &text_content.raw {
+            assert!(text.text.contains("Created issue #"));
+            
+            // Extract the issue number to verify filename format
+            let start = text.text.find("Created issue #").unwrap() + "Created issue #".len();
+            let end = text.text[start..].find(' ').unwrap() + start;
+            let issue_number_str = &text.text[start..end];
+            
+            // Verify the filename is in the nameless format (e.g., "000123.md")
+            // and not the named format (e.g., "000123_unnamed.md")
+            assert!(text.text.contains(&format!("{}.md", issue_number_str)), 
+                    "Nameless issue should create filename like 000123.md, got: {}", text.text);
+            assert!(!text.text.contains("_unnamed"), 
+                    "Nameless issue should not contain '_unnamed' in filename");
+        } else {
+            panic!("Expected text content, got: {:?}", text_content.raw);
         }
     }
 }

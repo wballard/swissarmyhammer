@@ -49,10 +49,13 @@ impl ToolHandlers {
         &self,
         request: CreateIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
-        tracing::debug!("Creating issue: {}", request.name);
+        tracing::debug!("Creating issue: {:?}", request.name);
 
-        // Validate issue name using shared validation logic
-        let validated_name = validate_issue_name(request.name.as_ref())?;
+        // Validate issue name using shared validation logic, or use empty string for nameless issues
+        let validated_name = match &request.name {
+            Some(name) => validate_issue_name(name.as_str())?,
+            None => String::new(), // Empty name for nameless issues
+        };
 
         let issue_storage = self.issue_storage.write().await;
         match issue_storage

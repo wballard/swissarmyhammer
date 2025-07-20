@@ -392,9 +392,15 @@ impl FileSystemIssueStorage {
     /// The name parameter is sanitized by replacing spaces, forward slashes,
     /// and backslashes with hyphens to ensure filesystem compatibility.
     fn create_issue_file(&self, number: u32, name: &str, content: &str) -> Result<PathBuf> {
-        // Format filename as <nnnnnn>_<name>.md using utility functions
-        let safe_name = create_safe_filename(name);
-        let filename = format!("{}_{}.md", format_issue_number(number), safe_name);
+        // Format filename based on whether name is provided
+        let filename = if name.is_empty() {
+            // Nameless issue: just the number (e.g., 000123.md)
+            format!("{}.md", format_issue_number(number))
+        } else {
+            // Named issue: number_name format (e.g., 000123_fix_bug.md)
+            let safe_name = create_safe_filename(name);
+            format!("{}_{}.md", format_issue_number(number), safe_name)
+        };
         let file_path = self.state.issues_dir.join(&filename);
 
         // Write content to file

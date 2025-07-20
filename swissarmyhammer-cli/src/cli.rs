@@ -643,6 +643,7 @@ pub enum IssueCommands {
     /// Create a new issue
     Create {
         /// Issue name (optional)
+        #[arg()]
         name: Option<String>,
         /// Issue content (use - for stdin)
         #[arg(short, long)]

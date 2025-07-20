@@ -90,20 +90,24 @@ async fn test_corrupted_issue_files() {
     let mut file = File::create(&corrupted_file).unwrap();
     file.write_all(b"\xFF\xFE\x00\x00corrupted binary data\x00\x00").unwrap();
     
-    // Create a file with invalid filename format
-    let invalid_filename = issues_dir.join("invalid_format.md");
-    let mut file = File::create(&invalid_filename).unwrap();
-    file.write_all(b"Valid markdown content but invalid filename").unwrap();
+    // Create a file with any .md name (now valid according to new requirement)
+    let non_numbered_filename = issues_dir.join("invalid_format.md");
+    let mut file = File::create(&non_numbered_filename).unwrap();
+    file.write_all(b"Valid markdown content in non-numbered file").unwrap();
     
     // Check all complete - should handle corrupted files gracefully
     let request = AllCompleteRequest {};
     let result = env.tool_handlers.handle_issue_all_complete(request).await.unwrap();
     
-    // Should still report the valid issue as active
+    // Should report both valid issues as active (original numbered + new non-numbered)
     assert!(!result.is_error.unwrap_or(false));
     if let rmcp::model::RawContent::Text(text) = &result.content[0].raw {
-        assert!(text.text.contains("Active: 1"));
+        // Should have 2 active issues: the original numbered one + the non-numbered one
+        assert!(text.text.contains("Active: 2"));
+        // Should contain the original numbered issue
         assert!(text.text.contains(&format!("#{:06} - {}", issue.number, issue.name)));
+        // Should contain the non-numbered issue (with auto-assigned virtual number)
+        assert!(text.text.contains("invalid_format"));
     } else {
         panic!("Expected text response");
     }

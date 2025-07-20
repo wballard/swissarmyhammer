@@ -195,30 +195,36 @@ impl FileSystemIssueStorage {
                 )
             })?;
 
-        // Parse filename format: <nnnnnn>_<name>.md
-        let parts: Vec<&str> = filename.splitn(2, '_').collect();
-        if parts.len() != 2 {
-            return Err(SwissArmyHammerError::parsing_failed(
-                "filename format",
-                filename,
-                "expected format: <nnnnnn>_<name>.md",
-            ));
-        }
-
-        // Parse the 6-digit number
-        let number: u32 = parts[0]
-            .parse()
-            .map_err(|_| SwissArmyHammerError::InvalidIssueNumber(parts[0].to_string()))?;
-
-        if number > Config::global().max_issue_number {
-            return Err(SwissArmyHammerError::InvalidIssueNumber(format!(
-                "Issue number {} exceeds maximum ({})",
-                number,
-                Config::global().max_issue_number
-            )));
-        }
-
-        let name = parts[1].to_string();
+        // Parse filename - supports both numbered and non-numbered formats
+        let (parsed_number, name) = parse_any_issue_filename(filename)?;
+        
+        let number = match parsed_number {
+            Some(num) => {
+                // Validate numbered files against the configured maximum
+                if num > Config::global().max_issue_number {
+                    return Err(SwissArmyHammerError::InvalidIssueNumber(format!(
+                        "Issue number {} exceeds maximum ({})",
+                        num,
+                        Config::global().max_issue_number
+                    )));
+                }
+                num
+            },
+            None => {
+                // For non-numbered files, generate a virtual number based on filename hash
+                // This ensures consistent ordering while keeping non-numbered files separate
+                // from numbered ones. Use a high base (500,000) to avoid conflicts.
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
+                
+                let mut hasher = DefaultHasher::new();
+                filename.hash(&mut hasher);
+                let hash = hasher.finish();
+                
+                // Map hash to range 500000-999999 to avoid conflicts with numbered files
+                500_000 + ((hash % 500_000) as u32)
+            }
+        };
 
         // Read file content
         let content = fs::read_to_string(path).map_err(SwissArmyHammerError::Io)?;
@@ -341,9 +347,12 @@ impl FileSystemIssueStorage {
         let completed_issues = self.list_issues_in_dir(&self.state.completed_dir)?;
 
         // Combine both iterators and find the maximum issue number
+        // Only consider explicitly numbered files (< 500,000) for next number calculation
+        // Non-numbered files use virtual numbers >= 500,000 and should not affect numbering
         let max_number = pending_issues
             .iter()
             .chain(completed_issues.iter())
+            .filter(|issue| issue.number.value() < 500_000) // Exclude virtual numbers
             .max_by_key(|issue| issue.number)
             .map(|issue| issue.number)
             .unwrap_or(IssueNumber::from(0));
@@ -690,6 +699,53 @@ pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
     Ok((number, name))
 }
 
+/// Parse any issue filename format (numbered or non-numbered)
+///
+/// This function can handle both the traditional numbered format (NNNNNN_name)
+/// and arbitrary markdown filenames. For numbered files, it returns the parsed
+/// number and name. For non-numbered files, it returns None for the number and
+/// the filename as the name.
+///
+/// # Arguments
+///
+/// * `filename` - The filename without extension to parse
+///
+/// # Returns
+///
+/// Returns `Ok((Option<u32>, String))` where:
+/// - First element is `Some(number)` for numbered files, `None` for non-numbered
+/// - Second element is the issue name
+///
+/// # Examples
+///
+/// ```ignore
+/// // Numbered format
+/// let (number, name) = parse_any_issue_filename("000123_bug_fix").unwrap();
+/// assert_eq!(number, Some(123));
+/// assert_eq!(name, "bug_fix");
+///
+/// // Non-numbered format  
+/// let (number, name) = parse_any_issue_filename("my-issue").unwrap();
+/// assert_eq!(number, None);
+/// assert_eq!(name, "my-issue");
+/// ```
+pub fn parse_any_issue_filename(filename: &str) -> Result<(Option<u32>, String)> {
+    // First try to parse as numbered format
+    if let Ok((number, name)) = parse_issue_filename(filename) {
+        return Ok((Some(number), name));
+    }
+    
+    // If that fails, treat the entire filename as the issue name
+    // Validate that the filename is not empty and is safe
+    if filename.is_empty() {
+        return Err(SwissArmyHammerError::Other(
+            "Issue filename cannot be empty".to_string()
+        ));
+    }
+    
+    Ok((None, filename.to_string()))
+}
+
 /// Create safe filename from issue name
 ///
 /// Converts an issue name into a filesystem-safe filename by replacing problematic
@@ -910,6 +966,10 @@ pub fn validate_issue_name(name: &str) -> Result<()> {
 }
 
 /// Check if file is an issue file
+/// 
+/// Any markdown file (.md) in the issues directory is considered a valid issue file.
+/// The numbered format (NNNNNN_name.md) is supported for backward compatibility,
+/// but any .md file with a non-empty name is accepted.
 pub fn is_issue_file(path: &Path) -> bool {
     // Must be .md file
     if path.extension() != Some(std::ffi::OsStr::new("md")) {
@@ -925,11 +985,8 @@ pub fn is_issue_file(path: &Path) -> bool {
         None => return false,
     };
 
-    // Check if filename matches pattern and name is not empty
-    match parse_issue_filename(filename) {
-        Ok((_, name)) => !name.is_empty(),
-        Err(_) => false,
-    }
+    // Any non-empty filename is valid (supports both numbered and non-numbered formats)
+    !filename.is_empty()
 }
 
 impl FileSystemIssueStorage {}
@@ -1067,45 +1124,54 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_issue_invalid_filename() {
+    fn test_parse_issue_non_numbered_filename() {
         let temp_dir = TempDir::new().unwrap();
         let issues_dir = temp_dir.path().to_path_buf();
         let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
 
-        // Create test file with invalid filename
+        // Create test file with non-numbered filename (now valid)
         let test_file = issues_dir.join("invalid_filename.md");
         fs::write(&test_file, "content").unwrap();
 
         let result = storage.parse_issue_from_file(&test_file);
-        assert!(result.is_err());
+        assert!(result.is_ok());
+        let issue = result.unwrap();
+        assert_eq!(issue.name, "invalid_filename");
+        assert!(issue.number.value() >= 500_000); // Virtual number for non-numbered files
     }
 
     #[test]
-    fn test_parse_issue_invalid_number() {
+    fn test_parse_issue_non_standard_format() {
         let temp_dir = TempDir::new().unwrap();
         let issues_dir = temp_dir.path().to_path_buf();
         let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
 
-        // Create test file with invalid number
+        // Create test file with non-standard format (now valid as non-numbered)
         let test_file = issues_dir.join("abc123_test.md");
         fs::write(&test_file, "content").unwrap();
 
         let result = storage.parse_issue_from_file(&test_file);
-        assert!(result.is_err());
+        assert!(result.is_ok());
+        let issue = result.unwrap();
+        assert_eq!(issue.name, "abc123_test");
+        assert!(issue.number.value() >= 500_000); // Virtual number for non-numbered files
     }
 
     #[test]
-    fn test_parse_issue_number_too_large() {
+    fn test_parse_issue_large_number_as_non_numbered() {
         let temp_dir = TempDir::new().unwrap();
         let issues_dir = temp_dir.path().to_path_buf();
         let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
 
-        // Create test file with number too large
+        // Create test file with number too large for numbered format (now valid as non-numbered)
         let test_file = issues_dir.join("1000000_test.md");
         fs::write(&test_file, "content").unwrap();
 
         let result = storage.parse_issue_from_file(&test_file);
-        assert!(result.is_err());
+        assert!(result.is_ok());
+        let issue = result.unwrap();
+        assert_eq!(issue.name, "1000000_test");
+        assert!(issue.number.value() >= 500_000); // Virtual number for non-numbered files
     }
 
     #[tokio::test]
@@ -1317,32 +1383,39 @@ mod tests {
 
         // Create various files
         fs::write(issues_dir.join("000001_test.md"), "content").unwrap();
-        fs::write(issues_dir.join("000002_test.txt"), "content").unwrap();
-        fs::write(issues_dir.join("README.md"), "content").unwrap();
+        fs::write(issues_dir.join("000002_test.txt"), "content").unwrap(); // Should be ignored (not .md)
+        fs::write(issues_dir.join("README.md"), "content").unwrap(); // Now valid as non-numbered issue
         fs::write(issues_dir.join("000003_valid.md"), "content").unwrap();
 
         let issues = storage.list_issues_in_dir(&issues_dir).unwrap();
-        assert_eq!(issues.len(), 2); // Only the valid issue files
-        assert_eq!(issues[0].number, IssueNumber::from(1));
-        assert_eq!(issues[1].number, IssueNumber::from(3));
+        assert_eq!(issues.len(), 3); // All .md files are valid issues now
+        
+        // Sort by number to make assertions predictable
+        let mut sorted_issues = issues;
+        sorted_issues.sort_by_key(|issue| issue.number);
+        
+        assert_eq!(sorted_issues[0].number, IssueNumber::from(1));
+        assert_eq!(sorted_issues[1].number, IssueNumber::from(3));
+        // README.md gets a virtual number in 500000+ range
+        assert!(sorted_issues[2].number.value() >= 500_000);
+        assert_eq!(sorted_issues[2].name, "README");
     }
 
     #[test]
-    fn test_parse_issue_malformed_filename_no_underscore() {
+    fn test_parse_issue_filename_no_underscore() {
         let temp_dir = TempDir::new().unwrap();
         let issues_dir = temp_dir.path().to_path_buf();
         let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
 
-        // Create file with no underscore
+        // Create file with no underscore (now valid as non-numbered)
         let test_file = issues_dir.join("000123test.md");
         fs::write(&test_file, "content").unwrap();
 
         let result = storage.parse_issue_from_file(&test_file);
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            SwissArmyHammerError::Other(_)
-        ));
+        assert!(result.is_ok());
+        let issue = result.unwrap();
+        assert_eq!(issue.name, "000123test");
+        assert!(issue.number.value() >= 500_000); // Virtual number for non-numbered files
     }
 
     #[test]
@@ -1380,21 +1453,20 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_issue_malformed_filename_empty_number() {
+    fn test_parse_issue_filename_starting_with_underscore() {
         let temp_dir = TempDir::new().unwrap();
         let issues_dir = temp_dir.path().to_path_buf();
         let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
 
-        // Create file with empty number part
+        // Create file starting with underscore (now valid as non-numbered)
         let test_file = issues_dir.join("_test.md");
         fs::write(&test_file, "content").unwrap();
 
         let result = storage.parse_issue_from_file(&test_file);
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            SwissArmyHammerError::InvalidIssueNumber(_)
-        ));
+        assert!(result.is_ok());
+        let issue = result.unwrap();
+        assert_eq!(issue.name, "_test");
+        assert!(issue.number.value() >= 500_000); // Virtual number for non-numbered files
     }
 
     #[test]
@@ -1437,19 +1509,30 @@ mod tests {
         let issues_dir = temp_dir.path().to_path_buf();
         let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
 
-        // Create valid file
+        // Create valid numbered file
         fs::write(issues_dir.join("000001_valid.md"), "content").unwrap();
 
-        // Create corrupted/malformed files
-        fs::write(issues_dir.join("invalid_format.md"), "content").unwrap();
-        fs::write(issues_dir.join("abc123_invalid_number.md"), "content").unwrap();
-        fs::write(issues_dir.join("1000000_too_large.md"), "content").unwrap();
+        // Create files that were previously considered "corrupted" but are now valid as non-numbered issues
+        fs::write(issues_dir.join("invalid_format.md"), "content").unwrap(); // Now valid as non-numbered
+        fs::write(issues_dir.join("abc123_invalid_number.md"), "content").unwrap(); // Now valid as non-numbered
+        fs::write(issues_dir.join("1000000_too_large.md"), "content").unwrap(); // Now valid as non-numbered
 
         let issues = storage.list_issues_in_dir(&issues_dir).unwrap();
-        // Should only return the valid issue, ignoring corrupted ones
-        assert_eq!(issues.len(), 1);
-        assert_eq!(issues[0].number, IssueNumber::from(1));
-        assert_eq!(issues[0].name, "valid");
+        // All .md files are now valid issues (1 numbered + 3 non-numbered)
+        assert_eq!(issues.len(), 4);
+        
+        // Sort to make assertions predictable
+        let mut sorted_issues = issues;
+        sorted_issues.sort_by_key(|issue| issue.number);
+        
+        // First issue should be the numbered one
+        assert_eq!(sorted_issues[0].number, IssueNumber::from(1));
+        assert_eq!(sorted_issues[0].name, "valid");
+        
+        // The other 3 should be non-numbered with virtual numbers >= 500000
+        for i in 1..4 {
+            assert!(sorted_issues[i].number.value() >= 500_000);
+        }
     }
 
     #[tokio::test]
@@ -1770,6 +1853,58 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_any_issue_filename_numbered() {
+        // Test numbered format (existing behavior)
+        let (number, name) = parse_any_issue_filename("000123_test_issue").unwrap();
+        assert_eq!(number, Some(123));
+        assert_eq!(name, "test_issue");
+
+        let (number, name) = parse_any_issue_filename("000001_simple").unwrap();
+        assert_eq!(number, Some(1));
+        assert_eq!(name, "simple");
+
+        let (number, name) = parse_any_issue_filename("000456_name_with_underscores").unwrap();
+        assert_eq!(number, Some(456));
+        assert_eq!(name, "name_with_underscores");
+    }
+
+    #[test]
+    fn test_parse_any_issue_filename_non_numbered() {
+        // Test non-numbered format (new behavior)
+        let (number, name) = parse_any_issue_filename("my-issue").unwrap();
+        assert_eq!(number, None);
+        assert_eq!(name, "my-issue");
+
+        let (number, name) = parse_any_issue_filename("bug-report").unwrap();
+        assert_eq!(number, None);
+        assert_eq!(name, "bug-report");
+
+        let (number, name) = parse_any_issue_filename("feature_request").unwrap();
+        assert_eq!(number, None);
+        assert_eq!(name, "feature_request");
+
+        let (number, name) = parse_any_issue_filename("simple").unwrap();
+        assert_eq!(number, None);
+        assert_eq!(name, "simple");
+    }
+
+    #[test]
+    fn test_parse_any_issue_filename_edge_cases() {
+        // Test empty filename
+        assert!(parse_any_issue_filename("").is_err());
+
+        // Test filename that looks like numbered but isn't
+        let (number, name) = parse_any_issue_filename("123_not_6_digits").unwrap();
+        assert_eq!(number, None);  // Should be treated as non-numbered
+        assert_eq!(name, "123_not_6_digits");
+
+        // Test filename with underscores but not numbered format
+        let (number, name) = parse_any_issue_filename("not_numbered_format").unwrap();
+        assert_eq!(number, None);
+        assert_eq!(name, "not_numbered_format");
+    }
+
+    #[test]
     fn test_create_safe_filename() {
         assert_eq!(create_safe_filename("simple"), "simple");
         assert_eq!(create_safe_filename("with spaces"), "with-spaces");
@@ -1844,25 +1979,32 @@ mod tests {
 
     #[test]
     fn test_is_issue_file() {
-        // Valid issue files
+        // Valid issue files - numbered format (traditional)
         assert!(is_issue_file(Path::new("000123_test.md")));
         assert!(is_issue_file(Path::new("000001_simple.md")));
         assert!(is_issue_file(Path::new("999999_max.md")));
         assert!(is_issue_file(Path::new("000000_zero.md")));
         assert!(is_issue_file(Path::new("000456_name_with_underscores.md")));
 
-        // Invalid files
-        assert!(!is_issue_file(Path::new("123_test.md"))); // Wrong number format
-        assert!(!is_issue_file(Path::new("000123test.md"))); // Missing underscore
+        // Valid issue files - non-numbered format (new)
+        assert!(is_issue_file(Path::new("123_test.md"))); // Now valid: any .md file
+        assert!(is_issue_file(Path::new("000123test.md"))); // Now valid: any .md file
+        assert!(is_issue_file(Path::new("abc123_test.md"))); // Now valid: any .md file  
+        assert!(is_issue_file(Path::new("README.md"))); // Now valid: any .md file
+        assert!(is_issue_file(Path::new("bug-report.md"))); // Valid: non-numbered
+        assert!(is_issue_file(Path::new("my-feature.md"))); // Valid: non-numbered
+
+        // Invalid files - wrong extension or no filename
         assert!(!is_issue_file(Path::new("000123_test.txt"))); // Wrong extension
         assert!(!is_issue_file(Path::new("000123_test"))); // No extension
-        assert!(!is_issue_file(Path::new("abc123_test.md"))); // Invalid number
-        assert!(!is_issue_file(Path::new("README.md"))); // Not issue format
-        assert!(!is_issue_file(Path::new("000123_.md"))); // Valid but edge case
+        assert!(!is_issue_file(Path::new(".md"))); // Empty filename
 
-        // Path with directory
+        // Valid but edge cases
+        assert!(is_issue_file(Path::new("000123_.md"))); // Valid: empty name part in numbered format
+
+        // Path with directory should work
         assert!(is_issue_file(Path::new("./issues/000123_test.md")));
-        assert!(is_issue_file(Path::new("/path/to/000123_test.md")));
+        assert!(is_issue_file(Path::new("/path/to/README.md")));
     }
 
     // Comprehensive tests for issue operations as specified in the issue

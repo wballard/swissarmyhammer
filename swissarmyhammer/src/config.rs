@@ -6,6 +6,8 @@
 use crate::common::env_loader::EnvLoader;
 use serde::Deserialize;
 
+const DEFAULT_BASE_BRANCH: &str = "main";
+
 /// Configuration settings for the SwissArmyHammer application
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -55,7 +57,7 @@ impl Default for Config {
             cache_max_size: 1000,
             virtual_issue_number_base: 500_000,
             virtual_issue_number_range: 500_000,
-            base_branch: "main".to_string(),
+            base_branch: DEFAULT_BASE_BRANCH.to_string(),
         }
     }
 }
@@ -80,7 +82,7 @@ impl Config {
             cache_max_size: loader.load_parsed("CACHE_MAX_SIZE", 1000),
             virtual_issue_number_base: loader.load_parsed("VIRTUAL_ISSUE_NUMBER_BASE", 500_000),
             virtual_issue_number_range: loader.load_parsed("VIRTUAL_ISSUE_NUMBER_RANGE", 500_000),
-            base_branch: loader.load_string("BASE_BRANCH", "main"),
+            base_branch: loader.load_string("BASE_BRANCH", DEFAULT_BASE_BRANCH),
         }
     }
 
@@ -302,8 +304,10 @@ base_branch: "feature/test"
         };
 
         // Create config with non-default value
-        let mut config = Config::default();
-        config.base_branch = "custom".to_string();
+        let mut config = Config { 
+            base_branch: "custom".to_string(), 
+            ..Default::default() 
+        };
 
         // Verify initial custom value
         assert_eq!(config.base_branch, "custom");

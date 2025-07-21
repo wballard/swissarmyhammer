@@ -32,10 +32,13 @@ impl InputTokens {
     pub fn count(self) -> u32 {
         self.0
     }
+}
 
-    /// Add two token counts together
-    pub fn add(self, other: InputTokens) -> InputTokens {
-        InputTokens(self.0 + other.0)
+impl std::ops::Add for InputTokens {
+    type Output = Self;
+    
+    fn add(self, other: Self) -> Self::Output {
+        Self(self.0 + other.0)
     }
 }
 
@@ -65,10 +68,13 @@ impl OutputTokens {
     pub fn count(self) -> u32 {
         self.0
     }
+}
 
-    /// Add two token counts together
-    pub fn add(self, other: OutputTokens) -> OutputTokens {
-        OutputTokens(self.0 + other.0)
+impl std::ops::Add for OutputTokens {
+    type Output = Self;
+    
+    fn add(self, other: Self) -> Self::Output {
+        Self(self.0 + other.0)
     }
 }
 
@@ -467,31 +473,16 @@ impl MockClaudeApi {
             self.generate_response_without_usage(call_index)
         };
 
-        let mut headers = HashMap::new();
-        headers.insert("content-type".to_string(), "application/json".to_string());
-        headers.insert("x-request-id".to_string(), format!("req_{}", call_index));
-
-        // Sometimes include token usage in headers as well
-        if call_index % 10 == 0 {
-            headers.insert(
-                "anthropic-input-tokens".to_string(),
-                input_tokens.to_string(),
-            );
-            headers.insert(
-                "anthropic-output-tokens".to_string(),
-                output_tokens.to_string(),
-            );
-        }
-
-        MockApiResponse {
-            status_code: HttpStatusCode::OK,
+        self.build_response(
+            HttpStatusCode::OK,
             body,
-            headers,
             latency,
-            success: true,
+            true,
             input_tokens,
             output_tokens,
-        }
+            None,
+            Some(call_index),
+        )
     }
 
     /// Generate standard Claude API response format
@@ -644,6 +635,55 @@ impl MockClaudeApi {
         self.create_json_response("no_usage", call_index, None)
     }
 
+    /// Unified response builder to reduce duplication across all response types
+    fn build_response(
+        &self,
+        status: HttpStatusCode,
+        body: String,
+        latency: Duration,
+        success: bool,
+        input_tokens: InputTokens,
+        output_tokens: OutputTokens,
+        extra_headers: Option<HashMap<String, String>>,
+        call_index: Option<u32>,
+    ) -> MockApiResponse {
+        let mut headers = HashMap::new();
+        headers.insert("content-type".to_string(), "application/json".to_string());
+        
+        // Add request ID if call index provided
+        if let Some(index) = call_index {
+            headers.insert("x-request-id".to_string(), format!("req_{}", index));
+        }
+
+        // Sometimes include token usage in headers
+        if let Some(index) = call_index {
+            if index % 10 == 0 {
+                headers.insert(
+                    "anthropic-input-tokens".to_string(),
+                    input_tokens.to_string(),
+                );
+                headers.insert(
+                    "anthropic-output-tokens".to_string(),
+                    output_tokens.to_string(),
+                );
+            }
+        }
+
+        if let Some(extra) = extra_headers {
+            headers.extend(extra);
+        }
+
+        MockApiResponse {
+            status_code: status,
+            body,
+            headers,
+            latency,
+            success,
+            input_tokens,
+            output_tokens,
+        }
+    }
+
     /// Common error response builder to reduce duplication
     fn create_error_response(
         &self,
@@ -653,25 +693,21 @@ impl MockClaudeApi {
         latency: Duration,
         extra_headers: Option<HashMap<String, String>>,
     ) -> MockApiResponse {
-        let mut headers = HashMap::new();
-        headers.insert("content-type".to_string(), "application/json".to_string());
+        let body = format!(
+            r#"{{"error": {{"type": "{}", "message": "{}"}}}}"#,
+            error_type, message
+        );
 
-        if let Some(extra) = extra_headers {
-            headers.extend(extra);
-        }
-
-        MockApiResponse {
-            status_code: status,
-            body: format!(
-                r#"{{"error": {{"type": "{}", "message": "{}"}}}}"#,
-                error_type, message
-            ),
-            headers,
+        self.build_response(
+            status,
+            body,
             latency,
-            success: false,
-            input_tokens: InputTokens::new(0),
-            output_tokens: OutputTokens::new(0),
-        }
+            false,
+            InputTokens::new(0),
+            OutputTokens::new(0),
+            extra_headers,
+            None,
+        )
     }
 
     /// Generate timeout error response
@@ -892,7 +928,11 @@ impl crate::issues::IssueStorage for MockIssueStorage {
         }
     }
 
-    async fn mark_complete_with_cost(&self, number: u32, _cost_data: crate::cost::IssueCostData) -> crate::Result<crate::issues::Issue> {
+    async fn mark_complete_with_cost(
+        &self,
+        number: u32,
+        _cost_data: crate::cost::IssueCostData,
+    ) -> crate::Result<crate::issues::Issue> {
         // For mock implementation, just mark as complete (cost data handling would be tested separately)
         self.mark_complete(number).await
     }
@@ -1250,10 +1290,51 @@ impl MockMcpSystem {
         self.api.lock().await.get_performance_stats()
     }
 
-    /// Reset the mock system state
+    /// Reset the mock system state completely
     pub async fn reset(&self) {
+        // Reset the mock API state
         self.api.lock().await.reset();
-        // Note: Cost tracker reset would require additional methods
+        
+        // Reset cost tracker state by removing all sessions
+        if let Ok(mut tracker) = self.cost_tracker.try_lock() {
+            // Get all session IDs to remove
+            let session_ids: Vec<_> = tracker.get_all_sessions().keys().cloned().collect();
+            let session_count = session_ids.len();
+            
+            // Remove all sessions
+            for session_id in session_ids {
+                tracker.remove_session(&session_id);
+            }
+            
+            // Also perform cleanup of any old sessions
+            tracker.cleanup_old_sessions();
+            
+            tracing::debug!("Reset mock system: removed {} sessions", session_count);
+        } else {
+            tracing::warn!("Could not acquire cost tracker lock during reset");
+        }
+    }
+
+    /// Reset the mock system state with verification
+    pub async fn reset_with_verification(&self) -> Result<(), String> {
+        // Perform the reset
+        self.reset().await;
+        
+        // Verify the reset was successful
+        if let Ok(tracker) = self.cost_tracker.try_lock() {
+            if tracker.session_count() > 0 {
+                return Err(format!("Reset verification failed: {} sessions remain", tracker.session_count()));
+            }
+        } else {
+            return Err("Could not acquire cost tracker lock for verification".to_string());
+        }
+        
+        let api = self.api.lock().await;
+        if !api.get_call_history().is_empty() {
+            return Err(format!("Reset verification failed: {} API calls remain in history", api.get_call_history().len()));
+        }
+        
+        Ok(())
     }
 }
 

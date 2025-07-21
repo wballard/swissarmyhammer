@@ -772,7 +772,11 @@ mod tests {
             })
         }
 
-        async fn mark_complete_with_cost(&self, number: u32, _cost_data: crate::cost::IssueCostData) -> crate::Result<crate::issues::Issue> {
+        async fn mark_complete_with_cost(
+            &self,
+            number: u32,
+            _cost_data: crate::cost::IssueCostData,
+        ) -> crate::Result<crate::issues::Issue> {
             // For mock implementation, just call mark_complete
             self.mark_complete(number).await
         }

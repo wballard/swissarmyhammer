@@ -73,9 +73,16 @@ impl IssueStorage for InstrumentedIssueStorage {
         result
     }
 
-    async fn mark_complete_with_cost(&self, number: u32, cost_data: crate::cost::IssueCostData) -> Result<Issue> {
+    async fn mark_complete_with_cost(
+        &self,
+        number: u32,
+        cost_data: crate::cost::IssueCostData,
+    ) -> Result<Issue> {
         let start = Instant::now();
-        let result = self.storage.mark_complete_with_cost(number, cost_data).await;
+        let result = self
+            .storage
+            .mark_complete_with_cost(number, cost_data)
+            .await;
         let duration = start.elapsed();
 
         self.metrics.record_operation(Operation::Delete, duration);

@@ -779,78 +779,129 @@ impl TestIssueBuilder {
 pub struct OperationSequenceFactory;
 
 impl OperationSequenceFactory {
-    /// Create a basic CRUD sequence: Create -> Update -> Complete
-    pub fn create_basic_crud_sequence(prefix: &str, id: usize) -> Vec<mock_mcp::McpOperation> {
-        let context = TestContext::new("basic-crud".to_string(), 0, id);
-        let issue_builder = TestIssueBuilder::new()
+    /// Common builder for creating issue operations with consistent patterns
+    fn build_issue_operation(
+        test_type: &str,
+        prefix: &str,
+        sequence_id: usize,
+        operation_id: usize,
+        content_type: ContentType,
+        content_size: Option<ContentSize>,
+        custom_suffix: Option<&str>,
+    ) -> mock_mcp::McpOperation {
+        let context = TestContext::new(test_type.to_string(), operation_id, sequence_id);
+        let mut builder = TestIssueBuilder::new()
             .with_name_prefix(prefix)
-            .with_sequence_id(id)
-            .with_content_type(ContentType::Descriptive);
+            .with_sequence_id(sequence_id)
+            .with_content_type(content_type);
 
-        vec![
-            mock_mcp::McpOperation::CreateIssue {
-                name: issue_builder.build_name(),
-                content: issue_builder.build_content(&context),
-            },
-            mock_mcp::McpOperation::UpdateIssue {
-                number: (id + 1) as u32,
-                content: format!("Updated content for {} test sequence {}", prefix, id),
-            },
-            mock_mcp::McpOperation::MarkComplete {
-                number: (id + 1) as u32,
-            },
-        ]
+        if let Some(size) = content_size {
+            builder = builder.with_content_size(size);
+        }
+
+        if let Some(suffix) = custom_suffix {
+            builder = builder.with_custom_suffix(suffix);
+        }
+
+        mock_mcp::McpOperation::CreateIssue {
+            name: builder.build_name(),
+            content: builder.build_content(&context),
+        }
     }
 
-    /// Create a performance testing sequence with multiple operations
-    pub fn create_performance_sequence(prefix: &str, count: usize) -> Vec<mock_mcp::McpOperation> {
+    /// Common method to build operation sequences with configurable patterns
+    fn build_operation_sequence(
+        test_type: &str,
+        prefix: &str,
+        count: usize,
+        include_updates: bool,
+        include_completions: bool,
+        content_type: ContentType,
+        content_size: Option<ContentSize>,
+        custom_suffix: Option<&str>,
+    ) -> Vec<mock_mcp::McpOperation> {
         let mut operations = Vec::new();
 
         for i in 0..count {
-            let context = TestContext::new("performance".to_string(), i, 0);
-            let issue_builder = TestIssueBuilder::new()
-                .with_name_prefix(prefix)
-                .with_sequence_id(i)
-                .with_content_type(ContentType::Performance);
+            // Create issue operation
+            operations.push(Self::build_issue_operation(
+                test_type,
+                prefix,
+                i,
+                i,
+                content_type,
+                content_size,
+                custom_suffix,
+            ));
 
-            operations.push(mock_mcp::McpOperation::CreateIssue {
-                name: issue_builder.build_name(),
-                content: issue_builder.build_content(&context),
-            });
-
-            // Add update operations for some entries to create realistic load
-            if i % 2 == 0 {
+            // Add update operations based on pattern
+            if include_updates && (i % 2 == 0 || test_type == "basic-crud") {
                 operations.push(mock_mcp::McpOperation::UpdateIssue {
                     number: (i + 1) as u32,
-                    content: format!("Performance update for {} operation {}", prefix, i),
+                    content: format!("Updated content for {} test sequence {}", prefix, i),
+                });
+            }
+
+            // Add completion operations based on pattern
+            if include_completions {
+                operations.push(mock_mcp::McpOperation::MarkComplete {
+                    number: (i + 1) as u32,
                 });
             }
         }
 
         operations
     }
+    /// Create a basic CRUD sequence: Create -> Update -> Complete
+    pub fn create_basic_crud_sequence(prefix: &str, _id: usize) -> Vec<mock_mcp::McpOperation> {
+        Self::build_operation_sequence(
+            "basic-crud",
+            prefix,
+            1, // Single sequence
+            true, // Include updates
+            true, // Include completions
+            ContentType::Descriptive,
+            None,
+            None,
+        )
+    }
+
+    /// Create a performance testing sequence with multiple operations
+    pub fn create_performance_sequence(prefix: &str, count: usize) -> Vec<mock_mcp::McpOperation> {
+        Self::build_operation_sequence(
+            "performance",
+            prefix,
+            count,
+            true, // Include updates (every even index)
+            false, // No completions
+            ContentType::Performance,
+            None,
+            None,
+        )
+    }
 
     /// Create a sequence for error resilience testing
     pub fn create_error_testing_sequence(prefix: &str) -> Vec<mock_mcp::McpOperation> {
-        let context = TestContext::new("error-resilience".to_string(), 0, 0);
-        let issue_builder = TestIssueBuilder::new()
-            .with_name_prefix(prefix)
-            .with_custom_suffix("error-test")
-            .with_content_type(ContentType::Descriptive);
+        let mut operations = vec![Self::build_issue_operation(
+            "error-resilience",
+            prefix,
+            0,
+            0,
+            ContentType::Descriptive,
+            None,
+            Some("error-test"),
+        )];
 
-        vec![
-            mock_mcp::McpOperation::CreateIssue {
-                name: issue_builder.build_name(),
-                content: issue_builder.build_content(&context),
-            },
-            // Try to update non-existent issue (should fail gracefully)
+        // Add operations that should fail gracefully
+        operations.extend(vec![
             mock_mcp::McpOperation::UpdateIssue {
                 number: 999,
                 content: "Update for non-existent issue to test error handling".to_string(),
             },
-            // Try to complete non-existent issue (should fail gracefully)
             mock_mcp::McpOperation::MarkComplete { number: 998 },
-        ]
+        ]);
+
+        operations
     }
 
     /// Create concurrent operation sequence for load testing
@@ -859,22 +910,19 @@ impl OperationSequenceFactory {
         worker_id: usize,
         ops_per_workflow: usize,
     ) -> Vec<mock_mcp::McpOperation> {
-        let mut operations = Vec::new();
-
-        for op_id in 0..ops_per_workflow {
-            let context = TestContext::new("concurrent".to_string(), op_id, worker_id);
-            let issue_builder = TestIssueBuilder::new()
-                .with_name_prefix(prefix)
-                .with_sequence_id(worker_id * ops_per_workflow + op_id)
-                .with_content_type(ContentType::Performance);
-
-            operations.push(mock_mcp::McpOperation::CreateIssue {
-                name: issue_builder.build_name(),
-                content: issue_builder.build_content(&context),
-            });
-        }
-
-        operations
+        (0..ops_per_workflow)
+            .map(|op_id| {
+                Self::build_issue_operation(
+                    "concurrent",
+                    prefix,
+                    worker_id * ops_per_workflow + op_id,
+                    op_id,
+                    ContentType::Performance,
+                    None,
+                    None,
+                )
+            })
+            .collect()
     }
 
     /// Create memory stress testing sequence with large content
@@ -883,23 +931,19 @@ impl OperationSequenceFactory {
         system_id: usize,
         ops_count: usize,
     ) -> Vec<mock_mcp::McpOperation> {
-        let mut operations = Vec::new();
-
-        for op_id in 0..ops_count {
-            let context = TestContext::new("memory-stress".to_string(), op_id, system_id);
-            let issue_builder = TestIssueBuilder::new()
-                .with_name_prefix(prefix)
-                .with_sequence_id(system_id * ops_count + op_id)
-                .with_content_type(ContentType::LargeContent)
-                .with_content_size(ContentSize::Variable(3)); // Repeat 3 times for stress
-
-            operations.push(mock_mcp::McpOperation::CreateIssue {
-                name: issue_builder.build_name(),
-                content: issue_builder.build_content(&context),
-            });
-        }
-
-        operations
+        (0..ops_count)
+            .map(|op_id| {
+                Self::build_issue_operation(
+                    "memory-stress",
+                    prefix,
+                    system_id * ops_count + op_id,
+                    op_id,
+                    ContentType::LargeContent,
+                    Some(ContentSize::Variable(3)), // Repeat 3 times for stress
+                    None,
+                )
+            })
+            .collect()
     }
 }
 

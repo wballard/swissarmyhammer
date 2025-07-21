@@ -94,8 +94,15 @@ impl IssueStorage for CachedIssueStorage {
         Ok(issue)
     }
 
-    async fn mark_complete_with_cost(&self, number: u32, cost_data: crate::cost::IssueCostData) -> Result<Issue> {
-        let issue = self.storage.mark_complete_with_cost(number, cost_data).await?;
+    async fn mark_complete_with_cost(
+        &self,
+        number: u32,
+        cost_data: crate::cost::IssueCostData,
+    ) -> Result<Issue> {
+        let issue = self
+            .storage
+            .mark_complete_with_cost(number, cost_data)
+            .await?;
 
         // Update cache
         self.cache.put(issue.clone());

@@ -99,10 +99,10 @@ impl ToolHandlers {
         request: MarkCompleteRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         let issue_storage = self.issue_storage.write().await;
-        match issue_storage.mark_complete_by_number(request.number.get()).await {
+        match issue_storage.mark_complete(&request.name).await {
             Ok(issue) => Ok(create_mark_complete_response(&issue)),
-            Err(crate::SwissArmyHammerError::IssueNotFound(num)) => Err(McpError::invalid_params(
-                format!("Issue #{num:06} not found"),
+            Err(crate::SwissArmyHammerError::IssueNotFound(name)) => Err(McpError::invalid_params(
+                format!("Issue '{name}' not found"),
                 None,
             )),
             Err(e) => Err(McpError::internal_error(
@@ -274,12 +274,12 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         let issue_storage = self.issue_storage.write().await;
         match issue_storage
-            .update_issue_by_number(request.number.get(), request.content)
+            .update_issue(&request.name, request.content)
             .await
         {
             Ok(issue) => Ok(create_success_response(format!(
                 "Updated issue {} ({})",
-                issue.number, issue.name
+                issue.name, issue.number
             ))),
             Err(e) => Ok(create_error_response(format!(
                 "Failed to update issue: {e}"
@@ -344,22 +344,22 @@ impl ToolHandlers {
         &self,
         request: WorkIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
-        // First get the issue to determine its name
+        // Get the issue to determine its number for branch naming
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue_by_number(request.number.get()).await {
+        let issue = match issue_storage.get_issue(&request.name).await {
             Ok(issue) => issue,
             Err(e) => {
                 return Ok(create_error_response(format!(
-                    "Failed to get issue {}: {}",
-                    request.number, e
+                    "Failed to get issue '{}': {}",
+                    request.name, e
                 )))
             }
         };
         drop(issue_storage);
 
-        // Create work branch
+        // Create work branch with format: number_name
         let mut git_ops = self.git_ops.lock().await;
-        let issue_name = format!(
+        let branch_name = format!(
             "{:0width$}_{}",
             issue.number,
             issue.name,
@@ -367,7 +367,7 @@ impl ToolHandlers {
         );
 
         match git_ops.as_mut() {
-            Some(ops) => match ops.create_work_branch(&issue_name) {
+            Some(ops) => match ops.create_work_branch(&branch_name) {
                 Ok(branch_name) => Ok(create_success_response(format!(
                     "Switched to work branch: {branch_name}"
                 ))),
@@ -405,14 +405,14 @@ impl ToolHandlers {
         &self,
         request: MergeIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
-        // First get the issue to determine its name
+        // Get the issue to determine its details
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue_by_number(request.number.get()).await {
+        let issue = match issue_storage.get_issue(&request.name).await {
             Ok(issue) => issue,
             Err(e) => {
                 return Ok(create_error_response(format!(
-                    "Failed to get issue {}: {}",
-                    request.number, e
+                    "Failed to get issue '{}': {}",
+                    request.name, e
                 )))
             }
         };
@@ -421,8 +421,8 @@ impl ToolHandlers {
         // Validate that the issue is completed before allowing merge
         if !issue.completed {
             return Ok(create_error_response(format!(
-                "Issue {} is not completed. Only completed issues can be merged.",
-                request.number
+                "Issue '{}' is not completed. Only completed issues can be merged.",
+                request.name
             )));
         }
 

@@ -186,7 +186,10 @@ impl IssueStorage for InstrumentedIssueStorage {
         result
     }
 
-    async fn update_issues_batch_by_numbers(&self, updates: Vec<(u32, String)>) -> Result<Vec<Issue>> {
+    async fn update_issues_batch_by_numbers(
+        &self,
+        updates: Vec<(u32, String)>,
+    ) -> Result<Vec<Issue>> {
         let start = Instant::now();
         let result = self.storage.update_issues_batch_by_numbers(updates).await;
         let duration = start.elapsed();
@@ -309,7 +312,10 @@ mod tests {
         storage.reset_metrics();
 
         // Get the issue
-        let retrieved_issue = storage.get_issue_by_number(issue.number.value()).await.unwrap();
+        let retrieved_issue = storage
+            .get_issue_by_number(issue.number.value())
+            .await
+            .unwrap();
 
         // Check metrics were recorded
         let snapshot = storage.get_metrics_snapshot();
@@ -366,7 +372,10 @@ mod tests {
         storage.reset_metrics();
 
         // Mark as complete
-        let completed_issue = storage.mark_complete_by_number(issue.number.value()).await.unwrap();
+        let completed_issue = storage
+            .mark_complete_by_number(issue.number.value())
+            .await
+            .unwrap();
 
         // Check metrics were recorded (mark_complete is tracked as Delete operation)
         let snapshot = storage.get_metrics_snapshot();
@@ -423,15 +432,24 @@ mod tests {
             .await
             .unwrap();
 
-        storage.get_issue_by_number(issue1.number.value()).await.unwrap();
-        storage.get_issue_by_number(issue2.number.value()).await.unwrap();
+        storage
+            .get_issue_by_number(issue1.number.value())
+            .await
+            .unwrap();
+        storage
+            .get_issue_by_number(issue2.number.value())
+            .await
+            .unwrap();
 
         storage
             .update_issue_by_number(issue1.number.value(), "Updated content".to_string())
             .await
             .unwrap();
 
-        storage.mark_complete_by_number(issue2.number.value()).await.unwrap();
+        storage
+            .mark_complete_by_number(issue2.number.value())
+            .await
+            .unwrap();
 
         storage.list_issues().await.unwrap();
 
@@ -570,7 +588,10 @@ mod tests {
             let storage_clone = storage.clone();
             let issue_number = issue.number.value();
             let handle = tokio::spawn(async move {
-                storage_clone.get_issue_by_number(issue_number).await.unwrap();
+                storage_clone
+                    .get_issue_by_number(issue_number)
+                    .await
+                    .unwrap();
             });
             handles.push(handle);
         }

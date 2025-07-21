@@ -4,6 +4,9 @@ use crate::config::Config;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+// Constants for validation
+const FILESYSTEM_MAX_ISSUE_NAME_LENGTH: usize = 200;
+
 // Type safety wrapper types
 
 /// A wrapper type for issue numbers to prevent mixing up different ID types
@@ -68,9 +71,19 @@ impl PartialEq<u32> for IssueNumber {
 pub struct IssueName(pub String);
 
 impl IssueName {
-    /// Create a new issue name after validation for MCP interface
+    /// Create a new issue name with strict validation for MCP interface
+    ///
+    /// Uses configurable length limit and rejects filesystem-unsafe characters.
+    /// Intended for user-provided input through the MCP interface.
+    /// Empty names are allowed for nameless issues, but whitespace-only strings are rejected.
     pub fn new(name: String) -> Result<Self, String> {
         let trimmed = name.trim();
+
+        // Allow truly empty names for nameless issues, but reject whitespace-only strings
+        if name.trim().is_empty() && !name.is_empty() {
+            return Err("Issue name cannot be empty".to_string());
+        }
+
         let config = Config::global();
         if trimmed.len() > config.max_issue_name_length {
             return Err(format!(
@@ -87,14 +100,23 @@ impl IssueName {
         Ok(IssueName(trimmed.to_string()))
     }
 
-    /// Create a new issue name for filesystem use with relaxed validation
+    /// Create a new issue name with relaxed validation for internal filesystem use
+    ///
+    /// Uses a fixed length limit and only rejects null bytes.
+    /// Intended for parsing existing filenames from the filesystem.
+    /// Empty names are allowed for nameless issues like 000123.md, but whitespace-only strings are rejected.
     pub fn from_filesystem(name: String) -> Result<Self, String> {
         let trimmed = name.trim();
-        
-        // For filesystem names, allow up to 200 characters and only reject null bytes
-        if trimmed.len() > 200 {
+
+        // Allow truly empty names for nameless issues, but reject whitespace-only strings
+        if name.trim().is_empty() && !name.is_empty() {
+            return Err("Issue name cannot be empty".to_string());
+        }
+
+        // For filesystem names, allow up to a fixed limit and only reject null bytes
+        if trimmed.len() > FILESYSTEM_MAX_ISSUE_NAME_LENGTH {
             return Err(format!(
-                "Issue name cannot exceed 200 characters"
+                "Issue name cannot exceed {FILESYSTEM_MAX_ISSUE_NAME_LENGTH} characters"
             ));
         }
 
@@ -189,8 +211,8 @@ pub struct CreateIssueRequest {
 /// Request to mark an issue as complete
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct MarkCompleteRequest {
-    /// Issue number to mark as complete
-    pub number: IssueNumber,
+    /// Issue name to mark as complete
+    pub name: IssueName,
 }
 
 /// Request to check if all issues are complete
@@ -202,8 +224,8 @@ pub struct AllCompleteRequest {
 /// Request to update an issue
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct UpdateIssueRequest {
-    /// Issue number to update
-    pub number: IssueNumber,
+    /// Issue name to update
+    pub name: IssueName,
     /// New markdown content for the issue
     pub content: String,
     /// If true, append to existing content instead of replacing
@@ -221,16 +243,196 @@ pub struct CurrentIssueRequest {
 /// Request to work on an issue
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct WorkIssueRequest {
-    /// Issue number to work on
-    pub number: IssueNumber,
+    /// Issue name to work on
+    pub name: IssueName,
 }
 
 /// Request to merge an issue
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct MergeIssueRequest {
-    /// Issue number to merge
-    pub number: IssueNumber,
+    /// Issue name to merge
+    pub name: IssueName,
     /// Whether to delete the branch after merging (default: false)
     #[serde(default)]
     pub delete_branch: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_issue_name_mcp_validation_success() {
+        // Valid names should pass
+        assert!(IssueName::new("valid_name".to_string()).is_ok());
+        assert!(IssueName::new("feature_123".to_string()).is_ok());
+        assert!(IssueName::new("fix-bug".to_string()).is_ok());
+        assert!(IssueName::new("a".to_string()).is_ok()); // Minimum length
+    }
+
+    #[test]
+    fn test_issue_name_mcp_validation_invalid_characters() {
+        // Invalid characters should be rejected
+        let invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
+
+        for invalid_char in invalid_chars {
+            let name = format!("test{}name", invalid_char);
+            let result = IssueName::new(name.clone());
+            assert!(
+                result.is_err(),
+                "Should reject name with '{}': {}",
+                invalid_char,
+                name
+            );
+            assert_eq!(
+                result.unwrap_err(),
+                "Issue name contains invalid characters"
+            );
+        }
+
+        // Null byte should be rejected
+        let result = IssueName::new("test\0name".to_string());
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "Issue name contains invalid characters"
+        );
+    }
+
+    #[test]
+    fn test_issue_name_mcp_validation_length_limits() {
+        // This test assumes max_issue_name_length is set to a reasonable value
+        // Test at the boundary of configured max length
+        let config = Config::global();
+
+        // Create name exactly at limit
+        let max_name = "a".repeat(config.max_issue_name_length);
+        assert!(IssueName::new(max_name).is_ok());
+
+        // Create name over limit
+        let over_limit_name = "a".repeat(config.max_issue_name_length + 1);
+        let result = IssueName::new(over_limit_name);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("cannot exceed"));
+    }
+
+    #[test]
+    fn test_issue_name_mcp_validation_trimming() {
+        // Names should be trimmed
+        let name = IssueName::new("  test_name  ".to_string()).unwrap();
+        assert_eq!(name.get(), "test_name");
+    }
+
+    #[test]
+    fn test_issue_name_filesystem_validation_success() {
+        // Filesystem validation should be more permissive
+        assert!(IssueName::from_filesystem("valid_name".to_string()).is_ok());
+        assert!(IssueName::from_filesystem("name with spaces".to_string()).is_ok());
+        assert!(IssueName::from_filesystem("name:with:colons".to_string()).is_ok());
+        assert!(IssueName::from_filesystem("name\"with\"quotes".to_string()).is_ok());
+    }
+
+    #[test]
+    fn test_issue_name_filesystem_validation_length_limits() {
+        // Test filesystem length limit
+        let max_name = "a".repeat(FILESYSTEM_MAX_ISSUE_NAME_LENGTH);
+        assert!(IssueName::from_filesystem(max_name).is_ok());
+
+        let over_limit_name = "a".repeat(FILESYSTEM_MAX_ISSUE_NAME_LENGTH + 1);
+        let result = IssueName::from_filesystem(over_limit_name);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("cannot exceed"));
+    }
+
+    #[test]
+    fn test_issue_name_filesystem_validation_null_bytes() {
+        // Only null bytes should be rejected for filesystem names
+        let result = IssueName::from_filesystem("test\0name".to_string());
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "Issue name contains invalid characters"
+        );
+    }
+
+    #[test]
+    fn test_issue_name_filesystem_validation_trimming() {
+        // Filesystem names should also be trimmed
+        let name = IssueName::from_filesystem("  test_name  ".to_string()).unwrap();
+        assert_eq!(name.get(), "test_name");
+    }
+
+    #[test]
+    fn test_issue_name_validation_consistency() {
+        // Test the difference between the two validation methods
+
+        // Name with colon - rejected by MCP, accepted by filesystem
+        let name_with_colon = "test:name".to_string();
+        assert!(IssueName::new(name_with_colon.clone()).is_err());
+        assert!(IssueName::from_filesystem(name_with_colon).is_ok());
+
+        // Name with null byte - rejected by both
+        let name_with_null = "test\0name".to_string();
+        assert!(IssueName::new(name_with_null.clone()).is_err());
+        assert!(IssueName::from_filesystem(name_with_null).is_err());
+    }
+
+    #[test]
+    fn test_issue_name_lexicographical_ordering() {
+        // Test that names are ordered lexicographically when used as keys
+        let names = vec![
+            IssueName::from_filesystem("zebra".to_string()).unwrap(),
+            IssueName::from_filesystem("apple".to_string()).unwrap(),
+            IssueName::from_filesystem("banana".to_string()).unwrap(),
+        ];
+
+        let mut sorted_names = names.clone();
+        sorted_names.sort_by(|a, b| a.get().cmp(b.get()));
+
+        assert_eq!(sorted_names[0].get(), "apple");
+        assert_eq!(sorted_names[1].get(), "banana");
+        assert_eq!(sorted_names[2].get(), "zebra");
+    }
+
+    #[test]
+    fn test_issue_name_boundary_conditions() {
+        // Empty string after trimming
+        let result = IssueName::new("   ".to_string());
+        assert!(result.is_err());
+
+        let result = IssueName::from_filesystem("   ".to_string());
+        assert!(result.is_err());
+
+        // Single character
+        assert!(IssueName::new("a".to_string()).is_ok());
+        assert!(IssueName::from_filesystem("a".to_string()).is_ok());
+    }
+
+    #[test]
+    fn test_issue_number_validation() {
+        // Valid numbers
+        assert!(IssueNumber::new(1).is_ok());
+        assert!(IssueNumber::new(999999).is_ok());
+
+        // Test boundary conditions based on config
+        let config = Config::global();
+
+        // At minimum boundary
+        let min_result = IssueNumber::new(config.min_issue_number);
+        assert!(min_result.is_ok());
+
+        // Below minimum
+        if config.min_issue_number > 0 {
+            let below_min_result = IssueNumber::new(config.min_issue_number - 1);
+            assert!(below_min_result.is_err());
+        }
+
+        // At maximum boundary
+        let max_result = IssueNumber::new(config.max_issue_number);
+        assert!(max_result.is_ok());
+
+        // Above maximum
+        let above_max_result = IssueNumber::new(config.max_issue_number + 1);
+        assert!(above_max_result.is_err());
+    }
 }

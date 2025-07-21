@@ -126,7 +126,10 @@ pub trait IssueStorage: Send + Sync {
     async fn update_issues_batch(&self, updates: Vec<(&IssueName, String)>) -> Result<Vec<Issue>>;
 
     /// Update multiple issues at once by number (legacy compatibility)
-    async fn update_issues_batch_by_numbers(&self, updates: Vec<(u32, String)>) -> Result<Vec<Issue>>;
+    async fn update_issues_batch_by_numbers(
+        &self,
+        updates: Vec<(u32, String)>,
+    ) -> Result<Vec<Issue>>;
 
     /// Mark multiple issues as complete by name
     async fn mark_complete_batch(&self, names: Vec<&IssueName>) -> Result<Vec<Issue>>;
@@ -258,7 +261,8 @@ impl FileSystemIssueStorage {
 
         Ok(Issue {
             number: IssueNumber::from(number),
-            name: IssueName::from_filesystem(name.clone()).map_err(|e| SwissArmyHammerError::parsing_failed("issue_name", &name, &e))?,
+            name: IssueName::from_filesystem(name.clone())
+                .map_err(|e| SwissArmyHammerError::parsing_failed("issue_name", &name, &e))?,
             content,
             completed,
             file_path: path.to_path_buf(),
@@ -591,7 +595,9 @@ impl IssueStorage for FileSystemIssueStorage {
 
         Ok(Issue {
             number: IssueNumber::from(number),
-            name: IssueName::from_filesystem(sanitized_name.clone()).map_err(|e| SwissArmyHammerError::parsing_failed("issue_name", &sanitized_name, &e))?,
+            name: IssueName::from_filesystem(sanitized_name.clone()).map_err(|e| {
+                SwissArmyHammerError::parsing_failed("issue_name", &sanitized_name, &e)
+            })?,
             content,
             completed: false,
             file_path,
@@ -678,7 +684,10 @@ impl IssueStorage for FileSystemIssueStorage {
         Ok(updated_issues)
     }
 
-    async fn update_issues_batch_by_numbers(&self, updates: Vec<(u32, String)>) -> Result<Vec<Issue>> {
+    async fn update_issues_batch_by_numbers(
+        &self,
+        updates: Vec<(u32, String)>,
+    ) -> Result<Vec<Issue>> {
         // First, verify all issues exist before updating any
         for (number, _) in &updates {
             self.get_issue_by_number(*number).await?; // This will fail if issue doesn't exist
@@ -1222,12 +1231,12 @@ pub fn validate_issue_name(name: &str) -> Result<()> {
 pub fn extract_issue_name_from_filename(filename: &str) -> String {
     // Remove .md extension if present
     let name_without_ext = filename.strip_suffix(".md").unwrap_or(filename);
-    
+
     // Try to parse as numbered format first
     if let Ok((_number, name)) = parse_issue_filename(name_without_ext) {
         return name;
     }
-    
+
     // If that fails, use the entire filename as the issue name
     name_without_ext.to_string()
 }
@@ -1991,7 +2000,9 @@ mod tests {
         let issues_dir = temp_dir.path().to_path_buf();
         let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
 
-        let result = storage.update_issue_by_number(999, "New content".to_string()).await;
+        let result = storage
+            .update_issue_by_number(999, "New content".to_string())
+            .await;
 
         assert!(result.is_err());
     }
@@ -2011,7 +2022,10 @@ mod tests {
         assert!(!issue.completed);
 
         // Mark as complete
-        let completed_issue = storage.mark_complete_by_number(issue.number.value()).await.unwrap();
+        let completed_issue = storage
+            .mark_complete_by_number(issue.number.value())
+            .await
+            .unwrap();
 
         assert_eq!(completed_issue.number, issue.number);
         assert_eq!(completed_issue.name, issue.name);
@@ -2037,10 +2051,16 @@ mod tests {
             .await
             .unwrap();
 
-        let completed_issue = storage.mark_complete_by_number(issue.number.value()).await.unwrap();
+        let completed_issue = storage
+            .mark_complete_by_number(issue.number.value())
+            .await
+            .unwrap();
 
         // Try to mark as complete again - should be no-op
-        let completed_again = storage.mark_complete_by_number(issue.number.value()).await.unwrap();
+        let completed_again = storage
+            .mark_complete_by_number(issue.number.value())
+            .await
+            .unwrap();
 
         assert_eq!(completed_issue.file_path, completed_again.file_path);
         assert!(completed_again.completed);
@@ -2102,8 +2122,14 @@ mod tests {
             .await
             .unwrap();
 
-        storage.mark_complete_by_number(issue1.number.value()).await.unwrap();
-        storage.mark_complete_by_number(issue2.number.value()).await.unwrap();
+        storage
+            .mark_complete_by_number(issue1.number.value())
+            .await
+            .unwrap();
+        storage
+            .mark_complete_by_number(issue2.number.value())
+            .await
+            .unwrap();
 
         let result = storage.all_complete().await.unwrap();
         assert!(result); // All issues are complete
@@ -2713,7 +2739,10 @@ mod tests {
             .unwrap();
 
         // Get it back
-        let retrieved = storage.get_issue_by_number(created.number.value()).await.unwrap();
+        let retrieved = storage
+            .get_issue_by_number(created.number.value())
+            .await
+            .unwrap();
         assert_eq!(retrieved.number, created.number);
         assert_eq!(retrieved.name, created.name);
         assert_eq!(retrieved.content, created.content);
@@ -2746,7 +2775,10 @@ mod tests {
         assert_eq!(updated.content, "Updated content");
 
         // Verify it's persisted
-        let retrieved = storage.get_issue_by_number(issue.number.value()).await.unwrap();
+        let retrieved = storage
+            .get_issue_by_number(issue.number.value())
+            .await
+            .unwrap();
         assert_eq!(retrieved.content, "Updated content");
     }
 
@@ -2754,7 +2786,9 @@ mod tests {
     async fn test_update_nonexistent_issue_comprehensive() {
         let (storage, _temp) = create_test_storage();
 
-        let result = storage.update_issue_by_number(999, "Content".to_string()).await;
+        let result = storage
+            .update_issue_by_number(999, "Content".to_string())
+            .await;
         assert!(matches!(
             result,
             Err(SwissArmyHammerError::IssueNotFound(_))
@@ -2774,7 +2808,10 @@ mod tests {
         assert!(!issue.completed);
 
         // Mark it complete
-        let completed = storage.mark_complete_by_number(issue.number.value()).await.unwrap();
+        let completed = storage
+            .mark_complete_by_number(issue.number.value())
+            .await
+            .unwrap();
         assert!(completed.completed);
 
         // Verify file was moved
@@ -2796,7 +2833,10 @@ mod tests {
             .await
             .unwrap();
 
-        storage.mark_complete_by_number(issue.number.value()).await.unwrap();
+        storage
+            .mark_complete_by_number(issue.number.value())
+            .await
+            .unwrap();
 
         // Mark complete again - should be idempotent
         let result = storage.mark_complete_by_number(issue.number.value()).await;
@@ -2825,11 +2865,17 @@ mod tests {
         assert!(!storage.all_complete().await.unwrap());
 
         // Complete one
-        storage.mark_complete_by_number(issue1.number.value()).await.unwrap();
+        storage
+            .mark_complete_by_number(issue1.number.value())
+            .await
+            .unwrap();
         assert!(!storage.all_complete().await.unwrap());
 
         // Complete both
-        storage.mark_complete_by_number(issue2.number.value()).await.unwrap();
+        storage
+            .mark_complete_by_number(issue2.number.value())
+            .await
+            .unwrap();
         assert!(storage.all_complete().await.unwrap());
     }
 
@@ -3043,7 +3089,10 @@ mod tests {
             (issue3.number.value(), "Updated 3".to_string()),
         ];
 
-        let updated_issues = storage.update_issues_batch_by_numbers(updates).await.unwrap();
+        let updated_issues = storage
+            .update_issues_batch_by_numbers(updates)
+            .await
+            .unwrap();
 
         assert_eq!(updated_issues.len(), 3);
         assert_eq!(updated_issues[0].content, "Updated 1");
@@ -3051,7 +3100,10 @@ mod tests {
         assert_eq!(updated_issues[2].content, "Updated 3");
 
         // Verify updates were persisted
-        let retrieved_issue1 = storage.get_issue_by_number(issue1.number.value()).await.unwrap();
+        let retrieved_issue1 = storage
+            .get_issue_by_number(issue1.number.value())
+            .await
+            .unwrap();
         assert_eq!(retrieved_issue1.content, "Updated 1");
     }
 
@@ -3060,7 +3112,10 @@ mod tests {
         let (storage, _temp) = create_test_storage();
 
         let updates = vec![];
-        let issues = storage.update_issues_batch_by_numbers(updates).await.unwrap();
+        let issues = storage
+            .update_issues_batch_by_numbers(updates)
+            .await
+            .unwrap();
 
         assert_eq!(issues.len(), 0);
     }
@@ -3103,7 +3158,10 @@ mod tests {
             issue2.number.value(),
             issue3.number.value(),
         ];
-        let completed_issues = storage.mark_complete_batch_by_numbers(numbers).await.unwrap();
+        let completed_issues = storage
+            .mark_complete_batch_by_numbers(numbers)
+            .await
+            .unwrap();
 
         assert_eq!(completed_issues.len(), 3);
         assert!(completed_issues[0].completed);
@@ -3111,7 +3169,10 @@ mod tests {
         assert!(completed_issues[2].completed);
 
         // Verify issues were marked complete
-        let retrieved_issue1 = storage.get_issue_by_number(issue1.number.value()).await.unwrap();
+        let retrieved_issue1 = storage
+            .get_issue_by_number(issue1.number.value())
+            .await
+            .unwrap();
         assert!(retrieved_issue1.completed);
     }
 
@@ -3184,7 +3245,10 @@ mod tests {
 
         // Get all issues in batch
         let numbers: Vec<u32> = created_issues.iter().map(|i| i.number.value()).collect();
-        let retrieved_issues = storage.get_issues_batch_by_numbers(numbers.clone()).await.unwrap();
+        let retrieved_issues = storage
+            .get_issues_batch_by_numbers(numbers.clone())
+            .await
+            .unwrap();
         assert_eq!(retrieved_issues.len(), batch_size);
 
         // Update all issues in batch
@@ -3192,12 +3256,18 @@ mod tests {
             .iter()
             .map(|i| (i.number.value(), format!("Updated {}", i.number.value())))
             .collect();
-        let updated_issues = storage.update_issues_batch_by_numbers(updates).await.unwrap();
+        let updated_issues = storage
+            .update_issues_batch_by_numbers(updates)
+            .await
+            .unwrap();
         assert_eq!(updated_issues.len(), batch_size);
 
         // Mark half complete in batch
         let half_numbers: Vec<u32> = numbers.iter().take(batch_size / 2).cloned().collect();
-        let completed_issues = storage.mark_complete_batch_by_numbers(half_numbers).await.unwrap();
+        let completed_issues = storage
+            .mark_complete_batch_by_numbers(half_numbers)
+            .await
+            .unwrap();
         assert_eq!(completed_issues.len(), batch_size / 2);
 
         // Verify final state
@@ -3236,7 +3306,10 @@ mod tests {
         assert!(result.is_err());
 
         // Verify original issue was not updated
-        let retrieved_issue = storage.get_issue_by_number(issue.number.value()).await.unwrap();
+        let retrieved_issue = storage
+            .get_issue_by_number(issue.number.value())
+            .await
+            .unwrap();
         assert_eq!(retrieved_issue.content, "Content");
     }
 
@@ -3417,59 +3490,124 @@ mod tests {
     #[tokio::test]
     async fn test_issue_identification_by_name() {
         let (storage, temp) = create_test_storage();
-        
+
         // Create various types of issues to test filename-based identification
         // 1. Traditional numbered issue
-        let numbered_issue = storage.create_issue("feature_request".to_string(), "# Feature Request\nContent".to_string()).await.unwrap();
-        
+        let numbered_issue = storage
+            .create_issue(
+                "feature_request".to_string(),
+                "# Feature Request\nContent".to_string(),
+            )
+            .await
+            .unwrap();
+
         // 2. Create arbitrary named issues directly (simulating user dropping in files)
         let content = "# My Issue\nThis is arbitrary content";
         let arbitrary_file = temp.path().join("issues").join("my-custom-issue.md");
         std::fs::write(&arbitrary_file, content).unwrap();
-        
+
         let parsed_issue = storage.parse_issue_from_file(&arbitrary_file).unwrap();
-        
+
         // Verify that we can identify issues by their derived names
         assert_eq!(numbered_issue.name.as_str(), "feature_request");
         assert_eq!(parsed_issue.name.as_str(), "my-custom-issue");
-        
+
         // Test that both issues are included in list and properly sorted
         let all_issues = storage.list_issues().await.unwrap();
         assert_eq!(all_issues.len(), 2);
-        
+
         // Issues should be sorted lexicographically by filename
         // 000001_feature_request.md should come before my-custom-issue.md
-        assert!(all_issues[0].file_path.file_name().unwrap().to_str().unwrap() < 
-                all_issues[1].file_path.file_name().unwrap().to_str().unwrap());
+        assert!(
+            all_issues[0]
+                .file_path
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                < all_issues[1]
+                    .file_path
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+        );
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_new_issue_name_based_api() {
         // This test demonstrates the new API that should work with IssueName
-        
+
         let (storage, _temp) = create_test_storage();
-        
+
         // Create an issue
-        let issue = storage.create_issue("bug_fix".to_string(), "# Bug Fix\nDetails".to_string()).await.unwrap();
-        
+        let issue = storage
+            .create_issue("bug_fix".to_string(), "# Bug Fix\nDetails".to_string())
+            .await
+            .unwrap();
+
         // TODO: These functions should work with IssueName instead of u32
         // This test will fail until we implement the new API
-        
+
         // Current API uses number (u32)
-        let retrieved_by_number = storage.get_issue_by_number(issue.number.value()).await.unwrap();
+        let retrieved_by_number = storage
+            .get_issue_by_number(issue.number.value())
+            .await
+            .unwrap();
         assert_eq!(retrieved_by_number.name.as_str(), "bug_fix");
-        
+
         // NEW API should allow getting by name - this is what we want to implement
         // let issue_name = IssueName::new("bug_fix".to_string()).unwrap();
         // let retrieved_by_name = storage.get_issue_by_name(&issue_name).await.unwrap();
         // assert_eq!(retrieved_by_name.name, "bug_fix");
-        
+
         // For now, let's verify that the issue name extraction works correctly
         // for different filename formats
         let issue_name_from_numbered = extract_issue_name_from_filename("000123_my_bug_fix.md");
         assert_eq!(issue_name_from_numbered, "my_bug_fix");
-        
+
         let issue_name_from_arbitrary = extract_issue_name_from_filename("my-arbitrary-issue.md");
         assert_eq!(issue_name_from_arbitrary, "my-arbitrary-issue");
+    }
+}
+
+/// Common error handling helper functions for consistent error creation and mapping
+mod error_helpers {
+    use super::*;
+
+    /// Helper function to map IO errors to SwissArmyHammerError
+    pub fn map_io_error<T>(result: std::io::Result<T>) -> Result<T> {
+        result.map_err(SwissArmyHammerError::Io)
+    }
+
+    /// Helper function to create invalid issue number errors with consistent formatting
+    pub fn invalid_issue_number_error(number: u32, max: u32) -> SwissArmyHammerError {
+        SwissArmyHammerError::InvalidIssueNumber(format!(
+            "Issue number {number} exceeds maximum ({max})"
+        ))
+    }
+
+    /// Helper function to create issue not found errors
+    pub fn issue_not_found_error(identifier: &str) -> SwissArmyHammerError {
+        SwissArmyHammerError::IssueNotFound(identifier.to_string())
+    }
+
+    /// Helper function to create parsing errors with consistent formatting
+    pub fn parsing_error(field_type: &str, value: &str, error: &str) -> SwissArmyHammerError {
+        SwissArmyHammerError::parsing_failed(field_type, value, error)
+    }
+
+    /// Helper function to create generic "Other" errors
+    pub fn other_error(message: &str) -> SwissArmyHammerError {
+        SwissArmyHammerError::Other(message.to_string())
+    }
+
+    /// Helper function to create path-related errors
+    pub fn invalid_path_error(path: &Path, reason: &str) -> SwissArmyHammerError {
+        SwissArmyHammerError::Other(format!(
+            "Invalid file path '{}': {}",
+            path.display(),
+            reason
+        ))
     }
 }

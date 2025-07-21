@@ -257,7 +257,9 @@ async fn update_issue(
         new_content
     };
 
-    let updated_issue = storage.update_issue_by_number(number, updated_content).await?;
+    let updated_issue = storage
+        .update_issue_by_number(number, updated_content)
+        .await?;
 
     println!(
         "{} Updated issue #{:06} - {}",

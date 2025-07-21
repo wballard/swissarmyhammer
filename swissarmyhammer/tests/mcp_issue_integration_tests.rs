@@ -195,11 +195,21 @@ async fn test_error_handling_scenarios() {
     assert_eq!(issue.name.as_str(), "path_traversal_attempted");
 
     // Test working on non-existent issue
-    let result = env.issue_storage.read().await.get_issue_by_number(999).await;
+    let result = env
+        .issue_storage
+        .read()
+        .await
+        .get_issue_by_number(999)
+        .await;
     assert!(result.is_err());
 
     // Test marking non-existent issue complete
-    let result = env.issue_storage.write().await.mark_complete_by_number(999).await;
+    let result = env
+        .issue_storage
+        .write()
+        .await
+        .mark_complete_by_number(999)
+        .await;
     assert!(result.is_err());
 }
 

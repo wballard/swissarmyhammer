@@ -26,7 +26,7 @@
 //!     "# Login Bug\n\nUsers cannot log in with special characters.".to_string()
 //! ).await?;
 //!
-//! println!("Created issue #{:06} - {}", issue.number, issue.name);
+//! println!("Created issue '{}' (#{:06})", issue.name, issue.number);
 //!
 //! // List all issues
 //! let issues = storage.list_issues().await?;
@@ -52,8 +52,8 @@
 //! // 1. Create issue
 //! let issue = storage.create_issue("new_feature".to_string(), "# New Feature\n\nDescription".to_string()).await?;
 //!
-//! // 2. Create work branch
-//! let branch_name = git_ops.create_work_branch(&format!("{:06}_{}", issue.number, issue.name))?;
+//! // 2. Create work branch (name-based with optional number for uniqueness)
+//! let branch_name = git_ops.create_work_branch(&format!("{}_{:06}", issue.name, issue.number))?;
 //!
 //! // 3. Work on the issue...
 //! // 4. Update issue with progress
@@ -63,7 +63,7 @@
 //! let completed = storage.mark_complete(&issue.name).await?;
 //!
 //! // 6. Merge branch
-//! git_ops.merge_issue_branch(&format!("{:06}_{}", issue.number, issue.name))?;
+//! git_ops.merge_issue_branch(&format!("{}_{:06}", issue.name, issue.number))?;
 //! # Ok(())
 //! # }
 //! ```
@@ -81,8 +81,8 @@ pub mod metrics;
 
 // Re-export main types from the filesystem module
 pub use filesystem::{
-    create_safe_filename, extract_issue_name_from_filename, format_issue_number, is_issue_file, 
-    parse_issue_filename, parse_issue_number, sanitize_issue_name, validate_issue_name, 
+    create_safe_filename, extract_issue_name_from_filename, format_issue_number, is_issue_file,
+    parse_issue_filename, parse_issue_number, sanitize_issue_name, validate_issue_name,
     FileSystemIssueStorage, Issue, IssueNumber, IssueState, IssueStorage,
 };
 

@@ -29,12 +29,10 @@ pub mod utils;
 // Re-export commonly used items from submodules
 use responses::create_issue_response;
 use types::{
-    AllCompleteRequest, CreateIssueRequest, CurrentIssueRequest, IssueNumber, MarkCompleteRequest,
+    AllCompleteRequest, CreateIssueRequest, CurrentIssueRequest, IssueName, MarkCompleteRequest,
     MergeIssueRequest, UpdateIssueRequest, WorkIssueRequest,
 };
 
-#[cfg(test)]
-use types::IssueName;
 use utils::validate_issue_name;
 
 /// Validation state for pre-work operations
@@ -589,26 +587,14 @@ impl McpServer {
         &self,
         request: MarkCompleteRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
-        // Validate issue number
-        let config = Config::global();
-        if request.number < config.min_issue_number || request.number > config.max_issue_number {
-            return Err(McpError::invalid_params(
-                format!(
-                    "Invalid issue number (must be {}-{})",
-                    config.min_issue_number, config.max_issue_number
-                ),
-                None,
-            ));
-        }
-
         // Check if issue exists and get its current state
         let existing_issue = {
             let issue_storage = self.issue_storage.write().await;
-            match issue_storage.get_issue_by_number(request.number.get()).await {
+            match issue_storage.get_issue(&request.name).await {
                 Ok(issue) => issue,
                 Err(crate::SwissArmyHammerError::IssueNotFound(_)) => {
                     return Err(McpError::invalid_params(
-                        format!("Issue #{:06} not found", request.number),
+                        format!("Issue '{}' not found", request.name),
                         None,
                     ));
                 }
@@ -627,8 +613,8 @@ impl McpServer {
                 content: vec![Annotated::new(
                     RawContent::Text(RawTextContent {
                         text: format!(
-                            "Issue #{:06} - {} is already marked as complete",
-                            existing_issue.number, existing_issue.name
+                            "Issue '{}' is already marked as complete",
+                            existing_issue.name
                         ),
                     }),
                     None,
@@ -640,11 +626,11 @@ impl McpServer {
         // Mark the issue as complete with a new lock
         let issue = {
             let issue_storage = self.issue_storage.write().await;
-            match issue_storage.mark_complete_by_number(request.number.get()).await {
+            match issue_storage.mark_complete(&request.name).await {
                 Ok(issue) => issue,
                 Err(crate::SwissArmyHammerError::IssueNotFound(_)) => {
                     return Err(McpError::invalid_params(
-                        format!("Issue #{:06} not found", request.number),
+                        format!("Issue '{}' not found", request.name),
                         None,
                     ));
                 }
@@ -672,8 +658,7 @@ impl McpServer {
                 "total": pending + completed,
             },
             "message": format!(
-                "Issue #{:06} - {} marked as complete. {} issues pending, {} completed.",
-                issue.number,
+                "Issue '{}' marked as complete. {} issues pending, {} completed.",
                 issue.name,
                 pending,
                 completed
@@ -883,18 +868,6 @@ impl McpServer {
 
     /// Validate the update request parameters
     fn validate_update_request(request: &UpdateIssueRequest) -> std::result::Result<(), McpError> {
-        let config = Config::global();
-        let issue_number = request.number.get();
-        if issue_number < config.min_issue_number || issue_number > config.max_issue_number {
-            return Err(McpError::invalid_params(
-                format!(
-                    "Invalid issue number (must be {}-{})",
-                    config.min_issue_number, config.max_issue_number
-                ),
-                None,
-            ));
-        }
-
         Self::validate_issue_content(&request.content)?;
         Ok(())
     }
@@ -906,13 +879,12 @@ impl McpServer {
     ) -> std::result::Result<(Issue, String), McpError> {
         let issue_storage = self.issue_storage.write().await;
         let current_issue = issue_storage
-            .get_issue_by_number(request.number.get())
+            .get_issue(&request.name)
             .await
             .map_err(|e| match e {
-                SwissArmyHammerError::IssueNotFound(_) => McpError::invalid_params(
-                    format!("Issue #{:06} not found", request.number),
-                    None,
-                ),
+                SwissArmyHammerError::IssueNotFound(_) => {
+                    McpError::invalid_params(format!("Issue '{}' not found", request.name), None)
+                }
                 _ => McpError::internal_error(format!("Failed to get issue: {e}"), None),
             })?;
 
@@ -924,12 +896,12 @@ impl McpServer {
     /// Update the issue with enhanced error handling
     async fn update_issue_with_content(
         &self,
-        issue_number: IssueNumber,
+        issue_name: &IssueName,
         final_content: String,
     ) -> std::result::Result<Issue, McpError> {
         let issue_storage = self.issue_storage.write().await;
         issue_storage
-            .update_issue_by_number(issue_number.get(), final_content)
+            .update_issue(issue_name, final_content)
             .await
             .map_err(|e| {
                 let error_msg = match &e {
@@ -1008,8 +980,8 @@ impl McpServer {
                 content: vec![Annotated::new(
                     RawContent::Text(RawTextContent {
                         text: format!(
-                            "ℹ️ Issue #{:06} - {} content unchanged\n\n📋 Current content:\n{}",
-                            current_issue.number, current_issue.name, current_issue.content
+                            "ℹ️ Issue '{}' content unchanged\n\n📋 Current content:\n{}",
+                            current_issue.name, current_issue.content
                         ),
                     }),
                     None,
@@ -1020,7 +992,7 @@ impl McpServer {
 
         // Update the issue
         let updated_issue = self
-            .update_issue_with_content(request.number, final_content)
+            .update_issue_with_content(&request.name, final_content)
             .await?;
 
         // Generate and return the response
@@ -1048,13 +1020,10 @@ impl McpServer {
         request: CurrentIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         let branch = self.get_current_or_specified_branch(request.branch).await?;
-        let issue_info = self.parse_issue_branch(&branch)?;
+        let issue_name = self.parse_issue_branch(&branch)?;
 
-        match issue_info {
-            Some((issue_number, _issue_name)) => {
-                self.create_issue_branch_response(issue_number, &branch)
-                    .await
-            }
+        match issue_name {
+            Some(name) => self.create_issue_branch_response(name, &branch).await,
             None => self.create_non_issue_branch_response(&branch).await,
         }
     }
@@ -1096,7 +1065,7 @@ impl McpServer {
     ///
     /// # Arguments
     ///
-    /// * `issue_number` - The issue number parsed from branch name
+    /// * `issue_name` - The issue name parsed from branch name
     /// * `branch` - The current branch name
     ///
     /// # Returns
@@ -1104,16 +1073,25 @@ impl McpServer {
     /// * `Result<CallToolResult, McpError>` - The tool call result
     async fn create_issue_branch_response(
         &self,
-        issue_number: u32,
+        issue_name: String,
         branch: &str,
     ) -> std::result::Result<CallToolResult, McpError> {
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue_by_number(issue_number).await {
+        let issue_name_type = match IssueName::new(issue_name.clone()) {
+            Ok(name) => name,
+            Err(_) => {
+                return Err(McpError::invalid_params(
+                    format!("Invalid issue name: {issue_name}"),
+                    None,
+                ));
+            }
+        };
+        let issue = match issue_storage.get_issue(&issue_name_type).await {
             Ok(issue) => issue,
             Err(SwissArmyHammerError::IssueNotFound(_)) => {
                 // Handle orphaned issue branch
                 let orphaned_text = format!(
-                    "⚠️ On issue branch '{branch}' but no corresponding issue found\n\n🔍 Branch Analysis:\n• Branch: {branch}\n• Type: Issue branch (orphaned)\n• Issue number: {issue_number:06}\n• Issue file: Missing\n\n💡 Suggestions:\n• Create issue with: issue_create\n• Switch to main branch: git checkout main\n• Delete orphaned branch: git branch -d {branch}"
+                    "⚠️ On issue branch '{branch}' but no corresponding issue found\n\n🔍 Branch Analysis:\n• Branch: {branch}\n• Type: Issue branch (orphaned)\n• Issue name: {issue_name}\n• Issue file: Missing\n\n💡 Suggestions:\n• Create issue with: issue_create\n• Switch to main branch: git checkout main\n• Delete orphaned branch: git branch -d {branch}"
                 );
 
                 return Ok(CallToolResult {
@@ -1206,16 +1184,14 @@ impl McpServer {
         &self,
         request: WorkIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
-        // Extract and validate issue number
-        let issue_number = request.number.get();
-
         // Validate the issue exists
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue_by_number(issue_number).await {
+        let issue = match issue_storage.get_issue(&request.name).await {
             Ok(issue) => issue,
             Err(SwissArmyHammerError::IssueNotFound(_)) => {
                 return Ok(Self::create_error_response(format!(
-                    "❌ Issue #{issue_number:06} not found"
+                    "❌ Issue '{}' not found",
+                    request.name
                 )))
             }
             Err(e) => {
@@ -1233,8 +1209,7 @@ impl McpServer {
                 content: vec![Annotated::new(
                     RawContent::Text(RawTextContent {
                         text: format!(
-                            "⚠️ Issue #{:06} - {} is already completed\n\n📋 Issue Details:\n• Status: Completed ✅\n• File: {}\n\n💡 Suggestions:\n• Work on active issue: issue_all_complete\n• Create new issue: issue_create",
-                            issue.number,
+                            "⚠️ Issue '{}' is already completed\n\n📋 Issue Details:\n• Status: Completed ✅\n• File: {}\n\n💡 Suggestions:\n• Work on active issue: issue_all_complete\n• Create new issue: issue_create",
                             issue.name,
                             issue.file_path.display()
                         ),
@@ -1260,9 +1235,9 @@ impl McpServer {
                 content: vec![Annotated::new(
                     RawContent::Text(RawTextContent {
                         text: format!(
-                            "⚠️ Cannot switch to work branch with uncommitted changes\n\n📋 Current Status:\n• Branch: {}\n• Uncommitted changes: Yes\n\n💡 Actions Required:\n• Commit your changes: git add . && git commit -m \"Your message\"\n• Or stash changes: git stash\n• Then try again: issue_work number={}",
+                            "⚠️ Cannot switch to work branch with uncommitted changes\n\n📋 Current Status:\n• Branch: {}\n• Uncommitted changes: Yes\n\n💡 Actions Required:\n• Commit your changes: git add . && git commit -m \"Your message\"\n• Or stash changes: git stash\n• Then try again: issue_work name={}",
                             validation.current_branch,
-                            issue_number
+                            request.name
                         ),
                     }),
                     None,
@@ -1272,14 +1247,13 @@ impl McpServer {
         }
 
         // Check if already on the target branch
-        let target_branch = format!("issue/{:06}_{}", issue.number, issue.name);
+        let target_branch = format!("issue/{}", issue.name);
         if validation.current_branch == target_branch {
             return Ok(CallToolResult {
                 content: vec![Annotated::new(
                     RawContent::Text(RawTextContent {
                         text: format!(
-                            "ℹ️ Already working on issue #{:06} - {}\n\n📋 Current Status:\n• Branch: {}\n• Issue: Active\n• Ready for work: Yes\n\n💡 You can now:\n• Make changes and commit them\n• Update issue: issue_update\n• Mark complete: issue_mark_complete",
-                            issue.number,
+                            "ℹ️ Already working on issue '{}'\n\n📋 Current Status:\n• Branch: {}\n• Issue: Active\n• Ready for work: Yes\n\n💡 You can now:\n• Make changes and commit them\n• Update issue: issue_update\n• Mark complete: issue_mark_complete",
                             issue.name,
                             validation.current_branch
                         ),
@@ -1291,7 +1265,7 @@ impl McpServer {
         }
 
         // Create branch identifier
-        let branch_identifier = format!("{:06}_{}", issue.number, issue.name);
+        let branch_identifier = issue.name.as_str();
 
         // Create and switch to work branch
         let mut git_ops = git_ops;
@@ -1300,7 +1274,7 @@ impl McpServer {
             .ok_or_else(|| {
                 McpError::internal_error("Git operations not available".to_string(), None)
             })?
-            .create_work_branch(&branch_identifier)
+            .create_work_branch(branch_identifier)
         {
             Ok(branch) => branch,
             Err(e) => {
@@ -1366,11 +1340,9 @@ impl McpServer {
 
         // Format success response
         let response_text = format!(
-            "🔄 Switched to branch '{}' for issue #{:06} - {}\n\n📋 Issue Details:\n• Number: {}\n• Name: {}\n• Status: Active\n• File: {}\n\n🌿 Git Branch:\n• Branch: {}\n• Status: Active work branch\n• Previous branch: Switched from previous branch\n\n💡 Next Steps:\n• Make your changes and commit them\n• Update issue progress: issue_update\n• Mark complete when done: issue_mark_complete\n• Merge back to main: issue_merge\n\n📝 Issue Content:\n{}",
+            "🔄 Switched to branch '{}' for issue '{}'\n\n📋 Issue Details:\n• Name: {}\n• Status: Active\n• File: {}\n\n🌿 Git Branch:\n• Branch: {}\n• Status: Active work branch\n• Previous branch: Switched from previous branch\n\n💡 Next Steps:\n• Make your changes and commit them\n• Update issue progress: issue_update\n• Mark complete when done: issue_mark_complete\n• Merge back to main: issue_merge\n\n📝 Issue Content:\n{}",
             branch_name,
-            issue.number,
             issue.name,
-            issue.number,
             issue.name,
             issue.file_path.display(),
             branch_name,
@@ -1414,15 +1386,15 @@ impl McpServer {
         &self,
         request: MergeIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
-        // First get the issue to determine its name
+        // First get the issue to determine its details
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue_by_number(request.number.get()).await {
+        let issue = match issue_storage.get_issue(&request.name).await {
             Ok(issue) => issue,
             Err(_e) => {
                 return Ok(CallToolResult {
                     content: vec![Annotated::new(
                         RawContent::Text(RawTextContent {
-                            text: format!("❌ Issue #{:06} not found", request.number.0),
+                            text: format!("❌ Issue '{}' not found", request.name),
                         }),
                         None,
                     )],
@@ -1438,12 +1410,11 @@ impl McpServer {
                 content: vec![Annotated::new(
                     RawContent::Text(RawTextContent {
                         text: format!(
-                            "⚠️ Issue #{:06} - {} is not completed\n\n📋 Issue Status:\n• Status: Active (not completed)\n• File: {}\n\n💡 Required Actions:\n• Complete the issue first: issue_mark_complete number={}\n• Then merge: issue_merge number={}",
-                            issue.number,
+                            "⚠️ Issue '{}' is not completed\n\n📋 Issue Status:\n• Status: Active (not completed)\n• File: {}\n\n💡 Required Actions:\n• Complete the issue first: issue_mark_complete name={}\n• Then merge: issue_merge name={}",
                             issue.name,
                             issue.file_path.display(),
-                            request.number.0,
-                            request.number.0
+                            request.name,
+                            request.name
                         )
                     }),
                     None,
@@ -1471,12 +1442,7 @@ impl McpServer {
         };
 
         // Create branch identifier
-        let branch_identifier = format!(
-            "{:0width$}_{}",
-            issue.number,
-            issue.name,
-            width = Config::global().issue_number_width
-        );
+        let branch_identifier = issue.name.as_str();
         let branch_name = format!("issue/{branch_identifier}");
 
         // Check if branch exists
@@ -1503,7 +1469,7 @@ impl McpServer {
         }
 
         // Perform the merge
-        match git_ops.merge_issue_branch(&branch_identifier) {
+        match git_ops.merge_issue_branch(branch_identifier) {
             Ok(()) => {
                 // Merge successful
 
@@ -1525,11 +1491,9 @@ impl McpServer {
 
                 // Format success response
                 let response_text = format!(
-                    "✅ Successfully merged issue #{:06} - {} to main\n\nMerged work branch for issue {} to main\n\n📋 Issue Details:\n• Number: {}\n• Name: {}\n• Status: Completed ✅\n• File: {}\n\n🌿 Git Operations:\n• Source branch: {}\n• Target branch: {}\n• Branch deleted: {}\n• Current branch: {}\n\n🎉 Issue Complete!\nThe issue has been successfully merged to the main branch and is now part of the project history.{}",
-                    issue.number,
+                    "✅ Successfully merged issue '{}' to main\n\nMerged work branch for issue {} to main\n\n📋 Issue Details:\n• Name: {}\n• Status: Completed ✅\n• File: {}\n\n🌿 Git Operations:\n• Source branch: {}\n• Target branch: {}\n• Branch deleted: {}\n• Current branch: {}\n\n🎉 Issue Complete!\nThe issue has been successfully merged to the main branch and is now part of the project history.{}",
                     issue.name,
                     branch_identifier,
-                    issue.number,
                     issue.name,
                     issue.file_path.display(),
                     branch_name,
@@ -1616,13 +1580,10 @@ impl McpServer {
         }
     }
 
-    /// Parse issue information from branch name
-    fn parse_issue_branch(
-        &self,
-        branch: &str,
-    ) -> std::result::Result<Option<(u32, String)>, McpError> {
+    /// Parse issue name from branch name
+    fn parse_issue_branch(&self, branch: &str) -> std::result::Result<Option<String>, McpError> {
         // Expected format: issue/<issue_name>
-        // Where issue_name is <nnnnnn>_<name>
+        // Where issue_name is <nnnnnn>_<name> or just <name>
 
         if !branch.starts_with(&Config::global().issue_branch_prefix) {
             return Ok(None);
@@ -1630,21 +1591,22 @@ impl McpServer {
 
         let issue_part = &branch[Config::global().issue_branch_prefix.len()..]; // Skip prefix
 
-        // Try to parse the issue number from the beginning
-        // Handle both formats: issue/000001_name and issue/name_000001
-
         // First try: <nnnnnn>_<name> format
         if let Some(underscore_pos) = issue_part.find('_') {
             let number_part = &issue_part[..underscore_pos];
-            if let Ok(number) = number_part.parse::<u32>() {
+            if number_part.parse::<u32>().is_ok() {
                 let name_part = &issue_part[underscore_pos + 1..];
-                return Ok(Some((number, name_part.to_string())));
+                return Ok(Some(name_part.to_string()));
             }
         }
 
-        // If we can't parse it, maybe it's just issue/<name>
-        // In this case, we need to search for an issue with this name
-        Ok(None)
+        // If we can't parse it in the numbered format, return the whole issue_part as name
+        // This handles cases like issue/feature_name
+        if !issue_part.is_empty() {
+            Ok(Some(issue_part.to_string()))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Reload prompts from disk with retry logic.
@@ -2058,6 +2020,15 @@ mod tests {
             number_str.parse::<u32>().unwrap()
         } else {
             panic!("Expected text content, got: {:?}", text_content.raw);
+        }
+    }
+
+    fn extract_issue_name_from_create_request(request: &CreateIssueRequest) -> IssueName {
+        if let Some(ref name) = request.name {
+            name.clone()
+        } else {
+            // This should not happen in the new system
+            panic!("Issue name is required in create request");
         }
     }
 
@@ -2706,8 +2677,7 @@ mod tests {
             .parse_issue_branch("issue/000123_test_issue")
             .unwrap();
         assert!(result.is_some());
-        let (number, name) = result.unwrap();
-        assert_eq!(number, 123);
+        let name = result.unwrap();
         assert_eq!(name, "test_issue");
 
         // Test another valid format
@@ -2715,8 +2685,7 @@ mod tests {
             .parse_issue_branch("issue/000001_my_feature")
             .unwrap();
         assert!(result.is_some());
-        let (number, name) = result.unwrap();
-        assert_eq!(number, 1);
+        let name = result.unwrap();
         assert_eq!(name, "my_feature");
 
         // Test non-issue branch
@@ -2727,13 +2696,17 @@ mod tests {
         let result = server.parse_issue_branch("feature/something").unwrap();
         assert!(result.is_none());
 
-        // Test invalid issue branch (no underscore)
+        // Test issue branch without number (just name)
         let result = server.parse_issue_branch("issue/nounderscorehere").unwrap();
-        assert!(result.is_none());
+        assert!(result.is_some());
+        let name = result.unwrap();
+        assert_eq!(name, "nounderscorehere");
 
-        // Test invalid issue branch (non-numeric prefix)
+        // Test issue branch with non-numeric prefix (should return whole part as name)
         let result = server.parse_issue_branch("issue/abcdef_test").unwrap();
-        assert!(result.is_none());
+        assert!(result.is_some());
+        let name = result.unwrap();
+        assert_eq!(name, "abcdef_test");
     }
 
     // Integration tests for MCP tools
@@ -2890,15 +2863,14 @@ mod tests {
                 content: "Implement new feature X".to_string(),
             };
 
+            // Extract issue name from create request
+            let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
             assert!(!create_result.is_error.unwrap_or(false));
 
-            // Extract issue number from response
-            let issue_number = extract_issue_number_from_response(&create_result);
-
             // 2. Update the issue
             let update_request = UpdateIssueRequest {
-                number: IssueNumber(issue_number),
+                name: issue_name.clone(),
                 content: "Implement new feature X\n\nAdditional notes: Started implementation"
                     .to_string(),
                 append: false,
@@ -2911,7 +2883,7 @@ mod tests {
 
             // 3. Mark it complete
             let complete_request = MarkCompleteRequest {
-                number: IssueNumber(issue_number),
+                name: issue_name.clone(),
             };
 
             tracing::debug!("About to mark complete...");
@@ -2946,17 +2918,16 @@ mod tests {
                 name: Some(IssueName::new("bug_fix".to_string()).unwrap()),
                 content: "Fix critical bug in parser".to_string(),
             };
+            // Extract issue name from create request
+            let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
-
-            // Extract issue number
-            let issue_number = extract_issue_number_from_response(&create_result);
 
             // Commit the issue file to keep git clean
             commit_changes(_temp.path()).await;
 
             // Work on the issue
             let work_request = WorkIssueRequest {
-                number: IssueNumber(issue_number),
+                name: issue_name.clone(),
             };
 
             let work_result = server.handle_issue_work(work_request).await;
@@ -2998,17 +2969,14 @@ mod tests {
                 name: Some(IssueName::new("test_task".to_string()).unwrap()),
                 content: "Test task content".to_string(),
             };
+            // Extract issue name from create request before moving it
+            let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
-
-            // Extract issue number
-            let issue_number = extract_issue_number_from_response(&create_result);
 
             // Commit the issue file to keep git clean
             commit_changes(_temp.path()).await;
 
-            let work_request = WorkIssueRequest {
-                number: IssueNumber(issue_number),
-            };
+            let work_request = WorkIssueRequest { name: issue_name };
             server.handle_issue_work(work_request).await.unwrap();
 
             // Now should have current issue
@@ -3031,7 +2999,7 @@ mod tests {
 
             // Test updating non-existent issue
             let update_request = UpdateIssueRequest {
-                number: IssueNumber(999),
+                name: IssueName::new("non_existent".to_string()).unwrap(),
                 content: "New content".to_string(),
                 append: false,
             };
@@ -3042,7 +3010,7 @@ mod tests {
 
             // Test marking non-existent issue complete
             let complete_request = MarkCompleteRequest {
-                number: IssueNumber(999),
+                name: IssueName::new("non_existent".to_string()).unwrap(),
             };
 
             let result = server.handle_issue_mark_complete(complete_request).await;
@@ -3050,7 +3018,7 @@ mod tests {
 
             // Test working on non-existent issue
             let work_request = WorkIssueRequest {
-                number: IssueNumber(999),
+                name: IssueName::new("non_existent".to_string()).unwrap(),
             };
 
             let result = server.handle_issue_work(work_request).await;
@@ -3088,17 +3056,16 @@ mod tests {
                 name: Some(IssueName::new("merge_test".to_string()).unwrap()),
                 content: "Test merge functionality".to_string(),
             };
+            // Extract issue name from create request before moving it
+            let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
-
-            // Extract issue number
-            let issue_number = extract_issue_number_from_response(&create_result);
 
             // Commit the issue file to keep git clean
             commit_changes(_temp.path()).await;
 
             // Work on the issue to create a branch
             let work_request = WorkIssueRequest {
-                number: IssueNumber(issue_number),
+                name: issue_name.clone(),
             };
             server.handle_issue_work(work_request).await.unwrap();
 
@@ -3118,7 +3085,7 @@ mod tests {
 
             // Mark issue as complete
             let complete_request = MarkCompleteRequest {
-                number: IssueNumber(issue_number),
+                name: issue_name.clone(),
             };
             server
                 .handle_issue_mark_complete(complete_request)
@@ -3130,7 +3097,7 @@ mod tests {
 
             // Test merge
             let merge_request = MergeIssueRequest {
-                number: IssueNumber(issue_number),
+                name: issue_name,
                 delete_branch: false,
             };
 
@@ -3154,14 +3121,13 @@ mod tests {
                 name: Some(IssueName::new("append_test".to_string()).unwrap()),
                 content: "Initial content".to_string(),
             };
+            // Extract issue name from create request before moving it
+            let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
-
-            // Extract issue number
-            let issue_number = extract_issue_number_from_response(&create_result);
 
             // Update in append mode
             let update_request = UpdateIssueRequest {
-                number: IssueNumber(issue_number),
+                name: issue_name,
                 content: "Additional content".to_string(),
                 append: true,
             };
@@ -3238,11 +3204,10 @@ mod tests {
                 content: "Testing git integration with MCP server".to_string(),
             };
 
+            // Extract issue name from create request before moving it
+            let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
             assert!(!create_result.is_error.unwrap_or(false));
-
-            // Extract issue number from response
-            let issue_number = extract_issue_number_from_response(&create_result);
 
             // Commit the created issue file to git
             Command::new("git")
@@ -3259,7 +3224,7 @@ mod tests {
 
             // Test 2: Work on the issue (should create a git branch)
             let work_request = WorkIssueRequest {
-                number: IssueNumber(issue_number),
+                name: issue_name.clone(),
             };
 
             let work_result = server.handle_issue_work(work_request).await.unwrap();
@@ -3273,13 +3238,11 @@ mod tests {
                 .expect("Failed to list git branches");
 
             let branches_output = String::from_utf8_lossy(&git_branches.stdout);
-            assert!(
-                branches_output.contains(&format!("issue/{issue_number:06}_git_integration_test"))
-            );
+            assert!(branches_output.contains("issue/git_integration_test"));
 
             // Test 3: Update the issue content
             let update_request = UpdateIssueRequest {
-                number: IssueNumber(issue_number),
+                name: issue_name.clone(),
                 content: "Updated content for git integration test".to_string(),
                 append: false,
             };
@@ -3301,9 +3264,7 @@ mod tests {
                 .expect("Failed to commit updated issue");
 
             // Test 4: Complete the issue (should switch back to main branch)
-            let complete_request = MarkCompleteRequest {
-                number: IssueNumber(issue_number),
-            };
+            let complete_request = MarkCompleteRequest { name: issue_name };
 
             let complete_result = server
                 .handle_issue_mark_complete(complete_request)
@@ -3331,7 +3292,7 @@ mod tests {
 
             // Test 5: Merge the issue branch (if it still exists)
             let merge_request = MergeIssueRequest {
-                number: IssueNumber(issue_number),
+                name: IssueName::new("git_integration_test".to_string()).unwrap(),
                 delete_branch: false,
             };
 
@@ -3376,7 +3337,7 @@ mod tests {
                 ("branch_test_3", "Third branch test"),
             ];
 
-            let mut issue_numbers = Vec::new();
+            let mut issue_names = Vec::new();
 
             // Create all issues
             for (name, content) in &issues {
@@ -3385,10 +3346,9 @@ mod tests {
                     content: content.to_string(),
                 };
 
+                let issue_name = extract_issue_name_from_create_request(&create_request);
                 let create_result = server.handle_issue_create(create_request).await.unwrap();
                 assert!(!create_result.is_error.unwrap_or(false));
-
-                let issue_number = extract_issue_number_from_response(&create_result);
 
                 // Commit the created issue file to git
                 Command::new("git")
@@ -3403,11 +3363,11 @@ mod tests {
                     .output()
                     .expect("Failed to commit issue");
 
-                issue_numbers.push(issue_number);
+                issue_names.push(issue_name);
             }
 
             // Work on multiple issues (should create multiple branches)
-            for (i, &issue_number) in issue_numbers.iter().enumerate() {
+            for (i, issue_name) in issue_names.iter().enumerate() {
                 // Switch back to main branch before working on next issue (except for the first one)
                 if i > 0 {
                     Command::new("git")
@@ -3424,7 +3384,7 @@ mod tests {
                 }
 
                 let work_request = WorkIssueRequest {
-                    number: IssueNumber(issue_number),
+                    name: issue_name.clone(),
                 };
 
                 let work_result = server.handle_issue_work(work_request).await.unwrap();
@@ -3439,15 +3399,13 @@ mod tests {
 
                 let branch_output_string = String::from_utf8_lossy(&current_branch.stdout);
                 let branch_output = branch_output_string.trim();
-                assert!(
-                    branch_output.contains(&format!("issue/{:06}_{}", issue_number, issues[i].0))
-                );
+                assert!(branch_output.contains(&format!("issue/{}", issues[i].0)));
             }
 
             // Complete all issues
-            for &issue_number in &issue_numbers {
+            for issue_name in &issue_names {
                 let complete_request = MarkCompleteRequest {
-                    number: IssueNumber(issue_number),
+                    name: issue_name.clone(),
                 };
 
                 let complete_result = server
@@ -3489,7 +3447,7 @@ mod tests {
 
             // Test working on a non-existent issue
             let work_request = WorkIssueRequest {
-                number: IssueNumber(99999),
+                name: IssueName::new("non_existent_issue".to_string()).unwrap(),
             };
 
             let work_result = server.handle_issue_work(work_request).await;
@@ -3505,7 +3463,7 @@ mod tests {
 
             // Test merging a non-existent issue
             let merge_request = MergeIssueRequest {
-                number: IssueNumber(99999),
+                name: IssueName::new("non_existent_issue".to_string()).unwrap(),
                 delete_branch: false,
             };
 
@@ -3518,10 +3476,9 @@ mod tests {
                 content: "Testing error handling".to_string(),
             };
 
+            let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
             assert!(!create_result.is_error.unwrap_or(false));
-
-            let issue_number = extract_issue_number_from_response(&create_result);
 
             // Commit the created issue file to git
             Command::new("git")
@@ -3538,7 +3495,7 @@ mod tests {
 
             // Test merging an issue that hasn't been worked on (no branch exists)
             let merge_request = MergeIssueRequest {
-                number: IssueNumber(issue_number),
+                name: issue_name,
                 delete_branch: false,
             };
 
@@ -3581,17 +3538,14 @@ mod tests {
             for (name, content) in issues {
                 // Create issue
                 let create_request = CreateIssueRequest {
-                    name: Some(IssueName(name.to_string())),
+                    name: Some(IssueName::new(name.to_string()).unwrap()),
                     content: content.to_string(),
                 };
+                // Extract issue name and complete it
+                let issue_name = extract_issue_name_from_create_request(&create_request);
                 let create_result = server.handle_issue_create(create_request).await.unwrap();
                 assert!(!create_result.is_error.unwrap_or(false));
-
-                // Extract issue number and complete it
-                let issue_number = extract_issue_number_from_response(&create_result);
-                let complete_request = MarkCompleteRequest {
-                    number: IssueNumber(issue_number),
-                };
+                let complete_request = MarkCompleteRequest { name: issue_name };
                 let complete_result = server
                     .handle_issue_mark_complete(complete_request)
                     .await
@@ -3651,16 +3605,13 @@ mod tests {
 
             for (name, content) in completed_issues {
                 let create_request = CreateIssueRequest {
-                    name: Some(IssueName(name.to_string())),
+                    name: Some(IssueName::new(name.to_string()).unwrap()),
                     content: content.to_string(),
                 };
+                let issue_name = extract_issue_name_from_create_request(&create_request);
                 let create_result = server.handle_issue_create(create_request).await.unwrap();
                 assert!(!create_result.is_error.unwrap_or(false));
-
-                let issue_number = extract_issue_number_from_response(&create_result);
-                let complete_request = MarkCompleteRequest {
-                    number: IssueNumber(issue_number),
-                };
+                let complete_request = MarkCompleteRequest { name: issue_name };
                 let complete_result = server
                     .handle_issue_mark_complete(complete_request)
                     .await
@@ -3747,23 +3698,20 @@ mod tests {
 
             // Create one active and one completed issue
             let create_request = CreateIssueRequest {
-                name: Some(IssueName("format_test_active".to_string())),
+                name: Some(IssueName::new("format_test_active".to_string()).unwrap()),
                 content: "Active issue content".to_string(),
             };
             let create_result = server.handle_issue_create(create_request).await.unwrap();
             assert!(!create_result.is_error.unwrap_or(false));
 
             let create_request = CreateIssueRequest {
-                name: Some(IssueName("format_test_completed".to_string())),
+                name: Some(IssueName::new("format_test_completed".to_string()).unwrap()),
                 content: "Completed issue content".to_string(),
             };
+            let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
             assert!(!create_result.is_error.unwrap_or(false));
-
-            let issue_number = extract_issue_number_from_response(&create_result);
-            let complete_request = MarkCompleteRequest {
-                number: IssueNumber(issue_number),
-            };
+            let complete_request = MarkCompleteRequest { name: issue_name };
             let complete_result = server
                 .handle_issue_mark_complete(complete_request)
                 .await
@@ -3809,12 +3757,12 @@ mod tests {
                 name: Some(IssueName::new("incomplete_merge_test".to_string()).unwrap()),
                 content: "Test merge of incomplete issue".to_string(),
             };
+            let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
-            let issue_number = extract_issue_number_from_response(&create_result);
 
             // Try to merge incomplete issue - should fail
             let merge_request = MergeIssueRequest {
-                number: IssueNumber(issue_number),
+                name: issue_name,
                 delete_branch: false,
             };
 
@@ -3837,7 +3785,7 @@ mod tests {
 
             // Try to merge non-existent issue
             let merge_request = MergeIssueRequest {
-                number: IssueNumber(99999),
+                name: IssueName::new("non_existent_merge_test".to_string()).unwrap(),
                 delete_branch: false,
             };
 
@@ -3863,12 +3811,12 @@ mod tests {
                 name: Some(IssueName::new("no_branch_test".to_string()).unwrap()),
                 content: "Test merge with no branch".to_string(),
             };
+            let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
-            let issue_number = extract_issue_number_from_response(&create_result);
 
             // Mark issue as complete
             let complete_request = MarkCompleteRequest {
-                number: IssueNumber(issue_number),
+                name: issue_name.clone(),
             };
             server
                 .handle_issue_mark_complete(complete_request)
@@ -3877,7 +3825,7 @@ mod tests {
 
             // Try to merge without creating a branch - should fail
             let merge_request = MergeIssueRequest {
-                number: IssueNumber(issue_number),
+                name: issue_name,
                 delete_branch: false,
             };
 
@@ -3903,15 +3851,15 @@ mod tests {
                 name: Some(IssueName::new("delete_branch_test".to_string()).unwrap()),
                 content: "Test merge with branch deletion".to_string(),
             };
+            let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
-            let issue_number = extract_issue_number_from_response(&create_result);
 
             // Commit the issue file to keep git clean
             commit_changes(_temp.path()).await;
 
             // Work on the issue to create a branch
             let work_request = WorkIssueRequest {
-                number: IssueNumber(issue_number),
+                name: issue_name.clone(),
             };
             server.handle_issue_work(work_request).await.unwrap();
 
@@ -3931,7 +3879,7 @@ mod tests {
 
             // Mark issue as complete
             let complete_request = MarkCompleteRequest {
-                number: IssueNumber(issue_number),
+                name: issue_name.clone(),
             };
             server
                 .handle_issue_mark_complete(complete_request)
@@ -3943,7 +3891,7 @@ mod tests {
 
             // Test merge with branch deletion
             let merge_request = MergeIssueRequest {
-                number: IssueNumber(issue_number),
+                name: issue_name,
                 delete_branch: true,
             };
 
@@ -3964,21 +3912,21 @@ mod tests {
             let (server, _temp) = create_test_mcp_server().await;
 
             // Create and complete multiple issues
-            let mut issue_numbers = Vec::new();
+            let mut issue_names = Vec::new();
             for i in 0..3 {
                 let create_request = CreateIssueRequest {
                     name: Some(IssueName::new(format!("stats_test_{i}")).unwrap()),
                     content: format!("Test issue {i}"),
                 };
+                let issue_name = extract_issue_name_from_create_request(&create_request);
                 let create_result = server.handle_issue_create(create_request).await.unwrap();
-                let issue_number = extract_issue_number_from_response(&create_result);
-                issue_numbers.push(issue_number);
+                issue_names.push(issue_name);
             }
 
             // Complete all issues except the first one
-            for &issue_number in &issue_numbers[1..] {
+            for issue_name in &issue_names[1..] {
                 let complete_request = MarkCompleteRequest {
-                    number: IssueNumber(issue_number),
+                    name: issue_name.clone(),
                 };
                 server
                     .handle_issue_mark_complete(complete_request)
@@ -3991,7 +3939,7 @@ mod tests {
 
             // Work on the first issue
             let work_request = WorkIssueRequest {
-                number: IssueNumber(issue_numbers[0]),
+                name: issue_names[0].clone(),
             };
             server.handle_issue_work(work_request).await.unwrap();
 
@@ -4011,7 +3959,7 @@ mod tests {
 
             // Now complete the first issue
             let complete_request = MarkCompleteRequest {
-                number: IssueNumber(issue_numbers[0]),
+                name: issue_names[0].clone(),
             };
             server
                 .handle_issue_mark_complete(complete_request)
@@ -4023,7 +3971,7 @@ mod tests {
 
             // Test merge - should include project statistics
             let merge_request = MergeIssueRequest {
-                number: IssueNumber(issue_numbers[0]),
+                name: issue_names[0].clone(),
                 delete_branch: false,
             };
 

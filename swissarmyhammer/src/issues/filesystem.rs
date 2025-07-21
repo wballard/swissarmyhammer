@@ -329,16 +329,16 @@ impl FileSystemIssueStorage {
     /// # Returns
     ///
     /// Returns `Ok(Vec<Issue>)` containing all successfully parsed issues,
-    /// sorted by issue number in ascending order. Returns an empty vector
+    /// sorted by issue name in ascending order. Returns an empty vector
     /// if the directory doesn't exist or contains no valid issue files.
     ///
     /// # Examples
     ///
     /// ```ignore
     /// let issues = storage.list_issues_in_dir(Path::new("./issues"))?;
-    /// // Issues are sorted by number
+    /// // Issues are sorted by name
     /// if !issues.is_empty() {
-    ///     assert!(issues[0].number <= issues[1].number);
+    ///     assert!(issues[0].name.as_str() <= issues[1].name.as_str());
     /// }
     /// ```
     fn list_issues_in_dir(&self, dir: &Path) -> Result<Vec<Issue>> {
@@ -372,8 +372,8 @@ impl FileSystemIssueStorage {
             }
         }
 
-        // Sort by number
-        issues.sort_by_key(|issue| issue.number);
+        // Sort by name
+        issues.sort_by(|a, b| a.name.as_str().cmp(b.name.as_str()));
 
         Ok(issues)
     }
@@ -833,8 +833,9 @@ pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
     let number_part = if filename.len() == Config::global().issue_number_digits {
         // Nameless format: "000123"
         filename
-    } else if filename.len() >= Config::global().issue_number_digits + 1 && 
-              filename.chars().nth(Config::global().issue_number_digits) == Some('_') {
+    } else if filename.len() > Config::global().issue_number_digits
+        && filename.chars().nth(Config::global().issue_number_digits) == Some('_')
+    {
         // Named format: "000123_name" or "000123_" (empty name)
         &filename[..Config::global().issue_number_digits]
     } else {
@@ -842,9 +843,9 @@ pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
             "Invalid filename format: expected <nnnnnn> or <nnnnnn>_<name> (e.g., '000123' or '000123_bug_fix'), got: '{filename}'"
         )));
     };
-    
+
     let number = parse_issue_number(number_part)?;
-    
+
     // Extract the name part (if any)
     let name = if filename.len() == Config::global().issue_number_digits {
         // Nameless format
@@ -853,7 +854,7 @@ pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
         // Named format - everything after the underscore (may be empty)
         filename[Config::global().issue_number_digits + 1..].to_string()
     };
-    
+
     Ok((number, name))
 }
 
@@ -1607,7 +1608,7 @@ mod tests {
         let issues = storage.list_issues().await.unwrap();
         assert_eq!(issues.len(), 4);
 
-        // Should be sorted by number
+        // Should be sorted by name
         assert_eq!(issues[0].number, IssueNumber::new(1).unwrap());
         assert_eq!(issues[0].name.as_str(), "another");
         assert!(!issues[0].completed);
@@ -1616,13 +1617,13 @@ mod tests {
         assert_eq!(issues[1].name.as_str(), "completed");
         assert!(issues[1].completed);
 
-        assert_eq!(issues[2].number, IssueNumber::new(3).unwrap());
-        assert_eq!(issues[2].name.as_str(), "pending");
-        assert!(!issues[2].completed);
+        assert_eq!(issues[2].number, IssueNumber::new(4).unwrap());
+        assert_eq!(issues[2].name.as_str(), "done");
+        assert!(issues[2].completed);
 
-        assert_eq!(issues[3].number, IssueNumber::new(4).unwrap());
-        assert_eq!(issues[3].name.as_str(), "done");
-        assert!(issues[3].completed);
+        assert_eq!(issues[3].number, IssueNumber::new(3).unwrap());
+        assert_eq!(issues[3].name.as_str(), "pending");
+        assert!(!issues[3].completed);
     }
 
     #[tokio::test]
@@ -2416,44 +2417,37 @@ mod tests {
         // Should have all 5 issues
         assert_eq!(all_issues.len(), 5);
 
-        // Issues should be sorted by number (numbered first, then virtual)
-        let config = Config::global();
-        let mut prev_number = 0;
-        let mut seen_virtual = false;
+        // Issues should be sorted by name alphabetically
+        let names: Vec<&str> = all_issues.iter().map(|i| i.name.as_str()).collect();
 
-        for issue in &all_issues {
-            if issue.number.value() < config.virtual_issue_number_base {
-                // This is a numbered issue
-                assert!(
-                    !seen_virtual,
-                    "Numbered issue found after virtual issue in sort order"
-                );
-                assert!(
-                    issue.number.value() > prev_number,
-                    "Numbered issues should be in ascending order"
-                );
-                prev_number = issue.number.value();
-            } else {
-                // This is a virtual number issue
-                seen_virtual = true;
-                assert!(
-                    issue.number.value() >= config.virtual_issue_number_base,
-                    "Virtual issue number should be >= base"
-                );
-            }
+        // Expected alphabetical order: NOTES, README, first, second, third
+        assert_eq!(
+            names,
+            vec!["NOTES", "README", "first", "second", "third"],
+            "Issues should be sorted alphabetically by name. Got: {names:?}"
+        );
+
+        // Verify that names are in alphabetical order
+        for i in 1..names.len() {
+            assert!(
+                names[i - 1] <= names[i],
+                "Names not in alphabetical order: {names:?}"
+            );
         }
 
-        // Verify we have the expected numbered issues in order
-        assert_eq!(all_issues[0].number.value(), 1);
-        assert_eq!(all_issues[0].name.as_str(), "first");
-        assert_eq!(all_issues[1].number.value(), 2);
-        assert_eq!(all_issues[1].name.as_str(), "second");
-        assert_eq!(all_issues[2].number.value(), 3);
-        assert_eq!(all_issues[2].name.as_str(), "third");
+        // Verify we still have numbered and virtual issues (functionality unchanged, ordering changed)
+        let config = Config::global();
+        let numbered_issues: Vec<_> = all_issues
+            .iter()
+            .filter(|i| i.number.value() < config.virtual_issue_number_base)
+            .collect();
+        let virtual_issues: Vec<_> = all_issues
+            .iter()
+            .filter(|i| i.number.value() >= config.virtual_issue_number_base)
+            .collect();
 
-        // The remaining two should be virtual numbered issues
-        assert!(all_issues[3].number.value() >= config.virtual_issue_number_base);
-        assert!(all_issues[4].number.value() >= config.virtual_issue_number_base);
+        assert_eq!(numbered_issues.len(), 3, "Should have 3 numbered issues");
+        assert_eq!(virtual_issues.len(), 2, "Should have 2 virtual issues");
     }
 
     #[test]
@@ -3409,29 +3403,27 @@ mod tests {
         // Verify we got all 5 files
         assert_eq!(all_issues.len(), 5);
 
-        // Verify issues are sorted by number (numbered issues first, then virtual numbers)
-        let numbers: Vec<u32> = all_issues.iter().map(|i| i.number.value()).collect();
+        // Verify issues are sorted by name alphabetically
+        let names: Vec<&str> = all_issues.iter().map(|i| i.name.as_str()).collect();
 
-        // Check that the sequence is monotonically increasing
-        for i in 1..numbers.len() {
+        // Expected alphabetical order: another, first, notes, numbered, readme
+        assert_eq!(
+            names,
+            vec!["another", "first", "notes", "numbered", "readme"],
+            "Issues should be sorted alphabetically by name. Got: {names:?}"
+        );
+
+        // Check that the names are actually in alphabetical order
+        for i in 1..names.len() {
             assert!(
-                numbers[i - 1] <= numbers[i],
-                "Issues not properly sorted: {numbers:?}"
+                names[i - 1] <= names[i],
+                "Names not properly sorted: {names:?}"
             );
         }
 
-        // Verify numbered issues (1, 5, 10) come before virtual numbers (500,000+)
-        let config = Config::global();
-        let first_numbered_count = numbers
-            .iter()
-            .take_while(|&n| *n < config.virtual_issue_number_base)
-            .count();
-        assert_eq!(
-            first_numbered_count, 3,
-            "Should have 3 numbered issues before virtual numbers"
-        );
-
         // Verify virtual numbers are in correct range
+        let numbers: Vec<u32> = all_issues.iter().map(|i| i.number.value()).collect();
+        let config = Config::global();
         let virtual_numbers: Vec<u32> = numbers
             .iter()
             .filter(|&n| *n >= config.virtual_issue_number_base)
@@ -3617,15 +3609,72 @@ mod tests {
         println!("Next issue number: {}", next_number);
 
         // Should be 189 (188 + 1)
-        assert_eq!(next_number, 189, "Expected next issue number to be 189, but got {}", next_number);
+        assert_eq!(
+            next_number, 189,
+            "Expected next issue number to be 189, but got {}",
+            next_number
+        );
 
         // Test creating a new issue
         let new_issue = storage
-            .create_issue("test_new_issue".to_string(), "New issue content".to_string())
+            .create_issue(
+                "test_new_issue".to_string(),
+                "New issue content".to_string(),
+            )
             .await
             .unwrap();
 
         assert_eq!(new_issue.number.value(), 189);
-        assert!(new_issue.file_path.to_string_lossy().ends_with("000189_test_new_issue.md"));
+        assert!(new_issue
+            .file_path
+            .to_string_lossy()
+            .ends_with("000189_test_new_issue.md"));
+    }
+
+    #[tokio::test]
+    async fn test_issues_sorted_by_name_ascending() {
+        // Test for issue 000188: Issues should be sorted by name, not by number
+        let temp_dir = TempDir::new().unwrap();
+        let issues_dir = temp_dir.path().to_path_buf();
+        let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
+
+        // Create issues with names that would be in different order if sorted by number vs name
+        // Using filesystem operations to create specific numbered files with specific names
+
+        // Create issue files with names that should be sorted alphabetically:
+        // - "alpha" should come first
+        // - "beta" should come second
+        // - "gamma" should come third
+        // But their numbers will be in different order
+        std::fs::write(issues_dir.join("000003_gamma.md"), "Third issue by name").unwrap();
+        std::fs::write(issues_dir.join("000001_beta.md"), "Second issue by name").unwrap();
+        std::fs::write(issues_dir.join("000002_alpha.md"), "First issue by name").unwrap();
+
+        // Also add a non-numbered issue to ensure it's sorted by name too
+        std::fs::write(issues_dir.join("zulu.md"), "Last issue by name").unwrap();
+        std::fs::write(issues_dir.join("apex.md"), "Should be first by name").unwrap();
+
+        let all_issues = storage.list_issues().await.unwrap();
+
+        // Verify we got all 5 issues
+        assert_eq!(all_issues.len(), 5);
+
+        // Extract the names in order
+        let names: Vec<&str> = all_issues.iter().map(|i| i.name.as_str()).collect();
+
+        // Issues should be sorted alphabetically by name:
+        // alpha, apex, beta, gamma, zulu
+        assert_eq!(
+            names,
+            vec!["alpha", "apex", "beta", "gamma", "zulu"],
+            "Issues should be sorted alphabetically by name. Got: {names:?}"
+        );
+
+        // Verify the first issue (next issue) is "alpha"
+        assert_eq!(
+            all_issues[0].name.as_str(),
+            "alpha",
+            "Next issue should be 'alpha' (first in alphabetical order)"
+        );
     }
 }

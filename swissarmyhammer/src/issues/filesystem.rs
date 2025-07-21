@@ -833,7 +833,7 @@ pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
     let number_part = if filename.len() == Config::global().issue_number_digits {
         // Nameless format: "000123"
         filename
-    } else if filename.len() >= Config::global().issue_number_digits + 1
+    } else if filename.len() > Config::global().issue_number_digits
         && filename.chars().nth(Config::global().issue_number_digits) == Some('_')
     {
         // Named format: "000123_name" or "000123_" (empty name)

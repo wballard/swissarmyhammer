@@ -123,58 +123,82 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Create a new configuration instance with values from environment variables,
-    /// YAML configuration file, or defaults (in that order of precedence)
+    /// Create a new configuration instance with values loaded from:
+    /// 1. YAML file (highest precedence)
+    /// 2. Environment variables
+    /// 3. Defaults (lowest precedence)
     pub fn new() -> Self {
-        let loader = EnvLoader::new("SWISSARMYHAMMER");
+        // Start with defaults
+        let mut config = Self::default();
 
-        // Start with environment variables or defaults
-        let mut config = Self {
-            issue_branch_prefix: loader.load_string("ISSUE_BRANCH_PREFIX", "issue/"),
-            issue_number_width: loader.load_parsed("ISSUE_NUMBER_WIDTH", 6),
-            max_pending_issues_in_summary: loader.load_parsed("MAX_PENDING_ISSUES_IN_SUMMARY", 5),
-            min_issue_number: loader.load_parsed("MIN_ISSUE_NUMBER", 1),
-            max_issue_number: loader.load_parsed("MAX_ISSUE_NUMBER", 999_999),
-            issue_number_digits: loader.load_parsed("ISSUE_NUMBER_DIGITS", 6),
-            max_content_length: loader.load_parsed("MAX_CONTENT_LENGTH", 50000),
-            max_line_length: loader.load_parsed("MAX_LINE_LENGTH", 10000),
-            max_issue_name_length: loader.load_parsed("MAX_ISSUE_NAME_LENGTH", 100),
-            cache_ttl_seconds: loader.load_parsed("CACHE_TTL_SECONDS", 300),
-            cache_max_size: loader.load_parsed("CACHE_MAX_SIZE", 1000),
-            virtual_issue_number_base: loader.load_parsed("VIRTUAL_ISSUE_NUMBER_BASE", 500_000),
-            virtual_issue_number_range: loader.load_parsed("VIRTUAL_ISSUE_NUMBER_RANGE", 500_000),
-            base_branch: loader.load_string("BASE_BRANCH", DEFAULT_BASE_BRANCH),
-            min_issue_branch_prefix_length: loader.load_parsed("MIN_ISSUE_BRANCH_PREFIX_LENGTH", 1),
-            max_issue_branch_prefix_length: loader.load_parsed(
-                "MAX_ISSUE_BRANCH_PREFIX_LENGTH",
-                MAX_ISSUE_BRANCH_PREFIX_LENGTH,
-            ),
-            min_issue_number_width: loader.load_parsed("MIN_ISSUE_NUMBER_WIDTH", 1),
-            max_issue_number_width: loader.load_parsed("MAX_ISSUE_NUMBER_WIDTH", 10),
-        };
+        // Apply environment variables (override defaults)
+        config.apply_env_vars();
 
-        // Apply YAML configuration if available (only overrides values not set by environment)
+        // Apply YAML configuration (override env vars and defaults)
         match YamlConfig::load_or_default() {
             Ok(yaml_config) => {
                 // Validate the loaded configuration
                 if let Err(validation_error) = yaml_config.validate() {
                     tracing::warn!(
-                        "Invalid YAML configuration: {}. Using default values instead.",
+                        "Invalid YAML configuration: {}. Continuing with environment variables and defaults.",
                         validation_error
                     );
-                    return config; // Return without applying invalid config
+                } else {
+                    yaml_config.apply_to_config(&mut config);
+                    tracing::info!("Configuration loaded successfully with YAML support");
                 }
-
-                tracing::debug!("Loaded and validated YAML configuration");
-                // YAML config only applies to values that weren't overridden by environment
-                Self::apply_yaml_config_selectively(&mut config, &yaml_config, &loader);
             }
             Err(e) => {
-                tracing::warn!("Failed to load YAML configuration: {}", e);
+                tracing::warn!(
+                    "Failed to load YAML configuration, falling back to env vars and defaults: {}",
+                    e
+                );
             }
         }
 
         config
+    }
+
+    /// Apply environment variable configuration to this config
+    fn apply_env_vars(&mut self) {
+        let loader = EnvLoader::new("SWISSARMYHAMMER");
+
+        self.issue_branch_prefix =
+            loader.load_string("ISSUE_BRANCH_PREFIX", &self.issue_branch_prefix);
+        self.issue_number_width = loader.load_parsed("ISSUE_NUMBER_WIDTH", self.issue_number_width);
+        self.max_pending_issues_in_summary = loader.load_parsed(
+            "MAX_PENDING_ISSUES_IN_SUMMARY",
+            self.max_pending_issues_in_summary,
+        );
+        self.min_issue_number = loader.load_parsed("MIN_ISSUE_NUMBER", self.min_issue_number);
+        self.max_issue_number = loader.load_parsed("MAX_ISSUE_NUMBER", self.max_issue_number);
+        self.issue_number_digits =
+            loader.load_parsed("ISSUE_NUMBER_DIGITS", self.issue_number_digits);
+        self.max_content_length = loader.load_parsed("MAX_CONTENT_LENGTH", self.max_content_length);
+        self.max_line_length = loader.load_parsed("MAX_LINE_LENGTH", self.max_line_length);
+        self.max_issue_name_length =
+            loader.load_parsed("MAX_ISSUE_NAME_LENGTH", self.max_issue_name_length);
+        self.cache_ttl_seconds = loader.load_parsed("CACHE_TTL_SECONDS", self.cache_ttl_seconds);
+        self.cache_max_size = loader.load_parsed("CACHE_MAX_SIZE", self.cache_max_size);
+        self.virtual_issue_number_base =
+            loader.load_parsed("VIRTUAL_ISSUE_NUMBER_BASE", self.virtual_issue_number_base);
+        self.virtual_issue_number_range = loader.load_parsed(
+            "VIRTUAL_ISSUE_NUMBER_RANGE",
+            self.virtual_issue_number_range,
+        );
+        self.base_branch = loader.load_string("BASE_BRANCH", &self.base_branch);
+        self.min_issue_branch_prefix_length = loader.load_parsed(
+            "MIN_ISSUE_BRANCH_PREFIX_LENGTH",
+            self.min_issue_branch_prefix_length,
+        );
+        self.max_issue_branch_prefix_length = loader.load_parsed(
+            "MAX_ISSUE_BRANCH_PREFIX_LENGTH",
+            self.max_issue_branch_prefix_length,
+        );
+        self.min_issue_number_width =
+            loader.load_parsed("MIN_ISSUE_NUMBER_WIDTH", self.min_issue_number_width);
+        self.max_issue_number_width =
+            loader.load_parsed("MAX_ISSUE_NUMBER_WIDTH", self.max_issue_number_width);
     }
 
     /// Get the global configuration instance
@@ -276,20 +300,6 @@ impl Config {
                     e
                 );
                 None
-            }
-        }
-    }
-
-    /// Apply YAML configuration selectively, only overriding values not set by environment
-    fn apply_yaml_config_selectively(
-        config: &mut Config,
-        yaml_config: &YamlConfig,
-        _loader: &EnvLoader,
-    ) {
-        // Only apply YAML base_branch if environment variable is not set
-        if std::env::var("SWISSARMYHAMMER_BASE_BRANCH").is_err() {
-            if let Some(ref base_branch) = yaml_config.base_branch {
-                config.base_branch = base_branch.clone();
             }
         }
     }
@@ -653,6 +663,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_config_new() {
         // Clean up any environment variables from other tests
         std::env::remove_var("SWISSARMYHAMMER_ISSUE_BRANCH_PREFIX");
@@ -667,8 +678,13 @@ mod tests {
         std::env::remove_var("SWISSARMYHAMMER_VIRTUAL_ISSUE_NUMBER_RANGE");
         std::env::remove_var("SWISSARMYHAMMER_BASE_BRANCH");
 
+        // Ensure we're in a directory without a YAML config file
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
         let config = Config::new();
-        // Should use defaults when environment variables are not set
+        // Should use defaults when no environment variables or YAML file are present
         assert_eq!(config.issue_branch_prefix, "issue/");
         assert_eq!(config.issue_number_width, 6);
         assert_eq!(config.max_pending_issues_in_summary, 5);
@@ -681,6 +697,9 @@ mod tests {
         assert_eq!(config.virtual_issue_number_base, 500_000);
         assert_eq!(config.virtual_issue_number_range, 500_000);
         assert_eq!(config.base_branch, "main");
+
+        // Cleanup
+        std::env::set_current_dir(original_dir).expect("Could not restore original directory");
     }
 
     #[test]
@@ -878,7 +897,7 @@ base_branch: "feature/test"
         }
 
         // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        std::env::set_current_dir(original_dir).expect("Could not restore original directory");
     }
 
     #[test]
@@ -1599,28 +1618,9 @@ base_branch: "develop"
 mod config_integration_tests {
     use super::*;
 
-    #[test]
-    #[serial_test::serial]
-    fn test_config_precedence_env_overrides_yaml() {
-        // Environment variables take precedence over YAML
-        let temp_dir = tempfile::TempDir::new().unwrap();
-        let yaml_path = temp_dir.path().join("swissarmyhammer.yaml");
-        std::fs::write(&yaml_path, "base_branch: \"yaml-branch\"").unwrap();
-
-        // Set environment variable - this should take precedence
-        std::env::set_var("SWISSARMYHAMMER_BASE_BRANCH", "env-branch");
-
-        // Change to temp directory
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_dir.path()).unwrap();
-
-        let config = Config::new();
-        assert_eq!(config.base_branch, "env-branch"); // env should override yaml
-
-        // Cleanup
-        std::env::set_current_dir(original_dir).expect("Could not restore original directory");
-        std::env::remove_var("SWISSARMYHAMMER_BASE_BRANCH");
-    }
+    // NOTE: The old test_config_precedence_env_overrides_yaml has been removed
+    // because the precedence order has been corrected. YAML now overrides
+    // environment variables as required by the specification.
 
     #[test]
     #[serial_test::serial]
@@ -1672,6 +1672,29 @@ mod config_integration_tests {
 
         // Cleanup
         std::env::set_current_dir(original_dir).expect("Could not restore original directory");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_config_precedence_yaml_overrides_env() {
+        // YAML should take precedence over environment variables (new requirement)
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let yaml_path = temp_dir.path().join("swissarmyhammer.yaml");
+        std::fs::write(&yaml_path, "base_branch: \"yaml-branch\"").unwrap();
+
+        // Set environment variable - YAML should override this
+        std::env::set_var("SWISSARMYHAMMER_BASE_BRANCH", "env-branch");
+
+        // Change to temp directory
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let config = Config::new();
+        assert_eq!(config.base_branch, "yaml-branch"); // yaml should override env
+
+        // Cleanup
+        std::env::set_current_dir(original_dir).expect("Could not restore original directory");
+        std::env::remove_var("SWISSARMYHAMMER_BASE_BRANCH");
     }
 }
 

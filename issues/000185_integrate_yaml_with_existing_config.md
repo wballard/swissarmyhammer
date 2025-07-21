@@ -112,3 +112,50 @@ Implement graceful degradation:
 
 ## Notes
 This step completes the core integration, making the new YAML configuration system fully functional while maintaining backward compatibility. The graceful error handling ensures that configuration issues don't prevent the application from starting.
+
+## Proposed Solution
+
+After analyzing the current implementation, I found that the precedence order is currently **incorrect**. The current Config::new() method applies environment variables first, then YAML configuration selectively (only if env vars aren't set). This is backwards from the requirements.
+
+### Current Implementation Issues:
+1. `Config::new()` loads environment variables first (lines 129-154)
+2. YAML config is applied via `apply_yaml_config_selectively()` which only applies YAML values when environment variables are NOT set
+3. This creates the wrong precedence: ENV > YAML > DEFAULTS
+
+### Required Changes:
+1. **Fix precedence order**: Change Config::new() to implement YAML > ENV > DEFAULTS
+2. **Remove selective application**: YAML should always override environment variables when present
+3. **Update apply_env_vars method**: Extract environment variable loading to a separate method that can be called in correct order
+4. **Maintain graceful error handling**: Continue to handle YAML errors gracefully
+
+### Implementation Steps:
+
+1. **Refactor Config::new() method** to implement correct precedence:
+   ```rust
+   pub fn new() -> Self {
+       // Start with defaults
+       let mut config = Self::default();
+       
+       // Apply environment variables (override defaults)
+       config.apply_env_vars();
+       
+       // Apply YAML configuration (override env vars and defaults)
+       match YamlConfig::load_or_default() {
+           Ok(yaml_config) => {
+               yaml_config.apply_to_config(&mut config);
+               tracing::info!("Configuration loaded successfully with YAML support");
+           }
+           Err(e) => {
+               tracing::warn!("Failed to load YAML configuration: {}", e);
+           }
+       }
+       
+       config
+   }
+   ```
+
+2. **Remove apply_yaml_config_selectively method**: Replace with direct YAML application
+3. **Update existing tests**: Fix the precedence tests to expect YAML > ENV precedence
+4. **Add comprehensive integration tests**: Ensure all precedence combinations work correctly
+
+This approach ensures YAML configuration takes the highest precedence while maintaining backward compatibility and graceful error handling.

@@ -450,6 +450,26 @@ impl CostTrackingMcpHandler {
             None
         }
     }
+
+    /// Get session statistics by session ID
+    /// 
+    /// This method can retrieve session statistics for any session by its ID,
+    /// regardless of whether it's currently active or has been completed.
+    pub async fn get_session_stats_by_id(&self, session_id: &crate::cost::CostSessionId) -> Option<SessionStats> {
+        let tracker = self.cost_tracker.lock().await;
+        tracker
+            .get_session(session_id)
+            .map(|session| SessionStats {
+                session_id: *session_id,
+                issue_id: session.issue_id.clone(),
+                api_call_count: session.api_call_count(),
+                total_input_tokens: session.total_input_tokens(),
+                total_output_tokens: session.total_output_tokens(),
+                total_tokens: session.total_tokens(),
+                is_completed: session.is_completed(),
+                duration: session.total_duration,
+            })
+    }
 }
 
 /// Token usage extractor for parsing API responses

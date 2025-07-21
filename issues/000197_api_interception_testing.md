@@ -181,3 +181,85 @@ Prepares for:
 - Consider future API changes in test design
 - Ensure tests are deterministic and reliable
 - Document performance benchmarks for future reference
+
+## Proposed Solution
+
+After analyzing the existing codebase, I identified that we have comprehensive implementations of:
+
+1. **Cost tracking foundation** (steps 000190-000193): Complete cost tracking system with integration tests
+2. **MCP protocol integration** (step 000194): CostTrackingMcpHandler with token extraction and session management
+3. **Token counting implementation** (step 000195): TokenCounter with API extraction, estimation, and validation
+4. **Comprehensive test utilities**: Extensive helpers, mock data generators, and performance tools
+
+### Implementation Strategy
+
+The missing piece is a comprehensive **end-to-end API interception testing suite** that validates the complete integration pipeline. My approach:
+
+#### 1. Create Enhanced Mock MCP System (`swissarmyhammer/src/cost/test_utils/mock_mcp.rs`)
+- **Realistic Claude API Mock**: Simulate actual Claude API responses with proper token usage data, timing characteristics, and various response formats
+- **Network Simulation**: Mock network delays, timeouts, and failures to test reliability
+- **Token Usage Patterns**: Generate realistic token patterns based on actual workflow usage
+- **Multiple API Versions**: Support different API response formats and edge cases
+
+#### 2. Build Complete API Interception Tests (`swissarmyhammer/src/cost/integration_tests/api_interception.rs`)
+- **End-to-End Flow Testing**: Complete pipeline from workflow action through MCP handler, cost tracking, token counting, to final cost calculation
+- **Concurrent Workflow Simulation**: Test multiple workflows with simultaneous API calls and cost attribution
+- **Performance Characteristics**: Validate <50ms overhead per API call requirement
+- **Error Recovery Testing**: Test graceful degradation when API calls fail, token extraction fails, or sessions timeout
+
+#### 3. Integration Test Categories
+
+**Complete Flow Integration:**
+```rust
+#[tokio::test]
+async fn test_complete_api_interception_pipeline() {
+    // Test: Workflow → MCP Handler → Cost Tracker → Token Counter → Cost Calculator
+    // Validates complete integration with realistic data flows
+}
+
+#[tokio::test] 
+async fn test_concurrent_workflow_cost_attribution() {
+    // Test: Multiple workflows running simultaneously with accurate cost attribution
+    // Validates session isolation and concurrent performance
+}
+```
+
+**Performance and Reliability:**
+```rust
+#[tokio::test]
+async fn test_api_interception_performance_overhead() {
+    // Measure actual overhead of cost tracking on MCP operations
+    // Validate <50ms per API call requirement under load
+}
+
+#[tokio::test]
+async fn test_error_resilience_and_recovery() {
+    // Test complete system behavior with API failures, network issues, malformed responses
+    // Validate graceful degradation and data consistency
+}
+```
+
+**Accuracy Validation:**
+```rust
+#[tokio::test]
+async fn test_token_counting_accuracy_integration() {
+    // Compare token counts from API vs estimation across complete workflows
+    // Validate cost calculation accuracy with real usage patterns
+}
+```
+
+#### 4. Enhanced Integration Points
+
+- **Integrate with existing test utilities**: Leverage SessionLifecycleHelper, ApiCallGenerator, and PerformanceMeasurer
+- **Build on existing MCP tests**: Extend current MCP cost tracking tests to full pipeline coverage
+- **Utilize token integration tests**: Enhance existing token counting tests with complete workflow context
+- **Performance benchmarking**: Establish performance baselines for CI/CD validation
+
+#### 5. Test Data and Scenarios
+
+- **Realistic Usage Patterns**: Based on actual issue workflow token and timing patterns
+- **Edge Case Coverage**: Zero tokens, very large responses, unknown models, malformed JSON
+- **Failure Scenarios**: Network timeouts, rate limiting, API errors, session cleanup failures
+- **Load Testing**: High-volume concurrent workflows to validate scalability
+
+This approach builds comprehensively on the existing solid foundation while adding the missing end-to-end validation layer that ensures the complete API interception system works reliably in production scenarios.

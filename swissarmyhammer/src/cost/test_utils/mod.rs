@@ -4,6 +4,8 @@
 //! and helper functions to support testing of the cost tracking foundation.
 //! These utilities enable realistic test scenarios and consistent test data.
 
+pub mod mock_mcp;
+
 use crate::cost::{
     calculator::{CostCalculator, PricingModel, PricingRates},
     tracker::{ApiCall, ApiCallStatus, CostSessionStatus, CostTracker, IssueId},

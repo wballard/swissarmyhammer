@@ -5,6 +5,8 @@
 //! Tests cover session lifecycle, configuration integration, cost calculations,
 //! memory management, and error handling scenarios.
 
+pub mod api_interception;
+
 use crate::cost::{
     calculator::{CostCalculator, MaxPlanConfig, PaidPlanConfig, PricingModel},
     tracker::{

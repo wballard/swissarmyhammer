@@ -43,6 +43,41 @@ pub enum ConfidenceLevel {
 }
 
 /// Token usage information with source and confidence
+///
+/// ## Design Rationale: Data + Behavior Combination
+///
+/// This struct combines data fields with closely related behavior methods, which is
+/// appropriate for the following reasons:
+///
+/// ### Why the current design is optimal:
+///
+/// 1. **Cohesion**: The methods are directly related to the data and don't perform
+///    complex business logic - they are simple constructors and property queries
+///
+/// 2. **Rust conventions**: This follows common Rust patterns where simple behavioral
+///    methods are implemented directly on data structures (similar to `Option::is_some()`)
+///
+/// 3. **Simplicity**: The methods are thin wrappers that don't warrant separate abstractions
+///
+/// 4. **Performance**: No additional indirection or trait objects needed for simple queries
+///
+/// 5. **Usability**: Having constructors and queries on the same type improves API ergonomics
+///
+/// ### Alternative architectures considered:
+///
+/// - **Separate trait for queries**: Would add complexity without clear benefits
+/// - **Builder pattern**: Overkill for a simple data structure with few fields
+/// - **Factory functions**: Less discoverable than associated methods
+///
+/// ### When to separate data from behavior:
+///
+/// Future separation would be warranted if:
+/// - Methods become complex with significant business logic
+/// - Multiple implementations of behavior are needed (polymorphism)
+/// - Cross-cutting concerns emerge (logging, caching, etc.)
+/// - The struct grows to have many unrelated methods
+///
+/// The current design strikes the right balance between simplicity and functionality.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TokenUsage {
     /// Number of input tokens
@@ -76,7 +111,12 @@ impl TokenUsage {
 
     /// Create token usage from API response data
     pub fn from_api(input_tokens: u32, output_tokens: u32) -> Self {
-        Self::new(input_tokens, output_tokens, TokenSource::ApiResponse, ConfidenceLevel::Exact)
+        Self::new(
+            input_tokens,
+            output_tokens,
+            TokenSource::ApiResponse,
+            ConfidenceLevel::Exact,
+        )
     }
 
     /// Create token usage from estimation
@@ -85,7 +125,12 @@ impl TokenUsage {
         output_tokens: u32,
         confidence: ConfidenceLevel,
     ) -> Self {
-        Self::new(input_tokens, output_tokens, TokenSource::Estimated, confidence)
+        Self::new(
+            input_tokens,
+            output_tokens,
+            TokenSource::Estimated,
+            confidence,
+        )
     }
 
     /// Check if this usage is from API response
@@ -159,41 +204,134 @@ pub struct ApiTokenExtractor;
 impl ApiTokenExtractor {
     /// Extract token usage from Claude API response JSON
     pub fn extract_from_response(&self, response_body: &str) -> Result<TokenUsage, CostError> {
-        let json: Value = serde_json::from_str(response_body).map_err(|e| CostError::InvalidInput {
-            message: format!("Invalid JSON response: {}", e),
-        })?;
+        let json: Value =
+            serde_json::from_str(response_body).map_err(|e| CostError::InvalidInput {
+                message: format!("Invalid JSON response: {}", e),
+            })?;
 
         // Try standard Claude API format
         if let Some(usage) = json.get("usage") {
-            if let (Some(input), Some(output)) = (
+            // Validate that usage is an object
+            if !usage.is_object() {
+                return Err(CostError::InvalidInput {
+                    message: "Invalid API response: 'usage' field is not an object".to_string(),
+                });
+            }
+
+            // Extract and validate token values
+            match (
                 usage.get("input_tokens").and_then(|v| v.as_u64()),
                 usage.get("output_tokens").and_then(|v| v.as_u64()),
             ) {
-                debug!(
-                    input_tokens = input,
-                    output_tokens = output,
-                    "Extracted token usage from Claude API response"
-                );
-                return Ok(TokenUsage::from_api(input as u32, output as u32));
+                (Some(input), Some(output)) => {
+                    // Validate token values are within reasonable bounds
+                    Self::validate_token_values(input, output)?;
+
+                    debug!(
+                        input_tokens = input,
+                        output_tokens = output,
+                        "Extracted token usage from Claude API response"
+                    );
+                    return Ok(TokenUsage::from_api(input as u32, output as u32));
+                }
+                (None, Some(_)) => {
+                    return Err(CostError::InvalidInput {
+                        message: "Invalid API response: 'input_tokens' field is missing or not a valid number".to_string(),
+                    });
+                }
+                (Some(_), None) => {
+                    return Err(CostError::InvalidInput {
+                        message: "Invalid API response: 'output_tokens' field is missing or not a valid number".to_string(),
+                    });
+                }
+                (None, None) => {
+                    return Err(CostError::InvalidInput {
+                        message: "Invalid API response: both 'input_tokens' and 'output_tokens' fields are missing or invalid".to_string(),
+                    });
+                }
             }
         }
 
         // Try alternative format
-        if let (Some(input), Some(output)) = (
+        match (
             json.get("input_token_count").and_then(|v| v.as_u64()),
             json.get("output_token_count").and_then(|v| v.as_u64()),
         ) {
-            debug!(
-                input_tokens = input,
-                output_tokens = output,
-                "Extracted token usage from alternative API response format"
-            );
-            return Ok(TokenUsage::from_api(input as u32, output as u32));
+            (Some(input), Some(output)) => {
+                // Validate token values are within reasonable bounds
+                Self::validate_token_values(input, output)?;
+
+                debug!(
+                    input_tokens = input,
+                    output_tokens = output,
+                    "Extracted token usage from alternative API response format"
+                );
+                return Ok(TokenUsage::from_api(input as u32, output as u32));
+            }
+            (None, Some(_)) => {
+                return Err(CostError::InvalidInput {
+                    message: "Invalid API response: 'input_token_count' field is missing or not a valid number".to_string(),
+                });
+            }
+            (Some(_), None) => {
+                return Err(CostError::InvalidInput {
+                    message: "Invalid API response: 'output_token_count' field is missing or not a valid number".to_string(),
+                });
+            }
+            (None, None) => {
+                // Continue to final error - no token usage found
+            }
         }
 
         Err(CostError::InvalidInput {
-            message: "No token usage found in API response".to_string(),
+            message: "No valid token usage found in API response. Expected 'usage' object with 'input_tokens'/'output_tokens' or 'input_token_count'/'output_token_count' fields.".to_string(),
         })
+    }
+
+    /// Validate that token values are within reasonable bounds
+    fn validate_token_values(input_tokens: u64, output_tokens: u64) -> Result<(), CostError> {
+        const MAX_REASONABLE_TOKENS: u64 = 10_000_000; // 10 million tokens as upper bound
+
+        if input_tokens > MAX_REASONABLE_TOKENS {
+            return Err(CostError::InvalidInput {
+                message: format!(
+                    "Input token count {} exceeds maximum reasonable value {}",
+                    input_tokens, MAX_REASONABLE_TOKENS
+                ),
+            });
+        }
+
+        if output_tokens > MAX_REASONABLE_TOKENS {
+            return Err(CostError::InvalidInput {
+                message: format!(
+                    "Output token count {} exceeds maximum reasonable value {}",
+                    output_tokens, MAX_REASONABLE_TOKENS
+                ),
+            });
+        }
+
+        // Check that values fit in u32 (since TokenUsage uses u32)
+        if input_tokens > u32::MAX as u64 {
+            return Err(CostError::InvalidInput {
+                message: format!(
+                    "Input token count {} exceeds u32 maximum value {}",
+                    input_tokens,
+                    u32::MAX
+                ),
+            });
+        }
+
+        if output_tokens > u32::MAX as u64 {
+            return Err(CostError::InvalidInput {
+                message: format!(
+                    "Output token count {} exceeds u32 maximum value {}",
+                    output_tokens,
+                    u32::MAX
+                ),
+            });
+        }
+
+        Ok(())
     }
 
     /// Extract token usage from response headers
@@ -239,11 +377,6 @@ impl TokenValidator {
         }
     }
 
-    /// Create with default threshold
-    pub fn default() -> Self {
-        Self::new(DEFAULT_DISCREPANCY_THRESHOLD)
-    }
-
     /// Validate token usage against estimation
     pub fn validate(
         &mut self,
@@ -284,15 +417,21 @@ impl TokenValidator {
         }
 
         let total_validations = self.validation_history.len();
-        let failed_validations = self.validation_history.iter()
+        let failed_validations = self
+            .validation_history
+            .iter()
             .filter(|r| r.exceeds_threshold)
             .count();
-        
-        let accuracy_percentage = ((total_validations - failed_validations) as f32 / total_validations as f32) * 100.0;
-        
-        let avg_discrepancy = self.validation_history.iter()
+
+        let accuracy_percentage =
+            ((total_validations - failed_validations) as f32 / total_validations as f32) * 100.0;
+
+        let avg_discrepancy = self
+            .validation_history
+            .iter()
             .map(|r| r.discrepancy_percentage)
-            .sum::<f32>() / total_validations as f32;
+            .sum::<f32>()
+            / total_validations as f32;
 
         ValidationStats {
             total_validations,
@@ -300,6 +439,12 @@ impl TokenValidator {
             accuracy_percentage,
             average_discrepancy: avg_discrepancy,
         }
+    }
+}
+
+impl Default for TokenValidator {
+    fn default() -> Self {
+        Self::new(DEFAULT_DISCREPANCY_THRESHOLD)
     }
 }
 
@@ -344,11 +489,6 @@ impl TokenCounter {
         }
     }
 
-    /// Create with default configuration
-    pub fn default() -> Self {
-        Self::new(DEFAULT_DISCREPANCY_THRESHOLD)
-    }
-
     /// Count tokens from API response with optional validation
     pub fn count_from_response(
         &mut self,
@@ -381,6 +521,12 @@ impl TokenCounter {
     }
 }
 
+impl Default for TokenCounter {
+    fn default() -> Self {
+        Self::new(DEFAULT_DISCREPANCY_THRESHOLD)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -388,7 +534,7 @@ mod tests {
     #[test]
     fn test_token_usage_creation() {
         let usage = TokenUsage::new(100, 200, TokenSource::ApiResponse, ConfidenceLevel::Exact);
-        
+
         assert_eq!(usage.input_tokens, 100);
         assert_eq!(usage.output_tokens, 200);
         assert_eq!(usage.total_tokens, 300);
@@ -401,7 +547,7 @@ mod tests {
     #[test]
     fn test_token_usage_from_api() {
         let usage = TokenUsage::from_api(50, 75);
-        
+
         assert_eq!(usage.input_tokens, 50);
         assert_eq!(usage.output_tokens, 75);
         assert_eq!(usage.total_tokens, 125);
@@ -412,7 +558,7 @@ mod tests {
     #[test]
     fn test_token_usage_from_estimation() {
         let usage = TokenUsage::from_estimation(60, 90, ConfidenceLevel::Medium);
-        
+
         assert_eq!(usage.input_tokens, 60);
         assert_eq!(usage.output_tokens, 90);
         assert_eq!(usage.total_tokens, 150);
@@ -467,7 +613,10 @@ mod tests {
         let extractor = ApiTokenExtractor;
         let result = extractor.extract_from_response(response_json);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), CostError::InvalidInput { .. }));
+        assert!(matches!(
+            result.unwrap_err(),
+            CostError::InvalidInput { .. }
+        ));
     }
 
     #[test]
@@ -499,7 +648,7 @@ mod tests {
     fn test_validation_result_discrepancy_calculation() {
         let api_usage = TokenUsage::from_api(100, 100);
         let estimated_usage = TokenUsage::from_estimation(110, 90, ConfidenceLevel::Medium);
-        
+
         let result = ValidationResult::new(
             api_usage,
             estimated_usage,
@@ -516,7 +665,7 @@ mod tests {
     fn test_validation_result_high_discrepancy() {
         let api_usage = TokenUsage::from_api(100, 100);
         let estimated_usage = TokenUsage::from_estimation(150, 150, ConfidenceLevel::Low);
-        
+
         let result = ValidationResult::new(
             api_usage,
             estimated_usage,
@@ -532,12 +681,12 @@ mod tests {
     #[test]
     fn test_token_validator_basic() {
         let mut validator = TokenValidator::new(0.1);
-        
+
         let api_usage = TokenUsage::from_api(100, 50);
         let estimated_usage = TokenUsage::from_estimation(95, 55, ConfidenceLevel::High);
-        
+
         let result = validator.validate(api_usage, estimated_usage, "claude-3-sonnet");
-        
+
         // Discrepancy should be small
         assert!(result.discrepancy_percentage < 10.0);
         assert!(!result.exceeds_threshold);
@@ -546,21 +695,23 @@ mod tests {
     #[test]
     fn test_token_validator_accuracy_stats() {
         let mut validator = TokenValidator::new(0.1);
-        
+
         // Add some good validations
         for i in 0..8 {
             let api_usage = TokenUsage::from_api(100, 100);
-            let estimated_usage = TokenUsage::from_estimation(95 + i, 105 - i, ConfidenceLevel::High);
+            let estimated_usage =
+                TokenUsage::from_estimation(95 + i, 105 - i, ConfidenceLevel::High);
             validator.validate(api_usage, estimated_usage, "claude-3-sonnet");
         }
-        
+
         // Add some bad validations
         for i in 0..2 {
             let api_usage = TokenUsage::from_api(100, 100);
-            let estimated_usage = TokenUsage::from_estimation(150 + i * 10, 150 + i * 10, ConfidenceLevel::Low);
+            let estimated_usage =
+                TokenUsage::from_estimation(150 + i * 10, 150 + i * 10, ConfidenceLevel::Low);
             validator.validate(api_usage, estimated_usage, "claude-3-sonnet");
         }
-        
+
         let stats = validator.get_accuracy_stats();
         assert_eq!(stats.total_validations, 10);
         assert_eq!(stats.failed_validations, 2);
@@ -571,16 +722,18 @@ mod tests {
     #[test]
     fn test_token_counter_basic() {
         let mut counter = TokenCounter::default();
-        
+
         let response_json = r#"{
             "usage": {
                 "input_tokens": 150,
                 "output_tokens": 75
             }
         }"#;
-        
-        let usage = counter.count_from_response(response_json, None, "claude-3-sonnet").unwrap();
-        
+
+        let usage = counter
+            .count_from_response(response_json, None, "claude-3-sonnet")
+            .unwrap();
+
         assert_eq!(usage.input_tokens, 150);
         assert_eq!(usage.output_tokens, 75);
         assert_eq!(usage.total_tokens, 225);
@@ -590,20 +743,22 @@ mod tests {
     #[test]
     fn test_token_counter_with_validation() {
         let mut counter = TokenCounter::default();
-        
+
         let response_json = r#"{
             "usage": {
                 "input_tokens": 100,
                 "output_tokens": 100
             }
         }"#;
-        
+
         let estimated = TokenUsage::from_estimation(95, 105, ConfidenceLevel::High);
-        let usage = counter.count_from_response(response_json, Some(estimated), "claude-3-sonnet").unwrap();
-        
+        let usage = counter
+            .count_from_response(response_json, Some(estimated), "claude-3-sonnet")
+            .unwrap();
+
         assert_eq!(usage.input_tokens, 100);
         assert_eq!(usage.output_tokens, 100);
-        
+
         // Check validation was performed
         let stats = counter.get_validation_stats();
         assert_eq!(stats.total_validations, 1);

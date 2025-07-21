@@ -3,6 +3,7 @@
 use crate::cost::{ApiCallId, CostSessionId};
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
+use rust_decimal::prelude::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -81,6 +82,63 @@ impl CostMetrics {
     /// Check if cost tracking is completed
     pub fn is_completed(&self) -> bool {
         self.completed_at.is_some()
+    }
+
+    /// Calculate cost per token (total cost / total tokens)
+    pub fn cost_per_token(&self) -> Option<Decimal> {
+        let total_tokens = self.total_tokens();
+        if total_tokens > 0 {
+            Some(self.total_cost / Decimal::from(total_tokens))
+        } else {
+            None
+        }
+    }
+
+    /// Calculate token efficiency ratio (output tokens / input tokens)
+    pub fn token_efficiency_ratio(&self) -> Option<f64> {
+        if self.total_input_tokens > 0 {
+            Some(self.total_output_tokens as f64 / self.total_input_tokens as f64)
+        } else {
+            None
+        }
+    }
+
+    /// Calculate average cost per API call
+    pub fn average_cost_per_call(&self) -> Option<Decimal> {
+        if self.api_call_count > 0 {
+            Some(self.total_cost / Decimal::from(self.api_call_count))
+        } else {
+            None
+        }
+    }
+
+    /// Get cost attribution percentages by action
+    pub fn cost_attribution(&self) -> HashMap<String, f64> {
+        if self.total_cost.is_zero() {
+            return HashMap::new();
+        }
+
+        self.cost_by_action
+            .iter()
+            .map(|(action, breakdown)| {
+                let percentage = (breakdown.cost / self.total_cost).to_f64().unwrap_or(0.0) * 100.0;
+                (action.clone(), percentage)
+            })
+            .collect()
+    }
+
+    /// Identify the most expensive action
+    pub fn most_expensive_action(&self) -> Option<(&String, &ActionCostBreakdown)> {
+        self.cost_by_action
+            .iter()
+            .max_by(|a, b| a.1.cost.cmp(&b.1.cost))
+    }
+
+    /// Identify the most token-intensive action
+    pub fn most_token_intensive_action(&self) -> Option<(&String, &ActionCostBreakdown)> {
+        self.cost_by_action
+            .iter()
+            .max_by_key(|&(_, breakdown)| breakdown.total_tokens())
     }
 
     /// Recalculate totals from action breakdowns

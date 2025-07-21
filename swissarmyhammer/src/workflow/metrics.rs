@@ -7,6 +7,12 @@ pub mod cleanup;
 pub mod cost;
 pub mod trends;
 
+#[cfg(test)]
+pub mod cost_integration_tests;
+
+#[cfg(test)]
+pub mod performance_tests;
+
 // Re-export from submodules
 pub use cleanup::MAX_RUN_METRICS;
 pub use cost::{ActionCostBreakdown, CostMetrics};
@@ -15,6 +21,7 @@ pub use trends::ResourceTrends;
 use crate::cost::CostSessionId;
 use crate::workflow::{StateId, WorkflowName, WorkflowRunId, WorkflowRunStatus};
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -105,6 +112,33 @@ pub struct WorkflowSummaryMetrics {
     pub hot_states: Vec<StateExecutionCount>,
     /// Last updated timestamp
     pub last_updated: DateTime<Utc>,
+    /// Cost summary for this workflow
+    pub cost_summary: Option<WorkflowCostSummary>,
+}
+
+/// Cost summary for workflow runs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowCostSummary {
+    /// Total cost across all runs
+    pub total_cost: Decimal,
+    /// Average cost per run
+    pub average_cost: Decimal,
+    /// Minimum cost per run
+    pub min_cost: Decimal,
+    /// Maximum cost per run
+    pub max_cost: Decimal,
+    /// Total number of tokens used
+    pub total_tokens: u32,
+    /// Average tokens per run
+    pub average_tokens: u32,
+    /// Cost trend over time
+    pub cost_trend: Vec<(DateTime<Utc>, Decimal)>,
+    /// Token efficiency trend over time
+    pub efficiency_trend: Vec<(DateTime<Utc>, f64)>,
+    /// Most expensive action across all runs
+    pub most_expensive_action: Option<String>,
+    /// Most token-intensive action across all runs
+    pub most_token_intensive_action: Option<String>,
 }
 
 /// State execution count for hot state tracking
@@ -131,6 +165,27 @@ pub struct GlobalMetrics {
     pub average_run_duration: Option<Duration>,
     /// System resource usage trends
     pub resource_trends: ResourceTrends,
+    /// Global cost tracking metrics
+    pub cost_metrics: Option<GlobalCostMetrics>,
+}
+
+/// Global cost tracking metrics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GlobalCostMetrics {
+    /// Total system cost across all workflows
+    pub total_system_cost: Decimal,
+    /// Average cost per run across all workflows
+    pub average_cost_per_run: Decimal,
+    /// Total tokens used across all workflows
+    pub total_tokens: u32,
+    /// Average tokens per run across all workflows
+    pub average_tokens_per_run: u32,
+    /// System-wide cost efficiency (average output/input ratio)
+    pub system_efficiency_ratio: f64,
+    /// Total API calls across all workflows
+    pub total_api_calls: usize,
+    /// Average cost per API call across system
+    pub average_cost_per_api_call: Decimal,
 }
 
 impl WorkflowMetrics {
@@ -266,7 +321,26 @@ impl WorkflowMetrics {
     /// Update cost metrics for a run
     pub fn update_cost_metrics(&mut self, run_id: &WorkflowRunId, cost_metrics: CostMetrics) {
         if let Some(run_metrics) = self.run_metrics.get_mut(run_id) {
-            run_metrics.cost_metrics = Some(cost_metrics);
+            run_metrics.cost_metrics = Some(cost_metrics.clone());
+            
+            // Update cost trends in global resource trends
+            self.update_cost_trends(&cost_metrics);
+        }
+    }
+
+    /// Update cost trends in global resource trends
+    pub fn update_cost_trends(&mut self, cost_metrics: &CostMetrics) {
+        // Add cost trend point
+        self.global_metrics.resource_trends.add_cost_point(cost_metrics.total_cost);
+        
+        // Add token efficiency trend point if available
+        if let Some(efficiency) = cost_metrics.token_efficiency_ratio() {
+            self.global_metrics.resource_trends.add_token_efficiency_point(efficiency);
+        }
+        
+        // Add average cost per call trend point if available
+        if let Some(avg_cost) = cost_metrics.average_cost_per_call() {
+            self.global_metrics.resource_trends.add_avg_cost_per_call_point(avg_cost);
         }
     }
 
@@ -367,6 +441,9 @@ impl WorkflowMetrics {
         hot_states.sort_by(|a, b| b.count.cmp(&a.count));
         hot_states.truncate(10); // Keep only top 10
 
+        // Calculate cost summary for runs with cost data
+        let cost_summary = self.calculate_workflow_cost_summary(&runs);
+
         let summary = WorkflowSummaryMetrics {
             workflow_name: workflow_name.clone(),
             total_runs,
@@ -379,6 +456,7 @@ impl WorkflowMetrics {
             average_transitions,
             hot_states,
             last_updated: Utc::now(),
+            cost_summary,
         };
 
         self.workflow_metrics.insert(workflow_name.clone(), summary);
@@ -396,6 +474,99 @@ impl WorkflowMetrics {
                 self.workflow_metrics.remove(&oldest);
             }
         }
+    }
+
+    /// Calculate cost summary for a set of workflow runs
+    fn calculate_workflow_cost_summary(&self, runs: &[&RunMetrics]) -> Option<WorkflowCostSummary> {
+        let cost_runs: Vec<_> = runs
+            .iter()
+            .filter_map(|run| run.cost_metrics.as_ref())
+            .collect();
+
+        if cost_runs.is_empty() {
+            return None;
+        }
+
+        let total_cost = cost_runs.iter().map(|cm| cm.total_cost).sum::<Decimal>();
+        let total_tokens = cost_runs.iter().map(|cm| cm.total_tokens()).sum::<u32>();
+        
+        let average_cost = if !cost_runs.is_empty() {
+            total_cost / Decimal::from(cost_runs.len())
+        } else {
+            Decimal::ZERO
+        };
+
+        let average_tokens = if !cost_runs.is_empty() {
+            total_tokens / cost_runs.len() as u32
+        } else {
+            0
+        };
+
+        let min_cost = cost_runs
+            .iter()
+            .map(|cm| cm.total_cost)
+            .min()
+            .unwrap_or(Decimal::ZERO);
+
+        let max_cost = cost_runs
+            .iter()
+            .map(|cm| cm.total_cost)
+            .max()
+            .unwrap_or(Decimal::ZERO);
+
+        // Build cost trend from run completion times
+        let cost_trend: Vec<_> = runs
+            .iter()
+            .filter_map(|run| {
+                run.cost_metrics.as_ref()
+                    .and_then(|cm| run.completed_at.map(|completed| (completed, cm.total_cost)))
+            })
+            .collect();
+
+        // Build efficiency trend
+        let efficiency_trend: Vec<_> = runs
+            .iter()
+            .filter_map(|run| {
+                run.cost_metrics.as_ref()
+                    .and_then(|cm| {
+                        cm.token_efficiency_ratio()
+                            .and_then(|ratio| run.completed_at.map(|completed| (completed, ratio)))
+                    })
+            })
+            .collect();
+
+        // Find most expensive and most token-intensive actions across all runs
+        let mut all_actions: HashMap<String, (Decimal, u32)> = HashMap::new();
+        for cost_metrics in &cost_runs {
+            for (action_name, breakdown) in &cost_metrics.cost_by_action {
+                let entry = all_actions.entry(action_name.clone()).or_insert((Decimal::ZERO, 0));
+                entry.0 += breakdown.cost;
+                entry.1 += breakdown.total_tokens();
+            }
+        }
+
+        let most_expensive_action = all_actions
+            .iter()
+            .max_by(|a, b| a.1.0.cmp(&b.1.0))
+            .map(|(name, _)| name.clone());
+
+        let most_token_intensive_action = all_actions
+            .iter()
+            .max_by_key(|&(_, (_, tokens))| tokens)
+            .map(|(name, _)| name.clone());
+
+        Some(WorkflowCostSummary {
+            total_cost,
+            average_cost,
+            min_cost,
+            max_cost,
+            total_tokens,
+            average_tokens,
+            cost_trend,
+            efficiency_trend,
+            most_expensive_action,
+            most_token_intensive_action,
+        })
     }
 
     /// Update global metrics
@@ -431,6 +602,9 @@ impl WorkflowMetrics {
             None
         };
 
+        // Calculate global cost metrics
+        let cost_metrics = self.calculate_global_cost_metrics();
+
         self.global_metrics = GlobalMetrics {
             total_runs,
             total_successful_runs,
@@ -438,7 +612,63 @@ impl WorkflowMetrics {
             total_cancelled_runs,
             average_run_duration,
             resource_trends: self.global_metrics.resource_trends.clone(),
+            cost_metrics,
         };
+    }
+
+    /// Calculate global cost metrics across all workflow runs
+    fn calculate_global_cost_metrics(&self) -> Option<GlobalCostMetrics> {
+        let cost_runs: Vec<_> = self
+            .run_metrics
+            .values()
+            .filter_map(|run| run.cost_metrics.as_ref())
+            .collect();
+
+        if cost_runs.is_empty() {
+            return None;
+        }
+
+        let total_system_cost = cost_runs.iter().map(|cm| cm.total_cost).sum::<Decimal>();
+        let total_tokens = cost_runs.iter().map(|cm| cm.total_tokens()).sum::<u32>();
+        let total_api_calls = cost_runs.iter().map(|cm| cm.api_call_count).sum::<usize>();
+
+        let average_cost_per_run = if !cost_runs.is_empty() {
+            total_system_cost / Decimal::from(cost_runs.len())
+        } else {
+            Decimal::ZERO
+        };
+
+        let average_tokens_per_run = if !cost_runs.is_empty() {
+            total_tokens / cost_runs.len() as u32
+        } else {
+            0
+        };
+
+        let average_cost_per_api_call = if total_api_calls > 0 {
+            total_system_cost / Decimal::from(total_api_calls)
+        } else {
+            Decimal::ZERO
+        };
+
+        // Calculate system-wide efficiency ratio
+        let total_input_tokens = cost_runs.iter().map(|cm| cm.total_input_tokens).sum::<u32>();
+        let total_output_tokens = cost_runs.iter().map(|cm| cm.total_output_tokens).sum::<u32>();
+        
+        let system_efficiency_ratio = if total_input_tokens > 0 {
+            total_output_tokens as f64 / total_input_tokens as f64
+        } else {
+            0.0
+        };
+
+        Some(GlobalCostMetrics {
+            total_system_cost,
+            average_cost_per_run,
+            total_tokens,
+            average_tokens_per_run,
+            system_efficiency_ratio,
+            total_api_calls,
+            average_cost_per_api_call,
+        })
     }
 
     /// Validate workflow name
@@ -469,6 +699,7 @@ impl GlobalMetrics {
             total_cancelled_runs: 0,
             average_run_duration: None,
             resource_trends: ResourceTrends::new(),
+            cost_metrics: None,
         }
     }
 }

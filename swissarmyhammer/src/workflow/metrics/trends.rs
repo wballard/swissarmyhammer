@@ -1,6 +1,7 @@
 //! Resource trend tracking for workflow execution
 
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 /// Maximum number of data points to keep in resource trends
@@ -15,6 +16,12 @@ pub struct ResourceTrends {
     pub cpu_trend: Vec<(DateTime<Utc>, f64)>,
     /// Throughput trend (runs per hour)
     pub throughput_trend: Vec<(DateTime<Utc>, f64)>,
+    /// Cost trend (total cost over time)
+    pub cost_trend: Vec<(DateTime<Utc>, Decimal)>,
+    /// Token efficiency trend (output/input ratio over time)
+    pub token_efficiency_trend: Vec<(DateTime<Utc>, f64)>,
+    /// Average cost per API call trend
+    pub avg_cost_per_call_trend: Vec<(DateTime<Utc>, Decimal)>,
 }
 
 impl ResourceTrends {
@@ -24,6 +31,9 @@ impl ResourceTrends {
             memory_trend: Vec::new(),
             cpu_trend: Vec::new(),
             throughput_trend: Vec::new(),
+            cost_trend: Vec::new(),
+            token_efficiency_trend: Vec::new(),
+            avg_cost_per_call_trend: Vec::new(),
         }
     }
 
@@ -48,6 +58,21 @@ impl ResourceTrends {
     /// Add throughput data point
     pub fn add_throughput_point(&mut self, runs_per_hour: f64) {
         Self::add_trend_point(&mut self.throughput_trend, runs_per_hour);
+    }
+
+    /// Add cost data point
+    pub fn add_cost_point(&mut self, total_cost: Decimal) {
+        Self::add_trend_point(&mut self.cost_trend, total_cost);
+    }
+
+    /// Add token efficiency data point
+    pub fn add_token_efficiency_point(&mut self, efficiency_ratio: f64) {
+        Self::add_trend_point(&mut self.token_efficiency_trend, efficiency_ratio);
+    }
+
+    /// Add average cost per call data point
+    pub fn add_avg_cost_per_call_point(&mut self, avg_cost: Decimal) {
+        Self::add_trend_point(&mut self.avg_cost_per_call_trend, avg_cost);
     }
 }
 

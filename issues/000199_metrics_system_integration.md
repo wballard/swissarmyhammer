@@ -160,6 +160,56 @@ Builds toward:
 - [ ] Comprehensive test coverage for cost metric scenarios
 - [ ] Cost optimization insights and recommendations
 
+## Proposed Solution
+
+After analyzing the existing codebase, I'll implement a comprehensive cost metrics integration that builds upon the existing infrastructure:
+
+### Implementation Strategy
+
+1. **Extend RunMetrics with Enhanced Cost Data**
+   - Add derived efficiency metrics (cost per token, token efficiency ratio)
+   - Calculate cost attribution percentages by action
+   - Store cost optimization indicators
+
+2. **Add Cost Aggregation to WorkflowSummaryMetrics**
+   - Implement cost summary fields (total, average, min, max)
+   - Add cost trend tracking using existing trend pattern
+   - Calculate workflow-level efficiency statistics
+
+3. **Enhance GlobalMetrics with System-wide Cost Tracking**
+   - Add total system costs and averages
+   - Integrate cost trends into existing ResourceTrends structure
+   - Provide system-wide cost optimization insights
+
+4. **Create Cost Trend Infrastructure**
+   - Extend existing trends.rs pattern for cost data
+   - Add cost trend points to ResourceTrends
+   - Implement trend analysis and anomaly detection
+
+5. **Update Aggregation Logic**
+   - Modify update_workflow_summary_metrics() to calculate cost statistics
+   - Enhance update_global_metrics() with cost aggregation
+   - Ensure backward compatibility with existing data
+
+### File Modifications
+- `swissarmyhammer/src/workflow/metrics.rs` - Main metric structures
+- `swissarmyhammer/src/workflow/metrics/cost.rs` - Enhanced cost calculations
+- `swissarmyhammer/src/workflow/metrics/trends.rs` - Cost trend tracking
+- `swissarmyhammer/src/workflow/metrics/cleanup.rs` - Cost data cleanup
+
+### Data Structure Extensions
+Following the issue specification but adapted to existing patterns:
+- Add cost efficiency calculations to existing CostMetrics
+- Extend WorkflowSummaryMetrics with cost_summary field
+- Add cost tracking to GlobalMetrics
+- Integrate cost trends into existing ResourceTrends
+
+### Testing Approach
+- Unit tests for cost calculation accuracy
+- Integration tests with existing metrics pipeline
+- Performance benchmarking for cost aggregation
+- Backward compatibility validation
+
 ## Notes
 
 - Follow existing metrics patterns and conventions

@@ -94,12 +94,26 @@ mod tests {
         let mut resolver = PromptResolver::new();
         let mut library = PromptLibrary::new();
 
-        // Temporarily change home directory for test
+        // Store original environment values for cleanup
+        let original_home = std::env::var("HOME").ok();
+        let original_dir = std::env::current_dir().ok();
+
+        // Set up test environment - only set HOME for user prompts test
         std::env::set_var("HOME", temp_dir.path());
+        // Don't change current directory - we only want to test user prompts, not local prompts
 
-        resolver.load_all_prompts(&mut library).unwrap();
+        let result = resolver.load_all_prompts(&mut library);
 
-        // Check that our test prompt was loaded
+        // Restore original environment
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        }
+        if let Some(dir) = original_dir {
+            std::env::set_current_dir(dir).ok();
+        }
+
+        // Check results after cleanup
+        result.unwrap();
         let prompt = library.get("test_prompt").unwrap();
         assert_eq!(prompt.name, "test_prompt");
         assert_eq!(
@@ -121,16 +135,21 @@ mod tests {
         let mut resolver = PromptResolver::new();
         let mut library = PromptLibrary::new();
 
+        // Store original directory for cleanup
+        let original_dir = std::env::current_dir().ok();
+
         // Change to the temp directory to simulate local prompts
-        let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(&temp_dir).unwrap();
 
-        resolver.load_all_prompts(&mut library).unwrap();
+        let result = resolver.load_all_prompts(&mut library);
 
         // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        if let Some(dir) = original_dir {
+            std::env::set_current_dir(dir).ok();
+        }
 
-        // Check that our test prompt was loaded
+        // Check results after cleanup
+        result.unwrap();
         let prompt = library.get("local_prompt").unwrap();
         assert_eq!(prompt.name, "local_prompt");
         assert_eq!(
@@ -141,11 +160,27 @@ mod tests {
 
     #[test]
     fn test_debug_error_prompt_is_correctly_tracked_as_builtin() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Store original directory for cleanup
+        let original_dir = std::env::current_dir().ok();
+
+        // Set up test environment with valid current directory
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
         let mut resolver = PromptResolver::new();
         let mut library = PromptLibrary::new();
 
         // Load builtin prompts
-        resolver.load_all_prompts(&mut library).unwrap();
+        let result = resolver.load_all_prompts(&mut library);
+
+        // Restore original directory
+        if let Some(dir) = original_dir {
+            std::env::set_current_dir(dir).ok();
+        }
+
+        // Check results after cleanup
+        result.unwrap();
 
         // The debug/error prompt should be loaded and tracked as builtin
         // First check that it exists in the library
@@ -179,8 +214,24 @@ mod tests {
 
     #[test]
     fn test_get_prompt_directories() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Store original directory for cleanup
+        let original_dir = std::env::current_dir().ok();
+
+        // Set up test environment with valid current directory
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
         let resolver = PromptResolver::new();
-        let directories = resolver.get_prompt_directories().unwrap();
+        let result = resolver.get_prompt_directories();
+
+        // Restore original directory
+        if let Some(dir) = original_dir {
+            std::env::set_current_dir(dir).ok();
+        }
+
+        // Check results after cleanup
+        let directories = result.unwrap();
 
         // Should return a vector of PathBuf (may be empty if no directories exist)
         // At minimum, should not panic and should return a valid result

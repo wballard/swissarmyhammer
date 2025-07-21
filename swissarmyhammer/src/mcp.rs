@@ -95,9 +95,10 @@ impl McpServer {
     ///
     /// Returns an error if workflow storage, issue storage, or git operations fail to initialize.
     pub fn new(library: PromptLibrary) -> Result<Self> {
-        let work_dir = std::env::current_dir().map_err(|e| {
-            SwissArmyHammerError::Other(format!("Failed to get current directory: {e}"))
-        })?;
+        let work_dir = std::env::current_dir().unwrap_or_else(|e| {
+            tracing::debug!("Failed to get current directory: {e}, using fallback");
+            std::path::PathBuf::from(".")
+        });
         Self::new_with_work_dir(library, work_dir)
     }
 
@@ -2049,8 +2050,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_mcp_server_creation() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
         let library = PromptLibrary::new();
-        let server = McpServer::new(library).unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         let info = server.get_info();
         // Just verify we can get server info - details depend on default implementation
@@ -2063,12 +2065,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_mcp_server_list_prompts() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
         let mut library = PromptLibrary::new();
         let prompt = Prompt::new("test", "Test prompt: {{ name }}")
             .with_description("Test description".to_string());
         library.add(prompt).unwrap();
 
-        let server = McpServer::new(library).unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
         let prompts = server.list_prompts().await.unwrap();
 
         assert_eq!(prompts.len(), 1);
@@ -2077,12 +2080,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_mcp_server_get_prompt() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
         let mut library = PromptLibrary::new();
         let prompt = Prompt::new("test", "Hello {{ name }}!")
             .with_description("Greeting prompt".to_string());
         library.add(prompt).unwrap();
 
-        let server = McpServer::new(library).unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
         let mut arguments = HashMap::new();
         arguments.insert("name".to_string(), "World".to_string());
 
@@ -2096,8 +2100,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_mcp_server_exposes_prompt_capabilities() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
         let library = PromptLibrary::new();
-        let server = McpServer::new(library).unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         let info = server.get_info();
 
@@ -2150,8 +2155,9 @@ mod tests {
     #[tokio::test]
     async fn test_mcp_server_file_watching_integration() {
         // Create a test library and server
+        let temp_dir = tempfile::TempDir::new().unwrap();
         let library = PromptLibrary::new();
-        let server = McpServer::new(library).unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         // Test that file watching requires a peer connection
         // In tests, we can't easily create a real peer, so we skip the file watching test
@@ -2171,14 +2177,27 @@ mod tests {
 
     #[tokio::test]
     async fn test_mcp_server_uses_same_directory_discovery() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        // Store original directory for cleanup
+        let original_dir = std::env::current_dir().ok();
+        // Set up test environment with valid current directory
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
         // Verify that MCP server uses same directory discovery as PromptResolver
         let resolver = PromptResolver::new();
-        let resolver_dirs = resolver.get_prompt_directories().unwrap();
+        let result = resolver.get_prompt_directories();
+
+        // Restore original directory
+        if let Some(dir) = original_dir {
+            std::env::set_current_dir(dir).ok();
+        }
+
+        let resolver_dirs = result.unwrap();
 
         // The server should use the same directories for file watching
         // This test ensures the fix for hardcoded paths is working
         let library = PromptLibrary::new();
-        let _server = McpServer::new(library).unwrap();
+        let _server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         // File watching now requires a peer connection from the MCP client
         // The important thing is that both use get_prompt_directories() method
@@ -2202,7 +2221,8 @@ mod tests {
         library
             .add(Prompt::new("test", "Hello {{ name }}!").with_description("Test prompt"))
             .unwrap();
-        let server = McpServer::new(library).unwrap();
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         // Test getting an existing prompt works
         let mut args = HashMap::new();
@@ -2227,8 +2247,9 @@ mod tests {
     #[tokio::test]
     async fn test_mcp_server_exposes_workflow_tools_capability() {
         // Create a test library and server
+        let temp_dir = tempfile::TempDir::new().unwrap();
         let library = PromptLibrary::new();
-        let server = McpServer::new(library).unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         let info = server.get_info();
 
@@ -2276,7 +2297,8 @@ mod tests {
         .with_description("Another partial template".to_string());
         library.add(partial_with_marker).unwrap();
 
-        let server = McpServer::new(library).unwrap();
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         // Test list_prompts - should only return regular prompts
         let prompts = server.list_prompts().await.unwrap();
@@ -2304,8 +2326,9 @@ mod tests {
     #[tokio::test]
     async fn test_mcp_server_exposes_issue_tools() {
         // Create a test library and server
+        let temp_dir = tempfile::TempDir::new().unwrap();
         let library = PromptLibrary::new();
-        let server = McpServer::new(library).unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         // Test that server info includes issue tracking capabilities
         let info = server.get_info();
@@ -2386,8 +2409,9 @@ mod tests {
     #[tokio::test]
     async fn test_mcp_server_initializes_with_issue_storage() {
         // Test that server can be created and includes issue storage
+        let temp_dir = tempfile::TempDir::new().unwrap();
         let library = PromptLibrary::new();
-        let server = McpServer::new(library).unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         // Verify server info includes issue tracking in instructions
         let info = server.get_info();
@@ -2410,8 +2434,9 @@ mod tests {
     #[tokio::test]
     async fn test_handle_issue_create_success() {
         // Test successful issue creation
+        let temp_dir = tempfile::TempDir::new().unwrap();
         let library = PromptLibrary::new();
-        let server = McpServer::new(library).unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         let request = CreateIssueRequest {
             name: IssueName::new("test_issue".to_string()).unwrap(),
@@ -2439,8 +2464,9 @@ mod tests {
     #[tokio::test]
     async fn test_handle_issue_create_empty_name() {
         // Test validation failure with empty name
+        let temp_dir = tempfile::TempDir::new().unwrap();
         let library = PromptLibrary::new();
-        let server = McpServer::new(library).unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         let request = CreateIssueRequest {
             name: IssueName("".to_string()),
@@ -2460,8 +2486,9 @@ mod tests {
     #[tokio::test]
     async fn test_handle_issue_create_whitespace_name() {
         // Test validation failure with whitespace-only name
+        let temp_dir = tempfile::TempDir::new().unwrap();
         let library = PromptLibrary::new();
-        let server = McpServer::new(library).unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         let request = CreateIssueRequest {
             name: IssueName("   ".to_string()),
@@ -2484,8 +2511,9 @@ mod tests {
     #[tokio::test]
     async fn test_handle_issue_create_long_name() {
         // Test validation failure with too long name
+        let temp_dir = tempfile::TempDir::new().unwrap();
         let library = PromptLibrary::new();
-        let server = McpServer::new(library).unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         let long_name = "a".repeat(101); // 101 characters, over the limit
         let request = CreateIssueRequest {
@@ -2506,8 +2534,9 @@ mod tests {
     #[tokio::test]
     async fn test_handle_issue_create_invalid_characters() {
         // Test validation failure with invalid characters
+        let temp_dir = tempfile::TempDir::new().unwrap();
         let library = PromptLibrary::new();
-        let server = McpServer::new(library).unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         let invalid_names = vec![
             "issue/with/slashes",
@@ -2543,8 +2572,9 @@ mod tests {
     #[tokio::test]
     async fn test_handle_issue_create_trimmed_name() {
         // Test that names are properly trimmed
+        let temp_dir = tempfile::TempDir::new().unwrap();
         let library = PromptLibrary::new();
-        let server = McpServer::new(library).unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         let request = CreateIssueRequest {
             name: IssueName("  test_issue  ".to_string()),
@@ -2570,8 +2600,9 @@ mod tests {
     #[tokio::test]
     async fn test_handle_issue_create_sequential_numbering() {
         // Test that multiple issues get sequential numbers
+        let temp_dir = tempfile::TempDir::new().unwrap();
         let library = PromptLibrary::new();
-        let server = McpServer::new(library).unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         // Create first issue
         let request1 = CreateIssueRequest {
@@ -2684,8 +2715,9 @@ mod tests {
     #[tokio::test]
     async fn test_parse_issue_branch() {
         // Test parsing issue branch names
+        let temp_dir = tempfile::TempDir::new().unwrap();
         let library = PromptLibrary::new();
-        let server = McpServer::new(library).unwrap();
+        let server = McpServer::new_with_work_dir(library, temp_dir.path().to_path_buf()).unwrap();
 
         // Test valid issue branch format
         let result = server

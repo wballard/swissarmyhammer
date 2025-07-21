@@ -17,7 +17,10 @@ pub struct GitOperations {
 impl GitOperations {
     /// Create new git operations handler
     pub fn new() -> Result<Self> {
-        let work_dir = std::env::current_dir()?;
+        let work_dir = std::env::current_dir().unwrap_or_else(|e| {
+            tracing::debug!("Failed to get current directory: {e}, using fallback");
+            std::path::PathBuf::from(".")
+        });
 
         // Verify this is a git repository
         Self::verify_git_repo(&work_dir)?;
@@ -331,7 +334,8 @@ mod tests {
     #[test]
     fn test_git_operations_new_in_git_repo() {
         let temp_dir = create_test_git_repo().unwrap();
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir =
+            std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
 
         // Change to test repo directory
         std::env::set_current_dir(temp_dir.path()).unwrap();
@@ -356,7 +360,8 @@ mod tests {
     #[test]
     fn test_git_operations_new_not_in_git_repo() {
         let temp_dir = TempDir::new().unwrap();
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir =
+            std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
 
         // Change to non-git directory
         std::env::set_current_dir(temp_dir.path()).unwrap();

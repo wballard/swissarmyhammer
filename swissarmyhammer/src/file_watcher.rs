@@ -243,7 +243,8 @@ mod tests {
         fs::write(&test_file, "test prompt").unwrap();
 
         // Set current directory to temp dir so it finds our test directory
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir =
+            std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
         let mut watcher = FileWatcher::new();
@@ -305,7 +306,8 @@ mod tests {
         fs::write(&test_file, "name: test\ndescription: test prompt").unwrap();
 
         // Set current directory to temp dir
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir =
+            std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
         let mut watcher = FileWatcher::new();
@@ -340,7 +342,8 @@ mod tests {
         fs::write(test_prompts_dir.join("test.md"), "test").unwrap();
 
         // Set current directory to temp dir
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir =
+            std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
         let mut watcher = FileWatcher::new();
@@ -365,11 +368,12 @@ mod tests {
         use std::fs;
         use tempfile::TempDir;
 
-        // Save original directory first
-        let original_dir = std::env::current_dir().unwrap();
-
         // Create a temporary directory for testing
         let temp_dir = TempDir::new().unwrap();
+
+        // Save original directory first
+        let original_dir =
+            std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
         let test_prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
         fs::create_dir_all(&test_prompts_dir).unwrap();
         fs::write(test_prompts_dir.join("test.yml"), "name: test").unwrap();
@@ -478,7 +482,8 @@ mod tests {
         fs::write(test_prompts_dir.join("test.yaml"), "name: test").unwrap();
 
         // Set current directory to temp dir
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir =
+            std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
         let mut watcher = FileWatcher::new();

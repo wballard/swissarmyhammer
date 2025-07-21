@@ -147,7 +147,10 @@ impl FileSystemIssueStorage {
     ///
     /// Uses current working directory joined with "issues" as the default location
     pub fn new_default() -> Result<Self> {
-        let current_dir = std::env::current_dir().map_err(SwissArmyHammerError::Io)?;
+        let current_dir = std::env::current_dir().unwrap_or_else(|e| {
+            tracing::debug!("Failed to get current directory: {e}, using fallback");
+            std::path::PathBuf::from(".")
+        });
         let issues_dir = current_dir.join("issues");
         Self::new(issues_dir)
     }

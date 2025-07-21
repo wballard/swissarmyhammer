@@ -10,6 +10,8 @@ use thiserror::Error;
 const DEFAULT_BASE_BRANCH: &str = "main";
 const MAX_ISSUE_BRANCH_PREFIX_LENGTH: usize = 50;
 const MAX_BRANCH_NAME_LENGTH: usize = 255;
+const ENV_PREFIX: &str = "SWISSARMYHAMMER";
+const CONFIG_FILENAME: &str = "swissarmyhammer.yaml";
 
 // Invalid characters for git branch names (comprehensive validation used by both Config and YamlConfig)
 const INVALID_BRANCH_CHARS_YAML: [char; 9] = ['\0', ' ', '~', '^', ':', '?', '*', '[', '\\'];
@@ -135,33 +137,53 @@ impl Config {
         config.apply_env_vars();
 
         // Apply YAML configuration (override env vars and defaults)
-        match YamlConfig::load_or_default() {
-            Ok(yaml_config) => {
-                // Validate the loaded configuration
-                if let Err(validation_error) = yaml_config.validate() {
-                    tracing::warn!(
-                        "Invalid YAML configuration: {}. Continuing with environment variables and defaults.",
-                        validation_error
-                    );
-                } else {
-                    yaml_config.apply_to_config(&mut config);
-                    tracing::info!("Configuration loaded successfully with YAML support");
-                }
-            }
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to load YAML configuration, falling back to env vars and defaults: {}",
-                    e
-                );
-            }
-        }
+        config.apply_yaml_config();
 
         config
     }
 
+    /// Apply YAML configuration to this config
+    ///
+    /// Attempts to load YAML configuration and applies it if valid.
+    /// Falls back gracefully to existing configuration on load or validation errors.
+    /// This is called during Config::new() as the final step in the precedence chain.
+    fn apply_yaml_config(&mut self) {
+        match YamlConfig::load_or_default() {
+            Ok(yaml_config) => {
+                self.process_yaml_config(yaml_config);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to load YAML configuration: {}. Falling back to environment variables and defaults",
+                    e
+                );
+            }
+        }
+    }
+
+    /// Process and validate a loaded YAML configuration
+    ///
+    /// Validates the YAML configuration and applies it if valid.
+    /// Logs appropriate warnings if validation fails.
+    fn process_yaml_config(&mut self, yaml_config: YamlConfig) {
+        if let Err(validation_error) = yaml_config.validate() {
+            tracing::warn!(
+                "Invalid YAML configuration: {}. Falling back to environment variables and defaults",
+                validation_error
+            );
+        } else {
+            yaml_config.apply_to_config(self);
+            tracing::info!("Configuration loaded successfully with YAML support");
+        }
+    }
+
     /// Apply environment variable configuration to this config
+    ///
+    /// Loads configuration values from environment variables with the SWISSARMYHAMMER prefix,
+    /// overriding the current config values. This is called during Config::new() as the second
+    /// step in the precedence chain: defaults < env vars < YAML.
     fn apply_env_vars(&mut self) {
-        let loader = EnvLoader::new("SWISSARMYHAMMER");
+        let loader = EnvLoader::new(ENV_PREFIX);
 
         self.issue_branch_prefix =
             loader.load_string("ISSUE_BRANCH_PREFIX", &self.issue_branch_prefix);
@@ -230,7 +252,7 @@ impl Config {
     pub fn find_yaml_config_file() -> Option<std::path::PathBuf> {
         use std::path::PathBuf;
 
-        let config_filename = "swissarmyhammer.yaml";
+        let config_filename = CONFIG_FILENAME;
 
         // Define search paths in order of priority
         let mut search_paths = Vec::new();
@@ -264,7 +286,10 @@ impl Config {
             }
         }
 
-        tracing::debug!("No swissarmyhammer.yaml configuration file found in any search location");
+        tracing::debug!(
+            "No {} configuration file found in any search location",
+            CONFIG_FILENAME
+        );
         None
     }
 
@@ -403,13 +428,16 @@ impl Config {
     }
 
     /// Generate an example YAML configuration file content
-    pub fn example_yaml_config() -> &'static str {
-        r#"# swissarmyhammer.yaml
+    pub fn example_yaml_config() -> String {
+        format!(
+            r#"# {}
 # Configuration file for Swiss Army Hammer
 
 # Base branch that pull requests will merge into
 base_branch: "main"
-"#
+"#,
+            CONFIG_FILENAME
+        )
     }
 
     /// Get configuration validation help message
@@ -680,7 +708,8 @@ mod tests {
 
         // Ensure we're in a directory without a YAML config file
         let temp_dir = tempfile::TempDir::new().unwrap();
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir =
+            std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
         let config = Config::new();
@@ -858,8 +887,8 @@ base_branch: "feature/test"
             .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         // Ensure we're in a directory that doesn't have the config file
-        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = std::env::temp_dir();
+        let original_dir = std::env::current_dir().unwrap_or_else(|_| temp_dir.clone());
         std::env::set_current_dir(&temp_dir).unwrap();
 
         // Remove any existing config file in temp dir
@@ -1440,7 +1469,7 @@ base_branch: "feature/test"
     #[test]
     fn test_config_example_yaml_config() {
         let example = Config::example_yaml_config();
-        assert!(example.contains("swissarmyhammer.yaml"));
+        assert!(example.contains(CONFIG_FILENAME));
         assert!(example.contains("base_branch: \"main\""));
     }
 
@@ -1639,7 +1668,8 @@ mod config_integration_tests {
             "Env var should not be set"
         );
 
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir =
+            std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
         // Verify YAML file exists and is readable
@@ -1662,7 +1692,8 @@ mod config_integration_tests {
     fn test_config_precedence_defaults_when_no_overrides() {
         // Ensure no YAML file exists and no env vars
         let temp_dir = tempfile::TempDir::new().unwrap();
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir =
+            std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
         std::env::remove_var("SWISSARMYHAMMER_BASE_BRANCH");
@@ -1686,7 +1717,8 @@ mod config_integration_tests {
         std::env::set_var("SWISSARMYHAMMER_BASE_BRANCH", "env-branch");
 
         // Change to temp directory
-        let original_dir = std::env::current_dir().unwrap();
+        let original_dir =
+            std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
         let config = Config::new();
@@ -1695,6 +1727,100 @@ mod config_integration_tests {
         // Cleanup
         std::env::set_current_dir(original_dir).expect("Could not restore original directory");
         std::env::remove_var("SWISSARMYHAMMER_BASE_BRANCH");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_config_yaml_validation_failure_fallback_to_env() {
+        // When YAML has invalid configuration, it should fall back to environment variables
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let yaml_path = temp_dir.path().join("swissarmyhammer.yaml");
+        // Create YAML with invalid base_branch (empty string)
+        std::fs::write(&yaml_path, "base_branch: \"\"").unwrap();
+
+        // Set environment variable that should be used as fallback
+        std::env::set_var("SWISSARMYHAMMER_BASE_BRANCH", "env-fallback-branch");
+
+        // Change to temp directory
+        let original_dir =
+            std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let config = Config::new();
+        // Should use env var because YAML validation failed
+        assert_eq!(config.base_branch, "env-fallback-branch");
+
+        // Cleanup
+        std::env::set_current_dir(original_dir).expect("Could not restore original directory");
+        std::env::remove_var("SWISSARMYHAMMER_BASE_BRANCH");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_config_empty_yaml_with_env_precedence() {
+        // When YAML file exists but is empty, environment variables should be used
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let yaml_path = temp_dir.path().join("swissarmyhammer.yaml");
+        // Create empty YAML file
+        std::fs::write(&yaml_path, "").unwrap();
+
+        // Set environment variable
+        std::env::set_var("SWISSARMYHAMMER_BASE_BRANCH", "env-with-empty-yaml");
+
+        // Change to temp directory
+        let original_dir =
+            std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let config = Config::new();
+        // Should use env var because YAML is empty (no override values)
+        assert_eq!(config.base_branch, "env-with-empty-yaml");
+
+        // Cleanup
+        std::env::set_current_dir(original_dir).expect("Could not restore original directory");
+        std::env::remove_var("SWISSARMYHAMMER_BASE_BRANCH");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_config_complete_precedence_hierarchy() {
+        // Comprehensive test of all three precedence levels: YAML > ENV > DEFAULTS
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let yaml_path = temp_dir.path().join("swissarmyhammer.yaml");
+
+        // Create YAML with partial configuration (only base_branch)
+        // This tests that YAML values override everything, env vars override defaults where no YAML
+        std::fs::write(&yaml_path, "base_branch: \"yaml-precedence-branch\"").unwrap();
+
+        // Set environment variables for multiple fields
+        std::env::set_var("SWISSARMYHAMMER_BASE_BRANCH", "env-branch"); // Should be overridden by YAML
+        std::env::set_var("SWISSARMYHAMMER_ISSUE_NUMBER_WIDTH", "8"); // Should be used (no YAML override)
+        std::env::set_var("SWISSARMYHAMMER_MAX_PENDING_ISSUES_IN_SUMMARY", "15"); // Should be used (no YAML override)
+
+        // Change to temp directory
+        let original_dir =
+            std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let config = Config::new();
+
+        // Verify precedence hierarchy:
+        // 1. YAML overrides env var
+        assert_eq!(config.base_branch, "yaml-precedence-branch");
+
+        // 2. Env vars override defaults (no YAML present for these fields)
+        assert_eq!(config.issue_number_width, 8);
+        assert_eq!(config.max_pending_issues_in_summary, 15);
+
+        // 3. Defaults used when no YAML or env var present
+        assert_eq!(config.issue_branch_prefix, "issue/"); // default value
+        assert_eq!(config.min_issue_number, 1); // default value
+
+        // Cleanup
+        std::env::set_current_dir(original_dir).expect("Could not restore original directory");
+        std::env::remove_var("SWISSARMYHAMMER_BASE_BRANCH");
+        std::env::remove_var("SWISSARMYHAMMER_ISSUE_NUMBER_WIDTH");
+        std::env::remove_var("SWISSARMYHAMMER_MAX_PENDING_ISSUES_IN_SUMMARY");
     }
 }
 

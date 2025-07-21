@@ -5,9 +5,9 @@ mod tests {
     use super::super::*;
     use crate::config::AggregationConfig;
     use crate::cost::aggregation::{
-        analyzer::{CostAggregator, AggregationError},
-        trends::{TrendAnalyzer, TimeSeriesPoint},
-        reports::{ReportGenerator, ExportFormat, ReportConfig},
+        analyzer::{AggregationError, CostAggregator},
+        reports::{ExportFormat, ReportConfig, ReportGenerator},
+        trends::{TimeSeriesPoint, TrendAnalyzer},
     };
     use crate::issues::IssueStorage;
     use crate::workflow::metrics::WorkflowMetrics;
@@ -24,7 +24,7 @@ mod tests {
     impl IssueStorage for MockIssueStorage {
         async fn list_issues(&self) -> crate::error::Result<Vec<crate::issues::Issue>> {
             use crate::issues::{Issue, IssueNumber};
-            
+
             Ok(vec![
                 Issue {
                     number: IssueNumber::new(1).unwrap(),
@@ -57,11 +57,19 @@ mod tests {
             unimplemented!("Not needed for aggregation tests")
         }
 
-        async fn create_issue(&self, _name: String, _content: String) -> crate::error::Result<crate::issues::Issue> {
+        async fn create_issue(
+            &self,
+            _name: String,
+            _content: String,
+        ) -> crate::error::Result<crate::issues::Issue> {
             unimplemented!("Not needed for aggregation tests")
         }
 
-        async fn update_issue(&self, _number: u32, _content: String) -> crate::error::Result<crate::issues::Issue> {
+        async fn update_issue(
+            &self,
+            _number: u32,
+            _content: String,
+        ) -> crate::error::Result<crate::issues::Issue> {
             unimplemented!("Not needed for aggregation tests")
         }
 
@@ -77,19 +85,31 @@ mod tests {
             unimplemented!("Not needed for aggregation tests")
         }
 
-        async fn create_issues_batch(&self, _issues: Vec<(String, String)>) -> crate::error::Result<Vec<crate::issues::Issue>> {
+        async fn create_issues_batch(
+            &self,
+            _issues: Vec<(String, String)>,
+        ) -> crate::error::Result<Vec<crate::issues::Issue>> {
             unimplemented!("Not needed for aggregation tests")
         }
 
-        async fn get_issues_batch(&self, _numbers: Vec<u32>) -> crate::error::Result<Vec<crate::issues::Issue>> {
+        async fn get_issues_batch(
+            &self,
+            _numbers: Vec<u32>,
+        ) -> crate::error::Result<Vec<crate::issues::Issue>> {
             unimplemented!("Not needed for aggregation tests")
         }
 
-        async fn update_issues_batch(&self, _updates: Vec<(u32, String)>) -> crate::error::Result<Vec<crate::issues::Issue>> {
+        async fn update_issues_batch(
+            &self,
+            _updates: Vec<(u32, String)>,
+        ) -> crate::error::Result<Vec<crate::issues::Issue>> {
             unimplemented!("Not needed for aggregation tests")
         }
 
-        async fn mark_complete_batch(&self, _numbers: Vec<u32>) -> crate::error::Result<Vec<crate::issues::Issue>> {
+        async fn mark_complete_batch(
+            &self,
+            _numbers: Vec<u32>,
+        ) -> crate::error::Result<Vec<crate::issues::Issue>> {
             unimplemented!("Not needed for aggregation tests")
         }
     }
@@ -97,10 +117,10 @@ mod tests {
     /// Create test workflow metrics with sample cost data
     fn create_test_workflow_metrics() -> WorkflowMetrics {
         let metrics = WorkflowMetrics::new();
-        
+
         // Note: In a real implementation, we would populate the metrics with actual cost data
         // For testing purposes, we'll create a minimal metrics instance
-        
+
         metrics
     }
 
@@ -110,11 +130,11 @@ mod tests {
         let config = AggregationConfig::default();
 
         CostAggregator::new(
-            issue_storage, 
-            metrics, 
+            issue_storage,
+            metrics,
             #[cfg(feature = "database")]
-            None, 
-            config
+            None,
+            config,
         )
     }
 
@@ -128,13 +148,10 @@ mod tests {
     async fn test_project_summary_generation() {
         let aggregator = create_test_aggregator();
 
-        let date_range = DateRange::new(
-            Utc::now() - chrono::Duration::days(30),
-            Utc::now(),
-        );
+        let date_range = DateRange::new(Utc::now() - chrono::Duration::days(30), Utc::now());
 
         let result = aggregator.generate_project_summary(Some(date_range)).await;
-        
+
         match result {
             Ok(summary) => {
                 assert!(summary.total_issues >= 3);
@@ -226,10 +243,7 @@ mod tests {
                 expensive_operations: Vec::new(),
                 efficiency_score: 0.75,
             },
-            period: DateRange::new(
-                Utc::now() - chrono::Duration::days(30),
-                Utc::now(),
-            ),
+            period: DateRange::new(Utc::now() - chrono::Duration::days(30), Utc::now()),
             cost_breakdown: HashMap::new(),
             outliers: Vec::new(),
             generated_at: Utc::now(),
@@ -278,13 +292,13 @@ mod tests {
         let metrics = Arc::new(create_test_workflow_metrics());
         let mut config = AggregationConfig::default();
         config.outlier_threshold = 1.0; // Lower threshold for test
-        
+
         let aggregator = CostAggregator::new(
-            issue_storage, 
-            metrics, 
+            issue_storage,
+            metrics,
             #[cfg(feature = "database")]
-            None, 
-            config
+            None,
+            config,
         );
 
         // Create test data with an extreme outlier
@@ -348,10 +362,7 @@ mod tests {
                 expensive_operations: Vec::new(),
                 efficiency_score: 0.75,
             },
-            period: DateRange::new(
-                Utc::now() - chrono::Duration::days(30),
-                Utc::now(),
-            ),
+            period: DateRange::new(Utc::now() - chrono::Duration::days(30), Utc::now()),
             cost_breakdown: HashMap::new(),
             outliers: Vec::new(),
             generated_at: Utc::now(),
@@ -362,7 +373,7 @@ mod tests {
     fn test_trend_direction_classification() {
         // Test stable trend
         assert_eq!(TrendDirection::Stable as u8, TrendDirection::Stable as u8);
-        
+
         // Test enum variants
         let directions = [
             TrendDirection::Increasing,
@@ -370,7 +381,7 @@ mod tests {
             TrendDirection::Stable,
             TrendDirection::Volatile,
         ];
-        
+
         for direction in &directions {
             // Just test that the enum values work
             match direction {

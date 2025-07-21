@@ -66,19 +66,33 @@ pub enum PerformanceError {
     /// Performance target exceeded
     #[error("Performance target exceeded: {metric} = {actual}ms, target = {target}ms")]
     TargetExceeded {
+        /// The performance metric that exceeded its target
         metric: String,
+        /// The actual measured value in milliseconds
         actual: u64,
+        /// The target threshold in milliseconds
         target: u64,
     },
     /// Memory limit exceeded
     #[error("Memory limit exceeded: {actual}% > {limit}%")]
-    MemoryLimitExceeded { actual: f32, limit: f32 },
+    MemoryLimitExceeded {
+        /// The actual memory usage percentage
+        actual: f32,
+        /// The maximum allowed memory usage percentage
+        limit: f32,
+    },
     /// Configuration error
     #[error("Configuration error: {message}")]
-    ConfigError { message: String },
+    ConfigError {
+        /// The configuration error message
+        message: String,
+    },
     /// Resource exhausted
     #[error("Resource exhausted: {resource}")]
-    ResourceExhausted { resource: String },
+    ResourceExhausted {
+        /// The name of the exhausted resource
+        resource: String,
+    },
 }
 
 #[cfg(test)]
@@ -88,7 +102,7 @@ mod tests {
     #[test]
     fn test_performance_config_default() {
         let config = PerformanceConfig::default();
-        
+
         assert_eq!(config.memory_pool_size, 10000);
         assert_eq!(config.async_batch_size, 100);
         assert_eq!(config.flush_interval_ms, 1000);
@@ -97,7 +111,7 @@ mod tests {
         assert!(config.enable_monitoring);
         assert_eq!(config.target_api_overhead_ms, 50);
         assert_eq!(config.max_memory_overhead_pct, 5.0);
-        
+
         // SIMD should be enabled on x86_64
         if cfg!(target_arch = "x86_64") {
             assert!(config.enable_simd);

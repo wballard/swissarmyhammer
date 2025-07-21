@@ -182,7 +182,6 @@ pub struct ReportGenerator {
     config: ReportConfig,
 }
 
-
 impl ReportGenerator {
     /// Create a new report generator with custom configuration
     pub fn new(config: ReportConfig) -> Self {
@@ -339,12 +338,30 @@ impl ReportGenerator {
         let trend = &summary.cost_trend;
 
         let mut key_values = HashMap::new();
-        key_values.insert("Direction".to_string(), format!("{:?}", trend.trend_direction));
-        key_values.insert("Growth Rate".to_string(), format!("{:.2}%", trend.growth_rate * 100.0));
-        key_values.insert("Confidence".to_string(), format!("{:.1}%", trend.confidence * 100.0));
-        key_values.insert("Daily Data Points".to_string(), trend.daily_costs.len().to_string());
-        key_values.insert("Weekly Data Points".to_string(), trend.weekly_costs.len().to_string());
-        key_values.insert("Monthly Data Points".to_string(), trend.monthly_costs.len().to_string());
+        key_values.insert(
+            "Direction".to_string(),
+            format!("{:?}", trend.trend_direction),
+        );
+        key_values.insert(
+            "Growth Rate".to_string(),
+            format!("{:.2}%", trend.growth_rate * 100.0),
+        );
+        key_values.insert(
+            "Confidence".to_string(),
+            format!("{:.1}%", trend.confidence * 100.0),
+        );
+        key_values.insert(
+            "Daily Data Points".to_string(),
+            trend.daily_costs.len().to_string(),
+        );
+        key_values.insert(
+            "Weekly Data Points".to_string(),
+            trend.weekly_costs.len().to_string(),
+        );
+        key_values.insert(
+            "Monthly Data Points".to_string(),
+            trend.monthly_costs.len().to_string(),
+        );
 
         Ok(Some(ReportSection {
             title: "Trend Analysis".to_string(),
@@ -430,8 +447,7 @@ impl ReportGenerator {
 
     /// Export report as JSON
     fn export_json(&self, report: &AggregatedReport) -> Result<String, ReportError> {
-        serde_json::to_string_pretty(report)
-            .map_err(|e| ReportError::Serialization(e.to_string()))
+        serde_json::to_string_pretty(report).map_err(|e| ReportError::Serialization(e.to_string()))
     }
 
     /// Export report as CSV
@@ -440,9 +456,18 @@ impl ReportGenerator {
 
         // Add summary information as CSV header
         output.push_str("# Project Cost Analysis Report\n");
-        output.push_str(&format!("# Generated: {}\n", self.format_date(report.metadata.generated_at)));
-        output.push_str(&format!("# Total Cost: {}\n", self.format_currency(report.summary.total_cost)));
-        output.push_str(&format!("# Total Issues: {}\n", report.summary.total_issues));
+        output.push_str(&format!(
+            "# Generated: {}\n",
+            self.format_date(report.metadata.generated_at)
+        ));
+        output.push_str(&format!(
+            "# Total Cost: {}\n",
+            self.format_currency(report.summary.total_cost)
+        ));
+        output.push_str(&format!(
+            "# Total Issues: {}\n",
+            report.summary.total_issues
+        ));
         output.push('\n');
 
         // Export each table section
@@ -469,7 +494,10 @@ impl ReportGenerator {
 
         // Report header
         output.push_str(&format!("# {}\n\n", report.metadata.title));
-        output.push_str(&format!("Generated: {}\n\n", self.format_date(report.metadata.generated_at)));
+        output.push_str(&format!(
+            "Generated: {}\n\n",
+            self.format_date(report.metadata.generated_at)
+        ));
 
         // Export sections in order
         let mut sorted_sections: Vec<_> = report.sections.iter().collect();
@@ -486,7 +514,15 @@ impl ReportGenerator {
                 ReportContent::Table(table) => {
                     // Markdown table format
                     output.push_str(&format!("| {} |\n", table.headers.join(" | ")));
-                    output.push_str(&format!("|{}|\n", table.headers.iter().map(|_| "---").collect::<Vec<_>>().join("|")));
+                    output.push_str(&format!(
+                        "|{}|\n",
+                        table
+                            .headers
+                            .iter()
+                            .map(|_| "---")
+                            .collect::<Vec<_>>()
+                            .join("|")
+                    ));
 
                     for row in &table.rows {
                         output.push_str(&format!("| {} |\n", row.join(" | ")));
@@ -543,7 +579,10 @@ impl ReportGenerator {
 
             match &section.content {
                 ReportContent::Text(text) => {
-                    output.push_str(&format!("    <div class=\"summary\"><pre>{}</pre></div>\n", text));
+                    output.push_str(&format!(
+                        "    <div class=\"summary\"><pre>{}</pre></div>\n",
+                        text
+                    ));
                 }
                 ReportContent::Table(table) => {
                     output.push_str("    <table>\n");
@@ -566,7 +605,10 @@ impl ReportGenerator {
                 ReportContent::KeyValue(kv) => {
                     output.push_str("    <ul>\n");
                     for (key, value) in kv {
-                        output.push_str(&format!("        <li><strong>{}:</strong> {}</li>\n", key, value));
+                        output.push_str(&format!(
+                            "        <li><strong>{}:</strong> {}</li>\n",
+                            key, value
+                        ));
                     }
                     output.push_str("    </ul>\n");
                 }
@@ -586,7 +628,10 @@ impl ReportGenerator {
 
         output.push_str(&format!("{}\n", report.metadata.title));
         output.push_str(&format!("{}\n", "=".repeat(report.metadata.title.len())));
-        output.push_str(&format!("Generated: {}\n\n", self.format_date(report.metadata.generated_at)));
+        output.push_str(&format!(
+            "Generated: {}\n\n",
+            self.format_date(report.metadata.generated_at)
+        ));
 
         let mut sorted_sections: Vec<_> = report.sections.iter().collect();
         sorted_sections.sort_by_key(|(_, section)| section.order);
@@ -602,11 +647,13 @@ impl ReportGenerator {
                 }
                 ReportContent::Table(table) => {
                     // Simple text table format
-                    let col_widths: Vec<usize> = table.headers
+                    let col_widths: Vec<usize> = table
+                        .headers
                         .iter()
                         .enumerate()
                         .map(|(i, header)| {
-                            let max_row_width = table.rows
+                            let max_row_width = table
+                                .rows
                                 .iter()
                                 .map(|row| row.get(i).map(|s| s.len()).unwrap_or(0))
                                 .max()
@@ -623,14 +670,22 @@ impl ReportGenerator {
 
                     // Separator
                     for &width in &col_widths {
-                        output.push_str(&format!("{:<width$}", "-".repeat(width), width = width + 2));
+                        output.push_str(&format!(
+                            "{:<width$}",
+                            "-".repeat(width),
+                            width = width + 2
+                        ));
                     }
                     output.push('\n');
 
                     // Data rows
                     for row in &table.rows {
                         for (i, cell) in row.iter().enumerate() {
-                            output.push_str(&format!("{:<width$}", cell, width = col_widths[i] + 2));
+                            output.push_str(&format!(
+                                "{:<width$}",
+                                cell,
+                                width = col_widths[i] + 2
+                            ));
                         }
                         output.push('\n');
                     }

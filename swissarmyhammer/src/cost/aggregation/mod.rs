@@ -11,9 +11,9 @@ pub mod trends;
 #[cfg(test)]
 pub mod tests;
 
-pub use analyzer::{CostAggregator, AggregationError, AggregationResult};
-pub use reports::{ReportGenerator, ExportFormat, AggregatedReport};
-pub use trends::{TrendAnalyzer, TrendAnalysis};
+pub use analyzer::{AggregationError, AggregationResult, CostAggregator};
+pub use reports::{AggregatedReport, ExportFormat, ReportGenerator};
+pub use trends::{TrendAnalysis, TrendAnalyzer};
 
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;

@@ -126,7 +126,13 @@ impl StorageTestHarness<MockStorageForTesting> {
         #[cfg(feature = "database")]
         let database = if config.enable_database {
             let db_path = temp_dir.path().join("test_costs.db");
-            let db_config = DatabaseConfig::new(db_path, true)?;
+            let db_config = DatabaseConfig::with_values(
+                true,
+                db_path,
+                std::time::Duration::from_secs(30),
+                10,
+                365,
+            )?;
             Some(CostDatabase::new(db_config).await?)
         } else {
             None

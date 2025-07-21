@@ -33,8 +33,8 @@ impl Default for MemoryPoolConfig {
 }
 
 /// Generic memory pool for reusable objects
-pub struct MemoryPool<T> 
-where 
+pub struct MemoryPool<T>
+where
     T: Default + Clone,
 {
     /// Pool of available objects
@@ -86,14 +86,14 @@ impl PoolStats {
     }
 }
 
-impl<T> MemoryPool<T> 
+impl<T> MemoryPool<T>
 where
     T: Default + Clone,
 {
     /// Create a new memory pool
     pub fn new(config: MemoryPoolConfig) -> Self {
         let mut pool = VecDeque::with_capacity(config.initial_size);
-        
+
         // Pre-allocate initial objects
         for _ in 0..config.initial_size {
             pool.push_back(PooledObject {
@@ -102,7 +102,7 @@ where
                 reuse_count: 0,
             });
         }
-        
+
         let stats = PoolStats {
             total_created: config.initial_size,
             objects_in_pool: config.initial_size,
@@ -124,34 +124,36 @@ where
     pub fn borrow(&self) -> PooledRef<T> {
         let mut pool = self.pool.lock().unwrap();
         let mut stats = self.stats.write().unwrap();
-        
+
         if let Some(mut pooled_obj) = pool.pop_front() {
             // Found an object in the pool
             pooled_obj.last_used = Instant::now();
             pooled_obj.reuse_count += 1;
-            
+
             stats.objects_in_pool -= 1;
             stats.objects_borrowed += 1;
             stats.pool_hits += 1;
             stats.total_reuses += 1;
-            
+
             PooledRef {
                 object: Some(pooled_obj.object.clone()),
                 pool: Arc::clone(&self.pool),
                 stats: Arc::clone(&self.stats),
+                max_pool_size: self.config.max_size,
             }
         } else {
             // Pool is empty, create new object
             let new_object = T::default();
-            
+
             stats.total_created += 1;
             stats.objects_borrowed += 1;
             stats.pool_misses += 1;
-            
+
             PooledRef {
                 object: Some(new_object),
                 pool: Arc::clone(&self.pool),
                 stats: Arc::clone(&self.stats),
+                max_pool_size: self.config.max_size,
             }
         }
     }
@@ -160,13 +162,13 @@ where
     pub fn cleanup(&self) {
         let mut pool = self.pool.lock().unwrap();
         let mut stats = self.stats.write().unwrap();
-        
+
         let cutoff_time = Instant::now() - Duration::from_secs(self.config.max_unused_age_secs);
         let initial_size = pool.len();
-        
+
         // Remove old objects
         pool.retain(|obj| obj.last_used > cutoff_time);
-        
+
         let removed_count = initial_size - pool.len();
         stats.objects_in_pool = pool.len();
         stats.objects_cleaned += removed_count;
@@ -179,16 +181,17 @@ where
 }
 
 /// RAII wrapper for borrowed objects
-pub struct PooledRef<T> 
+pub struct PooledRef<T>
 where
     T: Default + Clone,
 {
     object: Option<T>,
     pool: Arc<Mutex<VecDeque<PooledObject<T>>>>,
     stats: Arc<RwLock<PoolStats>>,
+    max_pool_size: usize,
 }
 
-impl<T> PooledRef<T> 
+impl<T> PooledRef<T>
 where
     T: Default + Clone,
 {
@@ -196,14 +199,14 @@ where
     pub fn get(&self) -> &T {
         self.object.as_ref().unwrap()
     }
-    
+
     /// Get a mutable reference to the object
     pub fn get_mut(&mut self) -> &mut T {
         self.object.as_mut().unwrap()
     }
 }
 
-impl<T> Drop for PooledRef<T> 
+impl<T> Drop for PooledRef<T>
 where
     T: Default + Clone,
 {
@@ -211,9 +214,10 @@ where
         if let Some(object) = self.object.take() {
             let mut pool = self.pool.lock().unwrap();
             let mut stats = self.stats.write().unwrap();
-            
+
             // Return object to pool if there's space
-            if pool.len() < 10000 { // Max pool size check
+            if pool.len() < self.max_pool_size {
+                // Max pool size check
                 pool.push_back(PooledObject {
                     object,
                     last_used: Instant::now(),
@@ -221,7 +225,7 @@ where
                 });
                 stats.objects_in_pool += 1;
             }
-            
+
             stats.objects_borrowed -= 1;
         }
     }
@@ -261,7 +265,7 @@ impl StringInterner {
     pub fn intern(&self, s: &str) -> Arc<str> {
         let mut stats = self.stats.write().unwrap();
         stats.total_requests += 1;
-        
+
         // Check if already interned (read lock first for performance)
         {
             let strings = self.strings.read().unwrap();
@@ -271,7 +275,7 @@ impl StringInterner {
                 return Arc::clone(interned);
             }
         }
-        
+
         // Not found, intern it (write lock)
         let mut strings = self.strings.write().unwrap();
         // Double-check in case another thread added it
@@ -280,11 +284,11 @@ impl StringInterner {
             stats.memory_saved_bytes += s.len();
             return Arc::clone(interned);
         }
-        
+
         let interned: Arc<str> = s.into();
         strings.insert(s.to_string(), Arc::clone(&interned));
         stats.unique_strings += 1;
-        
+
         interned
     }
 
@@ -333,7 +337,7 @@ impl ResourceManager {
         // Use string buffer pool for memory optimization
         let buffer_pool = MemoryPool::new(MemoryPoolConfig::default());
         let string_interner = StringInterner::new();
-        
+
         Ok(Self {
             buffer_pool,
             string_interner,
@@ -347,32 +351,32 @@ impl ResourceManager {
         if self.cleanup_handle.is_some() {
             return; // Already running
         }
-        
+
         let pool = Arc::clone(&self.buffer_pool.pool);
         let stats = Arc::clone(&self.buffer_pool.stats);
-        
+
         let handle = std::thread::spawn(move || {
             loop {
                 std::thread::sleep(Duration::from_secs(60));
-                
+
                 // Cleanup old objects
                 let mut pool_guard = pool.lock().unwrap();
                 let mut stats_guard = stats.write().unwrap();
-                
+
                 let cutoff_time = Instant::now() - Duration::from_secs(300); // 5 minutes
                 let initial_size = pool_guard.len();
-                
+
                 pool_guard.retain(|obj| obj.last_used > cutoff_time);
-                
+
                 let removed_count = initial_size - pool_guard.len();
                 stats_guard.objects_in_pool = pool_guard.len();
                 stats_guard.objects_cleaned += removed_count;
-                
+
                 drop(pool_guard);
                 drop(stats_guard);
             }
         });
-        
+
         self.cleanup_handle = Some(handle);
     }
 
@@ -419,10 +423,10 @@ mod tests {
             cleanup_interval_secs: 30,
             max_unused_age_secs: 120,
         };
-        
+
         let pool: MemoryPool<String> = MemoryPool::new(config);
         let stats = pool.stats();
-        
+
         assert_eq!(stats.total_created, 10);
         assert_eq!(stats.objects_in_pool, 10);
         assert_eq!(stats.objects_borrowed, 0);
@@ -431,16 +435,16 @@ mod tests {
     #[test]
     fn test_memory_pool_borrow_return() {
         let pool: MemoryPool<String> = MemoryPool::new(MemoryPoolConfig::default());
-        
+
         {
             let mut borrowed = pool.borrow();
             *borrowed.get_mut() = "test".to_string();
-            
+
             let stats = pool.stats();
             assert_eq!(stats.objects_borrowed, 1);
             assert_eq!(stats.pool_hits, 1);
         }
-        
+
         // Object should be returned to pool when dropped
         let stats = pool.stats();
         assert_eq!(stats.objects_borrowed, 0);
@@ -450,13 +454,13 @@ mod tests {
     #[test]
     fn test_memory_pool_stats() {
         let pool: MemoryPool<i32> = MemoryPool::new(MemoryPoolConfig::default());
-        
+
         // Borrow more objects than initial size
         let mut borrowed = Vec::new();
         for _ in 0..1200 {
             borrowed.push(pool.borrow());
         }
-        
+
         let stats = pool.stats();
         assert_eq!(stats.objects_borrowed, 1200);
         assert_eq!(stats.pool_hits, 1000); // Initial pool size
@@ -467,15 +471,15 @@ mod tests {
     #[test]
     fn test_string_interner() {
         let interner = StringInterner::new();
-        
+
         let str1 = interner.intern("test_string");
         let str2 = interner.intern("test_string");
         let str3 = interner.intern("different_string");
-        
+
         // Same string should return same Arc
         assert!(Arc::ptr_eq(&str1, &str2));
         assert!(!Arc::ptr_eq(&str1, &str3));
-        
+
         let stats = interner.stats();
         assert_eq!(stats.total_requests, 3);
         assert_eq!(stats.cache_hits, 1);
@@ -486,17 +490,17 @@ mod tests {
     #[test]
     fn test_string_interner_stats() {
         let interner = StringInterner::new();
-        
+
         // Intern the same string multiple times
         for _ in 0..10 {
             interner.intern("repeated_string");
         }
-        
+
         let stats = interner.stats();
         assert_eq!(stats.total_requests, 10);
         assert_eq!(stats.cache_hits, 9);
         assert_eq!(stats.unique_strings, 1);
-        
+
         // Memory saved should be 9 * string_length
         assert_eq!(stats.memory_saved_bytes, 9 * "repeated_string".len());
     }
@@ -508,10 +512,10 @@ mod tests {
             max_sessions: 5000,
             max_api_calls_per_session: 500,
         };
-        
+
         let manager = ResourceManager::new(limits.clone()).unwrap();
         let stats = manager.get_resource_stats();
-        
+
         assert_eq!(stats.limits.max_memory_bytes, limits.max_memory_bytes);
         assert_eq!(stats.limits.max_sessions, limits.max_sessions);
     }
@@ -519,13 +523,13 @@ mod tests {
     #[test]
     fn test_resource_manager_buffer_pool() {
         let manager = ResourceManager::new(ResourceLimits::default()).unwrap();
-        
+
         {
             let mut buffer = manager.borrow_string_buffer();
             buffer.get_mut().push_str("test content");
             assert!(buffer.get().contains("test content"));
         }
-        
+
         let stats = manager.get_resource_stats();
         assert!(stats.buffer_pool_stats.pool_hits > 0 || stats.buffer_pool_stats.pool_misses > 0);
     }
@@ -533,14 +537,14 @@ mod tests {
     #[test]
     fn test_resource_manager_string_interning() {
         let manager = ResourceManager::new(ResourceLimits::default()).unwrap();
-        
+
         let endpoint1 = manager.intern_string("https://api.anthropic.com/v1/messages");
         let endpoint2 = manager.intern_string("https://api.anthropic.com/v1/messages");
         let model = manager.intern_string("claude-3-sonnet");
-        
+
         assert!(Arc::ptr_eq(&endpoint1, &endpoint2));
         assert!(!Arc::ptr_eq(&endpoint1, &model));
-        
+
         let stats = manager.get_resource_stats();
         assert_eq!(stats.string_interner_stats.unique_strings, 2);
         assert_eq!(stats.string_interner_stats.cache_hits, 1);
@@ -554,15 +558,15 @@ mod tests {
             cleanup_interval_secs: 1,
             max_unused_age_secs: 1, // 1 second for testing
         };
-        
+
         let pool: MemoryPool<String> = MemoryPool::new(config);
-        
+
         // Wait for objects to age
         std::thread::sleep(Duration::from_secs(2));
-        
+
         // Cleanup should remove aged objects
         pool.cleanup();
-        
+
         let stats = pool.stats();
         assert!(stats.objects_cleaned > 0);
     }
@@ -578,7 +582,7 @@ mod tests {
             pool_misses: 20,
             objects_cleaned: 5,
         };
-        
+
         assert_eq!(stats.hit_rate(), 80.0); // 80/(80+20) * 100
     }
 

@@ -18,6 +18,15 @@ pub const DEFAULT_DISCREPANCY_THRESHOLD: f32 = 0.10;
 /// Maximum number of validation records to keep in memory
 pub const MAX_VALIDATION_RECORDS: usize = 1000;
 
+// Pre-allocated error message constants to avoid string allocation in hot paths
+const USAGE_FIELD_NOT_OBJECT_ERROR: &str = "Invalid API response: 'usage' field is not an object";
+const INPUT_TOKENS_MISSING_ERROR: &str = "Invalid API response: 'input_tokens' field is missing or not a valid number";
+const OUTPUT_TOKENS_MISSING_ERROR: &str = "Invalid API response: 'output_tokens' field is missing or not a valid number";
+const BOTH_TOKENS_MISSING_ERROR: &str = "Invalid API response: both 'input_tokens' and 'output_tokens' fields are missing or invalid";
+const INPUT_TOKEN_COUNT_MISSING_ERROR: &str = "Invalid API response: 'input_token_count' field is missing or not a valid number";
+const OUTPUT_TOKEN_COUNT_MISSING_ERROR: &str = "Invalid API response: 'output_token_count' field is missing or not a valid number";
+const NO_VALID_TOKEN_USAGE_ERROR: &str = "No valid token usage found in API response. Expected 'usage' object with 'input_tokens'/'output_tokens' or 'input_token_count'/'output_token_count' fields.";
+
 /// Source of token count information
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TokenSource {
@@ -214,7 +223,7 @@ impl ApiTokenExtractor {
             // Validate that usage is an object
             if !usage.is_object() {
                 return Err(CostError::InvalidInput {
-                    message: "Invalid API response: 'usage' field is not an object".to_string(),
+                    message: USAGE_FIELD_NOT_OBJECT_ERROR.to_string(),
                 });
             }
 
@@ -236,17 +245,17 @@ impl ApiTokenExtractor {
                 }
                 (None, Some(_)) => {
                     return Err(CostError::InvalidInput {
-                        message: "Invalid API response: 'input_tokens' field is missing or not a valid number".to_string(),
+                        message: INPUT_TOKENS_MISSING_ERROR.to_string(),
                     });
                 }
                 (Some(_), None) => {
                     return Err(CostError::InvalidInput {
-                        message: "Invalid API response: 'output_tokens' field is missing or not a valid number".to_string(),
+                        message: OUTPUT_TOKENS_MISSING_ERROR.to_string(),
                     });
                 }
                 (None, None) => {
                     return Err(CostError::InvalidInput {
-                        message: "Invalid API response: both 'input_tokens' and 'output_tokens' fields are missing or invalid".to_string(),
+                        message: BOTH_TOKENS_MISSING_ERROR.to_string(),
                     });
                 }
             }
@@ -270,12 +279,12 @@ impl ApiTokenExtractor {
             }
             (None, Some(_)) => {
                 return Err(CostError::InvalidInput {
-                    message: "Invalid API response: 'input_token_count' field is missing or not a valid number".to_string(),
+                    message: INPUT_TOKEN_COUNT_MISSING_ERROR.to_string(),
                 });
             }
             (Some(_), None) => {
                 return Err(CostError::InvalidInput {
-                    message: "Invalid API response: 'output_token_count' field is missing or not a valid number".to_string(),
+                    message: OUTPUT_TOKEN_COUNT_MISSING_ERROR.to_string(),
                 });
             }
             (None, None) => {
@@ -284,7 +293,7 @@ impl ApiTokenExtractor {
         }
 
         Err(CostError::InvalidInput {
-            message: "No valid token usage found in API response. Expected 'usage' object with 'input_tokens'/'output_tokens' or 'input_token_count'/'output_token_count' fields.".to_string(),
+            message: NO_VALID_TOKEN_USAGE_ERROR.to_string(),
         })
     }
 

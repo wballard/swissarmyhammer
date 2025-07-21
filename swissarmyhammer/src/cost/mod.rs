@@ -35,9 +35,9 @@ pub use formatting::{
     CostFormattingConfig, CostSectionFormatter, CostSummaryStats, DetailLevel, IssueCostData,
 };
 pub use performance::{
-    BenchmarkResult, BenchmarkSuite, MemoryPool, OptimizationConfig,
-    OptimizedTokenCounter, PerformanceConfig, PerformanceError, PerformanceMetrics,
-    PerformanceOptimizer, ResourceManager, TokenCache,
+    BenchmarkResult, BenchmarkSuite, MemoryPool, OptimizationConfig, OptimizedTokenCounter,
+    PerformanceConfig, PerformanceError, PerformanceMetrics, PerformanceOptimizer, ResourceManager,
+    TokenCache,
 };
 pub use token_counter::{
     ApiTokenExtractor, ConfidenceLevel, TokenCounter, TokenSource, TokenUsage, TokenValidator,
@@ -57,5 +57,5 @@ pub use database::{
 
 #[cfg(feature = "database")]
 pub use database::queries::{
-    CostTrend, IssueCostSummary, ModelUsage, QueryError, TimePeriod, TrendQuery,
+    CostTrend as QueryCostTrend, IssueCostSummary, ModelUsage, QueryError, TimePeriod, TrendQuery,
 };

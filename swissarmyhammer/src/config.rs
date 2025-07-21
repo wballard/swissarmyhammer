@@ -4,7 +4,9 @@
 //! and sensible defaults for all configurable constants throughout the application.
 
 use crate::common::env_loader::EnvLoader;
-use crate::cost::aggregation::analyzer::{DEFAULT_OUTLIER_THRESHOLD, DEFAULT_MAX_ISSUES_PER_AGGREGATION};
+use crate::cost::aggregation::analyzer::{
+    DEFAULT_MAX_ISSUES_PER_AGGREGATION, DEFAULT_OUTLIER_THRESHOLD,
+};
 use rust_decimal::Decimal;
 use serde::Deserialize;
 use thiserror::Error;

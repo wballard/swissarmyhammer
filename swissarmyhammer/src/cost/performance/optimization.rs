@@ -3,15 +3,15 @@
 //! This module coordinates all performance optimization components and provides
 //! the main interface for optimized cost tracking operations.
 
-use crate::cost::{
-    ApiCall, ApiCallId, ApiCallStatus, CostError, CostSession, CostSessionId, 
-    CostTracker, IssueId, TokenUsage
-};
 use crate::cost::performance::{
-    memory::{ResourceManager, ResourceLimits},
+    memory::{ResourceLimits, ResourceManager},
     monitoring::{MonitoringConfig, PerformanceMetrics},
     token_optimization::{OptimizedTokenCounter, TokenOptimizationConfig},
     PerformanceConfig, PerformanceError,
+};
+use crate::cost::{
+    ApiCall, ApiCallId, ApiCallStatus, CostError, CostSession, CostSessionId, CostTracker, IssueId,
+    TokenUsage,
 };
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
@@ -58,22 +58,21 @@ impl PerformanceOptimizer {
     /// Create a new performance optimizer
     pub fn new(config: OptimizationConfig) -> Result<Self, PerformanceError> {
         let resource_manager = Arc::new(
-            ResourceManager::new(config.resource_limits.clone())
-                .map_err(|e| PerformanceError::ConfigError {
+            ResourceManager::new(config.resource_limits.clone()).map_err(|e| {
+                PerformanceError::ConfigError {
                     message: format!("Failed to create resource manager: {}", e),
-                })?
+                }
+            })?,
         );
-        
-        let token_counter = Arc::new(
-            OptimizedTokenCounter::new(config.token_optimization.clone())
-        );
-        
-        let metrics = Arc::new(
-            PerformanceMetrics::new(config.monitoring.clone())
-        );
-        
+
+        let token_counter = Arc::new(OptimizedTokenCounter::new(
+            config.token_optimization.clone(),
+        ));
+
+        let metrics = Arc::new(PerformanceMetrics::new(config.monitoring.clone()));
+
         let base_tracker = Arc::new(RwLock::new(CostTracker::new()));
-        
+
         Ok(Self {
             config,
             resource_manager,
@@ -86,17 +85,17 @@ impl PerformanceOptimizer {
     /// Start a new optimized cost session
     pub fn start_session(&self, issue_id: IssueId) -> Result<CostSessionId, CostError> {
         let start_time = Instant::now();
-        
+
         // Use base tracker for session management
         let session_id = {
             let mut tracker = self.base_tracker.write().unwrap();
             tracker.start_session(issue_id)?
         };
-        
+
         // Record performance metrics
         let duration = start_time.elapsed();
         self.metrics.record_api_call(duration, true);
-        
+
         // Check performance target
         if duration.as_millis() > self.config.performance.target_api_overhead_ms as u128 {
             tracing::warn!(
@@ -105,38 +104,38 @@ impl PerformanceOptimizer {
                 "Session start exceeded performance target"
             );
         }
-        
+
         Ok(session_id)
     }
 
     /// Add an optimized API call to a session
     pub fn add_api_call(
-        &self, 
-        session_id: &CostSessionId, 
+        &self,
+        session_id: &CostSessionId,
         endpoint: &str,
-        model: &str
+        model: &str,
     ) -> Result<ApiCallId, CostError> {
         let start_time = Instant::now();
-        
+
         // Create API call using optimized memory management
         let api_call = {
             // Use resource manager to optimize string allocation
             let interned_endpoint = self.resource_manager.intern_string(endpoint);
             let interned_model = self.resource_manager.intern_string(model);
-            
+
             ApiCall::new(interned_endpoint.as_ref(), interned_model.as_ref())?
         };
-        
+
         // Add to tracker
         let call_id = {
             let mut tracker = self.base_tracker.write().unwrap();
             tracker.add_api_call(session_id, api_call)?
         };
-        
+
         // Record performance metrics
         let duration = start_time.elapsed();
         self.metrics.record_api_call(duration, true);
-        
+
         Ok(call_id)
     }
 
@@ -150,23 +149,20 @@ impl PerformanceOptimizer {
         error_message: Option<String>,
     ) -> Result<TokenUsage, CostError> {
         let start_time = Instant::now();
-        
+
         // Use optimized token counter
         let token_usage = {
             let count_start = Instant::now();
             let usage = self.token_counter.count_from_response(response_body)?;
             let count_duration = count_start.elapsed();
-            
+
             // Record token counting performance
-            self.metrics.record_token_counting(
-                count_duration, 
-                true, 
-                usage.total_tokens
-            );
-            
+            self.metrics
+                .record_token_counting(count_duration, true, usage.total_tokens);
+
             usage
         };
-        
+
         // Complete the API call
         {
             let mut tracker = self.base_tracker.write().unwrap();
@@ -179,11 +175,11 @@ impl PerformanceOptimizer {
                 error_message,
             )?;
         }
-        
+
         // Record overall performance
         let total_duration = start_time.elapsed();
         self.metrics.record_api_call(total_duration, true);
-        
+
         // Validate performance target
         if total_duration.as_millis() > self.config.performance.target_api_overhead_ms as u128 {
             return Err(CostError::SerializationError {
@@ -194,7 +190,7 @@ impl PerformanceOptimizer {
                 ),
             });
         }
-        
+
         Ok(token_usage)
     }
 
@@ -205,33 +201,33 @@ impl PerformanceOptimizer {
         status: crate::cost::CostSessionStatus,
     ) -> Result<(), CostError> {
         let start_time = Instant::now();
-        
+
         // Complete using base tracker
         {
             let mut tracker = self.base_tracker.write().unwrap();
             tracker.complete_session(session_id, status)?;
         }
-        
+
         // Record performance
         let duration = start_time.elapsed();
         self.metrics.record_api_call(duration, true);
-        
+
         Ok(())
     }
 
     /// Get session with optimized access
     pub fn get_session(&self, session_id: &CostSessionId) -> Option<CostSession> {
         let start_time = Instant::now();
-        
+
         let session = {
             let tracker = self.base_tracker.read().unwrap();
             tracker.get_session(session_id).cloned()
         };
-        
+
         // Record performance
         let duration = start_time.elapsed();
         self.metrics.record_api_call(duration, session.is_some());
-        
+
         session
     }
 
@@ -245,23 +241,25 @@ impl PerformanceOptimizer {
     pub fn validate_performance(&self) -> Result<PerformanceValidationResult, PerformanceError> {
         // Check if performance targets are being met
         self.metrics.check_targets()?;
-        
+
         // Get resource statistics
         let resource_stats = self.resource_manager.get_resource_stats();
         let token_stats = self.token_counter.get_stats();
         let performance_report = self.metrics.get_report();
-        
+
         // Calculate memory usage percentage
         let estimated_memory_usage = resource_stats.buffer_pool_stats.total_created * 1024; // Rough estimate
-        let memory_usage_pct = (estimated_memory_usage as f32 / self.config.resource_limits.max_memory_bytes as f32) * 100.0;
-        
+        let memory_usage_pct = (estimated_memory_usage as f32
+            / self.config.resource_limits.max_memory_bytes as f32)
+            * 100.0;
+
         if memory_usage_pct > self.config.performance.max_memory_overhead_pct {
             return Err(PerformanceError::MemoryLimitExceeded {
                 actual: memory_usage_pct,
                 limit: self.config.performance.max_memory_overhead_pct,
             });
         }
-        
+
         Ok(PerformanceValidationResult {
             targets_met: true,
             memory_usage_pct,
@@ -275,13 +273,13 @@ impl PerformanceOptimizer {
     pub fn cleanup(&self) {
         // Cleanup token counter caches
         self.token_counter.cleanup();
-        
+
         // Cleanup old sessions from base tracker
         {
             let mut tracker = self.base_tracker.write().unwrap();
             tracker.cleanup_old_sessions();
         }
-        
+
         tracing::info!("Performance optimizer cleanup completed");
     }
 
@@ -406,7 +404,7 @@ mod tests {
             .token_cache_size(5000)
             .memory_pool_size(500)
             .build();
-        
+
         assert_eq!(config.performance.target_api_overhead_ms, 30);
         assert_eq!(config.performance.max_memory_overhead_pct, 3.0);
         assert!(!config.performance.enable_simd);
@@ -417,7 +415,7 @@ mod tests {
     #[test]
     fn test_optimization_config_default() {
         let config = OptimizationConfig::default();
-        
+
         assert_eq!(config.performance.target_api_overhead_ms, 50);
         assert_eq!(config.performance.max_memory_overhead_pct, 5.0);
         assert_eq!(config.token_optimization.cache_size, 10000);
@@ -428,12 +426,12 @@ mod tests {
     fn test_performance_optimizer_creation() {
         let config = OptimizationConfig::default();
         let optimizer = PerformanceOptimizer::new(config);
-        
+
         assert!(optimizer.is_ok());
-        
+
         let optimizer = optimizer.unwrap();
         let stats = optimizer.get_performance_stats();
-        
+
         assert_eq!(stats.session_count, 0);
         assert_eq!(stats.active_session_count, 0);
     }
@@ -442,41 +440,44 @@ mod tests {
     fn test_optimized_session_lifecycle() {
         let config = OptimizationConfig::default();
         let optimizer = PerformanceOptimizer::new(config).unwrap();
-        
+
         // Start session
         let issue_id = IssueId::new("test-issue").unwrap();
         let session_id = optimizer.start_session(issue_id).unwrap();
-        
+
         // Add API call
-        let call_id = optimizer.add_api_call(
-            &session_id,
-            "https://api.anthropic.com/v1/messages",
-            "claude-3-sonnet-20241022"
-        ).unwrap();
-        
+        let call_id = optimizer
+            .add_api_call(
+                &session_id,
+                "https://api.anthropic.com/v1/messages",
+                "claude-3-sonnet-20241022",
+            )
+            .unwrap();
+
         // Complete API call
         let response = r#"{"usage":{"input_tokens":100,"output_tokens":50}}"#;
-        let token_usage = optimizer.complete_api_call_with_response(
-            &session_id,
-            &call_id,
-            response,
-            ApiCallStatus::Success,
-            None,
-        ).unwrap();
-        
+        let token_usage = optimizer
+            .complete_api_call_with_response(
+                &session_id,
+                &call_id,
+                response,
+                ApiCallStatus::Success,
+                None,
+            )
+            .unwrap();
+
         assert_eq!(token_usage.input_tokens, 100);
         assert_eq!(token_usage.output_tokens, 50);
-        
+
         // Complete session
-        optimizer.complete_session(
-            &session_id, 
-            crate::cost::CostSessionStatus::Completed
-        ).unwrap();
-        
+        optimizer
+            .complete_session(&session_id, crate::cost::CostSessionStatus::Completed)
+            .unwrap();
+
         // Verify session exists
         let session = optimizer.get_session(&session_id);
         assert!(session.is_some());
-        
+
         let session = session.unwrap();
         assert!(session.is_completed());
         assert_eq!(session.api_call_count(), 1);
@@ -489,27 +490,31 @@ mod tests {
             .api_overhead_target_ms(100) // Generous target for testing
             .memory_limit_pct(50.0) // Generous limit for testing
             .build();
-        
+
         let optimizer = PerformanceOptimizer::new(config).unwrap();
-        
+
         // Add some activity
         let issue_id = IssueId::new("test-issue").unwrap();
         let session_id = optimizer.start_session(issue_id).unwrap();
-        let call_id = optimizer.add_api_call(
-            &session_id,
-            "https://api.anthropic.com/v1/messages", 
-            "claude-3-sonnet"
-        ).unwrap();
-        
+        let call_id = optimizer
+            .add_api_call(
+                &session_id,
+                "https://api.anthropic.com/v1/messages",
+                "claude-3-sonnet",
+            )
+            .unwrap();
+
         let response = r#"{"usage":{"input_tokens":50,"output_tokens":25}}"#;
-        optimizer.complete_api_call_with_response(
-            &session_id,
-            &call_id,
-            response,
-            ApiCallStatus::Success,
-            None,
-        ).unwrap();
-        
+        optimizer
+            .complete_api_call_with_response(
+                &session_id,
+                &call_id,
+                response,
+                ApiCallStatus::Success,
+                None,
+            )
+            .unwrap();
+
         // Validate performance
         let validation_result = optimizer.validate_performance().unwrap();
         assert!(validation_result.targets_met);
@@ -522,14 +527,14 @@ mod tests {
     fn test_performance_cleanup() {
         let config = OptimizationConfig::default();
         let optimizer = PerformanceOptimizer::new(config).unwrap();
-        
+
         // Add some data
         let issue_id = IssueId::new("cleanup-test").unwrap();
         let session_id = optimizer.start_session(issue_id).unwrap();
-        
+
         // Cleanup should not panic
         optimizer.cleanup();
-        
+
         // Session should still exist after cleanup
         let session = optimizer.get_session(&session_id);
         assert!(session.is_some());
@@ -539,9 +544,9 @@ mod tests {
     fn test_performance_stats() {
         let config = OptimizationConfig::default();
         let optimizer = PerformanceOptimizer::new(config).unwrap();
-        
+
         let stats = optimizer.get_performance_stats();
-        
+
         assert_eq!(stats.session_count, 0);
         assert_eq!(stats.active_session_count, 0);
         assert!(!stats.monitoring_report.is_empty());

@@ -5,8 +5,8 @@
 
 use super::{PatternType, SeasonalPattern, TrendDirection};
 use chrono::{DateTime, Utc};
-use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -15,11 +15,11 @@ use thiserror::Error;
 pub enum TrendError {
     /// Insufficient data for trend analysis
     #[error("Insufficient data: need at least {required} points, got {actual}")]
-    InsufficientData { 
+    InsufficientData {
         /// Minimum number of data points required
-        required: usize, 
+        required: usize,
         /// Actual number of data points available
-        actual: usize 
+        actual: usize,
     },
 
     /// Mathematical calculation error
@@ -98,11 +98,7 @@ impl Default for TrendAnalyzer {
 
 impl TrendAnalyzer {
     /// Create a new trend analyzer with custom configuration
-    pub fn new(
-        min_data_points: usize,
-        confidence_level: f64,
-        prediction_periods: usize,
-    ) -> Self {
+    pub fn new(min_data_points: usize, confidence_level: f64, prediction_periods: usize) -> Self {
         Self {
             min_data_points,
             confidence_level,
@@ -111,10 +107,7 @@ impl TrendAnalyzer {
     }
 
     /// Perform comprehensive trend analysis on time series data
-    pub fn analyze_trends(
-        &self,
-        data: &[TimeSeriesPoint],
-    ) -> Result<TrendAnalysis, TrendError> {
+    pub fn analyze_trends(&self, data: &[TimeSeriesPoint]) -> Result<TrendAnalysis, TrendError> {
         if data.len() < self.min_data_points {
             return Err(TrendError::InsufficientData {
                 required: self.min_data_points,
@@ -161,10 +154,7 @@ impl TrendAnalyzer {
     }
 
     /// Prepare time series data for statistical analysis
-    fn prepare_time_series(
-        &self,
-        data: &[TimeSeriesPoint],
-    ) -> Result<Vec<(f64, f64)>, TrendError> {
+    fn prepare_time_series(&self, data: &[TimeSeriesPoint]) -> Result<Vec<(f64, f64)>, TrendError> {
         if data.is_empty() {
             return Ok(Vec::new());
         }
@@ -186,10 +176,7 @@ impl TrendAnalyzer {
     }
 
     /// Perform linear regression analysis
-    fn linear_regression(
-        &self,
-        data: &[(f64, f64)],
-    ) -> Result<(f64, f64, f64), TrendError> {
+    fn linear_regression(&self, data: &[(f64, f64)]) -> Result<(f64, f64, f64), TrendError> {
         let n = data.len() as f64;
 
         if n < 2.0 {
@@ -204,15 +191,9 @@ impl TrendAnalyzer {
         let y_mean = data.iter().map(|(_, y)| y).sum::<f64>() / n;
 
         // Calculate slope and intercept
-        let numerator: f64 = data
-            .iter()
-            .map(|(x, y)| (x - x_mean) * (y - y_mean))
-            .sum();
+        let numerator: f64 = data.iter().map(|(x, y)| (x - x_mean) * (y - y_mean)).sum();
 
-        let denominator: f64 = data
-            .iter()
-            .map(|(x, _)| (x - x_mean).powi(2))
-            .sum();
+        let denominator: f64 = data.iter().map(|(x, _)| (x - x_mean).powi(2)).sum();
 
         if denominator == 0.0 {
             return Err(TrendError::Calculation(
@@ -224,10 +205,7 @@ impl TrendAnalyzer {
         let intercept = y_mean - slope * x_mean;
 
         // Calculate R-squared
-        let ss_tot: f64 = data
-            .iter()
-            .map(|(_, y)| (y - y_mean).powi(2))
-            .sum();
+        let ss_tot: f64 = data.iter().map(|(_, y)| (y - y_mean).powi(2)).sum();
 
         if ss_tot == 0.0 {
             return Ok((slope, intercept, 1.0)); // Perfect fit if no variance
@@ -380,15 +358,15 @@ impl TrendAnalyzer {
         for i in 1..=self.prediction_periods {
             let future_day = last_day + i as f64;
             let predicted_value = slope * future_day + intercept;
-            let predicted_cost = Decimal::try_from(predicted_value.max(0.0))
-                .unwrap_or(Decimal::ZERO);
+            let predicted_cost =
+                Decimal::try_from(predicted_value.max(0.0)).unwrap_or(Decimal::ZERO);
 
             // Calculate confidence interval
             let error_margin = prediction_error * (self.confidence_level * 2.0);
             let confidence_lower = Decimal::try_from((predicted_value - error_margin).max(0.0))
                 .unwrap_or(Decimal::ZERO);
-            let confidence_upper = Decimal::try_from(predicted_value + error_margin)
-                .unwrap_or(predicted_cost);
+            let confidence_upper =
+                Decimal::try_from(predicted_value + error_margin).unwrap_or(predicted_cost);
 
             predictions.push(CostPrediction {
                 date: base_date + chrono::Duration::days(i as i64),

@@ -4,16 +4,16 @@
 //! extracts cost data from multiple sources, and performs comprehensive analysis.
 
 use super::{
-    CostTrend, DateRange, EfficiencyMetrics, IssueOutlier, OutlierType,
-    ProjectCostSummary, TrendDirection,
+    CostTrend, DateRange, EfficiencyMetrics, IssueOutlier, OutlierType, ProjectCostSummary,
+    TrendDirection,
 };
 use crate::config::AggregationConfig;
 #[cfg(feature = "database")]
 use crate::cost::CostDatabase;
 use crate::issues::IssueStorage;
 use crate::workflow::metrics::WorkflowMetrics;
-use rust_decimal::prelude::ToPrimitive;
 use chrono::Utc;
+use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -71,7 +71,6 @@ pub enum AggregationError {
 /// Result type for aggregation operations
 pub type AggregationResult<T> = Result<T, AggregationError>;
 
-
 /// Main cost aggregation engine
 pub struct CostAggregator {
     /// Issue storage backend
@@ -90,8 +89,7 @@ impl CostAggregator {
     pub fn new(
         issue_storage: Arc<dyn IssueStorage + Send + Sync>,
         metrics: Arc<WorkflowMetrics>,
-        #[cfg(feature = "database")]
-        database: Option<Arc<CostDatabase>>,
+        #[cfg(feature = "database")] database: Option<Arc<CostDatabase>>,
         config: AggregationConfig,
     ) -> Self {
         Self {
@@ -141,7 +139,9 @@ impl CostAggregator {
         let median_cost_per_issue = self.calculate_median(&costs);
 
         // Generate trend analysis
-        let cost_trend = self.analyze_cost_trends(&issue_costs, &effective_range).await?;
+        let cost_trend = self
+            .analyze_cost_trends(&issue_costs, &effective_range)
+            .await?;
 
         // Calculate efficiency metrics
         let efficiency_metrics = self.calculate_efficiency_metrics(&issue_costs).await?;
@@ -249,11 +249,10 @@ impl CostAggregator {
         let mut costs = HashMap::new();
 
         // Get all issues and filter for completed ones
-        let issues = self
-            .issue_storage
-            .list_issues()
-            .await
-            .map_err(|e| AggregationError::IssueStorage(format!("Failed to list issues: {}", e)))?;
+        let issues =
+            self.issue_storage.list_issues().await.map_err(|e| {
+                AggregationError::IssueStorage(format!("Failed to list issues: {}", e))
+            })?;
 
         for issue in issues {
             // Only process completed issues
@@ -355,7 +354,6 @@ impl CostAggregator {
 
         None
     }
-
 
     /// Calculate median of a list of decimals
     fn calculate_median(&self, values: &[Decimal]) -> Decimal {

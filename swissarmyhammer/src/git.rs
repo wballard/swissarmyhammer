@@ -5,6 +5,7 @@
 //! completed work back to the main branch.
 
 use crate::{Result, SwissArmyHammerError};
+use crate::config::Config;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -12,11 +13,13 @@ use std::process::Command;
 pub struct GitOperations {
     /// Working directory for git operations
     work_dir: PathBuf,
+    /// Base branch for merging (from configuration)
+    base_branch: String,
 }
 
 impl GitOperations {
-    /// Create new git operations handler
-    pub fn new() -> Result<Self> {
+    /// Create new git operations handler with configuration
+    pub fn new(config: &Config) -> Result<Self> {
         let work_dir = std::env::current_dir().unwrap_or_else(|e| {
             tracing::debug!("Failed to get current directory: {e}, using fallback");
             std::path::PathBuf::from(".")
@@ -25,15 +28,21 @@ impl GitOperations {
         // Verify this is a git repository
         Self::verify_git_repo(&work_dir)?;
 
-        Ok(Self { work_dir })
+        Ok(Self { 
+            work_dir,
+            base_branch: config.base_branch.clone(),
+        })
     }
 
-    /// Create git operations handler with explicit work directory
-    pub fn with_work_dir(work_dir: PathBuf) -> Result<Self> {
+    /// Create git operations handler with explicit work directory and configuration
+    pub fn with_work_dir(work_dir: PathBuf, config: &Config) -> Result<Self> {
         // Verify this is a git repository
         Self::verify_git_repo(&work_dir)?;
 
-        Ok(Self { work_dir })
+        Ok(Self { 
+            work_dir,
+            base_branch: config.base_branch.clone(),
+        })
     }
 
     /// Verify directory is a git repository
@@ -79,21 +88,25 @@ impl GitOperations {
         Ok(branch)
     }
 
-    /// Get the main branch name (main or master)
+    /// Get the main branch name from configuration
     pub fn main_branch(&self) -> Result<String> {
-        // Try 'main' first
+        // Use configured base_branch if it exists
+        if self.branch_exists(&self.base_branch)? {
+            return Ok(self.base_branch.clone());
+        }
+
+        // Fall back to 'main' and 'master' for backwards compatibility
         if self.branch_exists("main")? {
             return Ok("main".to_string());
         }
 
-        // Fall back to 'master'
         if self.branch_exists("master")? {
             return Ok("master".to_string());
         }
 
-        Err(SwissArmyHammerError::Other(
-            "No main or master branch found".to_string(),
-        ))
+        Err(SwissArmyHammerError::Other(format!(
+            "No base branch '{}', main, or master branch found", self.base_branch
+        )))
     }
 
     /// Check if a branch exists
@@ -287,6 +300,11 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
+    // Helper to create a test config
+    fn create_test_config() -> Config {
+        Config::new()
+    }
+
     // Helper to create a temporary git repository
     fn create_test_git_repo() -> Result<TempDir> {
         let temp_dir = TempDir::new()?;
@@ -341,7 +359,8 @@ mod tests {
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
         // Test creating GitOperations
-        let result = GitOperations::new();
+        let config = create_test_config();
+        let result = GitOperations::new(&config);
         assert!(result.is_ok());
 
         // Restore original directory (ensure we don't fail if temp dir is cleaned up)
@@ -353,7 +372,8 @@ mod tests {
         let temp_dir = create_test_git_repo().unwrap();
 
         // Test creating GitOperations with explicit work directory
-        let result = GitOperations::with_work_dir(temp_dir.path().to_path_buf());
+        let config = create_test_config();
+        let result = GitOperations::with_work_dir(temp_dir.path().to_path_buf(), &config);
         assert!(result.is_ok());
     }
 
@@ -367,7 +387,8 @@ mod tests {
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
         // Test creating GitOperations should fail
-        let result = GitOperations::new();
+        let config = create_test_config();
+        let result = GitOperations::new(&config);
         assert!(result.is_err());
 
         // Restore original directory (ensure we don't fail if temp dir is cleaned up)
@@ -379,7 +400,8 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
 
         // Test creating GitOperations with non-git directory should fail
-        let result = GitOperations::with_work_dir(temp_dir.path().to_path_buf());
+        let config = create_test_config();
+        let result = GitOperations::with_work_dir(temp_dir.path().to_path_buf(), &config);
         assert!(result.is_err());
     }
 
@@ -387,7 +409,8 @@ mod tests {
     fn test_current_branch() {
         let temp_dir = create_test_git_repo().unwrap();
 
-        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf()).unwrap();
+        let config = create_test_config();
+        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf(), &config).unwrap();
         let current_branch = git_ops.current_branch().unwrap();
 
         // Should be on main or master branch
@@ -398,7 +421,8 @@ mod tests {
     fn test_main_branch() {
         let temp_dir = create_test_git_repo().unwrap();
 
-        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf()).unwrap();
+        let config = create_test_config();
+        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf(), &config).unwrap();
         let main_branch = git_ops.main_branch().unwrap();
 
         // Should find main or master branch
@@ -409,7 +433,8 @@ mod tests {
     fn test_branch_exists() {
         let temp_dir = create_test_git_repo().unwrap();
 
-        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf()).unwrap();
+        let config = create_test_config();
+        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf(), &config).unwrap();
 
         // Main branch should exist
         let main_branch = git_ops.main_branch().unwrap();
@@ -423,7 +448,8 @@ mod tests {
     fn test_create_work_branch() {
         let temp_dir = create_test_git_repo().unwrap();
 
-        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf()).unwrap();
+        let config = create_test_config();
+        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf(), &config).unwrap();
 
         // Create work branch
         let branch_name = git_ops.create_work_branch("test_issue").unwrap();
@@ -441,7 +467,8 @@ mod tests {
     fn test_checkout_branch() {
         let temp_dir = create_test_git_repo().unwrap();
 
-        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf()).unwrap();
+        let config = create_test_config();
+        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf(), &config).unwrap();
 
         // Create work branch
         git_ops.create_work_branch("test_issue").unwrap();
@@ -466,7 +493,8 @@ mod tests {
     fn test_merge_issue_branch() {
         let temp_dir = create_test_git_repo().unwrap();
 
-        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf()).unwrap();
+        let config = create_test_config();
+        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf(), &config).unwrap();
 
         // Create work branch
         git_ops.create_work_branch("test_issue").unwrap();
@@ -500,7 +528,8 @@ mod tests {
     fn test_merge_non_existent_branch() {
         let temp_dir = create_test_git_repo().unwrap();
 
-        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf()).unwrap();
+        let config = create_test_config();
+        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf(), &config).unwrap();
 
         // Try to merge non-existent branch
         let result = git_ops.merge_issue_branch("non_existent_issue");
@@ -511,7 +540,8 @@ mod tests {
     fn test_has_uncommitted_changes() {
         let temp_dir = create_test_git_repo().unwrap();
 
-        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf()).unwrap();
+        let config = create_test_config();
+        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf(), &config).unwrap();
 
         // Initially should have no uncommitted changes
         assert!(!git_ops.has_uncommitted_changes().unwrap());

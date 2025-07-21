@@ -1,5 +1,6 @@
 use std::process::Command;
 use std::sync::Arc;
+use swissarmyhammer::config::Config;
 use swissarmyhammer::git::GitOperations;
 use swissarmyhammer::issues::{FileSystemIssueStorage, IssueStorage};
 use tempfile::TempDir;
@@ -34,8 +35,9 @@ impl TestEnvironment {
         let issue_storage = Arc::new(RwLock::new(issue_storage as Box<dyn IssueStorage>));
 
         // Initialize git operations
+        let config = Config::new();
         let git_ops = Arc::new(tokio::sync::Mutex::new(Some(
-            GitOperations::with_work_dir(temp_dir.path().to_path_buf())
+            GitOperations::with_work_dir(temp_dir.path().to_path_buf(), &config)
                 .expect("Failed to create git operations"),
         )));
 

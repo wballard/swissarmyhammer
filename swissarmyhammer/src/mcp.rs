@@ -1,5 +1,6 @@
 //! Model Context Protocol (MCP) server support
 
+use crate::config::Config;
 use crate::file_watcher::{FileWatcher, FileWatcherCallback};
 use crate::git::GitOperations;
 use crate::issues::{FileSystemIssueStorage, Issue, IssueStorage};
@@ -51,7 +52,6 @@ struct PreWorkValidation {
 }
 
 /// Constants for issue branch management
-use crate::config::Config;
 
 /// Request structure for getting a prompt
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -142,7 +142,8 @@ impl McpServer {
         })?) as Box<dyn IssueStorage>;
 
         // Initialize git operations with work_dir - make it optional for tests
-        let git_ops = match GitOperations::with_work_dir(work_dir.clone()) {
+        let config = Config::new();
+        let git_ops = match GitOperations::with_work_dir(work_dir.clone(), &config) {
             Ok(ops) => Some(ops),
             Err(e) => {
                 tracing::warn!("Git operations not available: {}", e);
@@ -3368,7 +3369,8 @@ mod tests {
             // Repository should be clean or have only expected changes
 
             // Test 7: Verify current branch is the main branch
-            let git_ops = GitOperations::with_work_dir(temp_path.to_path_buf()).unwrap();
+            let config = Config::new();
+            let git_ops = GitOperations::with_work_dir(temp_path.to_path_buf(), &config).unwrap();
             let expected_main_branch = git_ops.main_branch().unwrap();
 
             let current_branch = Command::new("git")

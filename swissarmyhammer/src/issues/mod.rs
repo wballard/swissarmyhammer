@@ -44,10 +44,12 @@
 //! ```rust
 //! use swissarmyhammer::issues::{FileSystemIssueStorage, IssueStorage};
 //! use swissarmyhammer::git::GitOperations;
+//! use swissarmyhammer::config::Config;
 //!
 //! # async fn workflow_example() -> Result<(), Box<dyn std::error::Error>> {
 //! let storage = FileSystemIssueStorage::new_default()?;
-//! let git_ops = GitOperations::new()?;
+//! let config = Config::new();
+//! let git_ops = GitOperations::new(&config)?;
 //!
 //! // 1. Create issue
 //! let issue = storage.create_issue("new_feature".to_string(), "# New Feature\n\nDescription".to_string()).await?;

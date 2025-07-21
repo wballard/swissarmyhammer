@@ -16,7 +16,7 @@ mod test;
 mod validate;
 
 use clap::CommandFactory;
-use cli::{Cli, Commands};
+use cli::{Cli, Commands, ConfigAction};
 use exit_codes::{EXIT_ERROR, EXIT_SUCCESS, EXIT_WARNING};
 use logging::FileWriterGuard;
 
@@ -134,6 +134,10 @@ async fn main() {
         Some(Commands::Issue { subcommand }) => {
             tracing::info!("Running issue command");
             run_issue(subcommand).await
+        }
+        Some(Commands::Config { action }) => {
+            tracing::info!("Running config command");
+            run_config(action)
         }
         None => {
             // This case is handled early above for performance
@@ -294,4 +298,121 @@ fn run_validate(quiet: bool, format: cli::ValidateFormat, workflow_dirs: Vec<Str
             EXIT_ERROR
         }
     }
+}
+
+/// Runs the config command to manage configuration settings.
+///
+/// Provides comprehensive configuration management including:
+/// - Showing current configuration values and sources
+/// - Validating configuration for correctness
+/// - Generating example configuration files
+/// - Displaying configuration help and documentation
+///
+/// # Arguments
+///
+/// * `action` - The configuration action to perform (Show, Validate, Init, Help)
+///
+/// # Returns
+///
+/// Exit code:
+/// - 0: Success
+/// - 1: Configuration validation failed
+/// - 2: Error occurred
+fn run_config(action: ConfigAction) -> i32 {
+    use swissarmyhammer::config::Config;
+
+    // Initialize configuration (Config::new() handles errors internally and falls back to defaults)
+    let config = Config::new();
+
+    // For non-validate commands, validate config and warn if there are issues
+    if !matches!(action, ConfigAction::Validate) {
+        if let Err(e) = config.validate() {
+            tracing::warn!("Configuration validation failed: {}", e);
+            tracing::warn!("Using fallback values for invalid settings");
+        }
+    }
+
+    match handle_config_command(action, &config) {
+        Ok(_) => EXIT_SUCCESS,
+        Err(e) => {
+            tracing::error!("Config command error: {}", e);
+            EXIT_ERROR
+        }
+    }
+}
+
+/// Handle the specific configuration command action
+fn handle_config_command(action: ConfigAction, config: &swissarmyhammer::config::Config) -> Result<(), Box<dyn std::error::Error>> {
+    use swissarmyhammer::config::Config;
+
+    match action {
+        ConfigAction::Show => {
+            println!("📋 Current Configuration:");
+            println!("base_branch: {}", config.base_branch);
+            println!("issue_branch_prefix: {}", config.issue_branch_prefix);
+            println!("issue_number_width: {}", config.issue_number_width);
+            println!("max_pending_issues_in_summary: {}", config.max_pending_issues_in_summary);
+            println!("min_issue_number: {}", config.min_issue_number);
+            println!("max_issue_number: {}", config.max_issue_number);
+            println!("issue_number_digits: {}", config.issue_number_digits);
+            println!("max_content_length: {}", config.max_content_length);
+            println!("max_line_length: {}", config.max_line_length);
+            println!("max_issue_name_length: {}", config.max_issue_name_length);
+            println!("cache_ttl_seconds: {}", config.cache_ttl_seconds);
+            println!("cache_max_size: {}", config.cache_max_size);
+            println!("virtual_issue_number_base: {}", config.virtual_issue_number_base);
+            println!("virtual_issue_number_range: {}", config.virtual_issue_number_range);
+            
+            // Show configuration file location if found
+            if let Some(config_file) = Config::find_yaml_config_file() {
+                println!("\n📍 Configuration File: {:?}", config_file);
+            } else {
+                println!("\n📍 Configuration File: None found (using environment variables and defaults)");
+            }
+        }
+        
+        ConfigAction::Validate => {
+            match config.validate() {
+                Ok(()) => {
+                    println!("✅ Configuration is valid");
+                }
+                Err(e) => {
+                    println!("❌ Configuration validation failed: {}", e);
+                    println!("\n{}", Config::validation_help());
+                    return Err(Box::new(e));
+                }
+            }
+        }
+        
+        ConfigAction::Init => {
+            let config_path = "swissarmyhammer.yaml";
+            
+            if std::path::Path::new(config_path).exists() {
+                eprintln!("❌ Configuration file already exists: {}", config_path);
+                eprintln!("Remove it first or use a different location.");
+                return Err("Configuration file already exists".into());
+            }
+            
+            std::fs::write(config_path, Config::example_yaml_config())?;
+            println!("✅ Created example configuration file: {}", config_path);
+            println!("Edit this file to customize your configuration.");
+        }
+        
+        ConfigAction::Guide => {
+            println!("📖 Configuration Help\n");
+            println!("SwissArmyHammer supports configuration via:");
+            println!("  1. YAML file (swissarmyhammer.yaml) - highest precedence");
+            println!("  2. Environment variables (SWISSARMYHAMMER_*) - medium precedence");
+            println!("  3. Built-in defaults - lowest precedence");
+            println!("\nConfiguration file locations searched:");
+            println!("  1. Current directory: ./swissarmyhammer.yaml");
+            println!("  2. User config directory: ~/.config/swissarmyhammer/swissarmyhammer.yaml");
+            println!("  3. User home directory: ~/swissarmyhammer.yaml");
+            println!("\nExample configuration file:");
+            println!("{}", Config::example_yaml_config());
+            println!("{}", Config::validation_help());
+        }
+    }
+    
+    Ok(())
 }

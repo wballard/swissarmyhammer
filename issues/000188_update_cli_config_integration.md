@@ -238,3 +238,37 @@ pub fn check_configuration_file() -> CheckResult {
 
 ## Notes
 This step completes the integration by making the YAML configuration system fully accessible through the CLI interface. Users can now manage their configuration entirely through CLI commands while maintaining full backward compatibility.
+
+## Proposed Solution
+
+After analyzing the codebase, I can see that:
+
+1. **Configuration System Ready**: The `swissarmyhammer/src/config.rs` module already provides a comprehensive configuration system with:
+   - `Config::new()` method for loading configuration from YAML, env vars, and defaults
+   - `Config::validate()` method for validation
+   - `Config::example_yaml_config()` and `Config::validation_help()` helper methods
+   - Full error handling with `ConfigError` enum
+   - YAML file discovery and loading through `YamlConfig`
+
+2. **Current CLI State**: The CLI in `swissarmyhammer-cli/src/cli.rs` has these commands:
+   - Serve, Doctor, Prompt, Flow, Completion, Validate, Issue
+   - **Missing**: Config command (this is what we need to add)
+
+3. **Main.rs Integration**: Current `main.rs` doesn't use `Config::new()` - it handles logging/server initialization directly
+
+### Implementation Plan:
+
+1. **Update CLI Structure**: Add `Config` command to `Commands` enum in `cli.rs` with subcommands: Show, Validate, Init, Help
+
+2. **Update Main.rs**: 
+   - Initialize configuration with `Config::new()` early in main function
+   - Pass config to command handlers that need it
+   - Handle configuration errors gracefully with fallback to defaults
+
+3. **Add Config Command Handler**: Create new config command handler that calls existing config methods
+
+4. **Update Doctor**: Add configuration health checks to doctor using existing config validation methods
+
+5. **Pass Config to Commands**: Update command handlers to accept and use the config (especially for base_branch access)
+
+This leverages the existing robust configuration system and integrates it cleanly with the CLI without duplicating functionality.

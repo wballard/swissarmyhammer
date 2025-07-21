@@ -267,6 +267,33 @@ Examples:
         #[command(subcommand)]
         subcommand: IssueCommands,
     },
+    /// Configuration management commands
+    #[command(long_about = "
+Manage SwissArmyHammer configuration with comprehensive CLI commands for viewing,
+validating, and initializing configuration settings. Configuration is loaded from
+YAML files, environment variables, and defaults with proper precedence.
+
+Configuration precedence (highest to lowest):
+  1. YAML file (swissarmyhammer.yaml) - highest precedence
+  2. Environment variables (SWISSARMYHAMMER_*) - medium precedence  
+  3. Built-in defaults - lowest precedence
+
+Basic usage:
+  swissarmyhammer config show                   # Show current configuration
+  swissarmyhammer config validate               # Validate configuration
+  swissarmyhammer config init                   # Create example config file
+  swissarmyhammer config help                   # Show configuration help
+
+Examples:
+  swissarmyhammer config show                   # Display all config values
+  swissarmyhammer config validate               # Check for config errors
+  swissarmyhammer config init                   # Generate swissarmyhammer.yaml
+  swissarmyhammer config help                   # Get configuration guidance
+")]
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -706,6 +733,71 @@ pub enum IssueCommands {
     Current,
     /// Show project status
     Status,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigAction {
+    /// Show current configuration values and sources
+    #[command(long_about = "
+Display all current configuration values and their sources. Shows the effective
+configuration after applying precedence rules (YAML > Environment > Defaults).
+
+This command helps you understand which configuration values are active and
+where they come from, making it easier to debug configuration issues.
+
+Examples:
+  swissarmyhammer config show                   # Show all configuration values
+")]
+    Show,
+    /// Validate current configuration
+    #[command(long_about = "
+Validate the current configuration for correctness and consistency. Checks for:
+- Valid git branch names (no invalid characters, proper format)
+- Numeric values within acceptable ranges
+- String values within length limits
+- Configuration consistency and logical constraints
+
+Exit codes:
+  0 - Configuration is valid
+  1 - Configuration validation failed
+
+Examples:
+  swissarmyhammer config validate               # Validate current config
+")]
+    Validate,
+    /// Generate example configuration file
+    #[command(long_about = "
+Create an example configuration file (swissarmyhammer.yaml) in the current
+directory with documented settings and sensible defaults.
+
+This command helps you get started with configuration customization by providing
+a template file with all available options and their descriptions.
+
+The generated file includes:
+- All configurable settings with their default values
+- Comments explaining each setting
+- Examples of valid values
+
+Examples:
+  swissarmyhammer config init                   # Create swissarmyhammer.yaml
+")]
+    Init,
+    /// Show configuration guide and documentation
+    #[command(long_about = "
+Display comprehensive guide about SwissArmyHammer configuration including:
+- Configuration precedence rules
+- Available configuration options
+- Environment variable names
+- YAML file format examples
+- Validation rules and constraints
+
+This is a detailed guide to understanding and working with SwissArmyHammer
+configuration in all its forms.
+
+Examples:
+  swissarmyhammer config guide                  # Show detailed config guide
+")]
+    Guide,
 }
 
 impl Cli {

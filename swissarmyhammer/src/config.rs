@@ -23,13 +23,31 @@ pub enum ConfigError {
     },
 
     /// Failed to parse YAML content from a configuration file
-    #[error("Failed to parse YAML configuration from {path}: {source}")]
+    #[error("Invalid YAML syntax in {path}:\n{source}\n\nHint: Check for proper indentation and YAML formatting")]
     YamlParse {
         /// Path to the configuration file with invalid YAML content
         path: std::path::PathBuf,
         /// Underlying YAML parsing error
         #[source]
         source: serde_yaml::Error,
+    },
+
+    /// Invalid configuration value for a specific field
+    #[error("Invalid configuration value for '{field}': {value}\n{hint}")]
+    InvalidValue {
+        /// Name of the configuration field that has an invalid value
+        field: String,
+        /// The invalid value that was provided
+        value: String,
+        /// Helpful hint about how to fix the issue
+        hint: String,
+    },
+
+    /// Configuration validation failed
+    #[error("Configuration validation failed: {message}")]
+    Validation {
+        /// Descriptive message about the validation failure
+        message: String,
     },
 }
 
@@ -252,6 +270,99 @@ impl Config {
         }
     }
 
+    /// Validate the current configuration settings
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        // Validate base_branch
+        self.validate_base_branch()?;
+
+        // Validate numeric ranges
+        self.validate_numeric_ranges()?;
+
+        // Validate string lengths
+        self.validate_string_lengths()?;
+
+        Ok(())
+    }
+
+    fn validate_base_branch(&self) -> Result<(), ConfigError> {
+        if self.base_branch.is_empty() {
+            return Err(ConfigError::InvalidValue {
+                field: "base_branch".to_string(),
+                value: self.base_branch.clone(),
+                hint: "base_branch cannot be empty. Use 'main' or 'develop' or another valid git branch name".to_string(),
+            });
+        }
+
+        // Check for invalid git branch characters
+        let invalid_chars = ['~', '^', ':', '?', '*', '[', '\\', ' '];
+        for ch in invalid_chars.iter() {
+            if self.base_branch.contains(*ch) {
+                return Err(ConfigError::InvalidValue {
+                    field: "base_branch".to_string(),
+                    value: self.base_branch.clone(),
+                    hint: format!("base_branch contains invalid character '{}'. Git branch names cannot contain: ~ ^ : ? * [ \\ <space>", ch),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    fn validate_numeric_ranges(&self) -> Result<(), ConfigError> {
+        if self.issue_number_width == 0 {
+            return Err(ConfigError::InvalidValue {
+                field: "issue_number_width".to_string(),
+                value: self.issue_number_width.to_string(),
+                hint: "issue_number_width must be greater than 0".to_string(),
+            });
+        }
+
+        if self.min_issue_number >= self.max_issue_number {
+            return Err(ConfigError::Validation {
+                message: format!(
+                    "min_issue_number ({}) must be less than max_issue_number ({})",
+                    self.min_issue_number, self.max_issue_number
+                ),
+            });
+        }
+
+        Ok(())
+    }
+
+    fn validate_string_lengths(&self) -> Result<(), ConfigError> {
+        if self.issue_branch_prefix.len() > 50 {
+            return Err(ConfigError::InvalidValue {
+                field: "issue_branch_prefix".to_string(),
+                value: self.issue_branch_prefix.clone(),
+                hint: "issue_branch_prefix cannot exceed 50 characters".to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
+    /// Generate an example YAML configuration file content
+    pub fn example_yaml_config() -> &'static str {
+        r#"# swissarmyhammer.yaml
+# Configuration file for Swiss Army Hammer
+
+# Base branch that pull requests will merge into
+base_branch: "main"
+"#
+    }
+
+    /// Get configuration validation help message
+    pub fn validation_help() -> &'static str {
+        r#"Configuration Validation Help:
+
+- base_branch: Must be a valid git branch name (no spaces, special characters)
+- All numeric values must be positive and within reasonable ranges
+- String values must not exceed maximum lengths
+
+For more help, see: https://github.com/wballard/swissarmyhammer/docs/configuration
+"#
+    }
+
     /// Reset the global configuration (for testing purposes)
     #[cfg(test)]
     pub fn reset_global() {
@@ -298,7 +409,13 @@ impl YamlConfig {
                 source: e,
             })?;
 
-        tracing::info!("Successfully loaded YAML configuration: {:?}", config);
+        // Apply basic validation to YAML values before returning
+        config.validate_yaml_values()?;
+
+        tracing::info!(
+            "Successfully loaded and validated YAML configuration: {:?}",
+            config
+        );
         Ok(config)
     }
 
@@ -311,6 +428,20 @@ impl YamlConfig {
                 Ok(Self::default())
             }
         }
+    }
+
+    /// Validate YAML configuration values for common issues
+    fn validate_yaml_values(&self) -> Result<(), ConfigError> {
+        if let Some(ref base_branch) = self.base_branch {
+            if base_branch.is_empty() {
+                return Err(ConfigError::InvalidValue {
+                    field: "base_branch".to_string(),
+                    value: base_branch.clone(),
+                    hint: "base_branch cannot be empty in YAML configuration".to_string(),
+                });
+            }
+        }
+        Ok(())
     }
 
     /// Validate the YAML configuration for correctness
@@ -1110,7 +1241,217 @@ base_branch: "feature/test"
             source: serde_yaml::from_str::<YamlConfig>("invalid: yaml: [").unwrap_err(),
         };
         let error_str = format!("{}", yaml_error);
-        assert!(error_str.contains("Failed to parse YAML configuration from"));
+        assert!(error_str.contains("Invalid YAML syntax in"));
         assert!(error_str.contains("/test/path.yaml"));
+        assert!(error_str.contains("Hint: Check for proper indentation"));
+
+        // Test InvalidValue error display
+        let invalid_value_error = ConfigError::InvalidValue {
+            field: "base_branch".to_string(),
+            value: "".to_string(),
+            hint: "base_branch cannot be empty".to_string(),
+        };
+        let error_str = format!("{}", invalid_value_error);
+        assert!(error_str.contains("Invalid configuration value for 'base_branch'"));
+        assert!(error_str.contains("base_branch cannot be empty"));
+
+        // Test Validation error display
+        let validation_error = ConfigError::Validation {
+            message: "min_issue_number must be less than max_issue_number".to_string(),
+        };
+        let error_str = format!("{}", validation_error);
+        assert!(error_str.contains("Configuration validation failed"));
+        assert!(error_str.contains("min_issue_number must be less than max_issue_number"));
+    }
+
+    #[test]
+    fn test_config_validate_success() {
+        let config = Config::default();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_config_validate_base_branch_empty() {
+        let mut config = Config::default();
+        config.base_branch = "".to_string();
+
+        let result = config.validate();
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            ConfigError::InvalidValue { field, value, hint } => {
+                assert_eq!(field, "base_branch");
+                assert_eq!(value, "");
+                assert!(hint.contains("base_branch cannot be empty"));
+            }
+            _ => panic!("Expected InvalidValue error"),
+        }
+    }
+
+    #[test]
+    fn test_config_validate_base_branch_invalid_chars() {
+        let invalid_chars = ['~', '^', ':', '?', '*', '[', '\\', ' '];
+
+        for ch in invalid_chars.iter() {
+            let mut config = Config::default();
+            config.base_branch = format!("branch{}", ch);
+
+            let result = config.validate();
+            assert!(
+                result.is_err(),
+                "Expected validation error for character '{}'",
+                ch
+            );
+
+            match result.unwrap_err() {
+                ConfigError::InvalidValue { field, hint, .. } => {
+                    assert_eq!(field, "base_branch");
+                    assert!(hint.contains(&format!("invalid character '{}'", ch)));
+                }
+                _ => panic!("Expected InvalidValue error for character '{}'", ch),
+            }
+        }
+    }
+
+    #[test]
+    fn test_config_validate_issue_number_width_zero() {
+        let mut config = Config::default();
+        config.issue_number_width = 0;
+
+        let result = config.validate();
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            ConfigError::InvalidValue { field, value, hint } => {
+                assert_eq!(field, "issue_number_width");
+                assert_eq!(value, "0");
+                assert!(hint.contains("must be greater than 0"));
+            }
+            _ => panic!("Expected InvalidValue error"),
+        }
+    }
+
+    #[test]
+    fn test_config_validate_min_max_issue_number_range() {
+        let mut config = Config::default();
+        config.min_issue_number = 100;
+        config.max_issue_number = 50; // Invalid: min >= max
+
+        let result = config.validate();
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            ConfigError::Validation { message } => {
+                assert!(message
+                    .contains("min_issue_number (100) must be less than max_issue_number (50)"));
+            }
+            _ => panic!("Expected Validation error"),
+        }
+    }
+
+    #[test]
+    fn test_config_validate_issue_branch_prefix_too_long() {
+        let mut config = Config::default();
+        config.issue_branch_prefix = "a".repeat(51); // Too long
+
+        let result = config.validate();
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            ConfigError::InvalidValue { field, hint, .. } => {
+                assert_eq!(field, "issue_branch_prefix");
+                assert!(hint.contains("cannot exceed 50 characters"));
+            }
+            _ => panic!("Expected InvalidValue error"),
+        }
+    }
+
+    #[test]
+    fn test_config_example_yaml_config() {
+        let example = Config::example_yaml_config();
+        assert!(example.contains("swissarmyhammer.yaml"));
+        assert!(example.contains("base_branch: \"main\""));
+    }
+
+    #[test]
+    fn test_config_validation_help() {
+        let help = Config::validation_help();
+        assert!(help.contains("Configuration Validation Help"));
+        assert!(help.contains("base_branch: Must be a valid git branch name"));
+    }
+
+    #[test]
+    fn test_yaml_config_validate_yaml_values_empty_base_branch() {
+        let yaml_config = YamlConfig {
+            base_branch: Some("".to_string()),
+        };
+
+        let result = yaml_config.validate_yaml_values();
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            ConfigError::InvalidValue { field, value, hint } => {
+                assert_eq!(field, "base_branch");
+                assert_eq!(value, "");
+                assert!(hint.contains("base_branch cannot be empty in YAML configuration"));
+            }
+            _ => panic!("Expected InvalidValue error"),
+        }
+    }
+
+    #[test]
+    fn test_yaml_config_validate_yaml_values_success() {
+        let yaml_config = YamlConfig {
+            base_branch: Some("main".to_string()),
+        };
+        assert!(yaml_config.validate_yaml_values().is_ok());
+
+        let yaml_config_none = YamlConfig { base_branch: None };
+        assert!(yaml_config_none.validate_yaml_values().is_ok());
+    }
+
+    #[test]
+    fn test_yaml_config_load_from_file_with_validation() {
+        use std::fs::File;
+        use std::io::Write;
+
+        let _guard = WORKING_DIR_MUTEX
+            .lock()
+            .expect("Failed to lock working directory mutex");
+
+        // Create a unique temporary directory
+        let test_dir = std::env::temp_dir().join(format!(
+            "swissarmyhammer_validation_test_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&test_dir).unwrap();
+
+        // Test valid YAML config
+        let valid_config_path = test_dir.join("valid_config.yaml");
+        let mut file = File::create(&valid_config_path).unwrap();
+        writeln!(file, "base_branch: \"feature/test\"").unwrap();
+        drop(file);
+
+        let result = YamlConfig::load_from_file(&valid_config_path);
+        assert!(result.is_ok());
+
+        // Test invalid YAML config with empty base_branch
+        let invalid_config_path = test_dir.join("invalid_config.yaml");
+        let mut file = File::create(&invalid_config_path).unwrap();
+        writeln!(file, "base_branch: \"\"").unwrap();
+        drop(file);
+
+        let result = YamlConfig::load_from_file(&invalid_config_path);
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            ConfigError::InvalidValue { field, .. } => {
+                assert_eq!(field, "base_branch");
+            }
+            _ => panic!("Expected InvalidValue error"),
+        }
+
+        // Clean up
+        std::fs::remove_dir_all(&test_dir).unwrap();
     }
 }

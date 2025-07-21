@@ -219,3 +219,25 @@ For more help, see: https://github.com/wballard/swissarmyhammer/docs/configurati
 
 ## Notes
 This step significantly improves user experience by providing clear guidance when configuration issues occur. The validation prevents runtime errors and guides users toward correct configuration.
+
+## Proposed Solution
+
+After examining the existing `config.rs` code, I found that:
+
+1. ✅ ConfigError enum already exists with FileRead and YamlParse variants
+2. ✅ YamlConfig already has basic branch name validation 
+3. ❌ Config struct lacks validation methods
+4. ❌ Missing InvalidValue and Validation error variants
+5. ❌ No comprehensive validation for all configuration fields
+6. ❌ No helper methods for configuration guidance
+
+### Implementation Steps
+
+1. **Expand ConfigError enum** - Add InvalidValue and Validation variants with helpful error messages
+2. **Add Config validation methods** - Implement validate(), validate_base_branch(), validate_numeric_ranges(), and validate_string_lengths()
+3. **Enhance YamlConfig validation** - Add validate_yaml_values() method with more comprehensive checks
+4. **Add configuration helpers** - Implement example_yaml_config() and validation_help() static methods
+5. **Integration** - Call validation from Config::new() when loading YAML config
+6. **Comprehensive testing** - Add tests for all validation scenarios and error cases
+
+This approach builds on the existing robust foundation while adding the comprehensive validation and user-friendly error messages specified in the requirements.

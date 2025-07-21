@@ -4,9 +4,9 @@
 //! and sensible defaults for all configurable constants throughout the application.
 
 use crate::common::env_loader::EnvLoader;
+use rust_decimal::Decimal;
 use serde::Deserialize;
 use thiserror::Error;
-use rust_decimal::Decimal;
 
 const DEFAULT_BASE_BRANCH: &str = "main";
 const MAX_ISSUE_BRANCH_PREFIX_LENGTH: usize = 50;
@@ -22,6 +22,21 @@ const COST_ENV_PREFIX: &str = "SAH_COST";
 const DEFAULT_INPUT_TOKEN_COST: &str = "0.000015";
 const DEFAULT_OUTPUT_TOKEN_COST: &str = "0.000075";
 
+// Session management configuration constants
+const DEFAULT_MAX_CONCURRENT_SESSIONS: u32 = 100;
+const DEFAULT_SESSION_TIMEOUT_HOURS: u32 = 24;
+const DEFAULT_CLEANUP_INTERVAL_HOURS: u32 = 6;
+
+// Aggregation configuration constants
+const DEFAULT_AGGREGATION_ENABLED: bool = true;
+const DEFAULT_RETENTION_DAYS: u32 = 90;
+const DEFAULT_MAX_STORED_SESSIONS: u32 = 10000;
+
+// Reporting configuration constants
+const DEFAULT_INCLUDE_IN_ISSUES: bool = true;
+const DEFAULT_DETAILED_BREAKDOWN: bool = true;
+const DEFAULT_COST_PRECISION_DECIMALS: u8 = 4;
+
 /// Pricing configuration for cost tracking
 #[derive(Debug, Clone, Deserialize)]
 pub struct PricingConfig {
@@ -33,19 +48,72 @@ pub struct PricingConfig {
     pub output_token_cost: Decimal,
 }
 
+/// Static instance of parsed input token cost for performance
+static PARSED_INPUT_TOKEN_COST: std::sync::OnceLock<Decimal> = std::sync::OnceLock::new();
+
+/// Static instance of parsed output token cost for performance  
+static PARSED_OUTPUT_TOKEN_COST: std::sync::OnceLock<Decimal> = std::sync::OnceLock::new();
+
 fn default_input_token_cost() -> Decimal {
-    DEFAULT_INPUT_TOKEN_COST.parse().expect("Invalid default input token cost")
+    *PARSED_INPUT_TOKEN_COST.get_or_init(|| {
+        parse_decimal_with_fallback(DEFAULT_INPUT_TOKEN_COST, "0.000015")
+    })
 }
 
 fn default_output_token_cost() -> Decimal {
-    DEFAULT_OUTPUT_TOKEN_COST.parse().expect("Invalid default output token cost")
+    *PARSED_OUTPUT_TOKEN_COST.get_or_init(|| {
+        parse_decimal_with_fallback(DEFAULT_OUTPUT_TOKEN_COST, "0.000075")
+    })
+}
+
+/// Parse a decimal string with a fallback value if parsing fails
+///
+/// This function provides safe decimal parsing with multiple fallback levels to prevent panics
+/// in configuration loading. It's designed for parsing monetary values where precision is important
+/// but the application should not crash due to invalid configuration values.
+///
+/// # Arguments
+/// * `value` - The primary string value to parse
+/// * `fallback` - The fallback string value to try if primary parsing fails
+///
+/// # Returns
+/// A valid Decimal value, guaranteed to not panic:
+/// 1. Returns parsed `value` if successful
+/// 2. Returns parsed `fallback` if `value` parsing fails
+/// 3. Returns minimal safe value (0.000001) if both fail
+///
+/// # Example
+/// ```rust
+/// use rust_decimal::Decimal;
+/// use swissarmyhammer::config::parse_decimal_with_fallback;
+/// 
+/// // Successful parsing
+/// let cost = parse_decimal_with_fallback("0.000015", "0.000010");
+/// assert_eq!(cost.to_string(), "0.000015");
+/// 
+/// // Fallback on invalid primary value
+/// let cost = parse_decimal_with_fallback("invalid", "0.000010");
+/// assert_eq!(cost.to_string(), "0.000010");
+/// 
+/// // Safe minimal value when both fail
+/// let cost = parse_decimal_with_fallback("invalid", "also_invalid");
+/// assert_eq!(cost.to_string(), "0.000001");
+/// ```
+pub fn parse_decimal_with_fallback(value: &str, fallback: &str) -> Decimal {
+    value.parse().unwrap_or_else(|_| {
+        // If primary value fails, try fallback
+        fallback.parse().unwrap_or_else(|_| {
+            // If both fail, use a safe minimal value
+            Decimal::new(1, 6) // 0.000001
+        })
+    })
 }
 
 impl Default for PricingConfig {
     fn default() -> Self {
         Self {
-            input_token_cost: DEFAULT_INPUT_TOKEN_COST.parse().expect("Invalid default input token cost"),
-            output_token_cost: DEFAULT_OUTPUT_TOKEN_COST.parse().expect("Invalid default output token cost"),
+            input_token_cost: default_input_token_cost(),
+            output_token_cost: default_output_token_cost(),
         }
     }
 }
@@ -64,9 +132,9 @@ pub struct SessionManagementConfig {
 impl Default for SessionManagementConfig {
     fn default() -> Self {
         Self {
-            max_concurrent_sessions: 100,
-            session_timeout_hours: 24,
-            cleanup_interval_hours: 6,
+            max_concurrent_sessions: DEFAULT_MAX_CONCURRENT_SESSIONS,
+            session_timeout_hours: DEFAULT_SESSION_TIMEOUT_HOURS,
+            cleanup_interval_hours: DEFAULT_CLEANUP_INTERVAL_HOURS,
         }
     }
 }
@@ -85,9 +153,9 @@ pub struct AggregationConfig {
 impl Default for AggregationConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
-            retention_days: 90,
-            max_stored_sessions: 10000,
+            enabled: DEFAULT_AGGREGATION_ENABLED,
+            retention_days: DEFAULT_RETENTION_DAYS,
+            max_stored_sessions: DEFAULT_MAX_STORED_SESSIONS,
         }
     }
 }
@@ -106,9 +174,35 @@ pub struct ReportingConfig {
 impl Default for ReportingConfig {
     fn default() -> Self {
         Self {
-            include_in_issues: true,
-            detailed_breakdown: true,
-            cost_precision_decimals: 4,
+            include_in_issues: DEFAULT_INCLUDE_IN_ISSUES,
+            detailed_breakdown: DEFAULT_DETAILED_BREAKDOWN,
+            cost_precision_decimals: DEFAULT_COST_PRECISION_DECIMALS,
+        }
+    }
+}
+
+/// Pricing model for cost tracking
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum PricingModel {
+    /// Use paid pricing model for cost calculations
+    Paid,
+    /// Use maximum pricing model for cost calculations
+    Max,
+}
+
+impl Default for PricingModel {
+    fn default() -> Self {
+        PricingModel::Paid
+    }
+}
+
+impl PricingModel {
+    fn from_str(s: &str) -> Result<Self, String> {
+        match s.to_lowercase().as_str() {
+            "paid" => Ok(PricingModel::Paid),
+            "max" => Ok(PricingModel::Max),
+            _ => Err(format!("Invalid pricing model '{}'. Must be 'paid' or 'max'", s)),
         }
     }
 }
@@ -119,7 +213,7 @@ pub struct CostTrackingConfig {
     /// Enable cost tracking
     pub enabled: bool,
     /// Pricing model: "paid" or "max"
-    pub pricing_model: String,
+    pub pricing_model: PricingModel,
     /// Pricing configuration
     #[serde(default)]
     pub rates: PricingConfig,
@@ -138,7 +232,7 @@ impl Default for CostTrackingConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            pricing_model: "paid".to_string(),
+            pricing_model: PricingModel::default(),
             rates: PricingConfig::default(),
             session_management: SessionManagementConfig::default(),
             aggregation: AggregationConfig::default(),
@@ -369,52 +463,84 @@ impl Config {
 
         // Check if the main tracking enabled variable is set to determine if we should create config
         if let Some(enabled) = cost_loader.load_optional::<bool>("TRACKING_ENABLED") {
-            // Load all cost tracking configuration from environment variables
-            let pricing_model = cost_loader.load_string("PRICING_MODEL", "paid");
-            let input_token_cost_str = cost_loader.load_string("INPUT_TOKEN_COST", DEFAULT_INPUT_TOKEN_COST);
-            let output_token_cost_str = cost_loader.load_string("OUTPUT_TOKEN_COST", DEFAULT_OUTPUT_TOKEN_COST);
-            
-            // Parse decimal values carefully
-            let input_cost = input_token_cost_str.parse::<Decimal>()
-                .unwrap_or_else(|_| DEFAULT_INPUT_TOKEN_COST.parse().expect("Invalid default input token cost"));
-            let output_cost = output_token_cost_str.parse::<Decimal>()
-                .unwrap_or_else(|_| DEFAULT_OUTPUT_TOKEN_COST.parse().expect("Invalid default output token cost"));
-
-            let max_concurrent_sessions = cost_loader.load_parsed("MAX_CONCURRENT_SESSIONS", 100u32);
-            let session_timeout_hours = cost_loader.load_parsed("SESSION_TIMEOUT_HOURS", 24u32);
-            let cleanup_interval_hours = cost_loader.load_parsed("CLEANUP_INTERVAL_HOURS", 6u32);
-            let aggregation_enabled = cost_loader.load_parsed("AGGREGATION_ENABLED", true);
-            let retention_days = cost_loader.load_parsed("RETENTION_DAYS", 90u32);
-            let max_stored_sessions = cost_loader.load_parsed("MAX_STORED_SESSIONS", 10000u32);
-            let include_in_issues = cost_loader.load_parsed("INCLUDE_IN_ISSUES", true);
-            let detailed_breakdown = cost_loader.load_parsed("DETAILED_BREAKDOWN", true);
-            let cost_precision_decimals = cost_loader.load_parsed("COST_PRECISION_DECIMALS", 4u8);
+            let pricing_config = Self::load_pricing_config_from_env(&cost_loader);
+            let session_management = Self::load_session_management_from_env(&cost_loader);
+            let aggregation = Self::load_aggregation_config_from_env(&cost_loader);
+            let reporting = Self::load_reporting_config_from_env(&cost_loader);
 
             let cost_tracking_config = CostTrackingConfig {
                 enabled,
-                pricing_model,
-                rates: PricingConfig {
-                    input_token_cost: input_cost,
-                    output_token_cost: output_cost,
-                },
-                session_management: SessionManagementConfig {
-                    max_concurrent_sessions,
-                    session_timeout_hours,
-                    cleanup_interval_hours,
-                },
-                aggregation: AggregationConfig {
-                    enabled: aggregation_enabled,
-                    retention_days,
-                    max_stored_sessions,
-                },
-                reporting: ReportingConfig {
-                    include_in_issues,
-                    detailed_breakdown,
-                    cost_precision_decimals,
-                },
+                pricing_model: pricing_config.0,
+                rates: pricing_config.1,
+                session_management,
+                aggregation,
+                reporting,
             };
 
             self.cost_tracking = Some(cost_tracking_config);
+        }
+    }
+
+    /// Load pricing configuration from environment variables
+    fn load_pricing_config_from_env(cost_loader: &EnvLoader) -> (PricingModel, PricingConfig) {
+        let pricing_model_str = cost_loader.load_string("PRICING_MODEL", "paid");
+        let pricing_model = PricingModel::from_str(&pricing_model_str)
+            .unwrap_or_else(|_| PricingModel::default());
+        
+        let input_token_cost_str =
+            cost_loader.load_string("INPUT_TOKEN_COST", DEFAULT_INPUT_TOKEN_COST);
+        let output_token_cost_str =
+            cost_loader.load_string("OUTPUT_TOKEN_COST", DEFAULT_OUTPUT_TOKEN_COST);
+
+        // Parse decimal values carefully
+        let input_cost = parse_decimal_with_fallback(&input_token_cost_str, DEFAULT_INPUT_TOKEN_COST);
+        let output_cost = parse_decimal_with_fallback(&output_token_cost_str, DEFAULT_OUTPUT_TOKEN_COST);
+
+        let pricing_config = PricingConfig {
+            input_token_cost: input_cost,
+            output_token_cost: output_cost,
+        };
+
+        (pricing_model, pricing_config)
+    }
+
+    /// Load session management configuration from environment variables
+    fn load_session_management_from_env(cost_loader: &EnvLoader) -> SessionManagementConfig {
+        let max_concurrent_sessions =
+            cost_loader.load_parsed("MAX_CONCURRENT_SESSIONS", DEFAULT_MAX_CONCURRENT_SESSIONS);
+        let session_timeout_hours = cost_loader.load_parsed("SESSION_TIMEOUT_HOURS", DEFAULT_SESSION_TIMEOUT_HOURS);
+        let cleanup_interval_hours = cost_loader.load_parsed("CLEANUP_INTERVAL_HOURS", DEFAULT_CLEANUP_INTERVAL_HOURS);
+
+        SessionManagementConfig {
+            max_concurrent_sessions,
+            session_timeout_hours,
+            cleanup_interval_hours,
+        }
+    }
+
+    /// Load aggregation configuration from environment variables
+    fn load_aggregation_config_from_env(cost_loader: &EnvLoader) -> AggregationConfig {
+        let aggregation_enabled = cost_loader.load_parsed("AGGREGATION_ENABLED", DEFAULT_AGGREGATION_ENABLED);
+        let retention_days = cost_loader.load_parsed("RETENTION_DAYS", DEFAULT_RETENTION_DAYS);
+        let max_stored_sessions = cost_loader.load_parsed("MAX_STORED_SESSIONS", DEFAULT_MAX_STORED_SESSIONS);
+
+        AggregationConfig {
+            enabled: aggregation_enabled,
+            retention_days,
+            max_stored_sessions,
+        }
+    }
+
+    /// Load reporting configuration from environment variables
+    fn load_reporting_config_from_env(cost_loader: &EnvLoader) -> ReportingConfig {
+        let include_in_issues = cost_loader.load_parsed("INCLUDE_IN_ISSUES", DEFAULT_INCLUDE_IN_ISSUES);
+        let detailed_breakdown = cost_loader.load_parsed("DETAILED_BREAKDOWN", DEFAULT_DETAILED_BREAKDOWN);
+        let cost_precision_decimals = cost_loader.load_parsed("COST_PRECISION_DECIMALS", DEFAULT_COST_PRECISION_DECIMALS);
+
+        ReportingConfig {
+            include_in_issues,
+            detailed_breakdown,
+            cost_precision_decimals,
         }
     }
 
@@ -627,83 +753,135 @@ impl Config {
         Ok(())
     }
 
-    /// Validate cost tracking configuration
+    /// Validate cost tracking configuration for Config struct
+    ///
+    /// This is a wrapper around the shared validation logic that converts validation errors
+    /// into ConfigError format with detailed field information for better error reporting.
+    ///
+    /// # Arguments
+    /// * `config` - The cost tracking configuration to validate
+    ///
+    /// # Returns
+    /// * `Ok(())` if validation passes
+    /// * `Err(ConfigError::InvalidValue)` with field name, value, and hint if validation fails
+    ///
+    /// # See Also
+    /// - [`validate_cost_tracking_shared`] for detailed validation rules
     fn validate_cost_tracking(&self, config: &CostTrackingConfig) -> Result<(), ConfigError> {
-        // Validate pricing model
-        if config.pricing_model != "paid" && config.pricing_model != "max" {
-            return Err(ConfigError::InvalidValue {
-                field: "cost_tracking.pricing_model".to_string(),
-                value: config.pricing_model.clone(),
-                hint: "pricing_model must be either 'paid' or 'max'".to_string(),
-            });
+        match Self::validate_cost_tracking_shared(config) {
+            Ok(()) => Ok(()),
+            Err((field, value, hint)) => Err(ConfigError::InvalidValue { field, value, hint }),
         }
+    }
+
+    /// Shared cost tracking validation logic
+    ///
+    /// Validates all aspects of a cost tracking configuration to ensure safe and reasonable operation.
+    /// This function is used by both Config and YamlConfig validation methods to eliminate duplication.
+    ///
+    /// # Validation Rules
+    ///
+    /// ## Pricing Configuration
+    /// - `input_token_cost` must be greater than 0 (positive monetary value)
+    /// - `output_token_cost` must be greater than 0 (positive monetary value)
+    /// - `pricing_model` validation is handled by enum type safety (Paid or Max)
+    ///
+    /// ## Session Management
+    /// - `max_concurrent_sessions` must be greater than 0 (at least one session allowed)
+    /// - `session_timeout_hours` must be greater than 0 (sessions must have finite lifetime)
+    /// - `cleanup_interval_hours` must be greater than 0 (cleanup must occur periodically)
+    ///
+    /// ## Aggregation Settings
+    /// - `retention_days` must be greater than 0 (data must have finite retention period)
+    /// - `max_stored_sessions` must be greater than 0 (storage must have reasonable limits)
+    /// - `enabled` flag has no validation constraints (boolean can be true/false)
+    ///
+    /// ## Reporting Settings
+    /// - `cost_precision_decimals` must be <= 10 (prevents excessive precision that could cause formatting issues)
+    /// - `include_in_issues` and `detailed_breakdown` have no validation constraints (boolean flags)
+    ///
+    /// # Returns
+    /// - `Ok(())` if all validation rules pass
+    /// - `Err((field_name, current_value, hint_message))` for the first validation failure encountered
+    ///
+    /// # Example
+    /// ```rust
+    /// use swissarmyhammer::config::{Config, CostTrackingConfig};
+    /// let config = CostTrackingConfig::default();
+    /// match Config::validate_cost_tracking_shared(&config) {
+    ///     Ok(()) => println!("Configuration is valid"),
+    ///     Err((field, value, hint)) => println!("Invalid {}: {} - {}", field, value, hint),
+    /// }
+    /// ```
+    pub fn validate_cost_tracking_shared(config: &CostTrackingConfig) -> Result<(), (String, String, String)> {
+        // Note: pricing_model validation is no longer needed as enum ensures type safety
 
         // Validate positive costs
         if config.rates.input_token_cost <= rust_decimal::Decimal::ZERO {
-            return Err(ConfigError::InvalidValue {
-                field: "cost_tracking.rates.input_token_cost".to_string(),
-                value: config.rates.input_token_cost.to_string(),
-                hint: "input_token_cost must be positive".to_string(),
-            });
+            return Err((
+                "cost_tracking.rates.input_token_cost".to_string(),
+                config.rates.input_token_cost.to_string(),
+                "input_token_cost must be positive".to_string(),
+            ));
         }
 
         if config.rates.output_token_cost <= rust_decimal::Decimal::ZERO {
-            return Err(ConfigError::InvalidValue {
-                field: "cost_tracking.rates.output_token_cost".to_string(),
-                value: config.rates.output_token_cost.to_string(),
-                hint: "output_token_cost must be positive".to_string(),
-            });
+            return Err((
+                "cost_tracking.rates.output_token_cost".to_string(),
+                config.rates.output_token_cost.to_string(),
+                "output_token_cost must be positive".to_string(),
+            ));
         }
 
         // Validate reasonable session management values
         if config.session_management.max_concurrent_sessions == 0 {
-            return Err(ConfigError::InvalidValue {
-                field: "cost_tracking.session_management.max_concurrent_sessions".to_string(),
-                value: config.session_management.max_concurrent_sessions.to_string(),
-                hint: "max_concurrent_sessions must be greater than 0".to_string(),
-            });
+            return Err((
+                "cost_tracking.session_management.max_concurrent_sessions".to_string(),
+                config.session_management.max_concurrent_sessions.to_string(),
+                "max_concurrent_sessions must be greater than 0".to_string(),
+            ));
         }
 
         if config.session_management.session_timeout_hours == 0 {
-            return Err(ConfigError::InvalidValue {
-                field: "cost_tracking.session_management.session_timeout_hours".to_string(),
-                value: config.session_management.session_timeout_hours.to_string(),
-                hint: "session_timeout_hours must be greater than 0".to_string(),
-            });
+            return Err((
+                "cost_tracking.session_management.session_timeout_hours".to_string(),
+                config.session_management.session_timeout_hours.to_string(),
+                "session_timeout_hours must be greater than 0".to_string(),
+            ));
         }
 
         if config.session_management.cleanup_interval_hours == 0 {
-            return Err(ConfigError::InvalidValue {
-                field: "cost_tracking.session_management.cleanup_interval_hours".to_string(),
-                value: config.session_management.cleanup_interval_hours.to_string(),
-                hint: "cleanup_interval_hours must be greater than 0".to_string(),
-            });
+            return Err((
+                "cost_tracking.session_management.cleanup_interval_hours".to_string(),
+                config.session_management.cleanup_interval_hours.to_string(),
+                "cleanup_interval_hours must be greater than 0".to_string(),
+            ));
         }
 
         // Validate aggregation settings
         if config.aggregation.retention_days == 0 {
-            return Err(ConfigError::InvalidValue {
-                field: "cost_tracking.aggregation.retention_days".to_string(),
-                value: config.aggregation.retention_days.to_string(),
-                hint: "retention_days must be greater than 0".to_string(),
-            });
+            return Err((
+                "cost_tracking.aggregation.retention_days".to_string(),
+                config.aggregation.retention_days.to_string(),
+                "retention_days must be greater than 0".to_string(),
+            ));
         }
 
         if config.aggregation.max_stored_sessions == 0 {
-            return Err(ConfigError::InvalidValue {
-                field: "cost_tracking.aggregation.max_stored_sessions".to_string(),
-                value: config.aggregation.max_stored_sessions.to_string(),
-                hint: "max_stored_sessions must be greater than 0".to_string(),
-            });
+            return Err((
+                "cost_tracking.aggregation.max_stored_sessions".to_string(),
+                config.aggregation.max_stored_sessions.to_string(),
+                "max_stored_sessions must be greater than 0".to_string(),
+            ));
         }
 
         // Validate reporting settings
         if config.reporting.cost_precision_decimals > 10 {
-            return Err(ConfigError::InvalidValue {
-                field: "cost_tracking.reporting.cost_precision_decimals".to_string(),
-                value: config.reporting.cost_precision_decimals.to_string(),
-                hint: "cost_precision_decimals cannot exceed 10".to_string(),
-            });
+            return Err((
+                "cost_tracking.reporting.cost_precision_decimals".to_string(),
+                config.reporting.cost_precision_decimals.to_string(),
+                "cost_precision_decimals cannot exceed 10".to_string(),
+            ));
         }
 
         Ok(())
@@ -959,53 +1137,25 @@ impl YamlConfig {
         }
     }
 
-    /// Validate cost tracking configuration
+    /// Validate cost tracking configuration for YamlConfig struct
+    ///
+    /// This is a wrapper around the shared validation logic that converts validation errors
+    /// into simple String format for backwards compatibility with existing YAML validation.
+    ///
+    /// # Arguments
+    /// * `config` - The cost tracking configuration to validate
+    ///
+    /// # Returns
+    /// * `Ok(())` if validation passes
+    /// * `Err(String)` with hint message if validation fails
+    ///
+    /// # See Also
+    /// - [`Config::validate_cost_tracking_shared`] for detailed validation rules
     fn validate_cost_tracking_config(config: &CostTrackingConfig) -> Result<(), String> {
-        // Validate pricing model
-        if config.pricing_model != "paid" && config.pricing_model != "max" {
-            return Err(format!(
-                "Invalid pricing model '{}'. Must be 'paid' or 'max'",
-                config.pricing_model
-            ));
+        match Config::validate_cost_tracking_shared(config) {
+            Ok(()) => Ok(()),
+            Err((_, _, hint)) => Err(hint), // Use just the hint message for String error
         }
-
-        // Validate positive costs
-        if config.rates.input_token_cost <= rust_decimal::Decimal::ZERO {
-            return Err("input_token_cost must be positive".to_string());
-        }
-
-        if config.rates.output_token_cost <= rust_decimal::Decimal::ZERO {
-            return Err("output_token_cost must be positive".to_string());
-        }
-
-        // Validate reasonable session management values
-        if config.session_management.max_concurrent_sessions == 0 {
-            return Err("max_concurrent_sessions must be greater than 0".to_string());
-        }
-
-        if config.session_management.session_timeout_hours == 0 {
-            return Err("session_timeout_hours must be greater than 0".to_string());
-        }
-
-        if config.session_management.cleanup_interval_hours == 0 {
-            return Err("cleanup_interval_hours must be greater than 0".to_string());
-        }
-
-        // Validate aggregation settings
-        if config.aggregation.retention_days == 0 {
-            return Err("retention_days must be greater than 0".to_string());
-        }
-
-        if config.aggregation.max_stored_sessions == 0 {
-            return Err("max_stored_sessions must be greater than 0".to_string());
-        }
-
-        // Validate reporting settings
-        if config.reporting.cost_precision_decimals > 10 {
-            return Err("cost_precision_decimals cannot exceed 10".to_string());
-        }
-
-        Ok(())
     }
 }
 
@@ -1399,7 +1549,10 @@ base_branch: "feature/test"
         };
         assert!(yaml_config.validate().is_ok());
 
-        let yaml_config_none = YamlConfig { base_branch: None, cost_tracking: None };
+        let yaml_config_none = YamlConfig {
+            base_branch: None,
+            cost_tracking: None,
+        };
         assert!(yaml_config_none.validate().is_ok());
     }
 
@@ -1866,7 +2019,10 @@ base_branch: "feature/test"
         };
         assert!(yaml_config.validate_yaml_values().is_ok());
 
-        let yaml_config_none = YamlConfig { base_branch: None, cost_tracking: None };
+        let yaml_config_none = YamlConfig {
+            base_branch: None,
+            cost_tracking: None,
+        };
         assert!(yaml_config_none.validate_yaml_values().is_ok());
     }
 
@@ -1997,7 +2153,10 @@ base_branch: "develop"
         let mut config = Config::default();
         let original_base_branch = config.base_branch.clone();
 
-        let yaml_config = YamlConfig { base_branch: None, cost_tracking: None };
+        let yaml_config = YamlConfig {
+            base_branch: None,
+            cost_tracking: None,
+        };
 
         yaml_config.apply_to_config(&mut config);
         assert_eq!(config.base_branch, original_base_branch);
@@ -2343,7 +2502,7 @@ mod cost_tracking_tests {
     fn test_cost_tracking_config_default() {
         let config = CostTrackingConfig::default();
         assert_eq!(config.enabled, false);
-        assert_eq!(config.pricing_model, "paid");
+        assert_eq!(config.pricing_model, PricingModel::Paid);
         assert_eq!(config.rates.input_token_cost.to_string(), "0.000015");
         assert_eq!(config.rates.output_token_cost.to_string(), "0.000075");
         assert_eq!(config.session_management.max_concurrent_sessions, 100);
@@ -2387,13 +2546,16 @@ cost_tracking:
 "#;
         let yaml_config: YamlConfig = serde_yaml::from_str(yaml_content).unwrap();
         assert!(yaml_config.cost_tracking.is_some());
-        
+
         let cost_tracking = yaml_config.cost_tracking.unwrap();
         assert!(cost_tracking.enabled);
-        assert_eq!(cost_tracking.pricing_model, "max");
+        assert_eq!(cost_tracking.pricing_model, PricingModel::Max);
         assert_eq!(cost_tracking.rates.input_token_cost.to_string(), "0.00003");
         assert_eq!(cost_tracking.rates.output_token_cost.to_string(), "0.00012");
-        assert_eq!(cost_tracking.session_management.max_concurrent_sessions, 200);
+        assert_eq!(
+            cost_tracking.session_management.max_concurrent_sessions,
+            200
+        );
         assert_eq!(cost_tracking.session_management.session_timeout_hours, 48);
         assert_eq!(cost_tracking.session_management.cleanup_interval_hours, 12);
         assert!(!cost_tracking.aggregation.enabled);
@@ -2413,13 +2575,16 @@ cost_tracking:
 "#;
         let yaml_config: YamlConfig = serde_yaml::from_str(yaml_content).unwrap();
         assert!(yaml_config.cost_tracking.is_some());
-        
+
         let cost_tracking = yaml_config.cost_tracking.unwrap();
         assert!(cost_tracking.enabled);
-        assert_eq!(cost_tracking.pricing_model, "paid");
+        assert_eq!(cost_tracking.pricing_model, PricingModel::Paid);
         // Should use defaults for missing fields
         assert_eq!(cost_tracking.rates.input_token_cost.to_string(), "0.000015");
-        assert_eq!(cost_tracking.session_management.max_concurrent_sessions, 100);
+        assert_eq!(
+            cost_tracking.session_management.max_concurrent_sessions,
+            100
+        );
     }
 
     #[test]
@@ -2428,22 +2593,22 @@ cost_tracking:
             base_branch: None,
             cost_tracking: Some(CostTrackingConfig {
                 enabled: true,
-                pricing_model: "max".to_string(),
+                pricing_model: PricingModel::Max,
                 ..Default::default()
             }),
         };
         let mut config = Config::default();
-        
+
         // Initially no cost tracking
         assert!(config.cost_tracking.is_none());
-        
+
         yaml_config.apply_to_config(&mut config);
-        
+
         // Should now have cost tracking from YAML
         assert!(config.cost_tracking.is_some());
         let cost_tracking = config.cost_tracking.unwrap();
         assert!(cost_tracking.enabled);
-        assert_eq!(cost_tracking.pricing_model, "max");
+        assert_eq!(cost_tracking.pricing_model, PricingModel::Max);
     }
 
     #[test]
@@ -2454,28 +2619,32 @@ cost_tracking:
         let original_pricing = env::var("SAH_COST_PRICING_MODEL").ok();
         let original_input_cost = env::var("SAH_COST_INPUT_TOKEN_COST").ok();
         let original_output_cost = env::var("SAH_COST_OUTPUT_TOKEN_COST").ok();
-        
+
         // Set test environment variables
         env::set_var("SAH_COST_TRACKING_ENABLED", "true");
         env::set_var("SAH_COST_PRICING_MODEL", "max");
         env::set_var("SAH_COST_INPUT_TOKEN_COST", "0.00005");
         env::set_var("SAH_COST_OUTPUT_TOKEN_COST", "0.0002");
         env::set_var("SAH_COST_MAX_CONCURRENT_SESSIONS", "150");
-        
+
         let temp_dir = tempfile::TempDir::new().unwrap();
-        let original_dir = std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
+        let original_dir =
+            std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
         std::env::set_current_dir(temp_dir.path()).unwrap();
-        
+
         let config = Config::new();
         assert!(config.cost_tracking.is_some());
-        
+
         let cost_tracking = config.cost_tracking.unwrap();
         assert!(cost_tracking.enabled);
-        assert_eq!(cost_tracking.pricing_model, "max");
+        assert_eq!(cost_tracking.pricing_model, PricingModel::Max);
         assert_eq!(cost_tracking.rates.input_token_cost.to_string(), "0.00005");
         assert_eq!(cost_tracking.rates.output_token_cost.to_string(), "0.0002");
-        assert_eq!(cost_tracking.session_management.max_concurrent_sessions, 150);
-        
+        assert_eq!(
+            cost_tracking.session_management.max_concurrent_sessions,
+            150
+        );
+
         // Restore original values
         std::env::set_current_dir(original_dir).expect("Could not restore original directory");
         match original_enabled {
@@ -2508,33 +2677,27 @@ cost_tracking:
     }
 
     #[test]
-    fn test_cost_tracking_validation_invalid_pricing_model() {
-        let config = CostTrackingConfig {
-            pricing_model: "invalid".to_string(),
-            ..Default::default()
-        };
-        let main_config = Config {
-            cost_tracking: Some(config),
-            ..Default::default()
-        };
-        let result = main_config.validate();
+    fn test_pricing_model_from_str_invalid() {
+        let result = PricingModel::from_str("invalid");
         assert!(result.is_err());
-        match result.unwrap_err() {
-            ConfigError::InvalidValue { field, value, .. } => {
-                assert_eq!(field, "cost_tracking.pricing_model");
-                assert_eq!(value, "invalid");
-            }
-            _ => panic!("Expected InvalidValue error"),
-        }
+        assert!(result.unwrap_err().contains("Invalid pricing model 'invalid'"));
+    }
+
+    #[test]
+    fn test_pricing_model_from_str_valid() {
+        assert_eq!(PricingModel::from_str("paid").unwrap(), PricingModel::Paid);
+        assert_eq!(PricingModel::from_str("max").unwrap(), PricingModel::Max);
+        assert_eq!(PricingModel::from_str("PAID").unwrap(), PricingModel::Paid);
+        assert_eq!(PricingModel::from_str("MAX").unwrap(), PricingModel::Max);
     }
 
     #[test]
     fn test_cost_tracking_validation_negative_costs() {
         use rust_decimal::Decimal;
-        
+
         let config = CostTrackingConfig {
             rates: PricingConfig {
-                input_token_cost: Decimal::new(-1, 6), // -0.000001
+                input_token_cost: Decimal::new(-1, 6),  // -0.000001
                 output_token_cost: Decimal::new(75, 6), // 0.000075
             },
             ..Default::default()
@@ -2570,7 +2733,10 @@ cost_tracking:
         assert!(result.is_err());
         match result.unwrap_err() {
             ConfigError::InvalidValue { field, .. } => {
-                assert_eq!(field, "cost_tracking.session_management.max_concurrent_sessions");
+                assert_eq!(
+                    field,
+                    "cost_tracking.session_management.max_concurrent_sessions"
+                );
             }
             _ => panic!("Expected InvalidValue error"),
         }
@@ -2579,57 +2745,71 @@ cost_tracking:
     #[test]
     fn test_yaml_cost_tracking_validation() {
         use rust_decimal::Decimal;
-        
+
         let invalid_config = CostTrackingConfig {
-            pricing_model: "invalid_model".to_string(),
+            pricing_model: PricingModel::Paid, // enum ensures valid pricing model
             rates: PricingConfig {
-                input_token_cost: Decimal::ZERO,
+                input_token_cost: Decimal::ZERO, // This should cause validation failure
                 output_token_cost: Decimal::new(75, 6),
             },
             ..Default::default()
         };
-        
+
         let result = YamlConfig::validate_cost_tracking_config(&invalid_config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid pricing model"));
+        assert!(result.unwrap_err().contains("input_token_cost must be positive"));
     }
 
     #[test]
     #[serial_test::serial]
     fn test_cost_tracking_precedence() {
         use tempfile::TempDir;
-        
+
         // Test that YAML overrides environment variables for cost tracking
         let temp_dir = TempDir::new().unwrap();
         let yaml_path = temp_dir.path().join("swissarmyhammer.yaml");
-        std::fs::write(&yaml_path, r#"
+        std::fs::write(
+            &yaml_path,
+            r#"
 cost_tracking:
   enabled: true
   pricing_model: "paid"
   rates:
     input_token_cost: 0.00001
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         // Set conflicting environment variable
         env::set_var("SAH_COST_TRACKING_ENABLED", "false");
         env::set_var("SAH_COST_PRICING_MODEL", "max");
         env::set_var("SAH_COST_INPUT_TOKEN_COST", "0.00009");
 
-        let original_dir = std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
+        let original_dir =
+            std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
         // Verify the YAML file exists and is readable
         assert!(yaml_path.exists(), "YAML config file should exist");
         let yaml_content = std::fs::read_to_string(&yaml_path).unwrap();
-        assert!(yaml_content.contains("enabled: true"), "YAML should contain enabled: true");
+        assert!(
+            yaml_content.contains("enabled: true"),
+            "YAML should contain enabled: true"
+        );
 
         let config = Config::new();
-        assert!(config.cost_tracking.is_some(), "Cost tracking config should exist");
-        
+        assert!(
+            config.cost_tracking.is_some(),
+            "Cost tracking config should exist"
+        );
+
         let cost_tracking = config.cost_tracking.unwrap();
         // YAML should override env vars
-        assert!(cost_tracking.enabled, "YAML enabled=true should override env enabled=false"); // YAML value, not env value
-        assert_eq!(cost_tracking.pricing_model, "paid"); // YAML value, not env value
+        assert!(
+            cost_tracking.enabled,
+            "YAML enabled=true should override env enabled=false"
+        ); // YAML value, not env value
+        assert_eq!(cost_tracking.pricing_model, PricingModel::Paid); // YAML value, not env value
         assert_eq!(cost_tracking.rates.input_token_cost.to_string(), "0.00001"); // YAML value, not env value
 
         // Cleanup
@@ -2637,5 +2817,213 @@ cost_tracking:
         env::remove_var("SAH_COST_TRACKING_ENABLED");
         env::remove_var("SAH_COST_PRICING_MODEL");
         env::remove_var("SAH_COST_INPUT_TOKEN_COST");
+    }
+
+    // Edge case and boundary condition tests
+
+    #[test]
+    fn test_validation_edge_cases_minimum_valid_values() {
+        use rust_decimal::Decimal;
+        
+        // Test with minimal positive values
+        let config = CostTrackingConfig {
+            enabled: true,
+            pricing_model: PricingModel::Paid,
+            rates: PricingConfig {
+                input_token_cost: Decimal::new(1, 12), // 0.000000000001
+                output_token_cost: Decimal::new(1, 12),
+            },
+            session_management: SessionManagementConfig {
+                max_concurrent_sessions: 1,
+                session_timeout_hours: 1,
+                cleanup_interval_hours: 1,
+            },
+            aggregation: AggregationConfig {
+                enabled: true,
+                retention_days: 1,
+                max_stored_sessions: 1,
+            },
+            reporting: ReportingConfig {
+                include_in_issues: false,
+                detailed_breakdown: false,
+                cost_precision_decimals: 0,
+            },
+        };
+        
+        let result = Config::validate_cost_tracking_shared(&config);
+        assert!(result.is_ok(), "Minimal valid values should pass validation");
+    }
+
+    #[test]
+    fn test_validation_edge_cases_maximum_precision_decimals() {
+        use rust_decimal::Decimal;
+        
+        // Test maximum allowed precision decimals
+        let config = CostTrackingConfig {
+            enabled: true,
+            pricing_model: PricingModel::Max,
+            rates: PricingConfig {
+                input_token_cost: Decimal::new(15, 6),
+                output_token_cost: Decimal::new(75, 6),
+            },
+            session_management: SessionManagementConfig::default(),
+            aggregation: AggregationConfig::default(),
+            reporting: ReportingConfig {
+                include_in_issues: true,
+                detailed_breakdown: true,
+                cost_precision_decimals: 10, // Maximum allowed
+            },
+        };
+        
+        let result = Config::validate_cost_tracking_shared(&config);
+        assert!(result.is_ok(), "Maximum precision decimals should pass validation");
+    }
+
+    #[test]
+    fn test_validation_edge_cases_excessive_precision_decimals() {
+        use rust_decimal::Decimal;
+        
+        // Test excessive precision decimals (should fail)
+        let config = CostTrackingConfig {
+            enabled: true,
+            pricing_model: PricingModel::Paid,
+            rates: PricingConfig {
+                input_token_cost: Decimal::new(15, 6),
+                output_token_cost: Decimal::new(75, 6),
+            },
+            session_management: SessionManagementConfig::default(),
+            aggregation: AggregationConfig::default(),
+            reporting: ReportingConfig {
+                include_in_issues: true,
+                detailed_breakdown: true,
+                cost_precision_decimals: 15, // Exceeds maximum of 10
+            },
+        };
+        
+        let result = Config::validate_cost_tracking_shared(&config);
+        assert!(result.is_err(), "Excessive precision decimals should fail validation");
+        if let Err((field, value, hint)) = result {
+            assert_eq!(field, "cost_tracking.reporting.cost_precision_decimals");
+            assert_eq!(value, "15");
+            assert!(hint.contains("cannot exceed 10"));
+        }
+    }
+
+    #[test]
+    fn test_validation_edge_cases_large_session_values() {
+        use rust_decimal::Decimal;
+        
+        // Test with very large but valid session management values
+        let config = CostTrackingConfig {
+            enabled: true,
+            pricing_model: PricingModel::Max,
+            rates: PricingConfig {
+                input_token_cost: Decimal::new(15, 6),
+                output_token_cost: Decimal::new(75, 6),
+            },
+            session_management: SessionManagementConfig {
+                max_concurrent_sessions: u32::MAX,
+                session_timeout_hours: u32::MAX,
+                cleanup_interval_hours: u32::MAX,
+            },
+            aggregation: AggregationConfig {
+                enabled: false,
+                retention_days: u32::MAX,
+                max_stored_sessions: u32::MAX,
+            },
+            reporting: ReportingConfig::default(),
+        };
+        
+        let result = Config::validate_cost_tracking_shared(&config);
+        assert!(result.is_ok(), "Large valid session values should pass validation");
+    }
+
+    #[test]
+    fn test_pricing_model_enum_boundary_conditions() {
+        // Test that both enum variants work correctly
+        let paid_config = CostTrackingConfig {
+            pricing_model: PricingModel::Paid,
+            ..Default::default()
+        };
+        
+        let max_config = CostTrackingConfig {
+            pricing_model: PricingModel::Max,
+            ..Default::default()
+        };
+        
+        // Both should validate successfully (enum ensures type safety)
+        assert!(Config::validate_cost_tracking_shared(&paid_config).is_ok());
+        assert!(Config::validate_cost_tracking_shared(&max_config).is_ok());
+        
+        // Test enum parsing edge cases
+        assert_eq!(PricingModel::from_str("paid").unwrap(), PricingModel::Paid);
+        assert_eq!(PricingModel::from_str("PAID").unwrap(), PricingModel::Paid);
+        assert_eq!(PricingModel::from_str("Paid").unwrap(), PricingModel::Paid);
+        assert_eq!(PricingModel::from_str("max").unwrap(), PricingModel::Max);
+        assert_eq!(PricingModel::from_str("MAX").unwrap(), PricingModel::Max);
+        assert_eq!(PricingModel::from_str("Max").unwrap(), PricingModel::Max);
+        
+        // Invalid values should return errors
+        assert!(PricingModel::from_str("invalid").is_err());
+        assert!(PricingModel::from_str("").is_err());
+        assert!(PricingModel::from_str("PREMIUM").is_err());
+    }
+
+    #[test]
+    fn test_decimal_parsing_boundary_conditions() {
+        // Test parsing with various decimal formats
+        assert_eq!(parse_decimal_with_fallback("0.000015", "0.000010").to_string(), "0.000015");
+        assert_eq!(parse_decimal_with_fallback("0", "0.000010").to_string(), "0");
+        assert_eq!(parse_decimal_with_fallback("999999.999999", "0.000010").to_string(), "999999.999999");
+        
+        // Test fallback scenarios
+        assert_eq!(parse_decimal_with_fallback("invalid", "0.000010").to_string(), "0.000010");
+        assert_eq!(parse_decimal_with_fallback("not_a_number", "0.123").to_string(), "0.123");
+        
+        // Test double fallback (both invalid)
+        assert_eq!(parse_decimal_with_fallback("invalid1", "invalid2").to_string(), "0.000001");
+        
+        // Test extreme values
+        assert_eq!(parse_decimal_with_fallback("0.000000000001", "0.000010").to_string(), "0.000000000001");
+        assert_eq!(parse_decimal_with_fallback("1000000", "0.000010").to_string(), "1000000");
+    }
+
+    #[test]
+    fn test_configuration_completeness_edge_cases() {
+        use rust_decimal::Decimal;
+        
+        // Test with all boolean flags in various combinations
+        let configs = [
+            (true, true, true, true),
+            (false, false, false, false), 
+            (true, false, true, false),
+            (false, true, false, true),
+        ];
+        
+        for (enabled, agg_enabled, include_issues, detailed) in configs {
+            let config = CostTrackingConfig {
+                enabled,
+                pricing_model: PricingModel::Paid,
+                rates: PricingConfig {
+                    input_token_cost: Decimal::new(15, 6),
+                    output_token_cost: Decimal::new(75, 6),
+                },
+                session_management: SessionManagementConfig::default(),
+                aggregation: AggregationConfig {
+                    enabled: agg_enabled,
+                    retention_days: 30,
+                    max_stored_sessions: 1000,
+                },
+                reporting: ReportingConfig {
+                    include_in_issues: include_issues,
+                    detailed_breakdown: detailed,
+                    cost_precision_decimals: 2,
+                },
+            };
+            
+            let result = Config::validate_cost_tracking_shared(&config);
+            assert!(result.is_ok(), "Valid configuration with flags ({}, {}, {}, {}) should pass validation", 
+                    enabled, agg_enabled, include_issues, detailed);
+        }
     }
 }

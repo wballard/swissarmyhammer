@@ -12,8 +12,8 @@ use std::str::FromStr;
 
 /// Current Claude pricing rates (configurable)
 pub mod default_rates {
-    use rust_decimal::Decimal;
     use rust_decimal::prelude::*;
+    use rust_decimal::Decimal;
 
     /// Default Sonnet pricing rates as single source of truth
     const SONNET_INPUT_RATE: Decimal = dec!(0.000015);
@@ -103,14 +103,15 @@ impl PaidPlanConfig {
     /// Find the best matching model using multiple strategies with precedence
     fn find_best_model_match(&self, model: &str) -> Option<&PricingRates> {
         let model_lower = model.to_lowercase();
-        
+
         // Strategy 1: Prefix matching (highest priority)
         // Look for keys that are prefixes of the model name
-        let mut prefix_matches: Vec<(&String, &PricingRates)> = self.model_rates
+        let mut prefix_matches: Vec<(&String, &PricingRates)> = self
+            .model_rates
             .iter()
             .filter(|(key, _)| model_lower.starts_with(&key.to_lowercase()))
             .collect();
-        
+
         // Sort by key length (longest prefix wins)
         prefix_matches.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
         if let Some((_, rates)) = prefix_matches.first() {
@@ -123,13 +124,14 @@ impl PaidPlanConfig {
             let key_lower = model_key.to_lowercase();
             let key_parts: Vec<&str> = key_lower.split('-').collect();
             let model_parts: Vec<&str> = model_lower.split('-').collect();
-            
+
             // Check if key represents a model family that model belongs to
             if key_parts.len() >= 2 && model_parts.len() >= key_parts.len() {
-                let matches_family = key_parts.iter()
+                let matches_family = key_parts
+                    .iter()
                     .zip(model_parts.iter())
                     .all(|(key_part, model_part)| key_part == model_part);
-                
+
                 if matches_family {
                     return Some(rates);
                 }
@@ -139,10 +141,10 @@ impl PaidPlanConfig {
         // Strategy 3: Bidirectional substring matching with scoring
         // Score matches based on the length of the matching substring
         let mut substring_matches: Vec<(&String, &PricingRates, usize)> = Vec::new();
-        
+
         for (model_key, rates) in &self.model_rates {
             let key_lower = model_key.to_lowercase();
-            
+
             let score = if model_lower.contains(&key_lower) {
                 key_lower.len() // Favor longer keys that match
             } else if key_lower.contains(&model_lower) {
@@ -150,10 +152,10 @@ impl PaidPlanConfig {
             } else {
                 continue;
             };
-            
+
             substring_matches.push((model_key, rates, score));
         }
-        
+
         // Return the match with highest score (longest matching substring)
         substring_matches.sort_by(|a, b| b.2.cmp(&a.2));
         substring_matches.first().map(|(_, rates, _)| *rates)
@@ -257,7 +259,7 @@ impl PricingRates {
         if input_cost > max_reasonable_rate {
             return Err(CostError::InvalidInput {
                 message: format!(
-                    "Input token cost ${} exceeds reasonable maximum of ${}", 
+                    "Input token cost ${} exceeds reasonable maximum of ${}",
                     input_cost, max_reasonable_rate
                 ),
             });
@@ -265,7 +267,7 @@ impl PricingRates {
         if output_cost > max_reasonable_rate {
             return Err(CostError::InvalidInput {
                 message: format!(
-                    "Output token cost ${} exceeds reasonable maximum of ${}", 
+                    "Output token cost ${} exceeds reasonable maximum of ${}",
                     output_cost, max_reasonable_rate
                 ),
             });
@@ -276,16 +278,18 @@ impl PricingRates {
         if input_cost.scale() > max_decimal_places {
             return Err(CostError::InvalidInput {
                 message: format!(
-                    "Input token cost has {} decimal places, maximum allowed is {}", 
-                    input_cost.scale(), max_decimal_places
+                    "Input token cost has {} decimal places, maximum allowed is {}",
+                    input_cost.scale(),
+                    max_decimal_places
                 ),
             });
         }
         if output_cost.scale() > max_decimal_places {
             return Err(CostError::InvalidInput {
                 message: format!(
-                    "Output token cost has {} decimal places, maximum allowed is {}", 
-                    output_cost.scale(), max_decimal_places
+                    "Output token cost has {} decimal places, maximum allowed is {}",
+                    output_cost.scale(),
+                    max_decimal_places
                 ),
             });
         }
@@ -482,11 +486,11 @@ impl CostCalculator {
     fn validate_token_counts(input_tokens: u32, output_tokens: u32) -> Result<(), CostError> {
         // Check for potential overflow when adding tokens (most critical validation)
         match input_tokens.checked_add(output_tokens) {
-            Some(_) => {}, // Addition is safe
+            Some(_) => {} // Addition is safe
             None => {
                 return Err(CostError::InvalidInput {
                     message: format!(
-                        "Total token count (input: {} + output: {}) would overflow", 
+                        "Total token count (input: {} + output: {}) would overflow",
                         input_tokens, output_tokens
                     ),
                 });
@@ -498,16 +502,16 @@ impl CostCalculator {
         if input_tokens == u32::MAX {
             return Err(CostError::InvalidInput {
                 message: format!(
-                    "Input token count {} is at maximum u32 value, which could cause overflow", 
+                    "Input token count {} is at maximum u32 value, which could cause overflow",
                     input_tokens
                 ),
             });
         }
-        
+
         if output_tokens == u32::MAX {
             return Err(CostError::InvalidInput {
                 message: format!(
-                    "Output token count {} is at maximum u32 value, which could cause overflow", 
+                    "Output token count {} is at maximum u32 value, which could cause overflow",
                     output_tokens
                 ),
             });

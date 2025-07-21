@@ -18,6 +18,38 @@ use tokio::sync::{Mutex, RwLock};
 use tokio::time::sleep;
 use tracing::{debug, info};
 
+// Token generation constants for realistic API simulation
+const DEFAULT_MCP_INPUT_TOKENS_BASE: u32 = 50;
+const DEFAULT_MCP_OUTPUT_TOKENS_OPUS: u32 = 300;
+const DEFAULT_MCP_OUTPUT_TOKENS_SONNET: u32 = 200;
+const DEFAULT_MCP_OUTPUT_TOKENS_HAIKU: u32 = 150;
+const DEFAULT_MCP_OUTPUT_TOKENS_DEFAULT: u32 = 200;
+
+/// HTTP status code wrapper type to prevent primitive misuse
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HttpStatusCode(pub u16);
+
+impl HttpStatusCode {
+    /// Success status code (200)
+    pub const OK: Self = Self(200);
+    /// Rate limit error (429)
+    pub const TOO_MANY_REQUESTS: Self = Self(429);
+    /// Server error (500)
+    pub const INTERNAL_SERVER_ERROR: Self = Self(500);
+    /// Timeout error (408)
+    pub const REQUEST_TIMEOUT: Self = Self(408);
+
+    /// Get the raw status code value
+    pub fn as_u16(self) -> u16 {
+        self.0
+    }
+
+    /// Check if status code represents success (200-299)
+    pub fn is_success(self) -> bool {
+        (200..300).contains(&self.0)
+    }
+}
+
 /// Configuration for mock Claude API behavior
 #[derive(Debug, Clone)]
 pub struct MockClaudeApiConfig {
@@ -55,7 +87,7 @@ impl Default for MockClaudeApiConfig {
 #[derive(Debug, Clone)]
 pub struct MockApiResponse {
     /// HTTP status code
-    pub status_code: u16,
+    pub status_code: HttpStatusCode,
     /// Response body JSON
     pub body: String,
     /// Response headers
@@ -116,8 +148,8 @@ impl MockClaudeApi {
         self.current_call_index += 1;
 
         // Simulate network latency with variance
-        let latency_ms = self.config.base_latency_ms
-            + (call_index as u64 % self.config.latency_variance_ms);
+        let latency_ms =
+            self.config.base_latency_ms + (call_index as u64 % self.config.latency_variance_ms);
         sleep(Duration::from_millis(latency_ms)).await;
 
         // Determine response outcome based on call index and configuration
@@ -138,7 +170,7 @@ impl MockClaudeApi {
             call_index = call_index,
             endpoint = endpoint,
             model = model,
-            status_code = response.status_code,
+            status_code = response.status_code.as_u16(),
             success = response.success,
             latency_ms = response.latency.as_millis(),
             "Mock API call completed"
@@ -147,7 +179,26 @@ impl MockClaudeApi {
         response
     }
 
-    /// Generate a realistic API response based on configuration
+    /// Generate a realistic API response based on configuration and probabilistic outcomes
+    ///
+    /// This function simulates real-world API behavior by generating different response types
+    /// based on configured success rates, timeout rates, and rate limiting patterns.
+    ///
+    /// # Response Type Selection
+    /// Uses the call index modulo 100 to deterministically select response types:
+    /// - Timeout responses: First N% based on `config.timeout_rate`
+    /// - Rate limit responses: Next N% based on `config.rate_limit_rate`  
+    /// - Error responses: Next N% based on failure rate (1.0 - `config.success_rate`)
+    /// - Success responses: Remaining calls
+    ///
+    /// # Arguments
+    /// * `call_index` - Sequential call number for deterministic outcome selection
+    /// * `model` - AI model name for response generation and token estimation
+    /// * `request_body` - Request content for realistic token count estimation
+    ///
+    /// # Returns
+    /// A `MockApiResponse` with appropriate status code, body content, headers,
+    /// latency simulation, and token usage data based on the selected outcome type.
     fn generate_response(
         &self,
         call_index: u32,
@@ -204,12 +255,18 @@ impl MockClaudeApi {
 
         // Sometimes include token usage in headers as well
         if call_index % 10 == 0 {
-            headers.insert("anthropic-input-tokens".to_string(), input_tokens.to_string());
-            headers.insert("anthropic-output-tokens".to_string(), output_tokens.to_string());
+            headers.insert(
+                "anthropic-input-tokens".to_string(),
+                input_tokens.to_string(),
+            );
+            headers.insert(
+                "anthropic-output-tokens".to_string(),
+                output_tokens.to_string(),
+            );
         }
 
         MockApiResponse {
-            status_code: 200,
+            status_code: HttpStatusCode::OK,
             body,
             headers,
             latency,
@@ -226,25 +283,69 @@ impl MockClaudeApi {
         input_tokens: u32,
         output_tokens: u32,
     ) -> String {
-        format!(
-            r#"{{
-                "id": "msg_mock_{}",
-                "type": "message",
-                "role": "assistant",
-                "content": [{{
-                    "type": "text",
-                    "text": "This is a mock response for testing API interception. Call index: {}"
-                }}],
-                "model": "claude-3-sonnet-20241022",
-                "stop_reason": "end_turn",
-                "stop_sequence": null,
-                "usage": {{
-                    "input_tokens": {},
-                    "output_tokens": {}
-                }}
-            }}"#,
-            call_index, call_index, input_tokens, output_tokens
-        )
+        self.create_json_response("standard", call_index, Some((input_tokens, output_tokens)))
+    }
+
+    /// Common response builder to reduce duplication
+    fn create_json_response(
+        &self,
+        format_type: &str,
+        call_index: u32,
+        tokens: Option<(u32, u32)>,
+    ) -> String {
+        match format_type {
+            "standard" => {
+                let (input_tokens, output_tokens) = tokens.unwrap_or((0, 0));
+                format!(
+                    r#"{{
+                        "id": "msg_mock_{}",
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{{
+                            "type": "text",
+                            "text": "This is a mock response for testing API interception. Call index: {}"
+                        }}],
+                        "model": "claude-3-sonnet-20241022",
+                        "stop_reason": "end_turn",
+                        "stop_sequence": null,
+                        "usage": {{
+                            "input_tokens": {},
+                            "output_tokens": {}
+                        }}
+                    }}"#,
+                    call_index, call_index, input_tokens, output_tokens
+                )
+            }
+            "alternative" => {
+                let (input_tokens, output_tokens) = tokens.unwrap_or((0, 0));
+                format!(
+                    r#"{{
+                        "message_id": "alt_mock_{}",
+                        "response_text": "Alternative format mock response {}",
+                        "input_token_count": {},
+                        "output_token_count": {},
+                        "total_tokens": {}
+                    }}"#,
+                    call_index,
+                    call_index,
+                    input_tokens,
+                    output_tokens,
+                    input_tokens + output_tokens
+                )
+            }
+            "no_usage" => {
+                format!(
+                    r#"{{
+                        "id": "msg_no_usage_{}",
+                        "content": [{{
+                            "text": "Response without token usage data for testing estimation fallback"
+                        }}]
+                    }}"#,
+                    call_index
+                )
+            }
+            _ => format!(r#"{{"error": "Unknown format type: {}"}}"#, format_type),
+        }
     }
 
     /// Generate alternative token format for testing flexibility
@@ -254,89 +355,39 @@ impl MockClaudeApi {
         input_tokens: u32,
         output_tokens: u32,
     ) -> String {
-        format!(
-            r#"{{
-                "message_id": "alt_mock_{}",
-                "response_text": "Alternative format mock response {}",
-                "input_token_count": {},
-                "output_token_count": {},
-                "total_tokens": {}
-            }}"#,
+        self.create_json_response(
+            "alternative",
             call_index,
-            call_index,
-            input_tokens,
-            output_tokens,
-            input_tokens + output_tokens
+            Some((input_tokens, output_tokens)),
         )
     }
 
     /// Generate response without token usage for fallback testing
     fn generate_response_without_usage(&self, call_index: u32) -> String {
-        format!(
-            r#"{{
-                "id": "msg_no_usage_{}",
-                "content": [{{
-                    "text": "Response without token usage data for testing estimation fallback"
-                }}]
-            }}"#,
-            call_index
-        )
+        self.create_json_response("no_usage", call_index, None)
     }
 
-    /// Generate timeout error response
-    fn generate_timeout_response(&self, latency: Duration) -> MockApiResponse {
+    /// Common error response builder to reduce duplication
+    fn create_error_response(
+        &self,
+        status: HttpStatusCode,
+        error_type: &str,
+        message: &str,
+        latency: Duration,
+        extra_headers: Option<HashMap<String, String>>,
+    ) -> MockApiResponse {
         let mut headers = HashMap::new();
         headers.insert("content-type".to_string(), "application/json".to_string());
 
-        MockApiResponse {
-            status_code: 408,
-            body: r#"{"error": {"type": "timeout_error", "message": "Request timeout"}}"#
-                .to_string(),
-            headers,
-            latency,
-            success: false,
-            input_tokens: 0,
-            output_tokens: 0,
+        if let Some(extra) = extra_headers {
+            headers.extend(extra);
         }
-    }
-
-    /// Generate rate limit error response
-    fn generate_rate_limit_response(&self, latency: Duration) -> MockApiResponse {
-        let mut headers = HashMap::new();
-        headers.insert("content-type".to_string(), "application/json".to_string());
-        headers.insert("retry-after".to_string(), "60".to_string());
 
         MockApiResponse {
-            status_code: 429,
-            body: r#"{"error": {"type": "rate_limit_error", "message": "Rate limit exceeded"}}"#
-                .to_string(),
-            headers,
-            latency,
-            success: false,
-            input_tokens: 0,
-            output_tokens: 0,
-        }
-    }
-
-    /// Generate generic error response
-    fn generate_error_response(&self, call_index: u32, latency: Duration) -> MockApiResponse {
-        let mut headers = HashMap::new();
-        headers.insert("content-type".to_string(), "application/json".to_string());
-
-        let error_types = [
-            "invalid_request_error",
-            "authentication_error",
-            "permission_error",
-            "not_found_error",
-            "overloaded_error",
-        ];
-        let error_type = error_types[call_index as usize % error_types.len()];
-
-        MockApiResponse {
-            status_code: 400,
+            status_code: status,
             body: format!(
-                r#"{{"error": {{"type": "{}", "message": "Mock error for testing"}}}}"#,
-                error_type
+                r#"{{"error": {{"type": "{}", "message": "{}"}}}}"#,
+                error_type, message
             ),
             headers,
             latency,
@@ -346,19 +397,65 @@ impl MockClaudeApi {
         }
     }
 
+    /// Generate timeout error response
+    fn generate_timeout_response(&self, latency: Duration) -> MockApiResponse {
+        self.create_error_response(
+            HttpStatusCode::REQUEST_TIMEOUT,
+            "timeout_error",
+            "Request timeout",
+            latency,
+            None,
+        )
+    }
+
+    /// Generate rate limit error response
+    fn generate_rate_limit_response(&self, latency: Duration) -> MockApiResponse {
+        let mut extra_headers = HashMap::new();
+        extra_headers.insert("retry-after".to_string(), "60".to_string());
+
+        self.create_error_response(
+            HttpStatusCode::TOO_MANY_REQUESTS,
+            "rate_limit_error",
+            "Rate limit exceeded",
+            latency,
+            Some(extra_headers),
+        )
+    }
+
+    /// Generate generic error response
+    fn generate_error_response(&self, call_index: u32, latency: Duration) -> MockApiResponse {
+        let error_types = [
+            "invalid_request_error",
+            "authentication_error",
+            "permission_error",
+            "not_found_error",
+            "overloaded_error",
+        ];
+        let error_type = error_types[call_index as usize % error_types.len()];
+
+        self.create_error_response(
+            HttpStatusCode::INTERNAL_SERVER_ERROR,
+            error_type,
+            "Mock error for testing",
+            latency,
+            None,
+        )
+    }
+
     /// Estimate input tokens based on request content (simple approximation)
     fn estimate_input_tokens(&self, request_body: &str) -> u32 {
         // Simple estimation: ~4 characters per token
-        ((request_body.len() / 4).max(1) + 50) as u32 // Add base tokens for system prompt
+        ((request_body.len() / 4).max(1) + DEFAULT_MCP_INPUT_TOKENS_BASE as usize) as u32
+        // Add base tokens for system prompt
     }
 
     /// Generate realistic output token counts based on model and call index
     fn generate_output_tokens(&self, call_index: u32, model: &str) -> u32 {
         let base_tokens = match model {
-            m if m.contains("claude-3-opus") => 300,
-            m if m.contains("claude-3-sonnet") => 200,
-            m if m.contains("claude-3-haiku") => 150,
-            _ => 200, // Default for unknown models
+            m if m.contains("claude-3-opus") => DEFAULT_MCP_OUTPUT_TOKENS_OPUS,
+            m if m.contains("claude-3-sonnet") => DEFAULT_MCP_OUTPUT_TOKENS_SONNET,
+            m if m.contains("claude-3-haiku") => DEFAULT_MCP_OUTPUT_TOKENS_HAIKU,
+            _ => DEFAULT_MCP_OUTPUT_TOKENS_DEFAULT, // Default for unknown models
         };
 
         // Add variance based on call index
@@ -383,17 +480,23 @@ impl MockClaudeApi {
         }
 
         let total_calls = self.call_history.len();
-        let successful_calls = self.call_history.iter().filter(|c| c.response.success).count();
-        
-        let total_latency: Duration = self.call_history.iter()
-            .map(|c| c.response.latency)
-            .sum();
+        let successful_calls = self
+            .call_history
+            .iter()
+            .filter(|c| c.response.success)
+            .count();
+
+        let total_latency: Duration = self.call_history.iter().map(|c| c.response.latency).sum();
         let avg_latency = total_latency / total_calls as u32;
 
-        let total_input_tokens: u32 = self.call_history.iter()
+        let total_input_tokens: u32 = self
+            .call_history
+            .iter()
             .map(|c| c.response.input_tokens)
             .sum();
-        let total_output_tokens: u32 = self.call_history.iter()
+        let total_output_tokens: u32 = self
+            .call_history
+            .iter()
             .map(|c| c.response.output_tokens)
             .sum();
 
@@ -455,8 +558,10 @@ impl crate::issues::IssueStorage for MockIssueStorage {
         name: String,
         content: String,
     ) -> crate::Result<crate::issues::Issue> {
-        let id = self.next_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        
+        let id = self
+            .next_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
         let issue = crate::issues::Issue {
             number: crate::issues::filesystem::IssueNumber::from(id),
             name,
@@ -471,7 +576,9 @@ impl crate::issues::IssueStorage for MockIssueStorage {
     }
 
     async fn get_issue(&self, number: u32) -> crate::Result<crate::issues::Issue> {
-        self.issues.read().await
+        self.issues
+            .read()
+            .await
             .get(&number)
             .cloned()
             .ok_or_else(|| crate::SwissArmyHammerError::IssueNotFound(number.to_string()))
@@ -487,7 +594,9 @@ impl crate::issues::IssueStorage for MockIssueStorage {
             issue.content = content;
             Ok(issue.clone())
         } else {
-            Err(crate::SwissArmyHammerError::IssueNotFound(number.to_string()))
+            Err(crate::SwissArmyHammerError::IssueNotFound(
+                number.to_string(),
+            ))
         }
     }
 
@@ -497,7 +606,9 @@ impl crate::issues::IssueStorage for MockIssueStorage {
             issue.completed = true;
             Ok(issue.clone())
         } else {
-            Err(crate::SwissArmyHammerError::IssueNotFound(number.to_string()))
+            Err(crate::SwissArmyHammerError::IssueNotFound(
+                number.to_string(),
+            ))
         }
     }
 
@@ -567,17 +678,15 @@ impl MockMcpSystem {
     pub async fn with_config(api_config: MockClaudeApiConfig) -> Self {
         let api = Arc::new(Mutex::new(MockClaudeApi::with_config(api_config)));
         let cost_tracker = Arc::new(Mutex::new(CostTracker::new()));
-        
+
         // Create mock issue storage and tool handlers
         let issue_storage: Arc<RwLock<Box<dyn crate::issues::IssueStorage>>> =
             Arc::new(RwLock::new(Box::new(MockIssueStorage::new())));
         let git_ops = Arc::new(Mutex::new(None::<crate::git::GitOperations>));
-        
+
         let tool_handlers = ToolHandlers::new(issue_storage, git_ops);
-        let cost_tracking_handler = CostTrackingMcpHandler::new(
-            tool_handlers,
-            Arc::clone(&cost_tracker),
-        );
+        let cost_tracking_handler =
+            CostTrackingMcpHandler::new(tool_handlers, Arc::clone(&cost_tracker));
 
         Self {
             api,
@@ -592,10 +701,7 @@ impl MockMcpSystem {
     }
 
     /// Complete a workflow session
-    pub async fn complete_workflow_session(
-        &self,
-        status: CostSessionStatus,
-    ) -> Result<(), String> {
+    pub async fn complete_workflow_session(&self, status: CostSessionStatus) -> Result<(), String> {
         self.cost_tracking_handler.complete_session(status).await
     }
 
@@ -606,7 +712,7 @@ impl MockMcpSystem {
         operations: Vec<McpOperation>,
     ) -> Result<WorkflowResult, String> {
         let start_time = Instant::now();
-        
+
         // Start session
         let session_id = self.start_workflow_session(issue_name).await?;
         info!("Started workflow session for issue: {}", issue_name);
@@ -620,10 +726,14 @@ impl MockMcpSystem {
         }
 
         // Complete session
-        self.complete_workflow_session(CostSessionStatus::Completed).await?;
+        self.complete_workflow_session(CostSessionStatus::Completed)
+            .await?;
 
         // Get session statistics by session ID after completion
-        let session_stats = self.cost_tracking_handler.get_session_stats_by_id(&session_id).await;
+        let session_stats = self
+            .cost_tracking_handler
+            .get_session_stats_by_id(&session_id)
+            .await;
 
         Ok(WorkflowResult {
             session_id,
@@ -650,16 +760,30 @@ impl MockMcpSystem {
                 };
 
                 // Simulate API call
-                let api_response = self.simulate_api_call_for_operation(
-                    "issue_create",
-                    &format!("Create issue: {} with content: {}", name, content),
-                ).await;
+                let api_response = self
+                    .simulate_api_call_for_operation(
+                        "issue_create",
+                        &format!("Create issue: {} with content: {}", name, content),
+                    )
+                    .await;
 
-                // Execute actual MCP operation
-                self.cost_tracking_handler
+                // Execute actual MCP operation without cost tracking (avoid double recording)
+                self.cost_tracking_handler.inner_handler
                     .handle_issue_create(request)
                     .await
-                    .map_err(|e| format!("MCP operation failed: {}", e))?;
+                    .map_err(|e| format!("Failed to create issue '{}' via MCP handler - cost tracking or handler error: {}", name, e))?;
+
+                // Record the API call with realistic token counts from mock API response
+                self.cost_tracking_handler
+                    .record_mcp_operation_with_tokens(
+                        "issue_create",
+                        start_time,
+                        api_response.success,
+                        api_response.input_tokens,
+                        api_response.output_tokens,
+                    )
+                    .await
+                    .map_err(|e| format!("Failed to record API call with token counts: {}", e))?;
 
                 McpOperationResult {
                     operation_type: "create_issue".to_string(),
@@ -676,22 +800,46 @@ impl MockMcpSystem {
                     append: false,
                 };
 
-                let api_response = self.simulate_api_call_for_operation(
-                    "issue_update",
-                    &format!("Update issue {} with content: {}", number, content),
-                ).await;
+                let api_response = self
+                    .simulate_api_call_for_operation(
+                        "issue_update",
+                        &format!("Update issue {} with content: {}", number, content),
+                    )
+                    .await;
 
-                self.cost_tracking_handler
+                // Execute actual MCP operation without cost tracking (avoid double recording)
+                let mcp_result = self
+                    .cost_tracking_handler
+                    .inner_handler
                     .handle_issue_update(request)
+                    .await;
+
+                // Handle MCP operation result - errors are expected for some test scenarios
+                let (success, error_message) = match mcp_result {
+                    Ok(_) => (true, None),
+                    Err(e) => (false, Some(format!("MCP error: {}", e))),
+                };
+
+                // Record the API call with realistic token counts from mock API response
+                // Only record successful operations, or record with success=false for failed operations
+                let api_success = api_response.success && success; // Both API and MCP must succeed
+                self.cost_tracking_handler
+                    .record_mcp_operation_with_tokens(
+                        "issue_update",
+                        start_time,
+                        api_success,
+                        api_response.input_tokens,
+                        api_response.output_tokens,
+                    )
                     .await
-                    .map_err(|e| format!("MCP operation failed: {}", e))?;
+                    .map_err(|e| format!("Failed to record API call with token counts: {}", e))?;
 
                 McpOperationResult {
                     operation_type: "update_issue".to_string(),
-                    success: true,
+                    success,
                     duration: start_time.elapsed(),
                     api_response: Some(api_response),
-                    error: None,
+                    error: error_message,
                 }
             }
             McpOperation::MarkComplete { number } => {
@@ -699,22 +847,46 @@ impl MockMcpSystem {
                     number: IssueNumber(number),
                 };
 
-                let api_response = self.simulate_api_call_for_operation(
-                    "issue_mark_complete",
-                    &format!("Mark issue {} complete", number),
-                ).await;
+                let api_response = self
+                    .simulate_api_call_for_operation(
+                        "issue_mark_complete",
+                        &format!("Mark issue {} complete", number),
+                    )
+                    .await;
 
-                self.cost_tracking_handler
+                // Execute actual MCP operation without cost tracking (avoid double recording)
+                let mcp_result = self
+                    .cost_tracking_handler
+                    .inner_handler
                     .handle_issue_mark_complete(request)
+                    .await;
+
+                // Handle MCP operation result - errors are expected for some test scenarios
+                let (success, error_message) = match mcp_result {
+                    Ok(_) => (true, None),
+                    Err(e) => (false, Some(format!("MCP error: {}", e))),
+                };
+
+                // Record the API call with realistic token counts from mock API response
+                // Only record successful operations, or record with success=false for failed operations
+                let api_success = api_response.success && success; // Both API and MCP must succeed
+                self.cost_tracking_handler
+                    .record_mcp_operation_with_tokens(
+                        "issue_mark_complete",
+                        start_time,
+                        api_success,
+                        api_response.input_tokens,
+                        api_response.output_tokens,
+                    )
                     .await
-                    .map_err(|e| format!("MCP operation failed: {}", e))?;
+                    .map_err(|e| format!("Failed to record API call with token counts: {}", e))?;
 
                 McpOperationResult {
                     operation_type: "mark_complete".to_string(),
-                    success: true,
+                    success,
                     duration: start_time.elapsed(),
                     api_response: Some(api_response),
-                    error: None,
+                    error: error_message,
                 }
             }
         };
@@ -733,7 +905,8 @@ impl MockMcpSystem {
             &format!("https://api.anthropic.com/v1/{}", operation),
             "claude-3-sonnet-20241022",
             request_content,
-        ).await
+        )
+        .await
     }
 
     /// Get API performance statistics
@@ -799,7 +972,7 @@ mod tests {
             )
             .await;
 
-        assert_eq!(response.status_code, 200);
+        assert_eq!(response.status_code, HttpStatusCode::OK);
         assert!(response.input_tokens > 0);
         assert!(response.output_tokens > 0);
 

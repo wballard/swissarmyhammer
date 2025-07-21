@@ -84,7 +84,7 @@ pub struct ApiCallRecord {
 /// ```
 pub struct CostTrackingMcpHandler {
     /// The inner MCP handler being wrapped
-    inner_handler: ToolHandlers,
+    pub inner_handler: ToolHandlers,
     /// Shared cost tracker instance
     cost_tracker: Arc<Mutex<CostTracker>>,
     /// Current active session ID (thread-local equivalent)
@@ -179,18 +179,34 @@ impl CostTrackingMcpHandler {
         }
     }
 
-    /// Record an API call in the current session
+    /// Record an API call in the current session with comprehensive error handling
     ///
-    /// This method is called internally to record API calls made during MCP operations.
-    /// It extracts timing and token information from the API call and updates the cost tracker.
+    /// This method handles the complex process of recording API calls during MCP operations,
+    /// including session management, duration calculation, error handling, and graceful
+    /// degradation when no active session exists.
+    ///
+    /// # Process Flow
+    /// 1. Checks for an active cost tracking session
+    /// 2. Creates and completes an `ApiCall` record with timing and token data
+    /// 3. Adds the call to the cost tracker with error conversion
+    /// 4. Logs the successful recording with structured fields
+    /// 5. Implements graceful degradation if no session is active
+    ///
+    /// # Graceful Degradation
+    /// When no active session exists, the call is logged but not recorded as an error,
+    /// allowing the system to continue functioning in environments where cost tracking
+    /// is not required or temporarily unavailable.
     ///
     /// # Arguments
-    ///
-    /// * `record` - The API call record containing all call information
+    /// * `record` - Complete API call record including endpoint, model, tokens, timing, and status
     ///
     /// # Returns
+    /// * `Ok(())` - API call successfully recorded or gracefully handled
+    /// * `Err(String)` - Failed to create API call or add to tracker (with detailed error message)
     ///
-    /// Success if the API call was recorded, or an error description
+    /// # Error Handling
+    /// Converts internal cost tracking errors to descriptive strings for better debugging
+    /// while maintaining the async operation's reliability.
     async fn record_api_call(&self, record: ApiCallRecord) -> Result<(), String> {
         let active_session = self.active_session.lock().await;
 
@@ -228,14 +244,16 @@ impl CostTrackingMcpHandler {
 
             Ok(())
         } else {
-            debug!(
+            info!(
                 endpoint = record.endpoint,
                 model = record.model,
                 input_tokens = record.input_tokens,
                 output_tokens = record.output_tokens,
-                "API call made without active cost session - not recorded"
+                duration_ms = record.start_time.elapsed().as_millis(),
+                status = ?record.status,
+                "API call made without active cost tracking session - skipping cost recording. This is normal behavior when cost tracking is disabled or between workflow sessions"
             );
-            Ok(()) // Not an error - graceful degradation
+            Ok(()) // Not an error - graceful degradation with better logging
         }
     }
 
@@ -452,23 +470,55 @@ impl CostTrackingMcpHandler {
     }
 
     /// Get session statistics by session ID
-    /// 
+    ///
     /// This method can retrieve session statistics for any session by its ID,
     /// regardless of whether it's currently active or has been completed.
-    pub async fn get_session_stats_by_id(&self, session_id: &crate::cost::CostSessionId) -> Option<SessionStats> {
+    pub async fn get_session_stats_by_id(
+        &self,
+        session_id: &crate::cost::CostSessionId,
+    ) -> Option<SessionStats> {
         let tracker = self.cost_tracker.lock().await;
-        tracker
-            .get_session(session_id)
-            .map(|session| SessionStats {
-                session_id: *session_id,
-                issue_id: session.issue_id.clone(),
-                api_call_count: session.api_call_count(),
-                total_input_tokens: session.total_input_tokens(),
-                total_output_tokens: session.total_output_tokens(),
-                total_tokens: session.total_tokens(),
-                is_completed: session.is_completed(),
-                duration: session.total_duration,
-            })
+        tracker.get_session(session_id).map(|session| SessionStats {
+            session_id: *session_id,
+            issue_id: session.issue_id.clone(),
+            api_call_count: session.api_call_count(),
+            total_input_tokens: session.total_input_tokens(),
+            total_output_tokens: session.total_output_tokens(),
+            total_tokens: session.total_tokens(),
+            is_completed: session.is_completed(),
+            duration: session.total_duration,
+        })
+    }
+
+    /// Record MCP operation with custom token counts (test-specific method)
+    ///
+    /// This method is designed for testing scenarios where realistic token counts
+    /// are needed instead of the hardcoded DEFAULT_MCP_* values.
+    pub async fn record_mcp_operation_with_tokens(
+        &self,
+        operation: &str,
+        start_time: Instant,
+        success: bool,
+        input_tokens: u32,
+        output_tokens: u32,
+    ) -> Result<(), String> {
+        let status = if success {
+            ApiCallStatus::Success
+        } else {
+            ApiCallStatus::Failed
+        };
+
+        let record = ApiCallRecord {
+            endpoint: format!("mcp://{}", operation),
+            model: "mcp-internal".to_string(),
+            start_time,
+            input_tokens,
+            output_tokens,
+            status,
+            error_message: None,
+        };
+
+        self.record_api_call(record).await
     }
 }
 

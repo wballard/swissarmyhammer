@@ -823,18 +823,17 @@ mod tests {
         assert!(chinese.total_tokens > 0);
         assert!(japanese.total_tokens > 0);
 
-        // Chinese/Japanese should have different token counts due to different char ratios
-        // (This is a basic check, actual values depend on the specific text)
-        assert!(
-            chinese.total_tokens != english.total_tokens
-                || chinese.total_tokens == english.total_tokens
-        );
+        // Different languages may have different token counts due to different char ratios
+        // (Actual values depend on the specific text and estimation algorithm)
+        // The key requirement is that all languages produce reasonable estimates > 0
     }
 
     #[test]
     fn test_unicode_normalization_handling() {
-        let mut config = EstimationConfig::default();
-        config.use_unicode_normalization = true;
+        let config = EstimationConfig {
+            use_unicode_normalization: true,
+            ..Default::default()
+        };
         let estimator = TokenEstimator::new(config);
 
         // Test with text that has Unicode normalization implications

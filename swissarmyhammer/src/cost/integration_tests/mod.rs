@@ -6,6 +6,10 @@
 //! memory management, and error handling scenarios.
 
 pub mod api_interception;
+pub mod api_interception_functional;
+pub mod api_interception_helpers;
+pub mod api_interception_performance;
+pub mod api_interception_reliability;
 
 use crate::cost::{
     calculator::{CostCalculator, MaxPlanConfig, PaidPlanConfig, PricingModel},

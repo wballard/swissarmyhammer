@@ -945,7 +945,8 @@ async fn metrics_workflow_command(
                 println!("Success rate: {:.2}%", success_rate * 100.0);
                 println!(
                     "Average execution time: {:.2}s",
-                    global_metrics.average_run_duration
+                    global_metrics
+                        .average_run_duration
                         .map(|d| d.as_secs_f64())
                         .unwrap_or(0.0)
                 );
@@ -1015,10 +1016,7 @@ async fn metrics_workflow_command(
                     } else {
                         0.0
                     };
-                    println!(
-                        "Success rate: {:.2}%",
-                        success_rate * 100.0
-                    );
+                    println!("Success rate: {:.2}%", success_rate * 100.0);
                     if let Some(avg_duration) = workflow_metrics.average_duration {
                         println!("Average duration: {:.2}s", avg_duration.as_secs_f64());
                     }
@@ -1038,8 +1036,7 @@ async fn metrics_workflow_command(
                         for state_count in &workflow_metrics.hot_states {
                             println!(
                                 "  {}: {} executions",
-                                state_count.state_id,
-                                state_count.count
+                                state_count.state_id, state_count.count
                             );
                         }
                     }

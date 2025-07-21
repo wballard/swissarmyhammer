@@ -9,9 +9,9 @@
 // pub mod cross_component_consistency;
 
 use crate::cost::{
+    calculator::PricingModel,
     tests::CostTrackingTestHarness,
     tracker::{ApiCallStatus, CostSessionStatus, IssueId},
-    calculator::PricingModel,
 };
 use rust_decimal::Decimal;
 use std::time::Duration;
@@ -20,16 +20,16 @@ use tokio::time::timeout;
 #[tokio::test]
 async fn test_complete_system_workflow_happy_path() {
     let harness = CostTrackingTestHarness::new();
-    
+
     // Direct test without execute_test_scenario to avoid lifetime issues
     tracing::info!("Starting test scenario: complete_workflow_happy_path");
     let scenario_start = std::time::Instant::now();
-    
+
     let test_future = async {
         let shared_tracker = harness.get_shared_tracker();
         let calculator = harness.calculator.clone();
         let api_generator = harness.api_call_generator.clone();
-        
+
         // Create a test session with realistic workflow
         let issue_id = IssueId::new("comprehensive-happy-001".to_string())?;
         let session_id = {
@@ -39,7 +39,7 @@ async fn test_complete_system_workflow_happy_path() {
 
         // Simulate typical workflow: analysis -> code gen -> testing -> completion
         let api_calls = api_generator.generate_multiple_calls(4);
-        
+
         for api_call in api_calls {
             let mut tracker = shared_tracker.lock().await;
             tracker.add_api_call(&session_id, api_call)?;
@@ -61,39 +61,57 @@ async fn test_complete_system_workflow_happy_path() {
         let calculation = calculator.calculate_session_cost(&session)?;
 
         // Validate results
-        assert!(calculation.total_cost > Decimal::ZERO, "Total cost should be positive");
+        assert!(
+            calculation.total_cost > Decimal::ZERO,
+            "Total cost should be positive"
+        );
         assert_eq!(session.api_calls.len(), 4, "Should have 4 API calls");
-        assert_eq!(session.status, CostSessionStatus::Completed, "Session should be completed");
+        assert_eq!(
+            session.status,
+            CostSessionStatus::Completed,
+            "Session should be completed"
+        );
 
         Ok(calculation.total_cost)
     };
-    
+
     let result: Result<Decimal, Box<dyn std::error::Error + Send + Sync>> = test_future.await;
     let duration = scenario_start.elapsed();
-    
+
     match &result {
-        Ok(_) => tracing::info!("Test scenario 'complete_workflow_happy_path' completed successfully in {:?}", duration),
-        Err(e) => tracing::error!("Test scenario 'complete_workflow_happy_path' failed after {:?}: {}", duration, e),
+        Ok(_) => tracing::info!(
+            "Test scenario 'complete_workflow_happy_path' completed successfully in {:?}",
+            duration
+        ),
+        Err(e) => tracing::error!(
+            "Test scenario 'complete_workflow_happy_path' failed after {:?}: {}",
+            duration,
+            e
+        ),
     }
-    
-    assert!(result.is_ok(), "Happy path workflow should succeed: {:?}", result);
+
+    assert!(
+        result.is_ok(),
+        "Happy path workflow should succeed: {:?}",
+        result
+    );
 }
 
-#[tokio::test] 
+#[tokio::test]
 async fn test_complete_system_workflow_with_failures() {
     let harness = CostTrackingTestHarness::with_config()
         .with_failure_injection()
         .build();
-    
+
     // Direct test without execute_test_scenario to avoid lifetime issues
     tracing::info!("Starting test scenario: complete_workflow_with_failures");
     let scenario_start = std::time::Instant::now();
-    
+
     let test_future = async {
         let shared_tracker = harness.get_shared_tracker();
         let calculator = harness.calculator.clone();
         let api_generator = harness.api_call_generator.clone();
-        
+
         let issue_id = IssueId::new("comprehensive-failures-001".to_string())?;
         let session_id = {
             let mut tracker = shared_tracker.lock().await;
@@ -138,51 +156,72 @@ async fn test_complete_system_workflow_with_failures() {
         };
 
         let session = session.ok_or("Session should exist even with failures")?;
-        
+
         // Should be able to calculate cost even with some failures
         let calculation = calculator.calculate_session_cost(&session)?;
-        
-        assert!(calculation.total_cost >= Decimal::ZERO, "Cost should be non-negative with failures");
-        assert!(session.api_calls.len() == 6, "Should track all API calls including failures");
-        
+
+        assert!(
+            calculation.total_cost >= Decimal::ZERO,
+            "Cost should be non-negative with failures"
+        );
+        assert!(
+            session.api_calls.len() == 6,
+            "Should track all API calls including failures"
+        );
+
         Ok((success_count, failure_count, calculation.total_cost))
     };
-    
-    let result: Result<(i32, i32, Decimal), Box<dyn std::error::Error + Send + Sync>> = test_future.await;
+
+    let result: Result<(i32, i32, Decimal), Box<dyn std::error::Error + Send + Sync>> =
+        test_future.await;
     let duration = scenario_start.elapsed();
-    
+
     match &result {
-        Ok(_) => tracing::info!("Test scenario 'complete_workflow_with_failures' completed successfully in {:?}", duration),
-        Err(e) => tracing::error!("Test scenario 'complete_workflow_with_failures' failed after {:?}: {}", duration, e),
+        Ok(_) => tracing::info!(
+            "Test scenario 'complete_workflow_with_failures' completed successfully in {:?}",
+            duration
+        ),
+        Err(e) => tracing::error!(
+            "Test scenario 'complete_workflow_with_failures' failed after {:?}: {}",
+            duration,
+            e
+        ),
     }
-    
-    assert!(result.is_ok(), "System should handle failures gracefully: {:?}", result);
-    
+
+    assert!(
+        result.is_ok(),
+        "System should handle failures gracefully: {:?}",
+        result
+    );
+
     let (success_count, failure_count, total_cost) = result.unwrap();
-    assert!(success_count > 0 || failure_count > 0, "Should have some API call results");
+    assert!(
+        success_count > 0 || failure_count > 0,
+        "Should have some API call results"
+    );
 }
 
 #[tokio::test]
 async fn test_multiple_concurrent_workflows() {
     let mut harness = CostTrackingTestHarness::new();
-    
+
     // Direct test without execute_test_scenario to avoid lifetime issues
     tracing::info!("Starting test scenario: concurrent_workflows");
     let scenario_start = std::time::Instant::now();
-    
+
     let test_future = async {
         let shared_tracker = harness.get_shared_tracker();
         let calculator = harness.calculator.clone();
-        
+
         // Create multiple concurrent workflows
         let num_workflows = 5;
         let mut handles = Vec::new();
-        
+
         for i in 0..num_workflows {
             let tracker_clone = shared_tracker.clone();
             let calc_clone = calculator.clone();
             let api_gen = harness.api_call_generator.clone();
-            
+
             let handle = tokio::spawn(async move {
                 let issue_id = IssueId::new(format!("concurrent-workflow-{}", i))?;
                 let session_id = {
@@ -212,9 +251,12 @@ async fn test_multiple_concurrent_workflows() {
                 let session = session.ok_or("Session should exist")?;
                 let calculation = calc_clone.calculate_session_cost(&session)?;
 
-                Ok::<_, Box<dyn std::error::Error + Send + Sync>>((session_id, calculation.total_cost))
+                Ok::<_, Box<dyn std::error::Error + Send + Sync>>((
+                    session_id,
+                    calculation.total_cost,
+                ))
             });
-            
+
             handles.push(handle);
         }
 
@@ -229,13 +271,24 @@ async fn test_multiple_concurrent_workflows() {
         }
 
         // Validate concurrent execution results
-        assert_eq!(session_count, num_workflows, "All workflows should complete");
+        assert_eq!(
+            session_count, num_workflows,
+            "All workflows should complete"
+        );
         assert!(total_cost > Decimal::ZERO, "Total cost should be positive");
 
         // Verify tracker state
         let tracker = shared_tracker.lock().await;
-        assert_eq!(tracker.session_count(), num_workflows, "Should have all sessions");
-        assert_eq!(tracker.completed_session_count(), num_workflows, "All sessions should be completed");
+        assert_eq!(
+            tracker.session_count(),
+            num_workflows,
+            "Should have all sessions"
+        );
+        assert_eq!(
+            tracker.completed_session_count(),
+            num_workflows,
+            "All sessions should be completed"
+        );
 
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>((session_count, total_cost))
     };
@@ -244,24 +297,41 @@ async fn test_multiple_concurrent_workflows() {
 
     let scenario_duration = scenario_start.elapsed();
     match &result {
-        Ok(Ok(_)) => tracing::info!("Test scenario 'concurrent_workflows' completed successfully in {:?}", scenario_duration),
-        Ok(Err(e)) => tracing::error!("Test scenario 'concurrent_workflows' failed after {:?}: {}", scenario_duration, e),
-        Err(_) => tracing::error!("Test scenario 'concurrent_workflows' timed out after {:?}", scenario_duration),
+        Ok(Ok(_)) => tracing::info!(
+            "Test scenario 'concurrent_workflows' completed successfully in {:?}",
+            scenario_duration
+        ),
+        Ok(Err(e)) => tracing::error!(
+            "Test scenario 'concurrent_workflows' failed after {:?}: {}",
+            scenario_duration,
+            e
+        ),
+        Err(_) => tracing::error!(
+            "Test scenario 'concurrent_workflows' timed out after {:?}",
+            scenario_duration
+        ),
     }
 
-    assert!(result.is_ok(), "Concurrent workflows should complete within timeout");
+    assert!(
+        result.is_ok(),
+        "Concurrent workflows should complete within timeout"
+    );
     let scenario_result = result.unwrap();
-    assert!(scenario_result.is_ok(), "Concurrent workflows should succeed: {:?}", scenario_result);
+    assert!(
+        scenario_result.is_ok(),
+        "Concurrent workflows should succeed: {:?}",
+        scenario_result
+    );
 }
 
 #[tokio::test]
 async fn test_system_resource_management() {
     let mut harness = CostTrackingTestHarness::new();
-    
+
     // Direct test without execute_test_scenario to avoid lifetime issues
     tracing::info!("Starting test scenario: resource_management");
     let start = std::time::Instant::now();
-    
+
     let result: Result<usize, Box<dyn std::error::Error + Send + Sync>> = async {
         // Create many sessions to test resource cleanup
         let num_sessions = 20;
@@ -295,39 +365,69 @@ async fn test_system_resource_management() {
 
         // Verify resource management
         let tracker = harness.cost_tracker.lock().await;
-        assert_eq!(tracker.session_count(), num_sessions, "Should track all sessions");
-        assert_eq!(tracker.active_session_count(), num_sessions - half_count, "Should have correct active count");
-        assert_eq!(tracker.completed_session_count(), half_count, "Should have correct completed count");
+        assert_eq!(
+            tracker.session_count(),
+            num_sessions,
+            "Should track all sessions"
+        );
+        assert_eq!(
+            tracker.active_session_count(),
+            num_sessions - half_count,
+            "Should have correct active count"
+        );
+        assert_eq!(
+            tracker.completed_session_count(),
+            half_count,
+            "Should have correct completed count"
+        );
 
         // Test cleanup behavior (implementation dependent)
-        let total_api_calls: usize = session_ids.iter()
+        let total_api_calls: usize = session_ids
+            .iter()
             .filter_map(|id| tracker.get_session(id))
             .map(|session| session.api_calls.len())
             .sum();
 
-        assert_eq!(total_api_calls, num_sessions * 2, "Should maintain all API call records");
+        assert_eq!(
+            total_api_calls,
+            num_sessions * 2,
+            "Should maintain all API call records"
+        );
 
         Ok(num_sessions)
-    }.await;
+    }
+    .await;
 
     let duration = start.elapsed();
     match &result {
-        Ok(_) => tracing::info!("Test scenario 'resource_management' completed successfully in {:?}", duration),
-        Err(e) => tracing::error!("Test scenario 'resource_management' failed after {:?}: {}", duration, e),
+        Ok(_) => tracing::info!(
+            "Test scenario 'resource_management' completed successfully in {:?}",
+            duration
+        ),
+        Err(e) => tracing::error!(
+            "Test scenario 'resource_management' failed after {:?}: {}",
+            duration,
+            e
+        ),
     }
 
-    assert!(result.is_ok(), "Resource management should work correctly: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Resource management should work correctly: {:?}",
+        result
+    );
 }
 
 #[tokio::test]
 async fn test_pricing_model_integration() {
     // Test with paid plan
-    let mut paid_harness = CostTrackingTestHarness::with_pricing_model(PricingModel::paid_with_defaults());
-    
+    let mut paid_harness =
+        CostTrackingTestHarness::with_pricing_model(PricingModel::paid_with_defaults());
+
     // Direct test without execute_test_scenario to avoid lifetime issues
     tracing::info!("Starting test scenario: paid_plan_integration");
     let start = std::time::Instant::now();
-    
+
     let paid_result: Result<Decimal, Box<dyn std::error::Error + Send + Sync>> = async {
         let issue_id = IssueId::new("pricing-paid-001".to_string())?;
         let session_id = {
@@ -349,27 +449,46 @@ async fn test_pricing_model_integration() {
         let session = session.ok_or("Session should exist")?;
         let calculation = paid_harness.calculator.calculate_session_cost(&session)?;
 
-        assert!(calculation.total_cost > Decimal::ZERO, "Paid plan should calculate actual cost");
-        assert!(paid_harness.calculator.supports_cost_calculation(), "Paid plan should support cost calculation");
+        assert!(
+            calculation.total_cost > Decimal::ZERO,
+            "Paid plan should calculate actual cost"
+        );
+        assert!(
+            paid_harness.calculator.supports_cost_calculation(),
+            "Paid plan should support cost calculation"
+        );
 
         Ok(calculation.total_cost)
-    }.await;
+    }
+    .await;
 
     let duration = start.elapsed();
     match &paid_result {
-        Ok(_) => tracing::info!("Test scenario 'paid_plan_integration' completed successfully in {:?}", duration),
-        Err(e) => tracing::error!("Test scenario 'paid_plan_integration' failed after {:?}: {}", duration, e),
+        Ok(_) => tracing::info!(
+            "Test scenario 'paid_plan_integration' completed successfully in {:?}",
+            duration
+        ),
+        Err(e) => tracing::error!(
+            "Test scenario 'paid_plan_integration' failed after {:?}: {}",
+            duration,
+            e
+        ),
     }
 
-    assert!(paid_result.is_ok(), "Paid plan integration should work: {:?}", paid_result);
+    assert!(
+        paid_result.is_ok(),
+        "Paid plan integration should work: {:?}",
+        paid_result
+    );
 
     // Test with max plan
-    let mut max_harness = CostTrackingTestHarness::with_pricing_model(PricingModel::max_with_tracking());
-    
+    let mut max_harness =
+        CostTrackingTestHarness::with_pricing_model(PricingModel::max_with_tracking());
+
     // Direct test without execute_test_scenario to avoid lifetime issues
     tracing::info!("Starting test scenario: max_plan_integration");
     let start = std::time::Instant::now();
-    
+
     let max_result: Result<usize, Box<dyn std::error::Error + Send + Sync>> = async {
         let issue_id = IssueId::new("pricing-max-001".to_string())?;
         let session_id = {
@@ -391,17 +510,36 @@ async fn test_pricing_model_integration() {
         let session = session.ok_or("Session should exist")?;
         let calculation = max_harness.calculator.calculate_session_cost(&session)?;
 
-        assert_eq!(calculation.total_cost, Decimal::ZERO, "Max plan should not calculate cost");
-        assert!(!max_harness.calculator.supports_cost_calculation(), "Max plan should not support cost calculation");
+        assert_eq!(
+            calculation.total_cost,
+            Decimal::ZERO,
+            "Max plan should not calculate cost"
+        );
+        assert!(
+            !max_harness.calculator.supports_cost_calculation(),
+            "Max plan should not support cost calculation"
+        );
 
         Ok(session.api_calls.len())
-    }.await;
+    }
+    .await;
 
     let duration = start.elapsed();
     match &max_result {
-        Ok(_) => tracing::info!("Test scenario 'max_plan_integration' completed successfully in {:?}", duration),
-        Err(e) => tracing::error!("Test scenario 'max_plan_integration' failed after {:?}: {}", duration, e),
+        Ok(_) => tracing::info!(
+            "Test scenario 'max_plan_integration' completed successfully in {:?}",
+            duration
+        ),
+        Err(e) => tracing::error!(
+            "Test scenario 'max_plan_integration' failed after {:?}: {}",
+            duration,
+            e
+        ),
     }
 
-    assert!(max_result.is_ok(), "Max plan integration should work: {:?}", max_result);
+    assert!(
+        max_result.is_ok(),
+        "Max plan integration should work: {:?}",
+        max_result
+    );
 }

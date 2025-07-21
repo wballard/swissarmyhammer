@@ -17,7 +17,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 /// Configuration for performance optimization
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct OptimizationConfig {
     /// General performance configuration
     pub performance: PerformanceConfig,
@@ -27,17 +27,6 @@ pub struct OptimizationConfig {
     pub monitoring: MonitoringConfig,
     /// Resource limits
     pub resource_limits: ResourceLimits,
-}
-
-impl Default for OptimizationConfig {
-    fn default() -> Self {
-        Self {
-            performance: PerformanceConfig::default(),
-            token_optimization: TokenOptimizationConfig::default(),
-            monitoring: MonitoringConfig::default(),
-            resource_limits: ResourceLimits::default(),
-        }
-    }
 }
 
 /// Main performance optimizer that coordinates all optimization components

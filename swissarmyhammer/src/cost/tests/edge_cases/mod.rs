@@ -10,25 +10,25 @@
 // pub mod resource_limits;
 
 use crate::cost::{
-    tests::CostTrackingTestHarness,
-    tracker::{ApiCall, ApiCallStatus, CostError, CostSession, CostSessionStatus, IssueId},
     calculator::CostCalculator,
-    token_counter::{TokenCounter, TokenUsage, ConfidenceLevel},
+    tests::CostTrackingTestHarness,
+    token_counter::{ConfidenceLevel, TokenCounter, TokenUsage},
+    tracker::{ApiCall, ApiCallStatus, CostError, CostSession, CostSessionStatus, IssueId},
 };
 use rust_decimal::Decimal;
 
 #[tokio::test]
 async fn test_zero_token_api_calls() {
     let harness = CostTrackingTestHarness::new();
-    
+
     // Direct test without execute_test_scenario to avoid lifetime issues
     tracing::info!("Starting test scenario: zero_token_edge_case");
     let scenario_start = std::time::Instant::now();
-    
+
     let test_future = async {
         let shared_tracker = harness.get_shared_tracker();
         let calculator = harness.calculator.clone();
-        
+
         let issue_id = IssueId::new("edge-zero-tokens".to_string())?;
         let session_id = {
             let mut tracker = shared_tracker.lock().await;
@@ -60,7 +60,11 @@ async fn test_zero_token_api_calls() {
         let calculation = calculator.calculate_session_cost(&session)?;
 
         // Zero tokens should result in zero cost
-        assert_eq!(calculation.total_cost, Decimal::ZERO, "Zero tokens should result in zero cost");
+        assert_eq!(
+            calculation.total_cost,
+            Decimal::ZERO,
+            "Zero tokens should result in zero cost"
+        );
         assert_eq!(session.api_calls.len(), 1, "Should have one API call");
         let api_call = session.api_calls.values().next().unwrap();
         assert_eq!(api_call.input_tokens, 0, "Input tokens should be zero");
@@ -68,30 +72,41 @@ async fn test_zero_token_api_calls() {
 
         Ok(calculation.total_cost)
     };
-    
+
     let result: Result<Decimal, Box<dyn std::error::Error + Send + Sync>> = test_future.await;
     let duration = scenario_start.elapsed();
-    
+
     match &result {
-        Ok(_) => tracing::info!("Test scenario 'zero_token_edge_case' completed successfully in {:?}", duration),
-        Err(e) => tracing::error!("Test scenario 'zero_token_edge_case' failed after {:?}: {}", duration, e),
+        Ok(_) => tracing::info!(
+            "Test scenario 'zero_token_edge_case' completed successfully in {:?}",
+            duration
+        ),
+        Err(e) => tracing::error!(
+            "Test scenario 'zero_token_edge_case' failed after {:?}: {}",
+            duration,
+            e
+        ),
     }
-    
-    assert!(result.is_ok(), "Zero token edge case should be handled: {:?}", result);
+
+    assert!(
+        result.is_ok(),
+        "Zero token edge case should be handled: {:?}",
+        result
+    );
 }
 
 #[tokio::test]
 async fn test_maximum_token_limits() {
     let harness = CostTrackingTestHarness::new();
-    
+
     // Direct test without execute_test_scenario to avoid lifetime issues
     tracing::info!("Starting test scenario: maximum_token_limits");
     let scenario_start = std::time::Instant::now();
-    
+
     let test_future = async {
         let shared_tracker = harness.get_shared_tracker();
         let calculator = harness.calculator.clone();
-        
+
         let issue_id = IssueId::new("edge-max-tokens".to_string())?;
         let session_id = {
             let mut tracker = shared_tracker.lock().await;
@@ -107,7 +122,12 @@ async fn test_maximum_token_limits() {
             "claude-3-sonnet-20241022",
         )?;
 
-        api_call.complete(max_input_tokens, max_output_tokens, ApiCallStatus::Success, None);
+        api_call.complete(
+            max_input_tokens,
+            max_output_tokens,
+            ApiCallStatus::Success,
+            None,
+        );
 
         {
             let mut tracker = shared_tracker.lock().await;
@@ -124,27 +144,50 @@ async fn test_maximum_token_limits() {
         let calculation = calculator.calculate_session_cost(&session)?;
 
         // Validate large token handling
-        assert!(calculation.total_cost > Decimal::ZERO, "Large token counts should result in positive cost");
+        assert!(
+            calculation.total_cost > Decimal::ZERO,
+            "Large token counts should result in positive cost"
+        );
         let api_call = session.api_calls.values().next().unwrap();
-        assert_eq!(api_call.input_tokens, max_input_tokens, "Should preserve large input token count");
-        assert_eq!(api_call.output_tokens, max_output_tokens, "Should preserve large output token count");
+        assert_eq!(
+            api_call.input_tokens, max_input_tokens,
+            "Should preserve large input token count"
+        );
+        assert_eq!(
+            api_call.output_tokens, max_output_tokens,
+            "Should preserve large output token count"
+        );
 
         // Cost should be reasonable for large token counts
         let expected_min_cost = Decimal::from(50); // Rough minimum for 1M+ tokens
-        assert!(calculation.total_cost >= expected_min_cost, "Large token cost should be substantial");
+        assert!(
+            calculation.total_cost >= expected_min_cost,
+            "Large token cost should be substantial"
+        );
 
         Ok(calculation.total_cost)
     };
-    
+
     let result: Result<Decimal, Box<dyn std::error::Error + Send + Sync>> = test_future.await;
     let duration = scenario_start.elapsed();
-    
+
     match &result {
-        Ok(_) => tracing::info!("Test scenario 'maximum_token_limits' completed successfully in {:?}", duration),
-        Err(e) => tracing::error!("Test scenario 'maximum_token_limits' failed after {:?}: {}", duration, e),
+        Ok(_) => tracing::info!(
+            "Test scenario 'maximum_token_limits' completed successfully in {:?}",
+            duration
+        ),
+        Err(e) => tracing::error!(
+            "Test scenario 'maximum_token_limits' failed after {:?}: {}",
+            duration,
+            e
+        ),
     }
-    
-    assert!(result.is_ok(), "Maximum token limits should be handled: {:?}", result);
+
+    assert!(
+        result.is_ok(),
+        "Maximum token limits should be handled: {:?}",
+        result
+    );
 }
 
 #[tokio::test]
@@ -156,7 +199,8 @@ async fn test_invalid_session_operations() {
     let api_call = ApiCall::new(
         "https://api.anthropic.com/v1/messages".to_string(),
         "claude-3-sonnet-20241022",
-    ).unwrap();
+    )
+    .unwrap();
 
     let result = {
         let mut tracker = harness.cost_tracker.lock().await;
@@ -164,10 +208,16 @@ async fn test_invalid_session_operations() {
     };
 
     // Should return appropriate error
-    assert!(result.is_err(), "Adding API call to non-existent session should fail");
+    assert!(
+        result.is_err(),
+        "Adding API call to non-existent session should fail"
+    );
     match result.err() {
         Some(CostError::SessionNotFound { session_id }) => {
-            assert_eq!(session_id, non_existent_id, "Error should contain correct session ID");
+            assert_eq!(
+                session_id, non_existent_id,
+                "Error should contain correct session ID"
+            );
         }
         _ => panic!("Expected SessionNotFound error"),
     }
@@ -178,10 +228,16 @@ async fn test_invalid_session_operations() {
         tracker.complete_session(&non_existent_id, CostSessionStatus::Completed)
     };
 
-    assert!(result.is_err(), "Completing non-existent session should fail");
+    assert!(
+        result.is_err(),
+        "Completing non-existent session should fail"
+    );
     match result.err() {
         Some(CostError::SessionNotFound { session_id }) => {
-            assert_eq!(session_id, non_existent_id, "Error should contain correct session ID");
+            assert_eq!(
+                session_id, non_existent_id,
+                "Error should contain correct session ID"
+            );
         }
         _ => panic!("Expected SessionNotFound error"),
     }
@@ -198,7 +254,10 @@ async fn test_duplicate_session_creation() {
         tracker.start_session(issue_id.clone())
     };
 
-    assert!(first_session.is_ok(), "First session creation should succeed");
+    assert!(
+        first_session.is_ok(),
+        "First session creation should succeed"
+    );
 
     // Try to create duplicate session with same issue ID
     let duplicate_result = {
@@ -211,7 +270,11 @@ async fn test_duplicate_session_creation() {
     match duplicate_result {
         Ok(second_session_id) => {
             // If duplicates are allowed, sessions should have different IDs
-            assert_ne!(first_session.unwrap(), second_session_id, "Duplicate sessions should have different IDs");
+            assert_ne!(
+                first_session.unwrap(),
+                second_session_id,
+                "Duplicate sessions should have different IDs"
+            );
         }
         Err(CostError::SessionAlreadyExists { session_id: _ }) => {
             // If duplicates are not allowed, should get appropriate error
@@ -228,7 +291,7 @@ async fn test_malformed_api_calls() {
     // Direct test without execute_test_scenario to avoid lifetime issues
     tracing::info!("Starting test scenario: malformed_api_calls");
     let start = std::time::Instant::now();
-    
+
     let result: Result<&str, Box<dyn std::error::Error + Send + Sync>> = async {
         let issue_id = IssueId::new("malformed-test".to_string())?;
         let session_id = {
@@ -254,10 +317,8 @@ async fn test_malformed_api_calls() {
         }
 
         // Test with empty model name
-        let empty_model_result = ApiCall::new(
-            "https://api.anthropic.com/v1/messages".to_string(),
-            "",
-        );
+        let empty_model_result =
+            ApiCall::new("https://api.anthropic.com/v1/messages".to_string(), "");
 
         match empty_model_result {
             Ok(api_call) => {
@@ -291,15 +352,27 @@ async fn test_malformed_api_calls() {
         }
 
         Ok("Malformed data handling completed")
-    }.await;
+    }
+    .await;
 
     let duration = start.elapsed();
     match &result {
-        Ok(_) => tracing::info!("Test scenario 'malformed_api_calls' completed successfully in {:?}", duration),
-        Err(e) => tracing::error!("Test scenario 'malformed_api_calls' failed after {:?}: {}", duration, e),
+        Ok(_) => tracing::info!(
+            "Test scenario 'malformed_api_calls' completed successfully in {:?}",
+            duration
+        ),
+        Err(e) => tracing::error!(
+            "Test scenario 'malformed_api_calls' failed after {:?}: {}",
+            duration,
+            e
+        ),
     }
 
-    assert!(result.is_ok(), "Malformed data should be handled gracefully: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Malformed data should be handled gracefully: {:?}",
+        result
+    );
 }
 
 #[tokio::test]
@@ -316,14 +389,17 @@ async fn test_session_state_transitions() {
     // Complete the session
     {
         let mut tracker = harness.cost_tracker.lock().await;
-        tracker.complete_session(&session_id, CostSessionStatus::Completed).unwrap();
+        tracker
+            .complete_session(&session_id, CostSessionStatus::Completed)
+            .unwrap();
     }
 
     // Try to add API call to completed session
     let api_call = ApiCall::new(
         "https://api.anthropic.com/v1/messages".to_string(),
         "claude-3-sonnet-20241022",
-    ).unwrap();
+    )
+    .unwrap();
 
     let result = {
         let mut tracker = harness.cost_tracker.lock().await;
@@ -331,12 +407,23 @@ async fn test_session_state_transitions() {
     };
 
     // Should reject operations on completed sessions
-    assert!(result.is_err(), "Should not allow adding API calls to completed session");
+    assert!(
+        result.is_err(),
+        "Should not allow adding API calls to completed session"
+    );
     match result.clone().err() {
-        Some(CostError::SessionAlreadyCompleted { session_id: error_session_id }) => {
-            assert_eq!(error_session_id, session_id, "Error should reference correct session");
+        Some(CostError::SessionAlreadyCompleted {
+            session_id: error_session_id,
+        }) => {
+            assert_eq!(
+                error_session_id, session_id,
+                "Error should reference correct session"
+            );
         }
-        _ => println!("Unexpected error type (implementation may vary): {:?}", result.err()),
+        _ => println!(
+            "Unexpected error type (implementation may vary): {:?}",
+            result.err()
+        ),
     }
 
     // Try to complete already completed session
@@ -345,7 +432,10 @@ async fn test_session_state_transitions() {
         tracker.complete_session(&session_id, CostSessionStatus::Failed)
     };
 
-    assert!(double_complete_result.is_err(), "Should not allow double completion");
+    assert!(
+        double_complete_result.is_err(),
+        "Should not allow double completion"
+    );
 }
 
 #[tokio::test]
@@ -404,26 +494,31 @@ async fn test_invalid_issue_ids() {
 async fn test_calculator_edge_cases() {
     // Test calculator with unknown model
     let calculator = CostCalculator::paid_default();
-    let mut session = CostSession::new(
-        IssueId::new("calc-edge-test".to_string()).unwrap(),
-    );
+    let mut session = CostSession::new(IssueId::new("calc-edge-test".to_string()).unwrap());
 
     // Add API call with unknown model
     let mut api_call = ApiCall::new(
         "https://api.anthropic.com/v1/messages".to_string(),
         "unknown-model-xyz-123",
-    ).unwrap();
+    )
+    .unwrap();
     api_call.complete(1000, 500, ApiCallStatus::Success, None);
 
     session.add_api_call(api_call).unwrap();
 
     let calculation_result = calculator.calculate_session_cost(&session);
-    
+
     match calculation_result {
         Ok(calculation) => {
             // Unknown model should either use default rates or return zero cost
-            println!("Unknown model cost calculation: {:?}", calculation.total_cost);
-            assert!(calculation.total_cost >= Decimal::ZERO, "Cost should be non-negative");
+            println!(
+                "Unknown model cost calculation: {:?}",
+                calculation.total_cost
+            );
+            assert!(
+                calculation.total_cost >= Decimal::ZERO,
+                "Cost should be non-negative"
+            );
         }
         Err(_) => {
             // Calculator may reject unknown models - this is acceptable
@@ -435,18 +530,27 @@ async fn test_calculator_edge_cases() {
     let mut failed_call = ApiCall::new(
         "https://api.anthropic.com/v1/messages".to_string(),
         "claude-3-sonnet-20241022",
-    ).unwrap();
-    failed_call.complete(0, 0, ApiCallStatus::Failed, Some("Request failed".to_string()));
-
-    let mut failed_session = CostSession::new(
-        IssueId::new("calc-failed-test".to_string()).unwrap(),
+    )
+    .unwrap();
+    failed_call.complete(
+        0,
+        0,
+        ApiCallStatus::Failed,
+        Some("Request failed".to_string()),
     );
+
+    let mut failed_session =
+        CostSession::new(IssueId::new("calc-failed-test".to_string()).unwrap());
     failed_session.add_api_call(failed_call).unwrap();
 
     let failed_calculation = calculator.calculate_session_cost(&failed_session).unwrap();
-    
+
     // Failed calls with zero tokens should result in zero cost
-    assert_eq!(failed_calculation.total_cost, Decimal::ZERO, "Failed calls should not incur cost");
+    assert_eq!(
+        failed_calculation.total_cost,
+        Decimal::ZERO,
+        "Failed calls should not incur cost"
+    );
 }
 
 #[tokio::test]
@@ -456,10 +560,10 @@ async fn test_memory_pressure_scenarios() {
     // Direct test without execute_test_scenario to avoid lifetime issues
     tracing::info!("Starting test scenario: memory_pressure");
     let start = std::time::Instant::now();
-    
+
     let result: Result<usize, Box<dyn std::error::Error + Send + Sync>> = async {
         let mut session_ids = Vec::new();
-        
+
         // Create many sessions to test memory management
         for i in 0..100 {
             let issue_id = IssueId::new(format!("memory-pressure-{}", i))?;
@@ -488,7 +592,10 @@ async fn test_memory_pressure_scenarios() {
             tracker.session_count()
         };
 
-        assert_eq!(final_count, 100, "Should track all sessions under memory pressure");
+        assert_eq!(
+            final_count, 100,
+            "Should track all sessions under memory pressure"
+        );
 
         // Complete all sessions
         for session_id in &session_ids {
@@ -504,45 +611,67 @@ async fn test_memory_pressure_scenarios() {
         assert_eq!(completed_count, 100, "Should complete all sessions");
 
         Ok(session_ids.len())
-    }.await;
+    }
+    .await;
 
     let duration = start.elapsed();
     match &result {
-        Ok(_) => tracing::info!("Test scenario 'memory_pressure' completed successfully in {:?}", duration),
-        Err(e) => tracing::error!("Test scenario 'memory_pressure' failed after {:?}: {}", duration, e),
+        Ok(_) => tracing::info!(
+            "Test scenario 'memory_pressure' completed successfully in {:?}",
+            duration
+        ),
+        Err(e) => tracing::error!(
+            "Test scenario 'memory_pressure' failed after {:?}: {}",
+            duration,
+            e
+        ),
     }
 
-    assert!(result.is_ok(), "Memory pressure should be handled gracefully: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Memory pressure should be handled gracefully: {:?}",
+        result
+    );
 }
 
 #[tokio::test]
 async fn test_token_counter_edge_cases() {
     // Test token counting with various edge cases
     let mut token_counter = TokenCounter::new(0.1); // 10% discrepancy threshold
-    
+
     // Test with empty text - use from_api for testing
     let empty_usage = TokenUsage::from_api(0, 0);
-    
+
     // Test the counter with mock response data since validate_token_usage doesn't exist
     // We'll test token counting from API response instead
-    let empty_response = r#"{"usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}}"#;
-    let empty_result = token_counter.count_from_response(empty_response, Some(empty_usage.clone()), "test-model");
+    let empty_response =
+        r#"{"usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}}"#;
+    let empty_result =
+        token_counter.count_from_response(empty_response, Some(empty_usage.clone()), "test-model");
     assert!(empty_result.is_ok(), "Empty token response should be valid");
-    
+
     // Test with very large text
     let large_usage = TokenUsage::from_estimation(100000, 50000, ConfidenceLevel::Medium);
-    
+
     // Test with large token response
     let large_response = r#"{"usage": {"prompt_tokens": 100000, "completion_tokens": 50000, "total_tokens": 150000}}"#;
-    let large_result = token_counter.count_from_response(large_response, Some(large_usage), "test-model");
-    assert!(large_result.is_ok(), "Large token response should be handled gracefully");
+    let large_result =
+        token_counter.count_from_response(large_response, Some(large_usage), "test-model");
+    assert!(
+        large_result.is_ok(),
+        "Large token response should be handled gracefully"
+    );
 
     // Test with mismatched token counts (API vs estimation)
     let estimated_usage = TokenUsage::from_estimation(10, 5, ConfidenceLevel::Low);
-    let mismatched_response = r#"{"usage": {"prompt_tokens": 10000, "completion_tokens": 5000, "total_tokens": 15000}}"#;
-    let mismatched_result = token_counter.count_from_response(mismatched_response, Some(estimated_usage), "test-model");
-    
+    let mismatched_response =
+        r#"{"usage": {"prompt_tokens": 10000, "completion_tokens": 5000, "total_tokens": 15000}}"#;
+    let mismatched_result =
+        token_counter.count_from_response(mismatched_response, Some(estimated_usage), "test-model");
+
     // Should handle token count mismatch (validation happens internally)
-    assert!(mismatched_result.is_ok(), 
-        "Should detect token count mismatch");
+    assert!(
+        mismatched_result.is_ok(),
+        "Should detect token count mismatch"
+    );
 }

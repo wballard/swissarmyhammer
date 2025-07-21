@@ -252,6 +252,12 @@ pub struct InternerStats {
     pub memory_saved_bytes: usize,
 }
 
+impl Default for StringInterner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StringInterner {
     /// Create a new string interner
     pub fn new() -> Self {

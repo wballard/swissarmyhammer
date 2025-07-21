@@ -92,6 +92,12 @@ pub struct ApiCallOverheadBenchmark {
     pub token_counter: TokenCounter,
 }
 
+impl Default for ApiCallOverheadBenchmark {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ApiCallOverheadBenchmark {
     /// Create a new API call overhead benchmark
     pub fn new() -> Self {
@@ -124,7 +130,7 @@ impl PerformanceBenchmark for ApiCallOverheadBenchmark {
         let mut total_tokens = 0u64;
         let mut total_api_calls = 0u64;
 
-        for batch in 0..(operations.div_ceil(MAX_CALLS_PER_SESSION)) {
+        for batch in 0..((operations + MAX_CALLS_PER_SESSION - 1) / MAX_CALLS_PER_SESSION) {
             let issue_id = IssueId::new(format!("benchmark-issue-{}", batch)).unwrap();
             let session_id = tracker.start_session(issue_id).unwrap();
 
@@ -169,6 +175,12 @@ impl PerformanceBenchmark for ApiCallOverheadBenchmark {
 pub struct TokenCountingBenchmark {
     /// Token counter for measuring token counting performance
     pub counter: TokenCounter,
+}
+
+impl Default for TokenCountingBenchmark {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TokenCountingBenchmark {
@@ -229,6 +241,12 @@ impl PerformanceBenchmark for TokenCountingBenchmark {
 pub struct MemoryUsageBenchmark {
     /// Cost tracker instance for measuring memory usage
     pub tracker: CostTracker,
+}
+
+impl Default for MemoryUsageBenchmark {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MemoryUsageBenchmark {
@@ -315,6 +333,12 @@ impl PerformanceBenchmark for MemoryUsageBenchmark {
 pub struct AggregationBenchmark {
     /// Cost tracker instance for measuring aggregation performance
     pub tracker: CostTracker,
+}
+
+impl Default for AggregationBenchmark {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AggregationBenchmark {
@@ -419,11 +443,12 @@ pub struct BenchmarkSuite {
 impl BenchmarkSuite {
     /// Create a new benchmark suite with performance targets
     pub fn new(target_ms: u64) -> Self {
-        let mut benchmarks: Vec<Box<dyn PerformanceBenchmark>> = Vec::new();
-        benchmarks.push(Box::new(ApiCallOverheadBenchmark::new()));
-        benchmarks.push(Box::new(TokenCountingBenchmark::new()));
-        benchmarks.push(Box::new(MemoryUsageBenchmark::new()));
-        benchmarks.push(Box::new(AggregationBenchmark::new()));
+        let benchmarks: Vec<Box<dyn PerformanceBenchmark>> = vec![
+            Box::new(ApiCallOverheadBenchmark::new()),
+            Box::new(TokenCountingBenchmark::new()),
+            Box::new(MemoryUsageBenchmark::new()),
+            Box::new(AggregationBenchmark::new()),
+        ];
 
         Self {
             benchmarks,
@@ -461,7 +486,7 @@ impl BenchmarkSuite {
     /// Generate performance report
     pub fn generate_report(&self, results: &[BenchmarkResult]) -> String {
         let mut report = String::new();
-        report.push_str(&format!("Performance Benchmark Report\n"));
+        report.push_str("Performance Benchmark Report\n");
         report.push_str(&format!("Target: {}ms per operation\n\n", self.target_ms));
 
         for result in results {

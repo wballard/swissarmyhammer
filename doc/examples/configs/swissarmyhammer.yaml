@@ -1,0 +1,12 @@
+# Example SwissArmyHammer configuration file
+# Place this file as 'swissarmyhammer.yaml' in your repository root
+
+# Base branch that pull requests will merge into
+# This is the target branch for all PRs created by SwissArmyHammer
+base_branch: "main"
+
+# You can also use "develop", "master", or any other branch name
+# Examples:
+# base_branch: "develop"      # For GitFlow development workflow
+# base_branch: "master"       # For legacy repositories
+# base_branch: "release/v2"   # For release-branch workflows

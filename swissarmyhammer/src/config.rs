@@ -8,6 +8,11 @@ use serde::Deserialize;
 use thiserror::Error;
 
 const DEFAULT_BASE_BRANCH: &str = "main";
+const MAX_ISSUE_BRANCH_PREFIX_LENGTH: usize = 50;
+const MAX_BRANCH_NAME_LENGTH: usize = 255;
+
+// Invalid characters for git branch names (comprehensive validation used by both Config and YamlConfig)
+const INVALID_BRANCH_CHARS_YAML: [char; 9] = ['\0', ' ', '~', '^', ':', '?', '*', '[', '\\'];
 
 /// Errors that can occur during configuration loading
 #[derive(Debug, Error)]
@@ -82,6 +87,14 @@ pub struct Config {
     pub virtual_issue_number_range: u32,
     /// Base branch for pull requests (default: "main")
     pub base_branch: String,
+    /// Minimum issue branch prefix length (default: 1)
+    pub min_issue_branch_prefix_length: usize,
+    /// Maximum issue branch prefix length (default: MAX_ISSUE_BRANCH_PREFIX_LENGTH)
+    pub max_issue_branch_prefix_length: usize,
+    /// Minimum issue number width (default: 1)
+    pub min_issue_number_width: usize,
+    /// Maximum issue number width (default: 10)
+    pub max_issue_number_width: usize,
 }
 
 impl Default for Config {
@@ -101,6 +114,10 @@ impl Default for Config {
             virtual_issue_number_base: 500_000,
             virtual_issue_number_range: 500_000,
             base_branch: DEFAULT_BASE_BRANCH.to_string(),
+            min_issue_branch_prefix_length: 1,
+            max_issue_branch_prefix_length: MAX_ISSUE_BRANCH_PREFIX_LENGTH,
+            min_issue_number_width: 1,
+            max_issue_number_width: 10,
         }
     }
 }
@@ -127,6 +144,13 @@ impl Config {
             virtual_issue_number_base: loader.load_parsed("VIRTUAL_ISSUE_NUMBER_BASE", 500_000),
             virtual_issue_number_range: loader.load_parsed("VIRTUAL_ISSUE_NUMBER_RANGE", 500_000),
             base_branch: loader.load_string("BASE_BRANCH", DEFAULT_BASE_BRANCH),
+            min_issue_branch_prefix_length: loader.load_parsed("MIN_ISSUE_BRANCH_PREFIX_LENGTH", 1),
+            max_issue_branch_prefix_length: loader.load_parsed(
+                "MAX_ISSUE_BRANCH_PREFIX_LENGTH",
+                MAX_ISSUE_BRANCH_PREFIX_LENGTH,
+            ),
+            min_issue_number_width: loader.load_parsed("MIN_ISSUE_NUMBER_WIDTH", 1),
+            max_issue_number_width: loader.load_parsed("MAX_ISSUE_NUMBER_WIDTH", 10),
         };
 
         // Apply YAML configuration if available (only overrides values not set by environment)
@@ -285,35 +309,29 @@ impl Config {
     }
 
     fn validate_base_branch(&self) -> Result<(), ConfigError> {
-        if self.base_branch.is_empty() {
-            return Err(ConfigError::InvalidValue {
-                field: "base_branch".to_string(),
-                value: self.base_branch.clone(),
-                hint: "base_branch cannot be empty. Use 'main' or 'develop' or another valid git branch name".to_string(),
-            });
-        }
-
-        // Check for invalid git branch characters
-        let invalid_chars = ['~', '^', ':', '?', '*', '[', '\\', ' '];
-        for ch in invalid_chars.iter() {
-            if self.base_branch.contains(*ch) {
-                return Err(ConfigError::InvalidValue {
-                    field: "base_branch".to_string(),
-                    value: self.base_branch.clone(),
-                    hint: format!("base_branch contains invalid character '{}'. Git branch names cannot contain: ~ ^ : ? * [ \\ <space>", ch),
-                });
-            }
-        }
-
-        Ok(())
+        Self::validate_branch_name_shared(&self.base_branch, "base_branch")
     }
 
     fn validate_numeric_ranges(&self) -> Result<(), ConfigError> {
-        if self.issue_number_width == 0 {
+        if self.issue_number_width < self.min_issue_number_width {
             return Err(ConfigError::InvalidValue {
                 field: "issue_number_width".to_string(),
                 value: self.issue_number_width.to_string(),
-                hint: "issue_number_width must be greater than 0".to_string(),
+                hint: format!(
+                    "issue_number_width must be at least {}",
+                    self.min_issue_number_width
+                ),
+            });
+        }
+
+        if self.issue_number_width > self.max_issue_number_width {
+            return Err(ConfigError::InvalidValue {
+                field: "issue_number_width".to_string(),
+                value: self.issue_number_width.to_string(),
+                hint: format!(
+                    "issue_number_width cannot exceed {}",
+                    self.max_issue_number_width
+                ),
             });
         }
 
@@ -326,15 +344,48 @@ impl Config {
             });
         }
 
+        // Validate the validation limits themselves
+        if self.min_issue_branch_prefix_length > self.max_issue_branch_prefix_length {
+            return Err(ConfigError::Validation {
+                message: format!(
+                    "min_issue_branch_prefix_length ({}) must be less than or equal to max_issue_branch_prefix_length ({})",
+                    self.min_issue_branch_prefix_length, self.max_issue_branch_prefix_length
+                ),
+            });
+        }
+
+        if self.min_issue_number_width > self.max_issue_number_width {
+            return Err(ConfigError::Validation {
+                message: format!(
+                    "min_issue_number_width ({}) must be less than or equal to max_issue_number_width ({})",
+                    self.min_issue_number_width, self.max_issue_number_width
+                ),
+            });
+        }
+
         Ok(())
     }
 
     fn validate_string_lengths(&self) -> Result<(), ConfigError> {
-        if self.issue_branch_prefix.len() > 50 {
+        if self.issue_branch_prefix.len() < self.min_issue_branch_prefix_length {
             return Err(ConfigError::InvalidValue {
                 field: "issue_branch_prefix".to_string(),
                 value: self.issue_branch_prefix.clone(),
-                hint: "issue_branch_prefix cannot exceed 50 characters".to_string(),
+                hint: format!(
+                    "issue_branch_prefix must be at least {} characters long",
+                    self.min_issue_branch_prefix_length
+                ),
+            });
+        }
+
+        if self.issue_branch_prefix.len() > self.max_issue_branch_prefix_length {
+            return Err(ConfigError::InvalidValue {
+                field: "issue_branch_prefix".to_string(),
+                value: self.issue_branch_prefix.clone(),
+                hint: format!(
+                    "issue_branch_prefix cannot exceed {} characters",
+                    self.max_issue_branch_prefix_length
+                ),
             });
         }
 
@@ -369,6 +420,89 @@ For more help, see: https://github.com/wballard/swissarmyhammer/docs/configurati
         // This is a workaround since OnceLock doesn't have a reset method
         // We can't actually reset the global config in tests due to OnceLock's design
         // Tests should use Config::new() directly instead of global() for testing env vars
+    }
+
+    /// Shared branch validation logic used by both Config and YamlConfig
+    fn validate_branch_name_shared(branch_name: &str, field_name: &str) -> Result<(), ConfigError> {
+        // Check for empty branch name
+        if branch_name.is_empty() {
+            return Err(ConfigError::InvalidValue {
+                field: field_name.to_string(),
+                value: branch_name.to_string(),
+                hint: format!(
+                    "{} cannot be empty. Use 'main' or 'develop' or another valid git branch name",
+                    field_name
+                ),
+            });
+        }
+
+        // Check for whitespace-only branch name
+        if branch_name.trim().is_empty() {
+            return Err(ConfigError::InvalidValue {
+                field: field_name.to_string(),
+                value: branch_name.to_string(),
+                hint: format!("{} cannot be whitespace only", field_name),
+            });
+        }
+
+        // Check branch name length
+        if branch_name.len() > MAX_BRANCH_NAME_LENGTH {
+            return Err(ConfigError::InvalidValue {
+                field: field_name.to_string(),
+                value: branch_name.to_string(),
+                hint: format!(
+                    "{} is too long (maximum {} characters)",
+                    field_name, MAX_BRANCH_NAME_LENGTH
+                ),
+            });
+        }
+
+        // Check for invalid git branch characters
+        for ch in INVALID_BRANCH_CHARS_YAML.iter() {
+            if branch_name.contains(*ch) {
+                return Err(ConfigError::InvalidValue {
+                    field: field_name.to_string(),
+                    value: branch_name.to_string(),
+                    hint: format!("{} contains invalid character '{}'. Git branch names cannot contain: \\0 ~ ^ : ? * [ \\ <space>", field_name, ch),
+                });
+            }
+        }
+
+        // Check for sequences that git doesn't allow
+        if branch_name.contains("..") {
+            return Err(ConfigError::InvalidValue {
+                field: field_name.to_string(),
+                value: branch_name.to_string(),
+                hint: format!("{} cannot contain consecutive dots '..'", field_name),
+            });
+        }
+
+        // Check that it doesn't start or end with certain characters
+        if branch_name.starts_with('.') || branch_name.ends_with('.') {
+            return Err(ConfigError::InvalidValue {
+                field: field_name.to_string(),
+                value: branch_name.to_string(),
+                hint: format!("{} cannot start or end with '.'", field_name),
+            });
+        }
+
+        if branch_name.starts_with('/') || branch_name.ends_with('/') {
+            return Err(ConfigError::InvalidValue {
+                field: field_name.to_string(),
+                value: branch_name.to_string(),
+                hint: format!("{} cannot start or end with '/'", field_name),
+            });
+        }
+
+        if branch_name.ends_with(".lock") {
+            return Err(ConfigError::InvalidValue {
+                field: field_name.to_string(),
+                value: branch_name.to_string(),
+                hint: format!("{} cannot end with '.lock'", field_name),
+            });
+        }
+
+        Ok(())
     }
 }
 
@@ -479,51 +613,18 @@ impl YamlConfig {
 
     /// Validate that a branch name is acceptable for git usage
     fn validate_branch_name(branch_name: &str) -> Result<(), String> {
-        // Check for empty branch name
-        if branch_name.is_empty() {
-            return Err("Branch name cannot be empty".to_string());
-        }
-
-        // Check for whitespace-only branch name
-        if branch_name.trim().is_empty() {
-            return Err("Branch name cannot be whitespace only".to_string());
-        }
-
-        // Check branch name length (reasonable limit)
-        if branch_name.len() > 255 {
-            return Err("Branch name is too long (maximum 255 characters)".to_string());
-        }
-
-        // Check for invalid characters that git doesn't allow
-        let invalid_chars = ['\0', ' ', '~', '^', ':', '?', '*', '[', '\\'];
-        for &invalid_char in &invalid_chars {
-            if branch_name.contains(invalid_char) {
-                return Err(format!(
-                    "Branch name '{}' contains invalid character '{}'",
-                    branch_name, invalid_char
-                ));
+        // Use the shared validation function but convert ConfigError to String
+        match Config::validate_branch_name_shared(branch_name, "branch_name") {
+            Ok(()) => Ok(()),
+            Err(config_error) => {
+                // Extract the hint from ConfigError for backwards compatibility
+                match config_error {
+                    ConfigError::InvalidValue { hint, .. } => Err(hint),
+                    ConfigError::Validation { message } => Err(message),
+                    _ => Err("Branch name validation failed".to_string()),
+                }
             }
         }
-
-        // Check for sequences that git doesn't allow
-        if branch_name.contains("..") {
-            return Err("Branch name cannot contain consecutive dots '..'".to_string());
-        }
-
-        // Check that it doesn't start or end with certain characters
-        if branch_name.starts_with('.') || branch_name.ends_with('.') {
-            return Err("Branch name cannot start or end with '.'".to_string());
-        }
-
-        if branch_name.starts_with('/') || branch_name.ends_with('/') {
-            return Err("Branch name cannot start or end with '/'".to_string());
-        }
-
-        if branch_name.ends_with(".lock") {
-            return Err("Branch name cannot end with '.lock'".to_string());
-        }
-
-        Ok(())
     }
 }
 
@@ -1272,8 +1373,10 @@ base_branch: "feature/test"
 
     #[test]
     fn test_config_validate_base_branch_empty() {
-        let mut config = Config::default();
-        config.base_branch = "".to_string();
+        let config = Config {
+            base_branch: "".to_string(),
+            ..Default::default()
+        };
 
         let result = config.validate();
         assert!(result.is_err());
@@ -1293,8 +1396,10 @@ base_branch: "feature/test"
         let invalid_chars = ['~', '^', ':', '?', '*', '[', '\\', ' '];
 
         for ch in invalid_chars.iter() {
-            let mut config = Config::default();
-            config.base_branch = format!("branch{}", ch);
+            let config = Config {
+                base_branch: format!("branch{}", ch),
+                ..Default::default()
+            };
 
             let result = config.validate();
             assert!(
@@ -1315,8 +1420,10 @@ base_branch: "feature/test"
 
     #[test]
     fn test_config_validate_issue_number_width_zero() {
-        let mut config = Config::default();
-        config.issue_number_width = 0;
+        let config = Config {
+            issue_number_width: 0,
+            ..Default::default()
+        };
 
         let result = config.validate();
         assert!(result.is_err());
@@ -1325,7 +1432,7 @@ base_branch: "feature/test"
             ConfigError::InvalidValue { field, value, hint } => {
                 assert_eq!(field, "issue_number_width");
                 assert_eq!(value, "0");
-                assert!(hint.contains("must be greater than 0"));
+                assert!(hint.contains("must be at least 1"));
             }
             _ => panic!("Expected InvalidValue error"),
         }
@@ -1333,9 +1440,11 @@ base_branch: "feature/test"
 
     #[test]
     fn test_config_validate_min_max_issue_number_range() {
-        let mut config = Config::default();
-        config.min_issue_number = 100;
-        config.max_issue_number = 50; // Invalid: min >= max
+        let config = Config {
+            min_issue_number: 100,
+            max_issue_number: 50, // Invalid: min >= max
+            ..Default::default()
+        };
 
         let result = config.validate();
         assert!(result.is_err());
@@ -1351,8 +1460,10 @@ base_branch: "feature/test"
 
     #[test]
     fn test_config_validate_issue_branch_prefix_too_long() {
-        let mut config = Config::default();
-        config.issue_branch_prefix = "a".repeat(51); // Too long
+        let config = Config {
+            issue_branch_prefix: "a".repeat(51), // Too long
+            ..Default::default()
+        };
 
         let result = config.validate();
         assert!(result.is_err());

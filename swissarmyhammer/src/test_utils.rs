@@ -449,6 +449,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[serial_test::serial]
     fn test_setup_test_home() {
         let _guard = create_test_home_guard();
 
@@ -462,6 +463,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_guard_restores_home() {
         let original_home = std::env::var("HOME").ok();
 
@@ -477,6 +479,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_concurrent_access() {
         use std::thread;
 

@@ -829,16 +829,31 @@ pub fn parse_issue_number(s: &str) -> Result<u32> {
 /// parse_issue_filename("1_000_000_test").unwrap();
 /// ```
 pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
-    let parts: Vec<&str> = filename.splitn(2, '_').collect();
-    if parts.len() != 2 {
+    // Try to parse the number part first
+    let number_part = if filename.len() == Config::global().issue_number_digits {
+        // Nameless format: "000123"
+        filename
+    } else if filename.len() >= Config::global().issue_number_digits + 1 && 
+              filename.chars().nth(Config::global().issue_number_digits) == Some('_') {
+        // Named format: "000123_name" or "000123_" (empty name)
+        &filename[..Config::global().issue_number_digits]
+    } else {
         return Err(SwissArmyHammerError::Other(format!(
-            "Invalid filename format: expected <nnnnnn>_<name> (e.g., '000123_bug_fix'), got: '{filename}'"
+            "Invalid filename format: expected <nnnnnn> or <nnnnnn>_<name> (e.g., '000123' or '000123_bug_fix'), got: '{filename}'"
         )));
-    }
-
-    let number = parse_issue_number(parts[0])?;
-    let name = parts[1].to_string();
-
+    };
+    
+    let number = parse_issue_number(number_part)?;
+    
+    // Extract the name part (if any)
+    let name = if filename.len() == Config::global().issue_number_digits {
+        // Nameless format
+        String::new()
+    } else {
+        // Named format - everything after the underscore (may be empty)
+        filename[Config::global().issue_number_digits + 1..].to_string()
+    };
+    
     Ok((number, name))
 }
 
@@ -3562,5 +3577,55 @@ mod tests {
 
         let issue_name_from_arbitrary = extract_issue_name_from_filename("my-arbitrary-issue.md");
         assert_eq!(issue_name_from_arbitrary, "my-arbitrary-issue");
+    }
+
+    #[tokio::test]
+    async fn test_real_issue_scenario_000187() {
+        let temp_dir = TempDir::new().unwrap();
+        let issues_dir = temp_dir.path().to_path_buf();
+        let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
+
+        // Simulate the real scenario from issue 000187:
+        // Main directory: 000185, 000186, 000187, 000188
+        fs::write(issues_dir.join("000185.md"), "issue 185").unwrap();
+        fs::write(issues_dir.join("000186.md"), "issue 186").unwrap();
+        fs::write(issues_dir.join("000187.md"), "issue 187").unwrap();
+        fs::write(issues_dir.join("000188.md"), "issue 188").unwrap();
+
+        // Complete directory: up to 000184 (simulate some completed issues)
+        let complete_dir = issues_dir.join("complete");
+        fs::write(complete_dir.join("000181.md"), "completed issue 181").unwrap();
+        fs::write(complete_dir.join("000182.md"), "completed issue 182").unwrap();
+        fs::write(complete_dir.join("000183.md"), "completed issue 183").unwrap();
+        fs::write(complete_dir.join("000184.md"), "completed issue 184").unwrap();
+
+        // Debug: List all issues found
+        let pending_issues = storage.list_issues_in_dir(&issues_dir).unwrap();
+        println!("Found {} pending issues:", pending_issues.len());
+        for issue in &pending_issues {
+            println!("  {} - {}", issue.number.value(), issue.file_path.display());
+        }
+
+        let completed_issues = storage.list_issues_in_dir(&complete_dir).unwrap();
+        println!("Found {} completed issues:", completed_issues.len());
+        for issue in &completed_issues {
+            println!("  {} - {}", issue.number.value(), issue.file_path.display());
+        }
+
+        // Test what the next issue number would be
+        let next_number = storage.get_next_issue_number().unwrap();
+        println!("Next issue number: {}", next_number);
+
+        // Should be 189 (188 + 1)
+        assert_eq!(next_number, 189, "Expected next issue number to be 189, but got {}", next_number);
+
+        // Test creating a new issue
+        let new_issue = storage
+            .create_issue("test_new_issue".to_string(), "New issue content".to_string())
+            .await
+            .unwrap();
+
+        assert_eq!(new_issue.number.value(), 189);
+        assert!(new_issue.file_path.to_string_lossy().ends_with("000189_test_new_issue.md"));
     }
 }

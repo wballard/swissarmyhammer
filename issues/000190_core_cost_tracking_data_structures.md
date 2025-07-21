@@ -85,3 +85,43 @@ This step provides the foundation for subsequent cost tracking features:
 - Use existing project dependencies and avoid adding new ones
 - Ensure thread-safety for concurrent workflow execution
 - Keep performance overhead minimal
+
+## Proposed Solution
+
+Based on analysis of the existing `workflow/metrics.rs` patterns, I will implement the cost tracking data structures following these steps:
+
+### 1. Module Structure
+- Create `swissarmyhammer/src/cost/mod.rs` with module exports
+- Create `swissarmyhammer/src/cost/tracker.rs` with core data structures
+- Update `swissarmyhammer/src/lib.rs` to include cost module
+
+### 2. Core Data Structures
+- **`CostError`** enum using `thiserror::Error` for consistent error handling
+- **`ApiCall`** struct with timestamp, endpoint, token counts, duration, status
+- **`CostSession`** struct with ULID identifier, issue metadata, API call collection, session timing
+- **`CostTracker`** struct for session lifecycle management with HashMap storage
+
+### 3. Design Patterns (following workflow/metrics.rs)
+- All structs implement `Debug`, `Clone`, `Serialize`, `Deserialize`
+- Use `chrono::DateTime<Utc>` for timestamps
+- Use `std::time::Duration` for durations
+- Use `ulid::Ulid` for session identifiers (wrapped in newtype)
+- Constants for maximum limits (similar to `MAX_RUN_METRICS`, etc.)
+- Validation functions for input data
+- Memory management with cleanup functions
+- Comprehensive error handling
+
+### 4. Memory Management
+- Maximum session limits (similar to `MAX_RUN_METRICS = 1000`)
+- Maximum API calls per session (similar to `MAX_STATE_DURATIONS_PER_RUN = 50`)
+- Automatic cleanup of old completed sessions
+- Configurable retention policies
+
+### 5. Testing Strategy
+- Unit tests for all data structures
+- Serialization/deserialization roundtrip tests
+- Memory limit enforcement tests
+- Error condition validation tests
+- Input validation tests (empty strings, negative values, etc.)
+
+This approach ensures consistency with existing codebase patterns while providing the foundation for future cost tracking features.

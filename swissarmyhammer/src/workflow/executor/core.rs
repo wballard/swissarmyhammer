@@ -10,9 +10,10 @@ use crate::workflow::{
     StateId, TransitionKey, TransitionPath, Workflow, WorkflowCacheManager, WorkflowRun,
     WorkflowRunStatus,
 };
+use crate::cost::{CostTracker, CostSessionId, IssueId};
 use cel_interpreter::Program;
 use serde_json::Value;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 /// Workflow execution engine
@@ -27,6 +28,8 @@ pub struct WorkflowExecutor {
     cache_manager: WorkflowCacheManager,
     /// Optional workflow storage for test mode
     test_storage: Option<Arc<crate::workflow::storage::WorkflowStorage>>,
+    /// Optional cost tracker for workflow execution cost tracking
+    cost_tracker: Option<Arc<Mutex<CostTracker>>>,
 }
 
 impl WorkflowExecutor {
@@ -38,6 +41,7 @@ impl WorkflowExecutor {
             metrics: WorkflowMetrics::new(),
             cache_manager: WorkflowCacheManager::new(),
             test_storage: None,
+            cost_tracker: None,
         }
     }
 
@@ -49,6 +53,7 @@ impl WorkflowExecutor {
             metrics: WorkflowMetrics::new(),
             cache_manager: WorkflowCacheManager::new(),
             test_storage: Some(storage),
+            cost_tracker: None,
         }
     }
 
@@ -65,15 +70,26 @@ impl WorkflowExecutor {
 
     /// Start a new workflow run (initializes but doesn't execute)
     pub fn start_workflow(&mut self, workflow: Workflow) -> ExecutorResult<WorkflowRun> {
+        self.start_workflow_with_issue_id(workflow, None)
+    }
+
+    /// Start a new workflow run with optional issue ID for cost tracking
+    pub fn start_workflow_with_issue_id(&mut self, workflow: Workflow, issue_id: Option<String>) -> ExecutorResult<WorkflowRun> {
         // Validate workflow before starting
         workflow
             .validate()
             .map_err(|errors| ExecutorError::ValidationFailed(errors.join("; ")))?;
 
-        let run = WorkflowRun::new(workflow);
+        let mut run = WorkflowRun::new(workflow);
 
         // Start metrics tracking for this run
         self.metrics.start_run(run.id, run.workflow.name.clone());
+
+        // Start cost tracking session if cost tracker is available
+        if let Some(session_id) = self.start_cost_tracking_session(&run, issue_id) {
+            // Store cost session ID in workflow run metadata
+            run.metadata.insert("cost_session_id".to_string(), session_id.to_string());
+        }
 
         self.log_event(
             ExecutionEventType::Started,
@@ -88,12 +104,24 @@ impl WorkflowExecutor {
         &mut self,
         workflow: Workflow,
     ) -> ExecutorResult<WorkflowRun> {
-        let mut run = self.start_workflow(workflow)?;
+        self.start_and_execute_workflow_with_issue_id(workflow, None).await
+    }
+
+    /// Start and execute a new workflow run with optional issue ID for cost tracking
+    pub async fn start_and_execute_workflow_with_issue_id(
+        &mut self,
+        workflow: Workflow,
+        issue_id: Option<String>,
+    ) -> ExecutorResult<WorkflowRun> {
+        let mut run = self.start_workflow_with_issue_id(workflow, issue_id)?;
 
         // Execute the initial state with transition limit
         let result = self
             .execute_state_with_limit(&mut run, MAX_TRANSITIONS)
             .await;
+
+        // Complete cost tracking session if one was started
+        self.complete_workflow_cost_tracking(&run, result.is_ok());
 
         // Complete metrics tracking
         match &result {
@@ -118,6 +146,15 @@ impl WorkflowExecutor {
         // Start metrics tracking for resumed run
         self.metrics.start_run(run.id, run.workflow.name.clone());
 
+        // Resume cost tracking if session ID is in metadata
+        if run.metadata.contains_key("cost_session_id") {
+            // Session was already started, just log resume
+            self.log_event(
+                ExecutionEventType::Started,
+                "Resumed cost tracking session".to_string(),
+            );
+        }
+
         self.log_event(
             ExecutionEventType::Started,
             format!(
@@ -130,6 +167,9 @@ impl WorkflowExecutor {
         let result = self
             .execute_state_with_limit(&mut run, MAX_TRANSITIONS)
             .await;
+
+        // Complete cost tracking session if one was started
+        self.complete_workflow_cost_tracking(&run, result.is_ok());
 
         // Complete metrics tracking
         match &result {
@@ -813,10 +853,274 @@ impl WorkflowExecutor {
     pub fn clear_all_caches(&mut self) {
         self.cache_manager.clear_all();
     }
+
+    /// Set cost tracker for workflow execution cost tracking
+    pub fn set_cost_tracker(&mut self, cost_tracker: Arc<Mutex<CostTracker>>) {
+        self.cost_tracker = Some(cost_tracker);
+    }
+
+    /// Get cost tracker reference if available
+    pub fn get_cost_tracker(&self) -> Option<&Arc<Mutex<CostTracker>>> {
+        self.cost_tracker.as_ref()
+    }
+
+    /// Start cost tracking session for workflow run
+    fn start_cost_tracking_session(&mut self, run: &WorkflowRun, issue_id: Option<String>) -> Option<CostSessionId> {
+        let cost_tracker = self.cost_tracker.clone();
+        if let Some(cost_tracker) = cost_tracker {
+            match cost_tracker.lock() {
+                Ok(mut tracker) => {
+                    // Create issue ID from workflow name or provided issue_id
+                    let issue_id = issue_id.unwrap_or_else(|| {
+                        format!("workflow_{}", run.workflow.name.as_str())
+                    });
+                    
+                    match IssueId::new(issue_id) {
+                        Ok(issue_id) => {
+                            match tracker.start_session(issue_id) {
+                                Ok(session_id) => {
+                                    // Release the lock before accessing self
+                                    drop(tracker);
+                                    
+                                    // Start cost tracking in metrics
+                                    self.metrics.start_cost_tracking(&run.id, session_id);
+                                    
+                                    self.log_event(
+                                        ExecutionEventType::Started,
+                                        format!("Started cost tracking session: {}", session_id)
+                                    );
+                                    
+                                    Some(session_id)
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "Failed to start cost tracking session for run {}: {}",
+                                        run.id,
+                                        e
+                                    );
+                                    None
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to create issue ID for cost tracking: {}",
+                                e
+                            );
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to acquire cost tracker lock for run {}: {}",
+                        run.id,
+                        e
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Complete cost tracking session for workflow run
+    fn complete_cost_tracking_session(&mut self, run: &WorkflowRun, session_id: CostSessionId, success: bool) {
+        let cost_tracker = self.cost_tracker.clone();
+        if let Some(cost_tracker) = cost_tracker {
+            match cost_tracker.lock() {
+                Ok(mut tracker) => {
+                    let status = if success {
+                        crate::cost::CostSessionStatus::Completed
+                    } else {
+                        crate::cost::CostSessionStatus::Failed
+                    };
+
+                    if let Err(e) = tracker.complete_session(&session_id, status) {
+                        tracing::warn!(
+                            "Failed to complete cost tracking session {} for run {}: {}",
+                            session_id,
+                            run.id,
+                            e
+                        );
+                    } else {
+                        // Release the lock before accessing self
+                        drop(tracker);
+                        
+                        // Complete cost tracking in metrics
+                        self.metrics.complete_cost_tracking(&run.id);
+                        
+                        self.log_event(
+                            ExecutionEventType::Completed,
+                            format!("Completed cost tracking session: {}", session_id)
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to acquire cost tracker lock to complete session {} for run {}: {}",
+                        session_id,
+                        run.id,
+                        e
+                    );
+                }
+            }
+        }
+    }
+
+    /// Complete workflow cost tracking by getting session ID from metadata
+    fn complete_workflow_cost_tracking(&mut self, run: &WorkflowRun, success: bool) {
+        if let Some(session_id_str) = run.metadata.get("cost_session_id") {
+            if let Ok(ulid) = ulid::Ulid::from_string(session_id_str) {
+                let session_id = CostSessionId::from_ulid(ulid);
+                self.complete_cost_tracking_session(run, session_id, success);
+            }
+        }
+    }
 }
 
 impl Default for WorkflowExecutor {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod cost_integration_tests {
+    use super::*;
+    use crate::workflow::{test_helpers::*, ConditionType};
+    use std::sync::{Arc, Mutex};
+    
+    #[test]
+    fn test_workflow_executor_with_cost_tracker() {
+        let mut executor = WorkflowExecutor::new();
+        let cost_tracker = Arc::new(Mutex::new(CostTracker::new()));
+        
+        // Test setting cost tracker
+        executor.set_cost_tracker(cost_tracker.clone());
+        assert!(executor.get_cost_tracker().is_some());
+        
+        // Test getting cost tracker reference
+        let tracker_ref = executor.get_cost_tracker().unwrap();
+        assert!(Arc::ptr_eq(tracker_ref, &cost_tracker));
+    }
+    
+    #[test]
+    fn test_start_workflow_with_cost_tracking() {
+        let mut executor = WorkflowExecutor::new();
+        let cost_tracker = Arc::new(Mutex::new(CostTracker::new()));
+        executor.set_cost_tracker(cost_tracker.clone());
+        
+        // Create test workflow
+        let mut workflow = create_workflow("Test Workflow", "Test workflow", "start");
+        workflow.add_state(create_state("start", "Start state", true));
+        
+        // Start workflow with issue ID
+        let run = executor.start_workflow_with_issue_id(workflow, Some("test-issue-123".to_string())).unwrap();
+        
+        // Verify cost session ID was stored in metadata
+        assert!(run.metadata.contains_key("cost_session_id"));
+        
+        // Verify cost session was created in tracker
+        let tracker = cost_tracker.lock().unwrap();
+        assert_eq!(tracker.session_count(), 1);
+        assert_eq!(tracker.active_session_count(), 1);
+        
+        // Verify metrics were updated with cost tracking
+        let run_metrics = executor.get_metrics().get_run_metrics(&run.id).unwrap();
+        assert!(run_metrics.cost_metrics.is_some());
+    }
+    
+    #[test]
+    fn test_workflow_execution_without_cost_tracker() {
+        let mut executor = WorkflowExecutor::new();
+        // No cost tracker set
+        
+        let mut workflow = create_workflow("Test Workflow", "Test workflow", "start");
+        workflow.add_state(create_state("start", "Start state", true));
+        
+        let run = executor.start_workflow_with_issue_id(workflow, Some("test-issue-123".to_string())).unwrap();
+        
+        // Verify no cost session ID in metadata
+        assert!(!run.metadata.contains_key("cost_session_id"));
+        
+        // Verify no cost metrics in run metrics
+        let run_metrics = executor.get_metrics().get_run_metrics(&run.id).unwrap();
+        assert!(run_metrics.cost_metrics.is_none());
+    }
+    
+    #[tokio::test]
+    async fn test_workflow_completion_with_cost_tracking() {
+        let mut executor = WorkflowExecutor::new();
+        let cost_tracker = Arc::new(Mutex::new(CostTracker::new()));
+        executor.set_cost_tracker(cost_tracker.clone());
+        
+        // Create simple workflow that will complete immediately
+        let mut workflow = create_workflow("Test Workflow", "Test workflow", "start");
+        workflow.add_state(create_state("start", "Start state", true));
+        
+        // Execute workflow
+        let run = executor.start_and_execute_workflow_with_issue_id(workflow, Some("test-issue-123".to_string())).await.unwrap();
+        
+        // Verify workflow completed
+        assert_eq!(run.status, WorkflowRunStatus::Completed);
+        
+        // Verify cost session was completed
+        let tracker = cost_tracker.lock().unwrap();
+        assert_eq!(tracker.session_count(), 1);
+        assert_eq!(tracker.completed_session_count(), 1);
+        assert_eq!(tracker.active_session_count(), 0);
+        
+        // Verify cost metrics were completed
+        let run_metrics = executor.get_metrics().get_run_metrics(&run.id).unwrap();
+        let cost_metrics = run_metrics.cost_metrics.as_ref().unwrap();
+        assert!(cost_metrics.is_completed());
+    }
+    
+    #[tokio::test]
+    async fn test_workflow_failure_with_cost_tracking() {
+        let mut executor = WorkflowExecutor::new();
+        let cost_tracker = Arc::new(Mutex::new(CostTracker::new()));
+        executor.set_cost_tracker(cost_tracker.clone());
+        
+        // Create valid workflow that starts but will fail during execution
+        let mut workflow = create_workflow("Test Workflow", "Test workflow", "start");
+        workflow.add_state(create_state("start", "log: start", false));
+        workflow.add_state(create_state("non_existent_state", "This state doesn't exist", true));
+        workflow.add_transition(create_transition("start", "non_existent_state", ConditionType::Always));
+        
+        // Execute workflow - this should start successfully but might fail during execution
+        let _result = executor.start_and_execute_workflow_with_issue_id(workflow, Some("test-issue-failed".to_string())).await;
+        
+        // Verify cost session was created and handled (either completed or failed)
+        let tracker = cost_tracker.lock().unwrap();
+        // Session should have been created when workflow started
+        assert!(tracker.session_count() >= 1, "Expected at least 1 session, got {}", tracker.session_count());
+        
+        // The session should be either completed or failed (not active)
+        assert_eq!(tracker.active_session_count(), 0, "Expected no active sessions");
+    }
+    
+    #[test]
+    fn test_cost_session_id_parsing() {
+        let mut executor = WorkflowExecutor::new();
+        let cost_tracker = Arc::new(Mutex::new(CostTracker::new()));
+        executor.set_cost_tracker(cost_tracker);
+        
+        let mut workflow = create_workflow("Test Workflow", "Test workflow", "start");
+        workflow.add_state(create_state("start", "Start state", true));
+        
+        let run = executor.start_workflow_with_issue_id(workflow, Some("test-issue".to_string())).unwrap();
+        
+        // Get session ID from metadata
+        let session_id_str = run.metadata.get("cost_session_id").unwrap();
+        
+        // Verify it can be parsed as a ULID
+        let ulid = ulid::Ulid::from_string(session_id_str).unwrap();
+        let session_id = CostSessionId::from_ulid(ulid);
+        
+        // Should be able to convert back to string
+        assert_eq!(session_id_str, &session_id.to_string());
     }
 }

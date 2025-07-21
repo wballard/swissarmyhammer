@@ -146,3 +146,49 @@ Integrates with:
 - Handle long-running workflows with session timeouts
 - Test with realistic workflow execution patterns
 - Preserve existing workflow performance characteristics
+
+## Proposed Solution
+
+Based on analysis of the existing codebase, I propose implementing cost tracking integration through the following approach:
+
+### 1. Workflow Executor Enhancement
+- Add optional `CostTracker` field to `WorkflowExecutor` struct
+- Integrate cost session lifecycle with workflow run lifecycle
+- Use `WorkflowRunId` as the basis for cost session identification
+- Map workflow runs to issue IDs for cost attribution
+
+### 2. Cost Session Management Integration
+- Start cost session when workflow run begins in `start_workflow()` and `start_and_execute_workflow()`
+- Complete cost session when workflow run ends in completion/failure paths
+- Handle cleanup for interrupted workflows through existing error paths
+- Store cost session ID in workflow run metadata for correlation
+
+### 3. Metrics System Extension
+- Extend `RunMetrics` struct with `CostMetrics` field containing:
+  - Total cost calculation
+  - Total input/output tokens
+  - API call count
+  - Per-action cost breakdown
+- Integrate cost data into workflow completion events
+- Maintain cost trends in global metrics
+
+### 4. Action-Level Cost Attribution  
+- Track active workflow context during action execution
+- Associate MCP API calls with current workflow run via session context
+- Maintain action-level cost breakdown through metadata tagging
+- Support nested action cost tracking
+
+### 5. Configuration and Error Handling
+- Make cost tracking optional through configuration
+- Ensure workflow execution continues even if cost tracking fails
+- Graceful degradation with logging for cost tracking errors
+- Backward compatibility with existing workflows
+
+### 6. Implementation Plan
+1. Create cost metrics data structures
+2. Write comprehensive tests using TDD approach
+3. Integrate cost tracker into WorkflowExecutor lifecycle
+4. Extend metrics system with cost data
+5. Add MCP integration for API call interception
+6. Implement action-level cost attribution
+7. Add configuration and error handling

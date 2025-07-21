@@ -58,6 +58,7 @@ fn create_sample_run_metrics() -> RunMetrics {
             context_variables_count: 5,
             history_size: 3,
         },
+        cost_metrics: None,
         error_details: None,
     }
 }

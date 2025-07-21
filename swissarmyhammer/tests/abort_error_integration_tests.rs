@@ -1,4 +1,7 @@
-//! Integration tests for abort error mechanism in workflows
+//! Integration tests for abort error mechanism in workflows and prompts
+//!
+//! These tests verify that "ABORT ERROR" patterns in prompt and workflow outputs
+//! trigger proper abort behavior with correct exit codes.
 
 use swissarmyhammer::workflow::{
     ConditionType, State, StateId, StateType, Transition, TransitionCondition, Workflow,

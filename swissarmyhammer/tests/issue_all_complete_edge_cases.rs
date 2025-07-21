@@ -111,9 +111,7 @@ async fn test_corrupted_issue_files() {
         // Should have 2 active issues: the original numbered one + the non-numbered one
         assert!(text.text.contains("Active: 2"));
         // Should contain the original numbered issue
-        assert!(text
-            .text
-            .contains(&issue.name.to_string()));
+        assert!(text.text.contains(&issue.name.to_string()));
         // Should contain the non-numbered issue (with auto-assigned virtual number)
         assert!(text.text.contains("invalid_format"));
     } else {

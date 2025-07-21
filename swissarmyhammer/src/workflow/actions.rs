@@ -618,12 +618,8 @@ impl PromptAction {
             );
         }
 
-        // Check for ABORT ERROR pattern in the response
-        if response_text.contains("ABORT ERROR:") {
-            let error_message = response_text.trim().to_string();
-            tracing::error!(error_message);
-            return Err(ActionError::AbortError(error_message));
-        }
+        // Check for ABORT ERROR pattern in the response using common helper
+        crate::common::check_for_abort_error(response_text)?;
 
         // Display the output as YAML
         if !quiet && !response_text.is_empty() {

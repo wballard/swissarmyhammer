@@ -1,12 +1,11 @@
-use crate::error::{Result, SwissArmyHammerError};
 use crate::config::Config;
+use crate::error::{Result, SwissArmyHammerError};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tokio::sync::Mutex;
 use tracing::debug;
-
 
 // IssueNumber type eliminated - we now use issue names (filename without .md) as the primary identifier
 
@@ -181,7 +180,6 @@ impl FileSystemIssueStorage {
             created_at,
         })
     }
-
 
     /// List issues in a directory
     ///
@@ -502,11 +500,14 @@ pub fn format_issue_number(number: u32) -> String {
 /// Parse issue number from 6-digit string
 pub fn parse_issue_number(s: &str) -> Result<u32> {
     if s.len() != 6 {
-        return Err(SwissArmyHammerError::Storage(format!("Issue number must be 6 digits, got: {s}")));
+        return Err(SwissArmyHammerError::Storage(format!(
+            "Issue number must be 6 digits, got: {s}"
+        )));
     }
-    
-    s.parse::<u32>()
-        .map_err(|_| SwissArmyHammerError::Storage(format!("Issue number must be numeric, got: {s}")))
+
+    s.parse::<u32>().map_err(|_| {
+        SwissArmyHammerError::Storage(format!("Issue number must be numeric, got: {s}"))
+    })
 }
 
 /// Parse issue filename in numbered format (e.g., "000123_bug_fix")
@@ -519,13 +520,15 @@ pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
     if let Some(underscore_pos) = filename.find('_') {
         let number_part = &filename[..underscore_pos];
         let name_part = &filename[underscore_pos + 1..];
-        
+
         // Parse the number part
         let number = parse_issue_number(number_part)?;
-        
+
         Ok((number, name_part.to_string()))
     } else {
-        Err(SwissArmyHammerError::Storage(format!("Invalid filename format, missing underscore: {filename}")))
+        Err(SwissArmyHammerError::Storage(format!(
+            "Invalid filename format, missing underscore: {filename}"
+        )))
     }
 }
 
@@ -717,7 +720,7 @@ pub fn parse_any_issue_filename(filename: &str) -> Result<(Option<u32>, String)>
             "Issue filename cannot be empty".to_string(),
         ));
     }
-    
+
     // Try to parse as numbered format first
     if let Ok((number, name)) = parse_issue_filename(filename) {
         Ok((Some(number), name))
@@ -975,7 +978,7 @@ pub fn validate_issue_name(name: &str) -> Result<()> {
 pub fn extract_issue_name_from_filename(filename: &str) -> String {
     // Remove .md extension if present
     let name_without_ext = filename.strip_suffix(".md").unwrap_or(filename);
-    
+
     // Try to parse as numbered format and extract just the name part
     if let Ok((_, name_part)) = parse_issue_filename(name_without_ext) {
         name_part
@@ -1065,18 +1068,18 @@ impl FileSystemIssueStorage {
     pub fn generate_virtual_number_with_collision_resistance(&self, filename: &str) -> u32 {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let config = Config::global();
-        
+
         // Use a hash of the filename to generate a deterministic number
         let mut hasher = DefaultHasher::new();
         filename.hash(&mut hasher);
         let hash = hasher.finish();
-        
+
         // Map the hash to the virtual number range
         let range = config.virtual_issue_number_range;
         let offset = (hash % range as u64) as u32;
-        
+
         config.virtual_issue_number_base + offset
     }
 }
@@ -3039,8 +3042,11 @@ mod tests {
         // Files without .md extension
         assert_eq!(get_issue_name_from_filename("000001_paper"), "000001_paper");
         assert_eq!(get_issue_name_from_filename("nice"), "nice");
-        
+
         // Test the specific case from the request
-        assert_eq!(get_issue_name_from_filename("000007_basic_testing.md"), "000007_basic_testing");
+        assert_eq!(
+            get_issue_name_from_filename("000007_basic_testing.md"),
+            "000007_basic_testing"
+        );
     }
 }

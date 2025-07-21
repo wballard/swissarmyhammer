@@ -52,7 +52,6 @@ pub enum SwissArmyHammerError {
     #[error("Issue not found: {0}")]
     IssueNotFound(String),
 
-
     /// Issue already exists
     #[error("Issue already exists: {0}")]
     IssueAlreadyExists(u32),

@@ -136,8 +136,8 @@ async fn test_path_completion_detection_precision() {
 
     for issue in &all_issues {
         let expected = match issue.name.as_str() {
-            "direct_complete" => true,  // direct_complete should be completed
-            _ => false, // all others should NOT be completed
+            "direct_complete" => true, // direct_complete should be completed
+            _ => false,                // all others should NOT be completed
         };
 
         assert_eq!(

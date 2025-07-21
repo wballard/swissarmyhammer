@@ -51,10 +51,7 @@ pub async fn handle_issue_command(
         IssueCommands::Work { name } => {
             work_issue(storage, &name).await?;
         }
-        IssueCommands::Merge {
-            name,
-            keep_branch,
-        } => {
+        IssueCommands::Merge { name, keep_branch } => {
             merge_issue(storage, &name, keep_branch).await?;
         }
         IssueCommands::Current => {
@@ -129,7 +126,9 @@ async fn list_issues(
     Ok(())
 }
 
-async fn print_issues_table(issues: &[swissarmyhammer::issues::Issue]) -> Result<(), Box<dyn std::error::Error>> {
+async fn print_issues_table(
+    issues: &[swissarmyhammer::issues::Issue],
+) -> Result<(), Box<dyn std::error::Error>> {
     if issues.is_empty() {
         println!("No issues found.");
         return Ok(());
@@ -173,7 +172,9 @@ async fn print_issues_table(issues: &[swissarmyhammer::issues::Issue]) -> Result
     Ok(())
 }
 
-async fn print_issues_markdown(issues: &[swissarmyhammer::issues::Issue]) -> Result<(), Box<dyn std::error::Error>> {
+async fn print_issues_markdown(
+    issues: &[swissarmyhammer::issues::Issue],
+) -> Result<(), Box<dyn std::error::Error>> {
     println!("# Issues");
     println!();
 
@@ -216,7 +217,9 @@ async fn show_issue(
     raw: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let issues = storage.list_issues().await?;
-    let issue = issues.into_iter().find(|i| i.name == name)
+    let issue = issues
+        .into_iter()
+        .find(|i| i.name == name)
         .ok_or_else(|| format!("Issue '{name}' not found"))?;
 
     if raw {
@@ -224,11 +227,7 @@ async fn show_issue(
     } else {
         let status = format_issue_status(issue.completed);
 
-        println!(
-            "{} Issue: {}",
-            status,
-            issue.name.as_str().bold()
-        );
+        println!("{} Issue: {}", status, issue.name.as_str().bold());
         println!("📁 File: {}", issue.file_path.display());
         println!(
             "📅 Created: {}",
@@ -251,7 +250,9 @@ async fn update_issue(
     let new_content = get_content_from_args(content, file)?;
 
     let issues = storage.list_issues().await?;
-    let issue = issues.into_iter().find(|i| i.name == name)
+    let issue = issues
+        .into_iter()
+        .find(|i| i.name == name)
         .ok_or_else(|| format!("Issue '{name}' not found"))?;
 
     let updated_content = if append {
@@ -280,14 +281,13 @@ async fn complete_issue(
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let issues = storage.list_issues().await?;
-    let issue = issues.into_iter().find(|i| i.name == name)
+    let issue = issues
+        .into_iter()
+        .find(|i| i.name == name)
         .ok_or_else(|| format!("Issue '{name}' not found"))?;
 
     if issue.completed {
-        println!(
-            "ℹ️ Issue '{}' is already completed",
-            issue.name
-        );
+        println!("ℹ️ Issue '{}' is already completed", issue.name);
         return Ok(());
     }
 
@@ -307,14 +307,13 @@ async fn work_issue(
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let issues = storage.list_issues().await?;
-    let issue = issues.into_iter().find(|i| i.name == name)
+    let issue = issues
+        .into_iter()
+        .find(|i| i.name == name)
         .ok_or_else(|| format!("Issue '{name}' not found"))?;
 
     if issue.completed {
-        println!(
-            "⚠️ Issue '{}' is already completed",
-            issue.name
-        );
+        println!("⚠️ Issue '{}' is already completed", issue.name);
         return Ok(());
     }
 
@@ -338,14 +337,13 @@ async fn merge_issue(
     keep_branch: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let issues = storage.list_issues().await?;
-    let issue = issues.into_iter().find(|i| i.name == name)
+    let issue = issues
+        .into_iter()
+        .find(|i| i.name == name)
         .ok_or_else(|| format!("Issue '{name}' not found"))?;
 
     if !issue.completed {
-        println!(
-            "⚠️ Issue '{}' is not completed",
-            issue.name
-        );
+        println!("⚠️ Issue '{}' is not completed", issue.name);
         println!("Complete the issue first with: swissarmyhammer issue complete {name}");
         return Ok(());
     }
@@ -385,11 +383,7 @@ async fn show_current_issue(
             Some(issue) => {
                 let status = format_issue_status(issue.completed);
 
-                println!(
-                    "{} Current issue: {}",
-                    status,
-                    issue.name.as_str().bold()
-                );
+                println!("{} Current issue: {}", status, issue.name.as_str().bold());
                 println!("🌿 Branch: {}", current_branch.bold());
                 println!("📁 File: {}", issue.file_path.display());
             }
@@ -405,9 +399,7 @@ async fn show_current_issue(
     Ok(())
 }
 
-async fn show_status(
-    storage: FileSystemIssueStorage,
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn show_status(storage: FileSystemIssueStorage) -> Result<(), Box<dyn std::error::Error>> {
     let all_issues = storage.list_issues().await?;
     let active_count = all_issues.iter().filter(|i| !i.completed).count();
     let completed_count = all_issues.iter().filter(|i| i.completed).count();
@@ -445,9 +437,7 @@ fn get_content_from_args(
             let content = std::fs::read_to_string(path)?;
             Ok(content.trim().to_string())
         }
-        (Some(_), Some(_)) => {
-            Err("Cannot specify both --content and --file options".into())
-        }
+        (Some(_), Some(_)) => Err("Cannot specify both --content and --file options".into()),
         (None, None) => {
             // Allow empty content for nameless issues
             Ok(String::new())

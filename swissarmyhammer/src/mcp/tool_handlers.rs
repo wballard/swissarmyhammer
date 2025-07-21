@@ -8,7 +8,7 @@ use super::types::*;
 use super::utils::validate_issue_name;
 use crate::config::Config;
 use crate::git::GitOperations;
-use crate::issues::IssueStorage;
+use crate::issues::{Issue, IssueStorage};
 use crate::Result;
 use rmcp::model::*;
 use rmcp::Error as McpError;
@@ -54,7 +54,7 @@ impl ToolHandlers {
         // Validate issue name using shared validation logic, or use empty string for nameless issues
         let validated_name = match &request.name {
             Some(name) => validate_issue_name(name.as_str())?,
-            None => String::new(), // Empty name for nameless issues
+            None => String::new(), // Empty name for nameless issues - skip validation
         };
 
         let issue_storage = self.issue_storage.write().await;
@@ -101,14 +101,9 @@ impl ToolHandlers {
         let issue_storage = self.issue_storage.write().await;
         match issue_storage.mark_complete(&request.name).await {
             Ok(issue) => Ok(create_mark_complete_response(&issue)),
-            Err(crate::SwissArmyHammerError::IssueNotFound(name)) => Err(McpError::invalid_params(
-                format!("Issue '{name}' not found"),
-                None,
-            )),
-            Err(e) => Err(McpError::internal_error(
-                format!("Failed to mark issue complete: {e}"),
-                None,
-            )),
+            Err(e) => Ok(create_error_response(format!(
+                "Failed to mark issue complete: {e}"
+            ))),
         }
     }
 
@@ -345,17 +340,10 @@ impl ToolHandlers {
         request: WorkIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         // Get the issue to determine its number for branch naming
-        let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue(&request.name).await {
+        let issue = match self.get_issue_or_error(&request.name).await {
             Ok(issue) => issue,
-            Err(e) => {
-                return Ok(create_error_response(format!(
-                    "Failed to get issue '{}': {}",
-                    request.name, e
-                )))
-            }
+            Err(error_response) => return Ok(error_response),
         };
-        drop(issue_storage);
 
         // Create work branch with format: number_name
         let mut git_ops = self.git_ops.lock().await;
@@ -406,22 +394,15 @@ impl ToolHandlers {
         request: MergeIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         // Get the issue to determine its details
-        let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue(&request.name).await {
+        let issue = match self.get_issue_or_error(&request.name).await {
             Ok(issue) => issue,
-            Err(e) => {
-                return Ok(create_error_response(format!(
-                    "Failed to get issue '{}': {}",
-                    request.name, e
-                )))
-            }
+            Err(error_response) => return Ok(error_response),
         };
-        drop(issue_storage);
 
         // Validate that the issue is completed before allowing merge
         if !issue.completed {
             return Ok(create_error_response(format!(
-                "Issue '{}' is not completed. Only completed issues can be merged.",
+                "Issue '{}' must be completed before merging",
                 request.name
             )));
         }
@@ -475,7 +456,7 @@ impl ToolHandlers {
 
                         // If delete_branch is true, delete the branch after successful merge
                         if request.delete_branch {
-                            let branch_name = format!("issue/{issue_name}");
+                            let branch_name = Self::format_issue_branch_name(&issue_name);
                             match ops.delete_branch(&branch_name) {
                                 Ok(_) => {
                                     success_message
@@ -525,5 +506,30 @@ impl ToolHandlers {
         }
 
         Ok(())
+    }
+
+    /// Helper method to get an issue and handle errors consistently
+    async fn get_issue_or_error(
+        &self,
+        issue_name: &IssueName,
+    ) -> std::result::Result<Issue, CallToolResult> {
+        let issue_storage = self.issue_storage.read().await;
+        match issue_storage.get_issue(issue_name).await {
+            Ok(issue) => {
+                drop(issue_storage);
+                Ok(issue)
+            }
+            Err(e) => {
+                drop(issue_storage);
+                Err(create_error_response(format!(
+                    "Failed to get issue '{issue_name}': {e}"
+                )))
+            }
+        }
+    }
+
+    /// Helper method to format issue branch names consistently
+    fn format_issue_branch_name(issue_name: &str) -> String {
+        format!("issue/{issue_name}")
     }
 }

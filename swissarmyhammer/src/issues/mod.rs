@@ -52,8 +52,8 @@
 //! // 1. Create issue
 //! let issue = storage.create_issue("new_feature".to_string(), "# New Feature\n\nDescription".to_string()).await?;
 //!
-//! // 2. Create work branch (name-based with optional number for uniqueness)
-//! let branch_name = git_ops.create_work_branch(&format!("{}_{:06}", issue.name, issue.number))?;
+//! // 2. Create work branch (name-based)  
+//! let branch_name = git_ops.create_work_branch(&format!("issue/{}", issue.name))?;
 //!
 //! // 3. Work on the issue...
 //! // 4. Update issue with progress

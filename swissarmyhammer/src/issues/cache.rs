@@ -158,7 +158,7 @@ mod tests {
 
     fn create_test_issue(number: u32, name: &str) -> Issue {
         Issue {
-            number: IssueNumber::from(number),
+            number: IssueNumber::new(number).unwrap(),
             name: IssueName::new(name.to_string()).unwrap(),
             content: format!("Test content for issue {number}"),
             completed: false,

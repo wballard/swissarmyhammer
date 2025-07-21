@@ -276,13 +276,11 @@ mod tests {
         let invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
 
         for invalid_char in invalid_chars {
-            let name = format!("test{}name", invalid_char);
+            let name = format!("test{invalid_char}name");
             let result = IssueName::new(name.clone());
             assert!(
                 result.is_err(),
-                "Should reject name with '{}': {}",
-                invalid_char,
-                name
+                "Should reject name with '{invalid_char}': {name}"
             );
             assert_eq!(
                 result.unwrap_err(),

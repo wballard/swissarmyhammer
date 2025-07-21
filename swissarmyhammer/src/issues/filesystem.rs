@@ -39,12 +39,6 @@ impl std::fmt::Display for IssueNumber {
     }
 }
 
-impl From<u32> for IssueNumber {
-    fn from(value: u32) -> Self {
-        Self(value)
-    }
-}
-
 impl From<IssueNumber> for u32 {
     fn from(value: IssueNumber) -> Self {
         value.0
@@ -195,7 +189,7 @@ impl FileSystemIssueStorage {
     ///
     /// ```ignore
     /// let issue = storage.parse_issue_from_file(Path::new("./issues/000123_bug_fix.md"))?;
-    /// assert_eq!(issue.number, IssueNumber::from(123));
+    /// assert_eq!(issue.number, IssueNumber::new(123).unwrap());
     /// assert_eq!(issue.name.as_str(), "bug_fix");
     /// ```
     fn parse_issue_from_file(&self, path: &Path) -> Result<Issue> {
@@ -260,7 +254,7 @@ impl FileSystemIssueStorage {
             .unwrap_or_else(|_| Utc::now());
 
         Ok(Issue {
-            number: IssueNumber::from(number),
+            number: IssueNumber::new(number)?,
             name: IssueName::from_filesystem(name.clone())
                 .map_err(|e| SwissArmyHammerError::parsing_failed("issue_name", &name, &e))?,
             content,
@@ -423,7 +417,7 @@ impl FileSystemIssueStorage {
             .filter(|issue| issue.number.value() < config.virtual_issue_number_base) // Exclude virtual numbers
             .max_by_key(|issue| issue.number)
             .map(|issue| issue.number)
-            .unwrap_or(IssueNumber::from(0));
+            .unwrap_or(IssueNumber::new(0).unwrap());
 
         Ok((max_number + 1).into())
     }
@@ -580,7 +574,7 @@ impl IssueStorage for FileSystemIssueStorage {
 
         all_issues
             .into_iter()
-            .find(|issue| issue.number == IssueNumber::from(number))
+            .find(|issue| issue.number == IssueNumber::new(number).unwrap())
             .ok_or_else(|| SwissArmyHammerError::IssueNotFound(number.to_string()))
     }
 
@@ -594,7 +588,7 @@ impl IssueStorage for FileSystemIssueStorage {
         let created_at = Utc::now();
 
         Ok(Issue {
-            number: IssueNumber::from(number),
+            number: IssueNumber::new(number).unwrap(),
             name: IssueName::from_filesystem(sanitized_name.clone()).map_err(|e| {
                 SwissArmyHammerError::parsing_failed("issue_name", &sanitized_name, &e)
             })?,
@@ -1334,7 +1328,7 @@ mod tests {
     fn test_issue_serialization() {
         let created_at = Utc::now();
         let issue = Issue {
-            number: IssueNumber::from(123),
+            number: IssueNumber::new(123).unwrap(),
             name: IssueName::new("test_issue".to_string()).unwrap(),
             content: "Test content".to_string(),
             completed: false,
@@ -1347,7 +1341,7 @@ mod tests {
         let deserialized: Issue = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(issue, deserialized);
-        assert_eq!(deserialized.number, IssueNumber::from(123));
+        assert_eq!(deserialized.number, IssueNumber::new(123).unwrap());
         assert_eq!(deserialized.name.as_str(), "test_issue");
         assert_eq!(deserialized.content, "Test content");
         assert!(!deserialized.completed);
@@ -1422,7 +1416,7 @@ mod tests {
         fs::write(&test_file, "# Test Issue\\n\\nThis is a test issue.").unwrap();
 
         let issue = storage.parse_issue_from_file(&test_file).unwrap();
-        assert_eq!(issue.number, IssueNumber::from(123));
+        assert_eq!(issue.number, IssueNumber::new(123).unwrap());
         assert_eq!(issue.name.as_str(), "test_issue");
         assert_eq!(issue.content, "# Test Issue\\n\\nThis is a test issue.");
         assert!(!issue.completed);
@@ -1441,7 +1435,7 @@ mod tests {
         fs::write(&test_file, "# Completed Issue\\n\\nThis is completed.").unwrap();
 
         let issue = storage.parse_issue_from_file(&test_file).unwrap();
-        assert_eq!(issue.number, IssueNumber::from(456));
+        assert_eq!(issue.number, IssueNumber::new(456).unwrap());
         assert_eq!(issue.name.as_str(), "completed_issue");
         assert_eq!(issue.content, "# Completed Issue\\n\\nThis is completed.");
         assert!(issue.completed);
@@ -1513,7 +1507,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(issue.number, IssueNumber::from(1));
+        assert_eq!(issue.number, IssueNumber::new(1).unwrap());
         assert_eq!(issue.name.as_str(), "test_issue");
         assert_eq!(issue.content, "# Test\\n\\nContent");
         assert!(!issue.completed);
@@ -1535,7 +1529,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(issue.number, IssueNumber::from(1));
+        assert_eq!(issue.number, IssueNumber::new(1).unwrap());
         assert_eq!(issue.name.as_str(), "test/issue with spaces");
 
         // Check file was created with safe filename
@@ -1599,19 +1593,19 @@ mod tests {
         assert_eq!(issues.len(), 4);
 
         // Should be sorted by number
-        assert_eq!(issues[0].number, IssueNumber::from(1));
+        assert_eq!(issues[0].number, IssueNumber::new(1).unwrap());
         assert_eq!(issues[0].name.as_str(), "another");
         assert!(!issues[0].completed);
 
-        assert_eq!(issues[1].number, IssueNumber::from(2));
+        assert_eq!(issues[1].number, IssueNumber::new(2).unwrap());
         assert_eq!(issues[1].name.as_str(), "completed");
         assert!(issues[1].completed);
 
-        assert_eq!(issues[2].number, IssueNumber::from(3));
+        assert_eq!(issues[2].number, IssueNumber::new(3).unwrap());
         assert_eq!(issues[2].name.as_str(), "pending");
         assert!(!issues[2].completed);
 
-        assert_eq!(issues[3].number, IssueNumber::from(4));
+        assert_eq!(issues[3].number, IssueNumber::new(4).unwrap());
         assert_eq!(issues[3].name.as_str(), "done");
         assert!(issues[3].completed);
     }
@@ -1626,7 +1620,7 @@ mod tests {
         fs::write(issues_dir.join("000123_test.md"), "test content").unwrap();
 
         let issue = storage.get_issue_by_number(123).await.unwrap();
-        assert_eq!(issue.number, IssueNumber::from(123));
+        assert_eq!(issue.number, IssueNumber::new(123).unwrap());
         assert_eq!(issue.name.as_str(), "test");
         assert_eq!(issue.content, "test content");
     }
@@ -1656,7 +1650,7 @@ mod tests {
         .unwrap();
 
         let issue = storage.get_issue_by_number(456).await.unwrap();
-        assert_eq!(issue.number, IssueNumber::from(456));
+        assert_eq!(issue.number, IssueNumber::new(456).unwrap());
         assert_eq!(issue.name.as_str(), "completed");
         assert_eq!(issue.content, "completed content");
         assert!(issue.completed);
@@ -1682,9 +1676,9 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(issue1.number, IssueNumber::from(1));
-        assert_eq!(issue2.number, IssueNumber::from(2));
-        assert_eq!(issue3.number, IssueNumber::from(3));
+        assert_eq!(issue1.number, IssueNumber::new(1).unwrap());
+        assert_eq!(issue2.number, IssueNumber::new(2).unwrap());
+        assert_eq!(issue3.number, IssueNumber::new(3).unwrap());
 
         // Check files were created
         assert!(issues_dir.join("000001_first.md").exists());
@@ -1722,8 +1716,8 @@ mod tests {
         let mut sorted_issues = issues;
         sorted_issues.sort_by_key(|issue| issue.number);
 
-        assert_eq!(sorted_issues[0].number, IssueNumber::from(1));
-        assert_eq!(sorted_issues[1].number, IssueNumber::from(3));
+        assert_eq!(sorted_issues[0].number, IssueNumber::new(1).unwrap());
+        assert_eq!(sorted_issues[1].number, IssueNumber::new(3).unwrap());
         // README.md gets a virtual number in virtual range
         assert!(sorted_issues[2].number.value() >= Config::global().virtual_issue_number_base);
         assert_eq!(sorted_issues[2].name.as_str(), "README");
@@ -1760,7 +1754,7 @@ mod tests {
         let result = storage.parse_issue_from_file(&test_file);
         assert!(result.is_ok());
         let issue = result.unwrap();
-        assert_eq!(issue.number, IssueNumber::from(123));
+        assert_eq!(issue.number, IssueNumber::new(123).unwrap());
         assert_eq!(issue.name.as_str(), "test_with_underscores");
     }
 
@@ -1777,7 +1771,7 @@ mod tests {
         let result = storage.parse_issue_from_file(&test_file);
         assert!(result.is_ok());
         let issue = result.unwrap();
-        assert_eq!(issue.number, IssueNumber::from(123));
+        assert_eq!(issue.number, IssueNumber::new(123).unwrap());
         assert_eq!(issue.name.as_str(), "");
     }
 
@@ -1812,7 +1806,7 @@ mod tests {
         let result = storage.parse_issue_from_file(&test_file);
         assert!(result.is_ok());
         let issue = result.unwrap();
-        assert_eq!(issue.number, IssueNumber::from(1));
+        assert_eq!(issue.number, IssueNumber::new(1).unwrap());
         assert_eq!(issue.name.as_str(), "test");
     }
 
@@ -1829,7 +1823,7 @@ mod tests {
         let result = storage.parse_issue_from_file(&test_file);
         assert!(result.is_ok());
         let issue = result.unwrap();
-        assert_eq!(issue.number, IssueNumber::from(0));
+        assert_eq!(issue.number, IssueNumber::new(0).unwrap());
         assert_eq!(issue.name.as_str(), "test");
     }
 
@@ -1856,7 +1850,7 @@ mod tests {
         sorted_issues.sort_by_key(|issue| issue.number);
 
         // First issue should be the numbered one
-        assert_eq!(sorted_issues[0].number, IssueNumber::from(1));
+        assert_eq!(sorted_issues[0].number, IssueNumber::new(1).unwrap());
         assert_eq!(sorted_issues[0].name.as_str(), "valid");
 
         // The other 3 should be non-numbered with virtual numbers >= virtual_base
@@ -2690,7 +2684,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(issue1.number, IssueNumber::from(1));
+        assert_eq!(issue1.number, IssueNumber::new(1).unwrap());
         assert_eq!(issue1.name.as_str(), "test_issue");
         assert_eq!(issue1.content, "Test content");
         assert!(!issue1.completed);
@@ -2701,7 +2695,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(issue2.number, IssueNumber::from(2));
+        assert_eq!(issue2.number, IssueNumber::new(2).unwrap());
     }
 
     #[tokio::test]
@@ -2724,8 +2718,8 @@ mod tests {
 
         let issues = storage.list_issues().await.unwrap();
         assert_eq!(issues.len(), 2);
-        assert_eq!(issues[0].number, IssueNumber::from(1));
-        assert_eq!(issues[1].number, IssueNumber::from(2));
+        assert_eq!(issues[0].number, IssueNumber::new(1).unwrap());
+        assert_eq!(issues[1].number, IssueNumber::new(2).unwrap());
     }
 
     #[tokio::test]
@@ -3568,46 +3562,5 @@ mod tests {
 
         let issue_name_from_arbitrary = extract_issue_name_from_filename("my-arbitrary-issue.md");
         assert_eq!(issue_name_from_arbitrary, "my-arbitrary-issue");
-    }
-}
-
-/// Common error handling helper functions for consistent error creation and mapping
-mod error_helpers {
-    use super::*;
-
-    /// Helper function to map IO errors to SwissArmyHammerError
-    pub fn map_io_error<T>(result: std::io::Result<T>) -> Result<T> {
-        result.map_err(SwissArmyHammerError::Io)
-    }
-
-    /// Helper function to create invalid issue number errors with consistent formatting
-    pub fn invalid_issue_number_error(number: u32, max: u32) -> SwissArmyHammerError {
-        SwissArmyHammerError::InvalidIssueNumber(format!(
-            "Issue number {number} exceeds maximum ({max})"
-        ))
-    }
-
-    /// Helper function to create issue not found errors
-    pub fn issue_not_found_error(identifier: &str) -> SwissArmyHammerError {
-        SwissArmyHammerError::IssueNotFound(identifier.to_string())
-    }
-
-    /// Helper function to create parsing errors with consistent formatting
-    pub fn parsing_error(field_type: &str, value: &str, error: &str) -> SwissArmyHammerError {
-        SwissArmyHammerError::parsing_failed(field_type, value, error)
-    }
-
-    /// Helper function to create generic "Other" errors
-    pub fn other_error(message: &str) -> SwissArmyHammerError {
-        SwissArmyHammerError::Other(message.to_string())
-    }
-
-    /// Helper function to create path-related errors
-    pub fn invalid_path_error(path: &Path, reason: &str) -> SwissArmyHammerError {
-        SwissArmyHammerError::Other(format!(
-            "Invalid file path '{}': {}",
-            path.display(),
-            reason
-        ))
     }
 }

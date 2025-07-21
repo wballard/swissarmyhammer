@@ -2921,6 +2921,10 @@ mod tests {
             // Extract issue name from create request
             let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
+            assert!(
+                !create_result.content.is_empty(),
+                "Create result should have content"
+            );
 
             // Commit the issue file to keep git clean
             commit_changes(_temp.path()).await;
@@ -2972,6 +2976,10 @@ mod tests {
             // Extract issue name from create request before moving it
             let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
+            assert!(
+                !create_result.content.is_empty(),
+                "Create result should have content"
+            );
 
             // Commit the issue file to keep git clean
             commit_changes(_temp.path()).await;
@@ -3059,6 +3067,10 @@ mod tests {
             // Extract issue name from create request before moving it
             let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
+            assert!(
+                !create_result.content.is_empty(),
+                "Create result should have content"
+            );
 
             // Commit the issue file to keep git clean
             commit_changes(_temp.path()).await;
@@ -3124,6 +3136,10 @@ mod tests {
             // Extract issue name from create request before moving it
             let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
+            assert!(
+                !create_result.content.is_empty(),
+                "Create result should have content"
+            );
 
             // Update in append mode
             let update_request = UpdateIssueRequest {
@@ -3759,6 +3775,10 @@ mod tests {
             };
             let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
+            assert!(
+                !create_result.content.is_empty(),
+                "Create result should have content"
+            );
 
             // Try to merge incomplete issue - should fail
             let merge_request = MergeIssueRequest {
@@ -3813,6 +3833,10 @@ mod tests {
             };
             let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
+            assert!(
+                !create_result.content.is_empty(),
+                "Create result should have content"
+            );
 
             // Mark issue as complete
             let complete_request = MarkCompleteRequest {
@@ -3853,6 +3877,10 @@ mod tests {
             };
             let issue_name = extract_issue_name_from_create_request(&create_request);
             let create_result = server.handle_issue_create(create_request).await.unwrap();
+            assert!(
+                !create_result.content.is_empty(),
+                "Create result should have content"
+            );
 
             // Commit the issue file to keep git clean
             commit_changes(_temp.path()).await;
@@ -3920,6 +3948,10 @@ mod tests {
                 };
                 let issue_name = extract_issue_name_from_create_request(&create_request);
                 let create_result = server.handle_issue_create(create_request).await.unwrap();
+                assert!(
+                    !create_result.content.is_empty(),
+                    "Create result should have content"
+                );
                 issue_names.push(issue_name);
             }
 

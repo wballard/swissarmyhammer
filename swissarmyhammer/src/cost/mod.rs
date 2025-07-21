@@ -4,6 +4,7 @@
 //! during issue workflow execution. It tracks API calls, token usage, and provides
 //! cost calculation capabilities throughout issue processing.
 
+pub mod aggregation;
 pub mod calculator;
 #[cfg(feature = "database")]
 pub mod database;
@@ -21,6 +22,11 @@ pub mod token_integration_tests;
 #[cfg(test)]
 pub mod test_utils;
 
+pub use aggregation::{
+    AggregatedReport, CostAggregator, CostTrend, DateRange, EfficiencyMetrics, ExportFormat,
+    IssueOutlier, OutlierType, PatternType, ProjectCostSummary, ReportGenerator, SeasonalPattern,
+    TrendAnalysis, TrendAnalyzer, TrendDirection,
+};
 pub use calculator::{
     CostCalculation, CostCalculator, MaxPlanConfig, PaidPlanConfig, PricingModel, PricingRates,
 };

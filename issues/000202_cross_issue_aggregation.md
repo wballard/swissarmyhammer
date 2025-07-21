@@ -196,3 +196,89 @@ This step integrates with:
 - Consider future integration with project management tools
 - Test with realistic project sizes and data volumes
 - Support both real-time and batch aggregation modes
+
+## Proposed Solution
+
+I have successfully implemented a comprehensive cross-issue cost aggregation and analysis system with the following components:
+
+### Implementation Overview
+
+1. **Core Aggregation Module** (`swissarmyhammer/src/cost/aggregation/`)
+   - `mod.rs` - Module definition and public API exports
+   - `analyzer.rs` - Main `CostAggregator` engine for data collection and analysis
+   - `trends.rs` - `TrendAnalyzer` for statistical trend analysis and predictions
+   - `reports.rs` - `ReportGenerator` for multi-format report generation
+   - `tests.rs` - Comprehensive test suite
+
+2. **Data Structures Implemented**
+   - `ProjectCostSummary` - Comprehensive project-wide cost analysis
+   - `CostTrend` - Trend data with daily/weekly/monthly aggregations
+   - `EfficiencyMetrics` - Performance and cost efficiency calculations
+   - `TrendAnalysis` - Statistical trend analysis with predictions
+   - `AggregatedReport` - Multi-format report generation support
+
+3. **Key Features Delivered**
+
+#### Aggregation Engine (`CostAggregator`)
+- Multi-source data collection (markdown files, database, metrics)
+- Handles large datasets (up to 10,000 issues per aggregation)
+- Graceful fallback when data sources are unavailable
+- Statistical outlier detection using configurable thresholds
+- Cost breakdown by categories and patterns
+
+#### Trend Analysis (`TrendAnalyzer`) 
+- Linear regression analysis for trend direction classification
+- Volatility calculations and stability scoring
+- Seasonal pattern detection (daily, weekly, monthly)
+- Cost predictions with confidence intervals
+- R-squared correlation analysis for trend confidence
+
+#### Reporting System (`ReportGenerator`)
+- Multiple export formats: JSON, CSV, Markdown, HTML, Text
+- Configurable report sections and detail levels
+- Executive summaries with key metrics
+- Tabular data for cost breakdowns and outliers
+- Chart-ready data structures for visualization
+
+#### Configuration Integration
+- Extended `AggregationConfig` with comprehensive settings:
+  - Scanning intervals and retention policies
+  - Trend analysis periods and outlier thresholds
+  - Data quality requirements (minimum issues for analysis)
+  - Flexible time window configurations
+
+### Architecture Benefits
+
+- **Scalable**: Handles large numbers of issues with memory-efficient processing
+- **Flexible**: Multiple data sources with graceful degradation
+- **Extensible**: Plugin-ready architecture for new analysis types
+- **Observable**: Comprehensive error handling and logging
+- **Testable**: Full test coverage with mock implementations
+
+### Integration Points
+
+- Seamlessly integrates with existing cost tracking infrastructure
+- Uses established configuration patterns and error handling
+- Leverages existing issue storage and workflow metrics systems
+- Compatible with optional database features for enhanced analytics
+
+### Usage Example
+
+```rust
+use swissarmyhammer::cost::{CostAggregator, AggregationConfig, DateRange, ExportFormat};
+
+// Create aggregator with configuration
+let config = AggregationConfig::default();
+let aggregator = CostAggregator::new(issue_storage, metrics, database, config);
+
+// Generate project summary
+let date_range = DateRange::new(start_date, end_date);
+let summary = aggregator.generate_project_summary(Some(date_range)).await?;
+
+// Generate and export reports
+let report_generator = ReportGenerator::default();
+let report = report_generator.generate_report(summary, ExportFormat::Markdown)?;
+let markdown_output = report_generator.export_report(&report, ExportFormat::Markdown)?;
+```
+
+This implementation fully satisfies all requirements in the issue specification and provides a robust foundation for project-wide cost analysis and optimization.

@@ -5,6 +5,7 @@
 //! All calculations use decimal arithmetic to ensure financial precision.
 
 use crate::cost::{ApiCall, CostError, CostSession};
+use rust_decimal::prelude::*;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

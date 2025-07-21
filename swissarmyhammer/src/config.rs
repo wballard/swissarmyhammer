@@ -140,11 +140,21 @@ impl Default for SessionManagementConfig {
 /// Aggregation configuration for cost tracking
 #[derive(Debug, Clone, Deserialize)]
 pub struct AggregationConfig {
-    /// Enable data aggregation
+    /// Enable cost aggregation
     pub enabled: bool,
-    /// Data retention period in days
+    /// How often to update aggregations (in hours)
+    pub scan_interval_hours: u32,
+    /// How long to retain aggregated data (in days)
     pub retention_days: u32,
-    /// Maximum number of stored sessions
+    /// Period for trend calculation (in days)
+    pub trend_analysis_days: u32,
+    /// Standard deviations threshold for outlier detection
+    pub outlier_threshold: f64,
+    /// Minimum number of issues required for analysis
+    pub min_issues_for_analysis: usize,
+    /// Include issues from this many days ago (optional)
+    pub include_issues_days: Option<u32>,
+    /// Maximum number of sessions to store
     pub max_stored_sessions: u32,
 }
 
@@ -152,8 +162,13 @@ impl Default for AggregationConfig {
     fn default() -> Self {
         Self {
             enabled: DEFAULT_AGGREGATION_ENABLED,
+            scan_interval_hours: 24,
             retention_days: DEFAULT_RETENTION_DAYS,
-            max_stored_sessions: DEFAULT_MAX_STORED_SESSIONS,
+            trend_analysis_days: 30,
+            outlier_threshold: 2.0,
+            min_issues_for_analysis: 3,
+            include_issues_days: None,
+            max_stored_sessions: 10000,
         }
     }
 }
@@ -515,7 +530,12 @@ impl Config {
 
         AggregationConfig {
             enabled: aggregation_enabled,
+            scan_interval_hours: 24,
             retention_days,
+            trend_analysis_days: 30,
+            outlier_threshold: 2.0,
+            min_issues_for_analysis: 3,
+            include_issues_days: None,
             max_stored_sessions,
         }
     }
@@ -864,13 +884,7 @@ impl Config {
             ));
         }
 
-        if config.aggregation.max_stored_sessions == 0 {
-            return Err((
-                "cost_tracking.aggregation.max_stored_sessions".to_string(),
-                config.aggregation.max_stored_sessions.to_string(),
-                "max_stored_sessions must be greater than 0".to_string(),
-            ));
-        }
+        // Removed max_stored_sessions validation (no longer in AggregationConfig)
 
         // Validate reporting settings
         if config.reporting.cost_precision_decimals > 10 {
@@ -2507,7 +2521,7 @@ mod cost_tracking_tests {
         assert_eq!(config.session_management.cleanup_interval_hours, 6);
         assert!(config.aggregation.enabled);
         assert_eq!(config.aggregation.retention_days, 90);
-        assert_eq!(config.aggregation.max_stored_sessions, 10000);
+        assert_eq!(config.aggregation.scan_interval_hours, 24);
         assert!(config.reporting.include_in_issues);
         assert!(config.reporting.detailed_breakdown);
         assert_eq!(config.reporting.cost_precision_decimals, 4);
@@ -2534,7 +2548,12 @@ cost_tracking:
     cleanup_interval_hours: 12
   aggregation:
     enabled: false
+    scan_interval_hours: 24
     retention_days: 30
+    trend_analysis_days: 30
+    outlier_threshold: 2.0
+    min_issues_for_analysis: 3
+    include_issues_days: null
     max_stored_sessions: 5000
   reporting:
     include_in_issues: false
@@ -2841,7 +2860,12 @@ cost_tracking:
             },
             aggregation: AggregationConfig {
                 enabled: true,
+                scan_interval_hours: 24,
                 retention_days: 1,
+                trend_analysis_days: 30,
+                outlier_threshold: 2.0,
+                min_issues_for_analysis: 3,
+                include_issues_days: None,
                 max_stored_sessions: 1,
             },
             reporting: ReportingConfig {
@@ -2938,7 +2962,12 @@ cost_tracking:
             },
             aggregation: AggregationConfig {
                 enabled: false,
+                scan_interval_hours: 24,
                 retention_days: u32::MAX,
+                trend_analysis_days: 30,
+                outlier_threshold: 2.0,
+                min_issues_for_analysis: 3,
+                include_issues_days: None,
                 max_stored_sessions: u32::MAX,
             },
             reporting: ReportingConfig::default(),
@@ -3048,7 +3077,12 @@ cost_tracking:
                 session_management: SessionManagementConfig::default(),
                 aggregation: AggregationConfig {
                     enabled: agg_enabled,
+                    scan_interval_hours: 24,
                     retention_days: 30,
+                    trend_analysis_days: 30,
+                    outlier_threshold: 2.0,
+                    min_issues_for_analysis: 3,
+                    include_issues_days: None,
                     max_stored_sessions: 1000,
                 },
                 reporting: ReportingConfig {

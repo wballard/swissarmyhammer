@@ -21,7 +21,6 @@ use tokio::time::sleep;
 
 /// Test configuration constants to eliminate magic numbers
 pub mod test_constants {
-    use std::time::Duration;
 
     /// Number of API calls per session in basic tests
     pub const BASIC_API_CALLS_PER_SESSION: usize = 5;

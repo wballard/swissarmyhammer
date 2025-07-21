@@ -16,7 +16,7 @@ mod executor;
 mod graph;
 #[cfg(test)]
 mod graph_tests;
-mod metrics;
+pub mod metrics;
 mod parser;
 mod run;
 mod state;

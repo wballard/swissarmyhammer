@@ -55,15 +55,13 @@ static PARSED_INPUT_TOKEN_COST: std::sync::OnceLock<Decimal> = std::sync::OnceLo
 static PARSED_OUTPUT_TOKEN_COST: std::sync::OnceLock<Decimal> = std::sync::OnceLock::new();
 
 fn default_input_token_cost() -> Decimal {
-    *PARSED_INPUT_TOKEN_COST.get_or_init(|| {
-        parse_decimal_with_fallback(DEFAULT_INPUT_TOKEN_COST, "0.000015")
-    })
+    *PARSED_INPUT_TOKEN_COST
+        .get_or_init(|| parse_decimal_with_fallback(DEFAULT_INPUT_TOKEN_COST, "0.000015"))
 }
 
 fn default_output_token_cost() -> Decimal {
-    *PARSED_OUTPUT_TOKEN_COST.get_or_init(|| {
-        parse_decimal_with_fallback(DEFAULT_OUTPUT_TOKEN_COST, "0.000075")
-    })
+    *PARSED_OUTPUT_TOKEN_COST
+        .get_or_init(|| parse_decimal_with_fallback(DEFAULT_OUTPUT_TOKEN_COST, "0.000075"))
 }
 
 /// Parse a decimal string with a fallback value if parsing fails
@@ -86,15 +84,15 @@ fn default_output_token_cost() -> Decimal {
 /// ```rust
 /// use rust_decimal::Decimal;
 /// use swissarmyhammer::config::parse_decimal_with_fallback;
-/// 
+///
 /// // Successful parsing
 /// let cost = parse_decimal_with_fallback("0.000015", "0.000010");
 /// assert_eq!(cost.to_string(), "0.000015");
-/// 
+///
 /// // Fallback on invalid primary value
 /// let cost = parse_decimal_with_fallback("invalid", "0.000010");
 /// assert_eq!(cost.to_string(), "0.000010");
-/// 
+///
 /// // Safe minimal value when both fail
 /// let cost = parse_decimal_with_fallback("invalid", "also_invalid");
 /// assert_eq!(cost.to_string(), "0.000001");
@@ -182,19 +180,14 @@ impl Default for ReportingConfig {
 }
 
 /// Pricing model for cost tracking
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum PricingModel {
     /// Use paid pricing model for cost calculations
+    #[default]
     Paid,
     /// Use maximum pricing model for cost calculations
     Max,
-}
-
-impl Default for PricingModel {
-    fn default() -> Self {
-        PricingModel::Paid
-    }
 }
 
 impl PricingModel {
@@ -202,13 +195,16 @@ impl PricingModel {
         match s.to_lowercase().as_str() {
             "paid" => Ok(PricingModel::Paid),
             "max" => Ok(PricingModel::Max),
-            _ => Err(format!("Invalid pricing model '{}'. Must be 'paid' or 'max'", s)),
+            _ => Err(format!(
+                "Invalid pricing model '{}'. Must be 'paid' or 'max'",
+                s
+            )),
         }
     }
 }
 
 /// Cost tracking configuration
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct CostTrackingConfig {
     /// Enable cost tracking
     pub enabled: bool,
@@ -226,19 +222,6 @@ pub struct CostTrackingConfig {
     /// Reporting configuration
     #[serde(default)]
     pub reporting: ReportingConfig,
-}
-
-impl Default for CostTrackingConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            pricing_model: PricingModel::default(),
-            rates: PricingConfig::default(),
-            session_management: SessionManagementConfig::default(),
-            aggregation: AggregationConfig::default(),
-            reporting: ReportingConfig::default(),
-        }
-    }
 }
 
 /// Errors that can occur during configuration loading
@@ -484,17 +467,19 @@ impl Config {
     /// Load pricing configuration from environment variables
     fn load_pricing_config_from_env(cost_loader: &EnvLoader) -> (PricingModel, PricingConfig) {
         let pricing_model_str = cost_loader.load_string("PRICING_MODEL", "paid");
-        let pricing_model = PricingModel::from_str(&pricing_model_str)
-            .unwrap_or_else(|_| PricingModel::default());
-        
+        let pricing_model =
+            PricingModel::from_str(&pricing_model_str).unwrap_or_else(|_| PricingModel::default());
+
         let input_token_cost_str =
             cost_loader.load_string("INPUT_TOKEN_COST", DEFAULT_INPUT_TOKEN_COST);
         let output_token_cost_str =
             cost_loader.load_string("OUTPUT_TOKEN_COST", DEFAULT_OUTPUT_TOKEN_COST);
 
         // Parse decimal values carefully
-        let input_cost = parse_decimal_with_fallback(&input_token_cost_str, DEFAULT_INPUT_TOKEN_COST);
-        let output_cost = parse_decimal_with_fallback(&output_token_cost_str, DEFAULT_OUTPUT_TOKEN_COST);
+        let input_cost =
+            parse_decimal_with_fallback(&input_token_cost_str, DEFAULT_INPUT_TOKEN_COST);
+        let output_cost =
+            parse_decimal_with_fallback(&output_token_cost_str, DEFAULT_OUTPUT_TOKEN_COST);
 
         let pricing_config = PricingConfig {
             input_token_cost: input_cost,
@@ -508,8 +493,10 @@ impl Config {
     fn load_session_management_from_env(cost_loader: &EnvLoader) -> SessionManagementConfig {
         let max_concurrent_sessions =
             cost_loader.load_parsed("MAX_CONCURRENT_SESSIONS", DEFAULT_MAX_CONCURRENT_SESSIONS);
-        let session_timeout_hours = cost_loader.load_parsed("SESSION_TIMEOUT_HOURS", DEFAULT_SESSION_TIMEOUT_HOURS);
-        let cleanup_interval_hours = cost_loader.load_parsed("CLEANUP_INTERVAL_HOURS", DEFAULT_CLEANUP_INTERVAL_HOURS);
+        let session_timeout_hours =
+            cost_loader.load_parsed("SESSION_TIMEOUT_HOURS", DEFAULT_SESSION_TIMEOUT_HOURS);
+        let cleanup_interval_hours =
+            cost_loader.load_parsed("CLEANUP_INTERVAL_HOURS", DEFAULT_CLEANUP_INTERVAL_HOURS);
 
         SessionManagementConfig {
             max_concurrent_sessions,
@@ -520,9 +507,11 @@ impl Config {
 
     /// Load aggregation configuration from environment variables
     fn load_aggregation_config_from_env(cost_loader: &EnvLoader) -> AggregationConfig {
-        let aggregation_enabled = cost_loader.load_parsed("AGGREGATION_ENABLED", DEFAULT_AGGREGATION_ENABLED);
+        let aggregation_enabled =
+            cost_loader.load_parsed("AGGREGATION_ENABLED", DEFAULT_AGGREGATION_ENABLED);
         let retention_days = cost_loader.load_parsed("RETENTION_DAYS", DEFAULT_RETENTION_DAYS);
-        let max_stored_sessions = cost_loader.load_parsed("MAX_STORED_SESSIONS", DEFAULT_MAX_STORED_SESSIONS);
+        let max_stored_sessions =
+            cost_loader.load_parsed("MAX_STORED_SESSIONS", DEFAULT_MAX_STORED_SESSIONS);
 
         AggregationConfig {
             enabled: aggregation_enabled,
@@ -533,9 +522,12 @@ impl Config {
 
     /// Load reporting configuration from environment variables
     fn load_reporting_config_from_env(cost_loader: &EnvLoader) -> ReportingConfig {
-        let include_in_issues = cost_loader.load_parsed("INCLUDE_IN_ISSUES", DEFAULT_INCLUDE_IN_ISSUES);
-        let detailed_breakdown = cost_loader.load_parsed("DETAILED_BREAKDOWN", DEFAULT_DETAILED_BREAKDOWN);
-        let cost_precision_decimals = cost_loader.load_parsed("COST_PRECISION_DECIMALS", DEFAULT_COST_PRECISION_DECIMALS);
+        let include_in_issues =
+            cost_loader.load_parsed("INCLUDE_IN_ISSUES", DEFAULT_INCLUDE_IN_ISSUES);
+        let detailed_breakdown =
+            cost_loader.load_parsed("DETAILED_BREAKDOWN", DEFAULT_DETAILED_BREAKDOWN);
+        let cost_precision_decimals =
+            cost_loader.load_parsed("COST_PRECISION_DECIMALS", DEFAULT_COST_PRECISION_DECIMALS);
 
         ReportingConfig {
             include_in_issues,
@@ -813,7 +805,9 @@ impl Config {
     ///     Err((field, value, hint)) => println!("Invalid {}: {} - {}", field, value, hint),
     /// }
     /// ```
-    pub fn validate_cost_tracking_shared(config: &CostTrackingConfig) -> Result<(), (String, String, String)> {
+    pub fn validate_cost_tracking_shared(
+        config: &CostTrackingConfig,
+    ) -> Result<(), (String, String, String)> {
         // Note: pricing_model validation is no longer needed as enum ensures type safety
 
         // Validate positive costs
@@ -837,7 +831,10 @@ impl Config {
         if config.session_management.max_concurrent_sessions == 0 {
             return Err((
                 "cost_tracking.session_management.max_concurrent_sessions".to_string(),
-                config.session_management.max_concurrent_sessions.to_string(),
+                config
+                    .session_management
+                    .max_concurrent_sessions
+                    .to_string(),
                 "max_concurrent_sessions must be greater than 0".to_string(),
             ));
         }
@@ -2501,7 +2498,7 @@ mod cost_tracking_tests {
     #[test]
     fn test_cost_tracking_config_default() {
         let config = CostTrackingConfig::default();
-        assert_eq!(config.enabled, false);
+        assert!(!config.enabled);
         assert_eq!(config.pricing_model, PricingModel::Paid);
         assert_eq!(config.rates.input_token_cost.to_string(), "0.000015");
         assert_eq!(config.rates.output_token_cost.to_string(), "0.000075");
@@ -2680,7 +2677,9 @@ cost_tracking:
     fn test_pricing_model_from_str_invalid() {
         let result = PricingModel::from_str("invalid");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid pricing model 'invalid'"));
+        assert!(result
+            .unwrap_err()
+            .contains("Invalid pricing model 'invalid'"));
     }
 
     #[test]
@@ -2757,7 +2756,9 @@ cost_tracking:
 
         let result = YamlConfig::validate_cost_tracking_config(&invalid_config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("input_token_cost must be positive"));
+        assert!(result
+            .unwrap_err()
+            .contains("input_token_cost must be positive"));
     }
 
     #[test]
@@ -2824,7 +2825,7 @@ cost_tracking:
     #[test]
     fn test_validation_edge_cases_minimum_valid_values() {
         use rust_decimal::Decimal;
-        
+
         // Test with minimal positive values
         let config = CostTrackingConfig {
             enabled: true,
@@ -2849,15 +2850,18 @@ cost_tracking:
                 cost_precision_decimals: 0,
             },
         };
-        
+
         let result = Config::validate_cost_tracking_shared(&config);
-        assert!(result.is_ok(), "Minimal valid values should pass validation");
+        assert!(
+            result.is_ok(),
+            "Minimal valid values should pass validation"
+        );
     }
 
     #[test]
     fn test_validation_edge_cases_maximum_precision_decimals() {
         use rust_decimal::Decimal;
-        
+
         // Test maximum allowed precision decimals
         let config = CostTrackingConfig {
             enabled: true,
@@ -2874,15 +2878,18 @@ cost_tracking:
                 cost_precision_decimals: 10, // Maximum allowed
             },
         };
-        
+
         let result = Config::validate_cost_tracking_shared(&config);
-        assert!(result.is_ok(), "Maximum precision decimals should pass validation");
+        assert!(
+            result.is_ok(),
+            "Maximum precision decimals should pass validation"
+        );
     }
 
     #[test]
     fn test_validation_edge_cases_excessive_precision_decimals() {
         use rust_decimal::Decimal;
-        
+
         // Test excessive precision decimals (should fail)
         let config = CostTrackingConfig {
             enabled: true,
@@ -2899,9 +2906,12 @@ cost_tracking:
                 cost_precision_decimals: 15, // Exceeds maximum of 10
             },
         };
-        
+
         let result = Config::validate_cost_tracking_shared(&config);
-        assert!(result.is_err(), "Excessive precision decimals should fail validation");
+        assert!(
+            result.is_err(),
+            "Excessive precision decimals should fail validation"
+        );
         if let Err((field, value, hint)) = result {
             assert_eq!(field, "cost_tracking.reporting.cost_precision_decimals");
             assert_eq!(value, "15");
@@ -2912,7 +2922,7 @@ cost_tracking:
     #[test]
     fn test_validation_edge_cases_large_session_values() {
         use rust_decimal::Decimal;
-        
+
         // Test with very large but valid session management values
         let config = CostTrackingConfig {
             enabled: true,
@@ -2933,9 +2943,12 @@ cost_tracking:
             },
             reporting: ReportingConfig::default(),
         };
-        
+
         let result = Config::validate_cost_tracking_shared(&config);
-        assert!(result.is_ok(), "Large valid session values should pass validation");
+        assert!(
+            result.is_ok(),
+            "Large valid session values should pass validation"
+        );
     }
 
     #[test]
@@ -2945,16 +2958,16 @@ cost_tracking:
             pricing_model: PricingModel::Paid,
             ..Default::default()
         };
-        
+
         let max_config = CostTrackingConfig {
             pricing_model: PricingModel::Max,
             ..Default::default()
         };
-        
+
         // Both should validate successfully (enum ensures type safety)
         assert!(Config::validate_cost_tracking_shared(&paid_config).is_ok());
         assert!(Config::validate_cost_tracking_shared(&max_config).is_ok());
-        
+
         // Test enum parsing edge cases
         assert_eq!(PricingModel::from_str("paid").unwrap(), PricingModel::Paid);
         assert_eq!(PricingModel::from_str("PAID").unwrap(), PricingModel::Paid);
@@ -2962,7 +2975,7 @@ cost_tracking:
         assert_eq!(PricingModel::from_str("max").unwrap(), PricingModel::Max);
         assert_eq!(PricingModel::from_str("MAX").unwrap(), PricingModel::Max);
         assert_eq!(PricingModel::from_str("Max").unwrap(), PricingModel::Max);
-        
+
         // Invalid values should return errors
         assert!(PricingModel::from_str("invalid").is_err());
         assert!(PricingModel::from_str("").is_err());
@@ -2972,34 +2985,58 @@ cost_tracking:
     #[test]
     fn test_decimal_parsing_boundary_conditions() {
         // Test parsing with various decimal formats
-        assert_eq!(parse_decimal_with_fallback("0.000015", "0.000010").to_string(), "0.000015");
-        assert_eq!(parse_decimal_with_fallback("0", "0.000010").to_string(), "0");
-        assert_eq!(parse_decimal_with_fallback("999999.999999", "0.000010").to_string(), "999999.999999");
-        
+        assert_eq!(
+            parse_decimal_with_fallback("0.000015", "0.000010").to_string(),
+            "0.000015"
+        );
+        assert_eq!(
+            parse_decimal_with_fallback("0", "0.000010").to_string(),
+            "0"
+        );
+        assert_eq!(
+            parse_decimal_with_fallback("999999.999999", "0.000010").to_string(),
+            "999999.999999"
+        );
+
         // Test fallback scenarios
-        assert_eq!(parse_decimal_with_fallback("invalid", "0.000010").to_string(), "0.000010");
-        assert_eq!(parse_decimal_with_fallback("not_a_number", "0.123").to_string(), "0.123");
-        
+        assert_eq!(
+            parse_decimal_with_fallback("invalid", "0.000010").to_string(),
+            "0.000010"
+        );
+        assert_eq!(
+            parse_decimal_with_fallback("not_a_number", "0.123").to_string(),
+            "0.123"
+        );
+
         // Test double fallback (both invalid)
-        assert_eq!(parse_decimal_with_fallback("invalid1", "invalid2").to_string(), "0.000001");
-        
+        assert_eq!(
+            parse_decimal_with_fallback("invalid1", "invalid2").to_string(),
+            "0.000001"
+        );
+
         // Test extreme values
-        assert_eq!(parse_decimal_with_fallback("0.000000000001", "0.000010").to_string(), "0.000000000001");
-        assert_eq!(parse_decimal_with_fallback("1000000", "0.000010").to_string(), "1000000");
+        assert_eq!(
+            parse_decimal_with_fallback("0.000000000001", "0.000010").to_string(),
+            "0.000000000001"
+        );
+        assert_eq!(
+            parse_decimal_with_fallback("1000000", "0.000010").to_string(),
+            "1000000"
+        );
     }
 
     #[test]
     fn test_configuration_completeness_edge_cases() {
         use rust_decimal::Decimal;
-        
+
         // Test with all boolean flags in various combinations
         let configs = [
             (true, true, true, true),
-            (false, false, false, false), 
+            (false, false, false, false),
             (true, false, true, false),
             (false, true, false, true),
         ];
-        
+
         for (enabled, agg_enabled, include_issues, detailed) in configs {
             let config = CostTrackingConfig {
                 enabled,
@@ -3020,10 +3057,16 @@ cost_tracking:
                     cost_precision_decimals: 2,
                 },
             };
-            
+
             let result = Config::validate_cost_tracking_shared(&config);
-            assert!(result.is_ok(), "Valid configuration with flags ({}, {}, {}, {}) should pass validation", 
-                    enabled, agg_enabled, include_issues, detailed);
+            assert!(
+                result.is_ok(),
+                "Valid configuration with flags ({}, {}, {}, {}) should pass validation",
+                enabled,
+                agg_enabled,
+                include_issues,
+                detailed
+            );
         }
     }
 }

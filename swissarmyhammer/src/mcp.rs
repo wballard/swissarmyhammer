@@ -1305,6 +1305,16 @@ impl McpServer {
             Ok(branch) => branch,
             Err(e) => {
                 let (error_msg, recovery_suggestions) = match &e {
+                    SwissArmyHammerError::Other(msg) if msg.contains("ABORT ERROR") => {
+                        // ABORT ERROR should exit completely without recovery suggestions
+                        return Ok(CallToolResult {
+                            content: vec![Annotated::new(
+                                RawContent::Text(RawTextContent { text: msg.clone() }),
+                                None,
+                            )],
+                            is_error: Some(true),
+                        });
+                    }
                     SwissArmyHammerError::Other(msg) if msg.contains("uncommitted changes") => {
                         let suggestions = vec![
                             "git add . && git commit -m \"Work in progress\"".to_string(),
@@ -3397,6 +3407,21 @@ mod tests {
 
             // Work on multiple issues (should create multiple branches)
             for (i, &issue_number) in issue_numbers.iter().enumerate() {
+                // Switch back to main branch before working on next issue (except for the first one)
+                if i > 0 {
+                    Command::new("git")
+                        .args(["checkout", "main"])
+                        .current_dir(temp_path)
+                        .output()
+                        .or_else(|_| {
+                            Command::new("git")
+                                .args(["checkout", "master"])
+                                .current_dir(temp_path)
+                                .output()
+                        })
+                        .expect("Failed to switch back to main/master branch");
+                }
+
                 let work_request = WorkIssueRequest {
                     number: IssueNumber(issue_number),
                 };

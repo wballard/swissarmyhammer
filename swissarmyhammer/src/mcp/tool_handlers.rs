@@ -371,9 +371,17 @@ impl ToolHandlers {
                 Ok(branch_name) => Ok(create_success_response(format!(
                     "Switched to work branch: {branch_name}"
                 ))),
-                Err(e) => Ok(create_error_response(format!(
-                    "Failed to create work branch: {e}"
-                ))),
+                Err(e) => {
+                    // Check if this is an ABORT ERROR - if so, return it directly
+                    let error_msg = e.to_string();
+                    if error_msg.contains("ABORT ERROR") {
+                        Ok(create_error_response(error_msg))
+                    } else {
+                        Ok(create_error_response(format!(
+                            "Failed to create work branch: {e}"
+                        )))
+                    }
+                }
             },
             None => Ok(create_error_response(
                 "Git operations not available".to_string(),

@@ -111,13 +111,33 @@ impl GitOperations {
     /// Create and switch to issue work branch
     pub fn create_work_branch(&self, issue_name: &str) -> Result<String> {
         let branch_name = format!("issue/{issue_name}");
+        let current_branch = self.current_branch()?;
+        let main_branch = self.main_branch()?;
 
-        // Check if branch already exists
+        // If we're already on the target issue branch, just return success (resume scenario)
+        if current_branch == branch_name {
+            return Ok(branch_name);
+        }
+
+        // Check if branch already exists but we're not on it
         if self.branch_exists(&branch_name)? {
-            // Just switch to it
+            // We need to be on main branch to switch to issue branch
+            if current_branch != main_branch {
+                return Err(SwissArmyHammerError::Other(
+                    "ABORT ERROR: Cannot switch to issue branch from another issue branch. Please switch to main first.".to_string()
+                ));
+            }
+            // Switch to existing issue branch from main
             self.checkout_branch(&branch_name)?;
         } else {
-            // Create and switch to new branch
+            // Creating a new branch - must be on main branch
+            if current_branch != main_branch {
+                return Err(SwissArmyHammerError::Other(
+                    "ABORT ERROR: Cannot create new issue branch from another issue branch. Must be on main branch.".to_string()
+                ));
+            }
+
+            // Create and switch to new branch from main
             let output = Command::new("git")
                 .current_dir(&self.work_dir)
                 .args(["checkout", "-b", &branch_name])
@@ -531,5 +551,54 @@ mod tests {
 
         // Should have no uncommitted changes again
         assert!(!git_ops.has_uncommitted_changes().unwrap());
+    }
+
+    #[test]
+    fn test_create_work_branch_from_issue_branch_should_abort() {
+        let temp_dir = create_test_git_repo().unwrap();
+        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf()).unwrap();
+
+        // Create and switch to first issue branch
+        git_ops.create_work_branch("issue_001").unwrap();
+
+        // Try to create another work branch while on an issue branch - should return ABORT ERROR
+        let result = git_ops.create_work_branch("issue_002");
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("ABORT ERROR"));
+    }
+
+    #[test]
+    fn test_create_work_branch_from_main_succeeds() {
+        let temp_dir = create_test_git_repo().unwrap();
+        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf()).unwrap();
+
+        // Verify we're on main branch
+        let main_branch = git_ops.main_branch().unwrap();
+        let current_branch = git_ops.current_branch().unwrap();
+        assert_eq!(current_branch, main_branch);
+
+        // Create work branch from main - should succeed
+        let result = git_ops.create_work_branch("test_issue");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "issue/test_issue");
+    }
+
+    #[test]
+    fn test_create_work_branch_resume_on_correct_branch() {
+        let temp_dir = create_test_git_repo().unwrap();
+        let git_ops = GitOperations::with_work_dir(temp_dir.path().to_path_buf()).unwrap();
+
+        // Create work branch
+        git_ops.create_work_branch("test_issue").unwrap();
+
+        // Try to create the same work branch again (resume scenario) - should succeed
+        let result = git_ops.create_work_branch("test_issue");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "issue/test_issue");
+
+        // Verify we're still on the same branch
+        let current_branch = git_ops.current_branch().unwrap();
+        assert_eq!(current_branch, "issue/test_issue");
     }
 }

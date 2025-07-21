@@ -5,6 +5,7 @@
 //! These utilities enable realistic test scenarios and consistent test data.
 
 pub mod mock_mcp;
+pub mod storage_helpers;
 
 use crate::cost::{
     calculator::{CostCalculator, PricingModel, PricingRates},

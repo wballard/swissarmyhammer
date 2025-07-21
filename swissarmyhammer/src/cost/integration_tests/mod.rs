@@ -10,6 +10,7 @@ pub mod api_interception_functional;
 pub mod api_interception_helpers;
 pub mod api_interception_performance;
 pub mod api_interception_reliability;
+pub mod storage;
 
 use crate::cost::{
     calculator::{CostCalculator, MaxPlanConfig, PaidPlanConfig, PricingModel},

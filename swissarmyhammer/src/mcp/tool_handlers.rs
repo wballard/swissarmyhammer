@@ -63,7 +63,7 @@ impl ToolHandlers {
             .await
         {
             Ok(issue) => {
-                tracing::info!("Created issue {} with number {}", issue.name, issue.number);
+                tracing::info!("Created issue {}", issue.name);
                 Ok(create_issue_response(&issue))
             }
             Err(crate::SwissArmyHammerError::IssueAlreadyExists(num)) => {
@@ -99,7 +99,7 @@ impl ToolHandlers {
         request: MarkCompleteRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         let issue_storage = self.issue_storage.write().await;
-        match issue_storage.mark_complete(&request.name).await {
+        match issue_storage.mark_complete(request.name.as_str()).await {
             Ok(issue) => Ok(create_mark_complete_response(&issue)),
             Err(e) => Ok(create_error_response(format!(
                 "Failed to mark issue complete: {e}"
@@ -226,14 +226,12 @@ impl ToolHandlers {
             "issues": {
                 "active": active_issues.iter().map(|issue| {
                     serde_json::json!({
-                        "number": issue.number,
                         "name": issue.name,
                         "file_path": issue.file_path.to_string_lossy()
                     })
                 }).collect::<Vec<_>>(),
                 "completed": completed_issues.iter().map(|issue| {
                     serde_json::json!({
-                        "number": issue.number,
                         "name": issue.name,
                         "file_path": issue.file_path.to_string_lossy()
                     })
@@ -269,12 +267,12 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         let issue_storage = self.issue_storage.write().await;
         match issue_storage
-            .update_issue(&request.name, request.content)
+            .update_issue(request.name.as_str(), request.content)
             .await
         {
             Ok(issue) => Ok(create_success_response(format!(
-                "Updated issue {} ({})",
-                issue.name, issue.number
+                "Updated issue {}",
+                issue.name
             ))),
             Err(e) => Ok(create_error_response(format!(
                 "Failed to update issue: {e}"
@@ -347,12 +345,7 @@ impl ToolHandlers {
 
         // Create work branch with format: number_name
         let mut git_ops = self.git_ops.lock().await;
-        let branch_name = format!(
-            "{:0width$}_{}",
-            issue.number,
-            issue.name,
-            width = Config::global().issue_number_width
-        );
+        let branch_name = format!("issue/{}", issue.name);
 
         match git_ops.as_mut() {
             Some(ops) => match ops.create_work_branch(&branch_name) {
@@ -420,12 +413,7 @@ impl ToolHandlers {
 
         // Merge branch
         let mut git_ops = self.git_ops.lock().await;
-        let issue_name = format!(
-            "{:0width$}_{}",
-            issue.number,
-            issue.name,
-            width = Config::global().issue_number_width
-        );
+        let issue_name = issue.name.clone();
 
         match git_ops.as_mut() {
             Some(ops) => {
@@ -514,7 +502,7 @@ impl ToolHandlers {
         issue_name: &IssueName,
     ) -> std::result::Result<Issue, CallToolResult> {
         let issue_storage = self.issue_storage.read().await;
-        match issue_storage.get_issue(issue_name).await {
+        match issue_storage.get_issue(issue_name.as_str()).await {
             Ok(issue) => {
                 drop(issue_storage);
                 Ok(issue)

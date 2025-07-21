@@ -541,13 +541,13 @@ impl McpServer {
             .await
         {
             Ok(issue) => {
-                tracing::info!("Created issue {} with number {}", issue.name, issue.number);
+                tracing::info!("Created issue {}", issue.name);
                 Ok(create_issue_response(&issue))
             }
-            Err(SwissArmyHammerError::IssueAlreadyExists(num)) => {
-                tracing::warn!("Issue #{:06} already exists", num);
+            Err(SwissArmyHammerError::IssueAlreadyExists(name)) => {
+                tracing::warn!("Issue '{}' already exists", name);
                 Err(McpError::invalid_params(
-                    format!("Issue #{num:06} already exists"),
+                    format!("Issue '{name}' already exists"),
                     None,
                 ))
             }
@@ -590,7 +590,7 @@ impl McpServer {
         // Check if issue exists and get its current state
         let existing_issue = {
             let issue_storage = self.issue_storage.write().await;
-            match issue_storage.get_issue(&request.name).await {
+            match issue_storage.get_issue(request.name.as_str()).await {
                 Ok(issue) => issue,
                 Err(crate::SwissArmyHammerError::IssueNotFound(_)) => {
                     return Err(McpError::invalid_params(
@@ -626,7 +626,7 @@ impl McpServer {
         // Mark the issue as complete with a new lock
         let issue = {
             let issue_storage = self.issue_storage.write().await;
-            match issue_storage.mark_complete(&request.name).await {
+            match issue_storage.mark_complete(request.name.as_str()).await {
                 Ok(issue) => issue,
                 Err(crate::SwissArmyHammerError::IssueNotFound(_)) => {
                     return Err(McpError::invalid_params(
@@ -648,7 +648,7 @@ impl McpServer {
 
         // Format response
         let response = serde_json::json!({
-            "number": issue.number,
+            "name": issue.name,
             "name": issue.name,
             "file_path": issue.file_path.to_string_lossy(),
             "completed": issue.completed,
@@ -734,6 +734,7 @@ impl McpServer {
             }
         }
 
+
         // Calculate statistics
         let total_issues = active_issues.len() + completed_issues.len();
         let completed_count = completed_issues.len();
@@ -802,7 +803,7 @@ impl McpServer {
 
         let mut summary = String::from("\nPending issues:\n");
         for issue in &displayed_issues {
-            summary.push_str(&format!("  - #{:06}: {}\n", issue.number, issue.name));
+            summary.push_str(&format!("  - {}\n", issue.name));
         }
 
         if pending_count > max_items {
@@ -879,7 +880,7 @@ impl McpServer {
     ) -> std::result::Result<(Issue, String), McpError> {
         let issue_storage = self.issue_storage.write().await;
         let current_issue = issue_storage
-            .get_issue(&request.name)
+            .get_issue(request.name.as_str())
             .await
             .map_err(|e| match e {
                 SwissArmyHammerError::IssueNotFound(_) => {
@@ -896,7 +897,7 @@ impl McpServer {
     /// Update the issue with enhanced error handling
     async fn update_issue_with_content(
         &self,
-        issue_name: &IssueName,
+        issue_name: &str,
         final_content: String,
     ) -> std::result::Result<Issue, McpError> {
         let issue_storage = self.issue_storage.write().await;
@@ -930,10 +931,8 @@ impl McpServer {
             Self::generate_change_summary(&current_issue.content, &updated_issue.content, append);
 
         let response_text = format!(
-            "✅ Successfully updated issue #{:06} - {}\n\n📋 Issue Details:\n• Number: {}\n• Name: {}\n• File: {}\n• Status: {}\n\n📊 Changes:\n• {}\n\n📝 Updated Content:\n{}",
-            updated_issue.number,
+            "✅ Successfully updated issue {}\n\n📋 Issue Details:\n• Name: {}\n• File: {}\n• Status: {}\n\n📊 Changes:\n• {}\n\n📝 Updated Content:\n{}",
             updated_issue.name,
-            updated_issue.number,
             updated_issue.name,
             updated_issue.file_path.display(),
             if updated_issue.completed { "Completed" } else { "Active" },
@@ -992,7 +991,7 @@ impl McpServer {
 
         // Update the issue
         let updated_issue = self
-            .update_issue_with_content(&request.name, final_content)
+            .update_issue_with_content(request.name.as_str(), final_content)
             .await?;
 
         // Generate and return the response
@@ -1086,7 +1085,7 @@ impl McpServer {
                 ));
             }
         };
-        let issue = match issue_storage.get_issue(&issue_name_type).await {
+        let issue = match issue_storage.get_issue(issue_name_type.as_str()).await {
             Ok(issue) => issue,
             Err(SwissArmyHammerError::IssueNotFound(_)) => {
                 // Handle orphaned issue branch
@@ -1120,11 +1119,9 @@ impl McpServer {
         };
 
         let response_text = format!(
-            "{} Current issue: #{:06} - {}\n\n📋 Issue Details:\n• Number: {}\n• Name: {}\n• Status: {}\n• Branch: {}\n• File: {}\n\n📝 Content:\n{}",
+            "{} Current issue: {}\n\n📋 Issue Details:\n• Name: {}\n• Status: {}\n• Branch: {}\n• File: {}\n\n📝 Content:\n{}",
             status_emoji,
-            issue.number,
             issue.name,
-            issue.number,
             issue.name,
             status_text,
             branch,
@@ -1186,7 +1183,7 @@ impl McpServer {
     ) -> std::result::Result<CallToolResult, McpError> {
         // Validate the issue exists
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue(&request.name).await {
+        let issue = match issue_storage.get_issue(request.name.as_str()).await {
             Ok(issue) => issue,
             Err(SwissArmyHammerError::IssueNotFound(_)) => {
                 return Ok(Self::create_error_response(format!(
@@ -1388,7 +1385,7 @@ impl McpServer {
     ) -> std::result::Result<CallToolResult, McpError> {
         // First get the issue to determine its details
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue(&request.name).await {
+        let issue = match issue_storage.get_issue(request.name.as_str()).await {
             Ok(issue) => issue,
             Err(_e) => {
                 return Ok(CallToolResult {

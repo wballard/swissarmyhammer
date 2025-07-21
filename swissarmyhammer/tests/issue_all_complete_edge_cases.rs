@@ -321,7 +321,7 @@ async fn test_cache_invalidation_bug() {
         .issue_storage
         .write()
         .await
-        .mark_complete_by_number(issue.number.value())
+        .mark_complete_by_number(issue.number)
         .await
         .unwrap();
 

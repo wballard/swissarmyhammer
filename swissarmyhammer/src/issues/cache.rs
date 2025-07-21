@@ -18,7 +18,7 @@ pub struct CacheEntry {
 
 /// In-memory cache for issue data with TTL and LRU eviction
 pub struct IssueCache {
-    entries: Arc<RwLock<HashMap<u32, CacheEntry>>>,
+    entries: Arc<RwLock<HashMap<String, CacheEntry>>>,
     ttl: Duration,
     max_size: usize,
     hits: Arc<RwLock<u64>>,
@@ -37,12 +37,12 @@ impl IssueCache {
         }
     }
 
-    /// Get an issue from the cache by number, updating access statistics
-    pub fn get(&self, issue_number: u32) -> Option<Issue> {
+    /// Get an issue from the cache by name, updating access statistics
+    pub fn get(&self, issue_name: &str) -> Option<Issue> {
         let now = Instant::now();
         let mut entries = self.entries.write().unwrap();
 
-        if let Some(entry) = entries.get_mut(&issue_number) {
+        if let Some(entry) = entries.get_mut(issue_name) {
             // Check if entry is still valid (TTL based on creation time)
             if now.duration_since(entry.created_at) < self.ttl {
                 entry.access_count += 1;
@@ -52,7 +52,7 @@ impl IssueCache {
                 return Some(entry.issue.clone());
             }
             // Entry expired, remove it
-            entries.remove(&issue_number);
+            entries.remove(issue_name);
         }
 
         *self.misses.write().unwrap() += 1;
@@ -69,8 +69,9 @@ impl IssueCache {
             self.evict_lru(&mut entries);
         }
 
+        let issue_name = issue.name.clone();
         entries.insert(
-            issue.number.value(),
+            issue_name,
             CacheEntry {
                 issue,
                 created_at: now,
@@ -81,9 +82,9 @@ impl IssueCache {
     }
 
     /// Remove a specific issue from the cache
-    pub fn invalidate(&self, issue_number: u32) {
+    pub fn invalidate(&self, issue_name: &str) {
         let mut entries = self.entries.write().unwrap();
-        entries.remove(&issue_number);
+        entries.remove(issue_name);
     }
 
     /// Clear all entries from the cache
@@ -117,7 +118,7 @@ impl IssueCache {
         }
     }
 
-    fn evict_lru(&self, entries: &mut HashMap<u32, CacheEntry>) {
+    fn evict_lru(&self, entries: &mut HashMap<String, CacheEntry>) {
         if entries.is_empty() {
             return;
         }
@@ -126,7 +127,7 @@ impl IssueCache {
         let lru_key = entries
             .iter()
             .min_by_key(|(_, entry)| entry.last_access)
-            .map(|(key, _)| *key)
+            .map(|(key, _)| key.clone())
             .unwrap();
 
         entries.remove(&lru_key);
@@ -151,18 +152,16 @@ pub struct CacheStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::issues::IssueNumber;
-    use crate::mcp::types::IssueName;
     use chrono::Utc;
     use std::path::PathBuf;
 
-    fn create_test_issue(number: u32, name: &str) -> Issue {
+    fn create_test_issue(name: &str) -> Issue {
         Issue {
-            number: IssueNumber::new(number).unwrap(),
-            name: IssueName::new(name.to_string()).unwrap(),
-            content: format!("Test content for issue {number}"),
+            number: 1, // Default test number
+            name: name.to_string(),
+            content: format!("Test content for issue {name}"),
             completed: false,
-            file_path: PathBuf::from(format!("test_{number}.md")),
+            file_path: PathBuf::from(format!("{name}.md")),
             created_at: Utc::now(),
         }
     }
@@ -182,14 +181,13 @@ mod tests {
     #[test]
     fn test_cache_put_and_get() {
         let cache = IssueCache::new(Duration::from_secs(300), 1000);
-        let issue = create_test_issue(1, "test_issue");
+        let issue = create_test_issue("test_issue");
 
         // Put issue in cache
         cache.put(issue.clone());
 
         // Get issue from cache
-        let cached_issue = cache.get(1).unwrap();
-        assert_eq!(cached_issue.number, issue.number);
+        let cached_issue = cache.get("test_issue").unwrap();
         assert_eq!(cached_issue.name, issue.name);
         assert_eq!(cached_issue.content, issue.content);
 
@@ -206,7 +204,7 @@ mod tests {
         let cache = IssueCache::new(Duration::from_secs(300), 1000);
 
         // Try to get non-existent issue
-        let result = cache.get(999);
+        let result = cache.get("nonexistent_issue");
         assert!(result.is_none());
 
         // Check stats
@@ -219,20 +217,20 @@ mod tests {
     #[test]
     fn test_cache_ttl_expiration() {
         let cache = IssueCache::new(Duration::from_millis(10), 1000);
-        let issue = create_test_issue(1, "test_issue");
+        let issue = create_test_issue("test_issue");
 
         // Put issue in cache
         cache.put(issue.clone());
 
         // Immediately get - should hit
-        let cached_issue = cache.get(1);
+        let cached_issue = cache.get("test_issue");
         assert!(cached_issue.is_some());
 
         // Wait for TTL to expire
         std::thread::sleep(Duration::from_millis(20));
 
         // Get again - should miss due to expiration
-        let expired_result = cache.get(1);
+        let expired_result = cache.get("test_issue");
         assert!(expired_result.is_none());
 
         // Check stats
@@ -245,28 +243,28 @@ mod tests {
     #[test]
     fn test_cache_lru_eviction() {
         let cache = IssueCache::new(Duration::from_secs(300), 2); // Max 2 entries
-        let issue1 = create_test_issue(1, "issue1");
-        let issue2 = create_test_issue(2, "issue2");
-        let issue3 = create_test_issue(3, "issue3");
+        let issue1 = create_test_issue("issue1");
+        let issue2 = create_test_issue("issue2");
+        let issue3 = create_test_issue("issue3");
 
         // Put first two issues
         cache.put(issue1.clone());
         cache.put(issue2.clone());
 
         // Access issue1 to make it more recently used
-        cache.get(1);
+        cache.get("issue1");
 
         // Put third issue - should evict issue2 (LRU)
         cache.put(issue3.clone());
 
         // Issue1 should still be there
-        assert!(cache.get(1).is_some());
+        assert!(cache.get("issue1").is_some());
 
         // Issue2 should be evicted
-        assert!(cache.get(2).is_none());
+        assert!(cache.get("issue2").is_none());
 
         // Issue3 should be there
-        assert!(cache.get(3).is_some());
+        assert!(cache.get("issue3").is_some());
 
         // Check size
         let stats = cache.stats();
@@ -276,15 +274,15 @@ mod tests {
     #[test]
     fn test_cache_invalidate() {
         let cache = IssueCache::new(Duration::from_secs(300), 1000);
-        let issue = create_test_issue(1, "test_issue");
+        let issue = create_test_issue("test_issue");
 
         // Put issue in cache
         cache.put(issue.clone());
-        assert!(cache.get(1).is_some());
+        assert!(cache.get("test_issue").is_some());
 
         // Invalidate the issue
-        cache.invalidate(1);
-        assert!(cache.get(1).is_none());
+        cache.invalidate("test_issue");
+        assert!(cache.get("test_issue").is_none());
 
         // Check size
         let stats = cache.stats();
@@ -294,8 +292,8 @@ mod tests {
     #[test]
     fn test_cache_clear() {
         let cache = IssueCache::new(Duration::from_secs(300), 1000);
-        let issue1 = create_test_issue(1, "issue1");
-        let issue2 = create_test_issue(2, "issue2");
+        let issue1 = create_test_issue("issue1");
+        let issue2 = create_test_issue("issue2");
 
         // Put issues in cache
         cache.put(issue1.clone());
@@ -305,8 +303,8 @@ mod tests {
         cache.clear();
 
         // All issues should be gone
-        assert!(cache.get(1).is_none());
-        assert!(cache.get(2).is_none());
+        assert!(cache.get("issue1").is_none());
+        assert!(cache.get("issue2").is_none());
 
         // Check size
         let stats = cache.stats();
@@ -316,35 +314,35 @@ mod tests {
     #[test]
     fn test_cache_access_count_tracking() {
         let cache = IssueCache::new(Duration::from_secs(300), 1000);
-        let issue = create_test_issue(1, "test_issue");
+        let issue = create_test_issue("test_issue");
 
         // Put issue in cache
         cache.put(issue.clone());
 
         // Access multiple times
-        cache.get(1);
-        cache.get(1);
-        cache.get(1);
+        cache.get("test_issue");
+        cache.get("test_issue");
+        cache.get("test_issue");
 
         // Check that access count is tracked
         let entries = cache.entries.read().unwrap();
-        let entry = entries.get(&1).unwrap();
+        let entry = entries.get("test_issue").unwrap();
         assert_eq!(entry.access_count, 4); // 1 from put + 3 from gets
     }
 
     #[test]
     fn test_cache_stats_calculation() {
         let cache = IssueCache::new(Duration::from_secs(300), 1000);
-        let issue = create_test_issue(1, "test_issue");
+        let issue = create_test_issue("test_issue");
 
         // Put issue in cache
         cache.put(issue.clone());
 
         // Mix of hits and misses
-        cache.get(1); // hit
-        cache.get(1); // hit
-        cache.get(2); // miss
-        cache.get(3); // miss
+        cache.get("test_issue"); // hit
+        cache.get("test_issue"); // hit
+        cache.get("issue2"); // miss
+        cache.get("issue3"); // miss
 
         let stats = cache.stats();
         assert_eq!(stats.hits, 2);
@@ -356,7 +354,7 @@ mod tests {
     #[test]
     fn test_cache_concurrent_access() {
         let cache = Arc::new(IssueCache::new(Duration::from_secs(300), 1000));
-        let issue = create_test_issue(1, "test_issue");
+        let issue = create_test_issue("test_issue");
 
         // Put issue in cache
         cache.put(issue.clone());
@@ -365,7 +363,7 @@ mod tests {
         let mut handles = vec![];
         for _ in 0..10 {
             let cache_clone = cache.clone();
-            let handle = std::thread::spawn(move || cache_clone.get(1));
+            let handle = std::thread::spawn(move || cache_clone.get("test_issue"));
             handles.push(handle);
         }
 

@@ -1,7 +1,6 @@
 use super::filesystem::{Issue, IssueStorage};
 use super::metrics::{MetricsSnapshot, Operation, PerformanceMetrics};
 use crate::error::Result;
-use crate::mcp::types::IssueName;
 use async_trait::async_trait;
 use tokio::time::Instant;
 
@@ -47,7 +46,7 @@ impl IssueStorage for InstrumentedIssueStorage {
         result
     }
 
-    async fn get_issue(&self, name: &IssueName) -> Result<Issue> {
+    async fn get_issue(&self, name: &str) -> Result<Issue> {
         let start = Instant::now();
         let result = self.storage.get_issue(name).await;
         let duration = start.elapsed();
@@ -56,16 +55,7 @@ impl IssueStorage for InstrumentedIssueStorage {
         result
     }
 
-    async fn get_issue_by_number(&self, number: u32) -> Result<Issue> {
-        let start = Instant::now();
-        let result = self.storage.get_issue_by_number(number).await;
-        let duration = start.elapsed();
-
-        self.metrics.record_operation(Operation::Read, duration);
-        result
-    }
-
-    async fn update_issue(&self, name: &IssueName, content: String) -> Result<Issue> {
+    async fn update_issue(&self, name: &str, content: String) -> Result<Issue> {
         let start = Instant::now();
         let result = self.storage.update_issue(name, content).await;
         let duration = start.elapsed();
@@ -74,27 +64,9 @@ impl IssueStorage for InstrumentedIssueStorage {
         result
     }
 
-    async fn update_issue_by_number(&self, number: u32, content: String) -> Result<Issue> {
-        let start = Instant::now();
-        let result = self.storage.update_issue_by_number(number, content).await;
-        let duration = start.elapsed();
-
-        self.metrics.record_operation(Operation::Update, duration);
-        result
-    }
-
-    async fn mark_complete(&self, name: &IssueName) -> Result<Issue> {
+    async fn mark_complete(&self, name: &str) -> Result<Issue> {
         let start = Instant::now();
         let result = self.storage.mark_complete(name).await;
-        let duration = start.elapsed();
-
-        self.metrics.record_operation(Operation::Delete, duration);
-        result
-    }
-
-    async fn mark_complete_by_number(&self, number: u32) -> Result<Issue> {
-        let start = Instant::now();
-        let result = self.storage.mark_complete_by_number(number).await;
         let duration = start.elapsed();
 
         self.metrics.record_operation(Operation::Delete, duration);
@@ -129,7 +101,7 @@ impl IssueStorage for InstrumentedIssueStorage {
         result
     }
 
-    async fn get_issues_batch(&self, names: Vec<&IssueName>) -> Result<Vec<Issue>> {
+    async fn get_issues_batch(&self, names: Vec<&str>) -> Result<Vec<Issue>> {
         let start = Instant::now();
         let result = self.storage.get_issues_batch(names).await;
         let duration = start.elapsed();
@@ -145,6 +117,72 @@ impl IssueStorage for InstrumentedIssueStorage {
             }
         }
 
+        result
+    }
+
+
+    async fn update_issues_batch(&self, updates: Vec<(&str, String)>) -> Result<Vec<Issue>> {
+        let start = Instant::now();
+        let result = self.storage.update_issues_batch(updates).await;
+        let duration = start.elapsed();
+
+        // Record each update operation in the batch with per-operation time
+        if let Ok(ref updated_issues) = result {
+            if !updated_issues.is_empty() {
+                let per_operation_duration = duration / updated_issues.len() as u32;
+                for _ in updated_issues {
+                    self.metrics
+                        .record_operation(Operation::Update, per_operation_duration);
+                }
+            }
+        }
+
+        result
+    }
+
+    async fn mark_complete_batch(&self, names: Vec<&str>) -> Result<Vec<Issue>> {
+        let start = Instant::now();
+        let result = self.storage.mark_complete_batch(names).await;
+        let duration = start.elapsed();
+
+        // Record each delete operation in the batch with per-operation time
+        if let Ok(ref completed_issues) = result {
+            if !completed_issues.is_empty() {
+                let per_operation_duration = duration / completed_issues.len() as u32;
+                for _ in completed_issues {
+                    self.metrics
+                        .record_operation(Operation::Delete, per_operation_duration);
+                }
+            }
+        }
+
+        result
+    }
+
+    async fn get_issue_by_number(&self, number: u32) -> Result<Issue> {
+        let start = Instant::now();
+        let result = self.storage.get_issue_by_number(number).await;
+        let duration = start.elapsed();
+
+        self.metrics.record_operation(Operation::Read, duration);
+        result
+    }
+
+    async fn update_issue_by_number(&self, number: u32, content: String) -> Result<Issue> {
+        let start = Instant::now();
+        let result = self.storage.update_issue_by_number(number, content).await;
+        let duration = start.elapsed();
+
+        self.metrics.record_operation(Operation::Update, duration);
+        result
+    }
+
+    async fn mark_complete_by_number(&self, number: u32) -> Result<Issue> {
+        let start = Instant::now();
+        let result = self.storage.mark_complete_by_number(number).await;
+        let duration = start.elapsed();
+
+        self.metrics.record_operation(Operation::Delete, duration);
         result
     }
 
@@ -167,29 +205,7 @@ impl IssueStorage for InstrumentedIssueStorage {
         result
     }
 
-    async fn update_issues_batch(&self, updates: Vec<(&IssueName, String)>) -> Result<Vec<Issue>> {
-        let start = Instant::now();
-        let result = self.storage.update_issues_batch(updates).await;
-        let duration = start.elapsed();
-
-        // Record each update operation in the batch with per-operation time
-        if let Ok(ref updated_issues) = result {
-            if !updated_issues.is_empty() {
-                let per_operation_duration = duration / updated_issues.len() as u32;
-                for _ in updated_issues {
-                    self.metrics
-                        .record_operation(Operation::Update, per_operation_duration);
-                }
-            }
-        }
-
-        result
-    }
-
-    async fn update_issues_batch_by_numbers(
-        &self,
-        updates: Vec<(u32, String)>,
-    ) -> Result<Vec<Issue>> {
+    async fn update_issues_batch_by_numbers(&self, updates: Vec<(u32, String)>) -> Result<Vec<Issue>> {
         let start = Instant::now();
         let result = self.storage.update_issues_batch_by_numbers(updates).await;
         let duration = start.elapsed();
@@ -201,25 +217,6 @@ impl IssueStorage for InstrumentedIssueStorage {
                 for _ in updated_issues {
                     self.metrics
                         .record_operation(Operation::Update, per_operation_duration);
-                }
-            }
-        }
-
-        result
-    }
-
-    async fn mark_complete_batch(&self, names: Vec<&IssueName>) -> Result<Vec<Issue>> {
-        let start = Instant::now();
-        let result = self.storage.mark_complete_batch(names).await;
-        let duration = start.elapsed();
-
-        // Record each delete operation in the batch with per-operation time
-        if let Ok(ref completed_issues) = result {
-            if !completed_issues.is_empty() {
-                let per_operation_duration = duration / completed_issues.len() as u32;
-                for _ in completed_issues {
-                    self.metrics
-                        .record_operation(Operation::Delete, per_operation_duration);
                 }
             }
         }
@@ -245,6 +242,7 @@ impl IssueStorage for InstrumentedIssueStorage {
 
         result
     }
+
 }
 
 #[cfg(test)]
@@ -313,7 +311,7 @@ mod tests {
 
         // Get the issue
         let retrieved_issue = storage
-            .get_issue_by_number(issue.number.value())
+            .get_issue(issue.name.as_str())
             .await
             .unwrap();
 
@@ -324,7 +322,7 @@ mod tests {
         assert!(snapshot.avg_read_time > 0.0);
 
         // Verify the issue was actually retrieved
-        assert_eq!(retrieved_issue.number, issue.number);
+        assert_eq!(retrieved_issue.name, issue.name);
         assert_eq!(retrieved_issue.content, issue.content);
     }
 
@@ -343,7 +341,7 @@ mod tests {
 
         // Update the issue
         let updated_issue = storage
-            .update_issue_by_number(issue.number.value(), "Updated content".to_string())
+            .update_issue(issue.name.as_str(), "Updated content".to_string())
             .await
             .unwrap();
 
@@ -354,7 +352,7 @@ mod tests {
         assert!(snapshot.avg_update_time > 0.0);
 
         // Verify the issue was actually updated
-        assert_eq!(updated_issue.number, issue.number);
+        assert_eq!(updated_issue.name, issue.name);
         assert_eq!(updated_issue.content, "Updated content");
     }
 
@@ -373,7 +371,7 @@ mod tests {
 
         // Mark as complete
         let completed_issue = storage
-            .mark_complete_by_number(issue.number.value())
+            .mark_complete(issue.name.as_str())
             .await
             .unwrap();
 
@@ -384,7 +382,7 @@ mod tests {
         assert!(snapshot.avg_delete_time > 0.0);
 
         // Verify the issue was actually marked complete
-        assert_eq!(completed_issue.number, issue.number);
+        assert_eq!(completed_issue.name, issue.name);
         assert!(completed_issue.completed);
     }
 
@@ -433,21 +431,21 @@ mod tests {
             .unwrap();
 
         storage
-            .get_issue_by_number(issue1.number.value())
+            .get_issue(issue1.name.as_str())
             .await
             .unwrap();
         storage
-            .get_issue_by_number(issue2.number.value())
-            .await
-            .unwrap();
-
-        storage
-            .update_issue_by_number(issue1.number.value(), "Updated content".to_string())
+            .get_issue(issue2.name.as_str())
             .await
             .unwrap();
 
         storage
-            .mark_complete_by_number(issue2.number.value())
+            .update_issue(issue1.name.as_str(), "Updated content".to_string())
+            .await
+            .unwrap();
+
+        storage
+            .mark_complete(issue2.name.as_str())
             .await
             .unwrap();
 
@@ -512,7 +510,7 @@ mod tests {
 
         // Perform multiple read operations (should be faster than creates)
         for i in 1..=5 {
-            storage.get_issue_by_number(i).await.unwrap();
+            storage.get_issue(&format!("issue_{i}")).await.unwrap();
         }
 
         // Perform a list operation (potentially slower)
@@ -586,10 +584,10 @@ mod tests {
 
         for _ in 0..10 {
             let storage_clone = storage.clone();
-            let issue_number = issue.number.value();
+            let issue_name = issue.name.clone();
             let handle = tokio::spawn(async move {
                 storage_clone
-                    .get_issue_by_number(issue_number)
+                    .get_issue(&issue_name)
                     .await
                     .unwrap();
             });
@@ -613,7 +611,7 @@ mod tests {
         let (storage, _temp) = create_test_storage();
 
         // Try to get a non-existent issue
-        let result = storage.get_issue_by_number(999).await;
+        let result = storage.get_issue("nonexistent_issue").await;
         assert!(result.is_err());
 
         // Verify metrics were still recorded even though operation failed

@@ -83,7 +83,7 @@ pub mod metrics;
 pub use filesystem::{
     create_safe_filename, extract_issue_name_from_filename, format_issue_number, is_issue_file,
     parse_issue_filename, parse_issue_number, sanitize_issue_name, validate_issue_name,
-    FileSystemIssueStorage, Issue, IssueNumber, IssueState, IssueStorage,
+    get_issue_name_from_filename, FileSystemIssueStorage, Issue, IssueState, IssueStorage,
 };
 
 // Export cache types

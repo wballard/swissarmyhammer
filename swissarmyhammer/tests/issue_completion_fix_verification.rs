@@ -45,7 +45,7 @@ async fn test_completion_detection_fix() {
     let _completed_issue = issue_storage
         .write()
         .await
-        .mark_complete_by_number(issue1.number.value())
+        .mark_complete_by_number(issue1.number)
         .await
         .unwrap();
 

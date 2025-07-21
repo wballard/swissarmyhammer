@@ -122,7 +122,7 @@ async fn test_complete_issue_workflow() {
     // Step 4: Update the issue with progress
     let updated_issue = env.issue_storage.write().await
         .update_issue_by_number(
-            issue_number.value(),
+            issue_number,
             format!("{}\n\nJWT authentication implementation completed. Added token generation and validation.", issue.content),
         )
         .await
@@ -137,7 +137,7 @@ async fn test_complete_issue_workflow() {
         .issue_storage
         .write()
         .await
-        .mark_complete_by_number(issue_number.value())
+        .mark_complete_by_number(issue_number)
         .await
         .unwrap();
 
@@ -390,7 +390,7 @@ async fn test_issue_file_structure() {
         .issue_storage
         .write()
         .await
-        .mark_complete_by_number(issue.number.value())
+        .mark_complete_by_number(issue.number)
         .await
         .unwrap();
 

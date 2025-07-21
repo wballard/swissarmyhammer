@@ -179,7 +179,7 @@ async fn test_ancestor_vs_parent_completion_detection() {
     let _completed_issue = issue_storage
         .write()
         .await
-        .mark_complete_by_number(completed.number.value())
+        .mark_complete_by_number(completed.number)
         .await
         .unwrap();
 

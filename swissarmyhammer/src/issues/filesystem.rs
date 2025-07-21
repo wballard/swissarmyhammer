@@ -122,8 +122,7 @@ impl FileSystemIssueStorage {
     ///
     /// ```ignore
     /// let issue = storage.parse_issue_from_file(Path::new("./issues/000123_bug_fix.md"))?;
-    /// assert_eq!(/*issue.number*/ 0, 123);
-    /// assert_eq!(issue.name.as_str(), "bug_fix");
+    /// assert_eq!(issue.name.as_str(), "000123_bug_fix");
     /// ```
     fn parse_issue_from_file(&self, path: &Path) -> Result<Issue> {
         let filename = path
@@ -145,14 +144,8 @@ impl FileSystemIssueStorage {
             })?;
 
         // Extract issue name from filename
-        // For numbered files (000123_name), extract just the name part
-        // For non-numbered files (just_a_name), use the whole filename
-        let name = if let Ok((_, name_part)) = parse_issue_filename(filename) {
-            name_part
-        } else {
-            // If parsing as numbered format fails, use the whole filename
-            filename.to_string()
-        };
+        // Use the full filename (without .md extension) to preserve issue numbers
+        let name = filename.to_string();
 
         // Read file content
         let content = fs::read_to_string(path).map_err(SwissArmyHammerError::Io)?;
@@ -1224,7 +1217,7 @@ mod tests {
         fs::write(&test_file, "# Completed Issue\\n\\nThis is completed.").unwrap();
 
         let issue = storage.parse_issue_from_file(&test_file).unwrap();
-        assert_eq!(issue.name.as_str(), "completed_issue");
+        assert_eq!(issue.name.as_str(), "000456_completed_issue");
         assert_eq!(issue.content, "# Completed Issue\\n\\nThis is completed.");
         assert!(issue.completed);
         assert_eq!(issue.file_path, test_file);
@@ -1362,20 +1355,20 @@ mod tests {
 
         // Should be sorted by name
         // Number assertion removed - name-based approach
-        assert_eq!(issues[0].name.as_str(), "another");
+        assert_eq!(issues[0].name.as_str(), "000001_another");
         assert!(!issues[0].completed);
 
         // Number assertion removed - name-based approach
-        assert_eq!(issues[1].name.as_str(), "completed");
+        assert_eq!(issues[1].name.as_str(), "000002_completed");
         assert!(issues[1].completed);
 
         // Number assertion removed - name-based approach
-        assert_eq!(issues[2].name.as_str(), "done");
-        assert!(issues[2].completed);
+        assert_eq!(issues[2].name.as_str(), "000003_pending");
+        assert!(!issues[2].completed);
 
         // Number assertion removed - name-based approach
-        assert_eq!(issues[3].name.as_str(), "pending");
-        assert!(!issues[3].completed);
+        assert_eq!(issues[3].name.as_str(), "000004_done");
+        assert!(issues[3].completed);
     }
 
     #[tokio::test]
@@ -1480,10 +1473,10 @@ mod tests {
         let mut sorted_issues = issues;
         sorted_issues.sort_by_key(|issue| issue.name.clone());
 
-        // Issues sorted alphabetically by name: README, test, valid
-        assert_eq!(sorted_issues[0].name.as_str(), "README");
-        assert_eq!(sorted_issues[1].name.as_str(), "test");
-        assert_eq!(sorted_issues[2].name.as_str(), "valid");
+        // Issues sorted alphabetically by name: 000001_test, 000003_valid, README
+        assert_eq!(sorted_issues[0].name.as_str(), "000001_test");
+        assert_eq!(sorted_issues[1].name.as_str(), "000003_valid");
+        assert_eq!(sorted_issues[2].name.as_str(), "README");
     }
 
     #[test]
@@ -1518,7 +1511,7 @@ mod tests {
         assert!(result.is_ok());
         let issue = result.unwrap();
         // Number assertion removed - name-based approach
-        assert_eq!(issue.name.as_str(), "test_with_underscores");
+        assert_eq!(issue.name.as_str(), "000123_test_with_underscores");
     }
 
     #[test]
@@ -1535,7 +1528,7 @@ mod tests {
         assert!(result.is_ok());
         let issue = result.unwrap();
         // Number assertion removed - name-based approach
-        assert_eq!(issue.name.as_str(), "");
+        assert_eq!(issue.name.as_str(), "000123_");
     }
 
     #[test]
@@ -1570,7 +1563,7 @@ mod tests {
         assert!(result.is_ok());
         let issue = result.unwrap();
         // Number assertion removed - name-based approach
-        assert_eq!(issue.name.as_str(), "test");
+        assert_eq!(issue.name.as_str(), "000001_test");
     }
 
     #[test]
@@ -1587,7 +1580,7 @@ mod tests {
         assert!(result.is_ok());
         let issue = result.unwrap();
         // Number assertion removed - name-based approach
-        assert_eq!(issue.name.as_str(), "test");
+        assert_eq!(issue.name.as_str(), "000000_test");
     }
 
     #[test]
@@ -1613,10 +1606,10 @@ mod tests {
         sorted_issues.sort_by_key(|issue| issue.name.clone());
 
         // Issues are now sorted alphabetically by name
-        assert_eq!(sorted_issues[0].name.as_str(), "1000000_too_large");
-        assert_eq!(sorted_issues[1].name.as_str(), "abc123_invalid_number");
-        assert_eq!(sorted_issues[2].name.as_str(), "invalid_format");
-        assert_eq!(sorted_issues[3].name.as_str(), "valid");
+        assert_eq!(sorted_issues[0].name.as_str(), "000001_valid");
+        assert_eq!(sorted_issues[1].name.as_str(), "1000000_too_large");
+        assert_eq!(sorted_issues[2].name.as_str(), "abc123_invalid_number");
+        assert_eq!(sorted_issues[3].name.as_str(), "invalid_format");
 
         // The other 3 should be non-numbered with virtual numbers >= virtual_base
         for _issue in sorted_issues.iter().take(4).skip(1) {
@@ -3010,18 +3003,24 @@ mod tests {
         let names: Vec<&str> = all_issues.iter().map(|i| i.name.as_str()).collect();
 
         // Issues should be sorted alphabetically by name:
-        // alpha, apex, beta, gamma, zulu
+        // 000001_beta, 000002_alpha, 000003_gamma, apex, zulu
         assert_eq!(
             names,
-            vec!["alpha", "apex", "beta", "gamma", "zulu"],
+            vec![
+                "000001_beta",
+                "000002_alpha",
+                "000003_gamma",
+                "apex",
+                "zulu"
+            ],
             "Issues should be sorted alphabetically by name. Got: {names:?}"
         );
 
-        // Verify the first issue (next issue) is "alpha"
+        // Verify the first issue (next issue) is "000001_beta"
         assert_eq!(
             all_issues[0].name.as_str(),
-            "alpha",
-            "Next issue should be 'alpha' (first in alphabetical order)"
+            "000001_beta",
+            "Next issue should be '000001_beta' (first in alphabetical order)"
         );
     }
 

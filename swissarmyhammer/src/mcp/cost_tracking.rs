@@ -14,6 +14,29 @@ use std::time::Instant;
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
+/// Default token values for MCP operations
+const DEFAULT_MCP_INPUT_TOKENS: u32 = 10;
+const DEFAULT_MCP_OUTPUT_TOKENS: u32 = 5;
+
+/// API call record for cost tracking
+#[derive(Debug, Clone)]
+pub struct ApiCallRecord {
+    /// The API endpoint that was called
+    pub endpoint: String,
+    /// The model used for the API call
+    pub model: String,
+    /// When the API call started
+    pub start_time: Instant,
+    /// Number of input tokens used
+    pub input_tokens: u32,
+    /// Number of output tokens generated
+    pub output_tokens: u32,
+    /// Status of the API call (success/failure)
+    pub status: ApiCallStatus,
+    /// Error message if the call failed
+    pub error_message: Option<String>,
+}
+
 /// Cost tracking wrapper for MCP handlers
 ///
 /// This wrapper implements the decorator pattern to add cost tracking capabilities
@@ -163,42 +186,27 @@ impl CostTrackingMcpHandler {
     ///
     /// # Arguments
     ///
-    /// * `endpoint` - The API endpoint that was called
-    /// * `model` - The model used for the API call
-    /// * `start_time` - When the API call started
-    /// * `input_tokens` - Number of input tokens used
-    /// * `output_tokens` - Number of output tokens generated
-    /// * `status` - Status of the API call (success/failure)
-    /// * `error_message` - Error message if the call failed
+    /// * `record` - The API call record containing all call information
     ///
     /// # Returns
     ///
     /// Success if the API call was recorded, or an error description
-    async fn record_api_call(
-        &self,
-        endpoint: &str,
-        model: &str,
-        start_time: Instant,
-        input_tokens: u32,
-        output_tokens: u32,
-        status: ApiCallStatus,
-        error_message: Option<String>,
-    ) -> Result<(), String> {
+    async fn record_api_call(&self, record: ApiCallRecord) -> Result<(), String> {
         let active_session = self.active_session.lock().await;
 
         if let Some(session_id) = *active_session {
             drop(active_session);
 
-            let mut api_call = ApiCall::new(endpoint, model)
+            let mut api_call = ApiCall::new(&record.endpoint, &record.model)
                 .map_err(|e| format!("Failed to create API call record: {e}"))?;
 
             // Calculate duration
-            let duration = start_time.elapsed();
+            let duration = record.start_time.elapsed();
             api_call.complete(
-                input_tokens,
-                output_tokens,
-                status.clone(),
-                error_message.clone(),
+                record.input_tokens,
+                record.output_tokens,
+                record.status.clone(),
+                record.error_message.clone(),
             );
 
             let mut tracker = self.cost_tracker.lock().await;
@@ -209,22 +217,22 @@ impl CostTrackingMcpHandler {
             debug!(
                 session_id = %session_id,
                 call_id = %call_id,
-                endpoint = endpoint,
-                model = model,
-                input_tokens = input_tokens,
-                output_tokens = output_tokens,
+                endpoint = record.endpoint,
+                model = record.model,
+                input_tokens = record.input_tokens,
+                output_tokens = record.output_tokens,
                 duration_ms = duration.as_millis(),
-                ?status,
+                status = ?record.status,
                 "Recorded API call"
             );
 
             Ok(())
         } else {
             debug!(
-                endpoint = endpoint,
-                model = model,
-                input_tokens = input_tokens,
-                output_tokens = output_tokens,
+                endpoint = record.endpoint,
+                model = record.model,
+                input_tokens = record.input_tokens,
+                output_tokens = record.output_tokens,
                 "API call made without active cost session - not recorded"
             );
             Ok(()) // Not an error - graceful degradation
@@ -397,19 +405,20 @@ impl CostTrackingMcpHandler {
         };
 
         // Simulate token usage for MCP operations (minimal overhead)
-        let input_tokens = 10; // Minimal tokens for MCP request processing
-        let output_tokens = 5; // Minimal tokens for MCP response
+        let input_tokens = DEFAULT_MCP_INPUT_TOKENS;
+        let output_tokens = DEFAULT_MCP_OUTPUT_TOKENS;
 
-        self.record_api_call(
-            &format!("mcp://{}", operation),
-            "mcp-internal",
+        let record = ApiCallRecord {
+            endpoint: format!("mcp://{}", operation),
+            model: "mcp-internal".to_string(),
             start_time,
             input_tokens,
             output_tokens,
             status,
-            None,
-        )
-        .await
+            error_message: None,
+        };
+
+        self.record_api_call(record).await
     }
 
     /// Get the current active session ID
@@ -425,8 +434,9 @@ impl CostTrackingMcpHandler {
             drop(active_session);
 
             let tracker = self.cost_tracker.lock().await;
-            if let Some(session) = tracker.get_session(&session_id) {
-                Some(SessionStats {
+            tracker
+                .get_session(&session_id)
+                .map(|session| SessionStats {
                     session_id,
                     issue_id: session.issue_id.clone(),
                     api_call_count: session.api_call_count(),
@@ -436,9 +446,6 @@ impl CostTrackingMcpHandler {
                     is_completed: session.is_completed(),
                     duration: session.total_duration,
                 })
-            } else {
-                None
-            }
         } else {
             None
         }

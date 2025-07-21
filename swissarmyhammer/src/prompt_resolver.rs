@@ -41,16 +41,35 @@ impl PromptResolver {
 
         // Process all loaded files into prompts
         let loader = PromptLoader::new();
+
+        // We need to process files in precedence order to ensure source tracking is correct
+        // Collect files by source and process in order: builtin -> user -> local
+        let mut builtin_files = Vec::new();
+        let mut user_files = Vec::new();
+        let mut local_files = Vec::new();
+
         for file in self.vfs.list() {
-            // Load the prompt from content
-            let prompt = loader.load_from_string(&file.name, &file.content)?;
+            match file.source {
+                FileSource::Builtin => builtin_files.push(file),
+                FileSource::User => user_files.push(file),
+                FileSource::Local => local_files.push(file),
+                FileSource::Dynamic => {} // Skip dynamic files for now
+            }
+        }
 
-            // Track the source
-            self.prompt_sources
-                .insert(prompt.name.clone(), file.source.clone());
+        // Process in precedence order (later sources override earlier ones)
+        for files in [&builtin_files, &user_files, &local_files] {
+            for file in files {
+                // Load the prompt from content
+                let prompt = loader.load_from_string(&file.name, &file.content)?;
 
-            // Add to library
-            library.add(prompt)?;
+                // Track the source (this will override any previous tracking for the same prompt)
+                self.prompt_sources
+                    .insert(prompt.name.clone(), file.source.clone());
+
+                // Add to library
+                library.add(prompt)?;
+            }
         }
 
         Ok(())
@@ -82,6 +101,7 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
+    #[serial_test::serial]
     fn test_prompt_resolver_loads_user_prompts() {
         let temp_dir = TempDir::new().unwrap();
         let user_prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
@@ -123,6 +143,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_prompt_resolver_loads_local_prompts() {
         let temp_dir = TempDir::new().unwrap();
         let local_prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
@@ -159,14 +180,18 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_debug_error_prompt_is_correctly_tracked_as_builtin() {
         let temp_dir = TempDir::new().unwrap();
 
-        // Store original directory for cleanup
+        // Store original environment values for cleanup
         let original_dir = std::env::current_dir().ok();
+        let original_home = std::env::var("HOME").ok();
 
-        // Set up test environment with valid current directory
+        // Set up test environment with isolated directories
         std::env::set_current_dir(temp_dir.path()).unwrap();
+        // Set HOME to an empty temp directory to avoid user prompts
+        std::env::set_var("HOME", temp_dir.path());
 
         let mut resolver = PromptResolver::new();
         let mut library = PromptLibrary::new();
@@ -174,9 +199,13 @@ mod tests {
         // Load builtin prompts
         let result = resolver.load_all_prompts(&mut library);
 
-        // Restore original directory
+        // Restore original environment
         if let Some(dir) = original_dir {
             std::env::set_current_dir(dir).ok();
+        }
+        match original_home {
+            Some(home) => std::env::set_var("HOME", home),
+            None => std::env::remove_var("HOME"),
         }
 
         // Check results after cleanup
@@ -213,6 +242,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_get_prompt_directories() {
         let temp_dir = TempDir::new().unwrap();
 
@@ -246,7 +276,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Temporarily ignoring due to pre-existing test failure"]
+    #[serial_test::serial]
     fn test_user_prompt_overrides_builtin_source_tracking() {
         let temp_dir = TempDir::new().unwrap();
         let user_prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
@@ -273,16 +303,10 @@ This is a user-defined debug/error prompt that should override the builtin one.
         // Temporarily change home directory for test
         std::env::set_var("HOME", temp_dir.path());
 
-        // Load builtin prompts first
+        // Load all prompts (builtin, user, and local in proper precedence)
         resolver.load_all_prompts(&mut library).unwrap();
 
-        // Check if debug/error exists as builtin (it might not always exist)
-        let has_builtin_debug_error = resolver.prompt_sources.contains_key("debug/error");
-
-        // Load user prompts (should override the builtin if it exists, or just add it if not)
-        resolver.load_all_prompts(&mut library).unwrap();
-
-        // Now it should be tracked as a user prompt
+        // The debug/error should be tracked as a user prompt since user prompts override builtin
         assert_eq!(
             resolver.prompt_sources.get("debug/error"),
             Some(&FileSource::User),
@@ -300,15 +324,6 @@ This is a user-defined debug/error prompt that should override the builtin one.
         match original_home {
             Some(home) => std::env::set_var("HOME", home),
             None => std::env::remove_var("HOME"),
-        }
-
-        // If we had a builtin debug/error, verify it was actually overridden
-        if has_builtin_debug_error {
-            assert_eq!(
-                resolver.prompt_sources.get("debug/error"),
-                Some(&FileSource::User),
-                "Builtin debug/error should have been overridden by user prompt"
-            );
         }
     }
 }

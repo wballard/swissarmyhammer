@@ -881,6 +881,7 @@ base_branch: "feature/test"
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_find_yaml_config_file_not_found() {
         let _guard = WORKING_DIR_MUTEX
             .lock()

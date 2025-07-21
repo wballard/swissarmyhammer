@@ -74,9 +74,16 @@ rust_decimal = { version = "1.0", features = ["serde", "macros"] }
 # Text processing
 unicode-normalization = "0.1"
 
+# Database (optional SQLite for cost analytics)
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "json", "rust_decimal"], optional = true }
+
 # Syntax highlighting
 syntect = { workspace = true }
 
+
+[features]
+default = []
+database = ["sqlx"]
 
 [dev-dependencies]
 tempfile = { workspace = true }

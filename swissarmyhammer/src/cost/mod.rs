@@ -5,6 +5,8 @@
 //! cost calculation capabilities throughout issue processing.
 
 pub mod calculator;
+#[cfg(feature = "database")]
+pub mod database;
 pub mod formatting;
 pub mod token_counter;
 pub mod token_estimation;
@@ -33,4 +35,15 @@ pub use token_estimation::{ContentType, EstimationConfig, Language, TextAnalyzer
 pub use tracker::{
     ApiCall, ApiCallId, ApiCallStatus, CostError, CostSession, CostSessionId, CostSessionStatus,
     CostTracker, IssueId,
+};
+
+#[cfg(feature = "database")]
+pub use database::{
+    CostAnalytics, CostDatabase, DatabaseConfig, DatabaseConfigError, DatabaseError,
+    Migration, MigrationError, MigrationRunner,
+};
+
+#[cfg(feature = "database")]
+pub use database::queries::{
+    CostTrend, IssueCostSummary, ModelUsage, QueryError, TimePeriod, TrendQuery,
 };

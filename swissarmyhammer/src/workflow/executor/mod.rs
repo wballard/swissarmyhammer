@@ -1,6 +1,9 @@
 //! Workflow execution engine
 
+pub mod cache;
+pub mod compensation;
 pub mod core;
+pub mod cost_integration;
 pub mod fork_join;
 #[cfg(test)]
 mod tests;

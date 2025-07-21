@@ -48,16 +48,17 @@ fn create_sample_run_metrics() -> RunMetrics {
         started_at: Utc::now(),
         completed_at: Some(Utc::now()),
         status: WorkflowRunStatus::Completed,
+        duration: Some(Duration::from_millis(650)),
         total_duration: Some(Duration::from_millis(650)),
         state_durations,
         transition_count: 2,
-        memory_metrics: MemoryMetrics {
+        memory_metrics: Some(MemoryMetrics {
             peak_memory_bytes: 1024 * 1024,
             initial_memory_bytes: 512 * 1024,
             final_memory_bytes: 600 * 1024,
             context_variables_count: 5,
             history_size: 3,
-        },
+        }),
         cost_metrics: None,
         error_details: None,
     }

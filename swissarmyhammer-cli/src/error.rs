@@ -6,7 +6,7 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::exit_codes::EXIT_SUCCESS;
+use crate::exit_codes::{EXIT_ERROR, EXIT_SUCCESS};
 
 /// CLI-specific result type that preserves error information
 pub type CliResult<T> = Result<T, CliError>;
@@ -26,6 +26,28 @@ impl CliError {
             message: message.into(),
             exit_code,
             source: None,
+        }
+    }
+
+    /// Create a CLI error from a SwissArmyHammer error, with proper exit code handling for abort errors
+    #[allow(dead_code)]
+    pub fn from_swissarmyhammer_error(error: swissarmyhammer::SwissArmyHammerError) -> Self {
+        // Check if this is an abort error by examining the error message
+        let error_msg = error.to_string();
+        if error_msg.contains("ABORT ERROR") {
+            tracing::error!("Detected abort error, triggering immediate shutdown");
+            Self {
+                message: format!("Execution aborted: {error_msg}"),
+                exit_code: EXIT_ERROR,
+                source: Some(Box::new(error)),
+            }
+        } else {
+            // Regular error handling
+            Self {
+                message: error_msg,
+                exit_code: EXIT_ERROR,
+                source: Some(Box::new(error)),
+            }
         }
     }
 

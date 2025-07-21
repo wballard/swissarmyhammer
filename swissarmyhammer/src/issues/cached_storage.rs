@@ -94,7 +94,6 @@ impl IssueStorage for CachedIssueStorage {
         Ok(issue)
     }
 
-
     async fn list_issues(&self) -> Result<Vec<Issue>> {
         // For list operations, we typically don't cache the entire list
         // but we can cache individual issues from the list
@@ -131,7 +130,6 @@ impl IssueStorage for CachedIssueStorage {
         Ok(issues)
     }
 
-
     async fn update_issues_batch(&self, updates: Vec<(&str, String)>) -> Result<Vec<Issue>> {
         let updated_issues = self.storage.update_issues_batch(updates).await?;
 
@@ -143,7 +141,6 @@ impl IssueStorage for CachedIssueStorage {
         Ok(updated_issues)
     }
 
-
     async fn mark_complete_batch(&self, names: Vec<&str>) -> Result<Vec<Issue>> {
         let completed_issues = self.storage.mark_complete_batch(names).await?;
 
@@ -154,8 +151,6 @@ impl IssueStorage for CachedIssueStorage {
 
         Ok(completed_issues)
     }
-
-
 }
 
 #[cfg(test)]
@@ -218,10 +213,7 @@ mod tests {
         assert_eq!(stats.size, 1);
 
         // Verify we can get it from cache
-        let cached_issue = storage
-            .get_issue(issue.name.as_str())
-            .await
-            .unwrap();
+        let cached_issue = storage.get_issue(issue.name.as_str()).await.unwrap();
         assert_eq!(cached_issue.name, issue.name);
         assert_eq!(cached_issue.content, issue.content);
 
@@ -248,10 +240,7 @@ mod tests {
         let cached_storage = CachedIssueStorage::new(Box::new(fs_storage));
 
         // First get - should be cache miss
-        let retrieved_issue = cached_storage
-            .get_issue(issue.name.as_str())
-            .await
-            .unwrap();
+        let retrieved_issue = cached_storage.get_issue(issue.name.as_str()).await.unwrap();
         assert_eq!(retrieved_issue.name, issue.name);
 
         let stats = cached_storage.cache_stats();
@@ -260,10 +249,7 @@ mod tests {
         assert_eq!(stats.size, 1);
 
         // Second get - should be cache hit
-        let cached_issue = cached_storage
-            .get_issue(issue.name.as_str())
-            .await
-            .unwrap();
+        let cached_issue = cached_storage.get_issue(issue.name.as_str()).await.unwrap();
         assert_eq!(cached_issue.name, issue.name);
 
         let stats = cached_storage.cache_stats();
@@ -288,10 +274,7 @@ mod tests {
             .unwrap();
 
         // Get from cache - should have updated content
-        let cached_issue = storage
-            .get_issue(issue.name.as_str())
-            .await
-            .unwrap();
+        let cached_issue = storage.get_issue(issue.name.as_str()).await.unwrap();
         assert_eq!(cached_issue.content, "Updated content");
 
         // Should be cache hits
@@ -312,17 +295,11 @@ mod tests {
         assert!(!issue.completed);
 
         // Mark as complete
-        let completed_issue = storage
-            .mark_complete(issue.name.as_str())
-            .await
-            .unwrap();
+        let completed_issue = storage.mark_complete(issue.name.as_str()).await.unwrap();
         assert!(completed_issue.completed);
 
         // Get from cache - should show as completed
-        let cached_issue = storage
-            .get_issue(issue.name.as_str())
-            .await
-            .unwrap();
+        let cached_issue = storage.get_issue(issue.name.as_str()).await.unwrap();
         assert!(cached_issue.completed);
 
         // Should be cache hits
@@ -357,14 +334,8 @@ mod tests {
         assert_eq!(stats.size, 2);
 
         // Getting individual issues should be cache hits
-        let cached_issue1 = storage
-            .get_issue(issue1.name.as_str())
-            .await
-            .unwrap();
-        let cached_issue2 = storage
-            .get_issue(issue2.name.as_str())
-            .await
-            .unwrap();
+        let cached_issue1 = storage.get_issue(issue1.name.as_str()).await.unwrap();
+        let cached_issue2 = storage.get_issue(issue2.name.as_str()).await.unwrap();
 
         assert_eq!(cached_issue1.name, issue1.name);
         assert_eq!(cached_issue2.name, issue2.name);
@@ -397,10 +368,7 @@ mod tests {
         assert_eq!(stats.size, 0);
 
         // Getting the issue should be a cache miss
-        let retrieved_issue = storage
-            .get_issue(issue.name.as_str())
-            .await
-            .unwrap();
+        let retrieved_issue = storage.get_issue(issue.name.as_str()).await.unwrap();
         assert_eq!(retrieved_issue.name, issue.name);
 
         let stats = storage.cache_stats();
@@ -423,20 +391,14 @@ mod tests {
         storage.reset_cache_stats();
 
         // First get should be a miss (loads from storage and caches)
-        let _first_get = storage
-            .get_issue(issue.name.as_str())
-            .await
-            .unwrap();
+        let _first_get = storage.get_issue(issue.name.as_str()).await.unwrap();
         let stats = storage.cache_stats();
         assert_eq!(stats.hits, 0);
         assert_eq!(stats.misses, 1);
 
         // Subsequent gets should be hits
         for _ in 0..9 {
-            storage
-                .get_issue(issue.name.as_str())
-                .await
-                .unwrap();
+            storage.get_issue(issue.name.as_str()).await.unwrap();
         }
 
         // Verify cache stats - 9 hits, 1 miss total
@@ -449,10 +411,7 @@ mod tests {
         storage.reset_cache_stats();
 
         // First get after clear should be miss again
-        let _first_get = storage
-            .get_issue(issue.name.as_str())
-            .await
-            .unwrap();
+        let _first_get = storage.get_issue(issue.name.as_str()).await.unwrap();
         let stats = storage.cache_stats();
         assert_eq!(stats.hits, 0);
         assert_eq!(stats.misses, 1);

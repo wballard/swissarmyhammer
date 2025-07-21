@@ -2084,7 +2084,6 @@ mod tests {
     use super::*;
     use crate::prompts::Prompt;
 
-
     fn extract_issue_name_from_create_request(request: &CreateIssueRequest) -> IssueName {
         if let Some(ref name) = request.name {
             name.clone()

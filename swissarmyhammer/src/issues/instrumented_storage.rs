@@ -120,7 +120,6 @@ impl IssueStorage for InstrumentedIssueStorage {
         result
     }
 
-
     async fn update_issues_batch(&self, updates: Vec<(&str, String)>) -> Result<Vec<Issue>> {
         let start = Instant::now();
         let result = self.storage.update_issues_batch(updates).await;
@@ -158,8 +157,6 @@ impl IssueStorage for InstrumentedIssueStorage {
 
         result
     }
-
-
 }
 
 #[cfg(test)]
@@ -227,10 +224,7 @@ mod tests {
         storage.reset_metrics();
 
         // Get the issue
-        let retrieved_issue = storage
-            .get_issue(issue.name.as_str())
-            .await
-            .unwrap();
+        let retrieved_issue = storage.get_issue(issue.name.as_str()).await.unwrap();
 
         // Check metrics were recorded
         let snapshot = storage.get_metrics_snapshot();
@@ -287,10 +281,7 @@ mod tests {
         storage.reset_metrics();
 
         // Mark as complete
-        let completed_issue = storage
-            .mark_complete(issue.name.as_str())
-            .await
-            .unwrap();
+        let completed_issue = storage.mark_complete(issue.name.as_str()).await.unwrap();
 
         // Check metrics were recorded (mark_complete is tracked as Delete operation)
         let snapshot = storage.get_metrics_snapshot();
@@ -347,24 +338,15 @@ mod tests {
             .await
             .unwrap();
 
-        storage
-            .get_issue(issue1.name.as_str())
-            .await
-            .unwrap();
-        storage
-            .get_issue(issue2.name.as_str())
-            .await
-            .unwrap();
+        storage.get_issue(issue1.name.as_str()).await.unwrap();
+        storage.get_issue(issue2.name.as_str()).await.unwrap();
 
         storage
             .update_issue(issue1.name.as_str(), "Updated content".to_string())
             .await
             .unwrap();
 
-        storage
-            .mark_complete(issue2.name.as_str())
-            .await
-            .unwrap();
+        storage.mark_complete(issue2.name.as_str()).await.unwrap();
 
         storage.list_issues().await.unwrap();
 
@@ -503,10 +485,7 @@ mod tests {
             let storage_clone = storage.clone();
             let issue_name = issue.name.clone();
             let handle = tokio::spawn(async move {
-                storage_clone
-                    .get_issue(&issue_name)
-                    .await
-                    .unwrap();
+                storage_clone.get_issue(&issue_name).await.unwrap();
             });
             handles.push(handle);
         }

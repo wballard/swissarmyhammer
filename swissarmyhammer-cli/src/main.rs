@@ -244,8 +244,15 @@ async fn run_flow(subcommand: cli::FlowSubcommand) -> i32 {
     match flow::run_flow_command(subcommand).await {
         Ok(_) => EXIT_SUCCESS,
         Err(e) => {
-            tracing::error!("Flow error: {}", e);
-            EXIT_WARNING
+            // Check if this is an abort error and use appropriate exit code
+            let error_msg = e.to_string();
+            if error_msg.contains("ABORT ERROR") {
+                tracing::error!("Flow execution aborted: {}", e);
+                EXIT_ERROR
+            } else {
+                tracing::error!("Flow error: {}", e);
+                EXIT_WARNING
+            }
         }
     }
 }

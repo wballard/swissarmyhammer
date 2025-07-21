@@ -3,6 +3,9 @@
 //! This module provides shared utilities to eliminate code duplication
 //! throughout the SwissArmyHammer codebase.
 
+/// Abort error handling utilities
+pub mod abort_handler;
+
 /// Error handling utilities and context helpers
 pub mod error_context;
 
@@ -19,6 +22,7 @@ pub mod mcp_errors;
 pub mod validation_builders;
 
 // Re-export commonly used items
+pub use abort_handler::{check_for_abort_error, ABORT_ERROR_PATTERN};
 pub use env_loader::{load_env_optional, load_env_parsed, load_env_string, EnvLoader};
 pub use error_context::{io_error_with_context, io_error_with_message, other_error, IoResultExt};
 pub use file_types::{

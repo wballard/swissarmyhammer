@@ -71,6 +71,10 @@ impl TestRunner {
         // Render the prompt with environment variables support
         let rendered = self.render_prompt_with_env(&prompt, &args)?;
 
+        // Check for abort error in the rendered output
+        swissarmyhammer::common::check_for_abort_error(&rendered)
+            .map_err(|e| anyhow::anyhow!("Prompt execution aborted: {}", e))?;
+
         // Output the result
         self.output_result(&rendered, config.raw, config.copy, config.save.as_deref())?;
 

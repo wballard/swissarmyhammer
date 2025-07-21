@@ -357,5 +357,4 @@ mod tests {
         assert!(IssueName::new("a".to_string()).is_ok());
         assert!(IssueName::from_filesystem("a".to_string()).is_ok());
     }
-
 }

@@ -328,9 +328,8 @@ fn benchmark_batch_operations(c: &mut Criterion) {
                         }
 
                         // Batch get
-                        let names: Vec<String> = (1..=batch_size)
-                            .map(|i| format!("test_{i}"))
-                            .collect();
+                        let names: Vec<String> =
+                            (1..=batch_size).map(|i| format!("test_{i}")).collect();
                         let name_refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
                         let _issues = storage.get_issues_batch(name_refs).await.unwrap();
                     });
@@ -508,7 +507,7 @@ fn benchmark_concurrent_operations(c: &mut Criterion) {
                             let cache_clone = cache.clone();
                             let handle = tokio::spawn(async move {
                                 for i in 1..=100 {
-                                    let _issue = cache_clone.get(i as u32);
+                                    let _issue = cache_clone.get(&format!("test_issue_{i}"));
                                 }
                             });
                             handles.push(handle);

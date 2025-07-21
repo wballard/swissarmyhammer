@@ -42,10 +42,8 @@ async fn debug_issue_completion_detection() {
 
     println!("Total issues found: {}", all_issues.len());
     for issue in &all_issues {
-        let issue_num: u32 = issue.number.into();
         println!(
-            "Issue {}: name='{}', completed={}, path='{}'",
-            issue_num,
+            "Issue: name='{}', completed={}, path='{}'",
             issue.name,
             issue.completed,
             issue.file_path.display()

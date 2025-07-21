@@ -39,12 +39,10 @@ pub fn create_error_response(message: String) -> CallToolResult {
 /// * `CallToolResult` - Standardized response with artifact support
 pub fn create_issue_response(issue: &Issue) -> CallToolResult {
     let response = serde_json::json!({
-        "number": issue.number,
         "name": issue.name,
         "file_path": issue.file_path.to_string_lossy(),
         "message": format!(
-            "Created issue #{:06} - {} at {}",
-            issue.number,
+            "Created issue {} at {}",
             issue.name,
             issue.file_path.display()
         )
@@ -64,10 +62,9 @@ pub fn create_issue_response(issue: &Issue) -> CallToolResult {
 /// Create a standardized response for issue mark complete operations
 pub fn create_mark_complete_response(issue: &Issue) -> CallToolResult {
     let response = serde_json::json!({
-        "number": issue.number,
         "name": issue.name,
         "completed": true,
-        "message": format!("Marked issue #{:06} - {} as complete", issue.number, issue.name)
+        "message": format!("Marked issue {} as complete", issue.name)
     });
 
     CallToolResult {
@@ -84,10 +81,9 @@ pub fn create_mark_complete_response(issue: &Issue) -> CallToolResult {
 /// Create a standardized response for issue update operations
 pub fn create_update_response(issue: &Issue) -> CallToolResult {
     let response = serde_json::json!({
-        "number": issue.number,
         "name": issue.name,
         "file_path": issue.file_path.to_string_lossy(),
-        "message": format!("Updated issue #{:06} - {}", issue.number, issue.name)
+        "message": format!("Updated issue {}", issue.name)
     });
 
     CallToolResult {
@@ -161,7 +157,6 @@ pub fn create_current_issue_response(
 /// Create a standardized response for issue work operations
 pub fn create_work_response(issue: &Issue, branch_name: &str) -> CallToolResult {
     let response = serde_json::json!({
-        "issue_number": issue.number,
         "issue_name": issue.name,
         "branch_name": branch_name,
         "message": format!("Switched to work branch: {}", branch_name)

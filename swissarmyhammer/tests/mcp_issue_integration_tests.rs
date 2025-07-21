@@ -100,7 +100,7 @@ async fn test_complete_issue_workflow() {
         .await
         .unwrap();
 
-    let issue_number = issue.number;
+    let issue_name = &issue.name;
 
     // Step 2: Check all complete (should be false)
     let issues = env.issue_storage.read().await.list_issues().await.unwrap();
@@ -121,8 +121,8 @@ async fn test_complete_issue_workflow() {
 
     // Step 4: Update the issue with progress
     let updated_issue = env.issue_storage.write().await
-        .update_issue_by_number(
-            issue_number.value(),
+        .update_issue(
+            issue_name,
             format!("{}\n\nJWT authentication implementation completed. Added token generation and validation.", issue.content),
         )
         .await
@@ -137,7 +137,7 @@ async fn test_complete_issue_workflow() {
         .issue_storage
         .write()
         .await
-        .mark_complete_by_number(issue_number.value())
+        .mark_complete(issue_name)
         .await
         .unwrap();
 
@@ -169,7 +169,7 @@ async fn test_complete_issue_workflow() {
 async fn test_error_handling_scenarios() {
     let env = TestEnvironment::new().await;
 
-    // Test creating issue with empty name (direct storage call accepts empty name)
+    // Test creating issue with empty name (direct storage call generates ULID)
     let result = env
         .issue_storage
         .write()
@@ -178,7 +178,9 @@ async fn test_error_handling_scenarios() {
         .await;
     assert!(result.is_ok());
     let issue = result.unwrap();
-    assert_eq!(issue.name.as_str(), "");
+    // When name is empty, a ULID is generated
+    assert!(!issue.name.is_empty());
+    assert_eq!(issue.name.len(), 26); // ULID length
 
     // Test creating issue with dangerous characters in name (path traversal protection)
     let result = env
@@ -199,7 +201,7 @@ async fn test_error_handling_scenarios() {
         .issue_storage
         .read()
         .await
-        .get_issue_by_number(999)
+        .get_issue("nonexistent_issue")
         .await;
     assert!(result.is_err());
 
@@ -208,7 +210,7 @@ async fn test_error_handling_scenarios() {
         .issue_storage
         .write()
         .await
-        .mark_complete_by_number(999)
+        .mark_complete("nonexistent_issue")
         .await;
     assert!(result.is_err());
 }
@@ -378,7 +380,7 @@ async fn test_issue_file_structure() {
         .temp_dir
         .path()
         .join("issues")
-        .join(format!("{:06}_{}.md", issue.number, issue.name));
+        .join(format!("{}.md", issue.name));
     assert!(issue_file.exists());
 
     // Verify the content is correct
@@ -390,7 +392,7 @@ async fn test_issue_file_structure() {
         .issue_storage
         .write()
         .await
-        .mark_complete_by_number(issue.number.value())
+        .mark_complete(&issue.name)
         .await
         .unwrap();
 
@@ -400,7 +402,7 @@ async fn test_issue_file_structure() {
         .path()
         .join("issues")
         .join("complete")
-        .join(format!("{:06}_{}.md", issue.number, issue.name));
+        .join(format!("{}.md", issue.name));
     assert!(complete_file.exists());
     assert!(!issue_file.exists());
 }

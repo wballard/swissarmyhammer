@@ -9,61 +9,7 @@ const FILESYSTEM_MAX_ISSUE_NAME_LENGTH: usize = 200;
 
 // Type safety wrapper types
 
-/// A wrapper type for issue numbers to prevent mixing up different ID types
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize, schemars::JsonSchema,
-)]
-#[serde(transparent)]
-pub struct IssueNumber(pub u32);
-
-impl IssueNumber {
-    /// Create a new issue number after validation
-    pub fn new(number: u32) -> Result<Self, String> {
-        let config = Config::global();
-        if !(config.min_issue_number..=config.max_issue_number).contains(&number) {
-            return Err(format!(
-                "Issue number {} is out of valid range ({}-{})",
-                number, config.min_issue_number, config.max_issue_number
-            ));
-        }
-        Ok(IssueNumber(number))
-    }
-
-    /// Get the inner u32 value
-    pub fn get(&self) -> u32 {
-        self.0
-    }
-
-    /// Create from u32 with validation
-    pub fn from_u32(number: u32) -> Result<Self, String> {
-        Self::new(number)
-    }
-}
-
-impl std::fmt::Display for IssueNumber {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let config = Config::global();
-        write!(f, "{:0width$}", self.0, width = config.issue_number_digits)
-    }
-}
-
-impl From<IssueNumber> for u32 {
-    fn from(issue_number: IssueNumber) -> Self {
-        issue_number.0
-    }
-}
-
-impl PartialOrd<u32> for IssueNumber {
-    fn partial_cmp(&self, other: &u32) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(other)
-    }
-}
-
-impl PartialEq<u32> for IssueNumber {
-    fn eq(&self, other: &u32) -> bool {
-        self.0 == *other
-    }
-}
+// IssueNumber type eliminated - we now use issue names (filename without .md) as the primary identifier
 
 /// A wrapper type for issue names to prevent mixing up different string types
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
@@ -412,31 +358,4 @@ mod tests {
         assert!(IssueName::from_filesystem("a".to_string()).is_ok());
     }
 
-    #[test]
-    fn test_issue_number_validation() {
-        // Valid numbers
-        assert!(IssueNumber::new(1).is_ok());
-        assert!(IssueNumber::new(999999).is_ok());
-
-        // Test boundary conditions based on config
-        let config = Config::global();
-
-        // At minimum boundary
-        let min_result = IssueNumber::new(config.min_issue_number);
-        assert!(min_result.is_ok());
-
-        // Below minimum
-        if config.min_issue_number > 0 {
-            let below_min_result = IssueNumber::new(config.min_issue_number - 1);
-            assert!(below_min_result.is_err());
-        }
-
-        // At maximum boundary
-        let max_result = IssueNumber::new(config.max_issue_number);
-        assert!(max_result.is_ok());
-
-        // Above maximum
-        let above_max_result = IssueNumber::new(config.max_issue_number + 1);
-        assert!(above_max_result.is_err());
-    }
 }

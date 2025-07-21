@@ -541,13 +541,13 @@ impl McpServer {
             .await
         {
             Ok(issue) => {
-                tracing::info!("Created issue {} with number {}", issue.name, issue.number);
+                tracing::info!("Created issue {}", issue.name);
                 Ok(create_issue_response(&issue))
             }
-            Err(SwissArmyHammerError::IssueAlreadyExists(num)) => {
-                tracing::warn!("Issue #{:06} already exists", num);
+            Err(SwissArmyHammerError::IssueAlreadyExists(name)) => {
+                tracing::warn!("Issue '{}' already exists", name);
                 Err(McpError::invalid_params(
-                    format!("Issue #{num:06} already exists"),
+                    format!("Issue '{name}' already exists"),
                     None,
                 ))
             }
@@ -590,7 +590,7 @@ impl McpServer {
         // Check if issue exists and get its current state
         let existing_issue = {
             let issue_storage = self.issue_storage.write().await;
-            match issue_storage.get_issue(&request.name).await {
+            match issue_storage.get_issue(request.name.as_str()).await {
                 Ok(issue) => issue,
                 Err(crate::SwissArmyHammerError::IssueNotFound(_)) => {
                     return Err(McpError::invalid_params(
@@ -626,7 +626,7 @@ impl McpServer {
         // Mark the issue as complete with a new lock
         let issue = {
             let issue_storage = self.issue_storage.write().await;
-            match issue_storage.mark_complete(&request.name).await {
+            match issue_storage.mark_complete(request.name.as_str()).await {
                 Ok(issue) => issue,
                 Err(crate::SwissArmyHammerError::IssueNotFound(_)) => {
                     return Err(McpError::invalid_params(
@@ -648,7 +648,7 @@ impl McpServer {
 
         // Format response
         let response = serde_json::json!({
-            "number": issue.number,
+            "name": issue.name,
             "name": issue.name,
             "file_path": issue.file_path.to_string_lossy(),
             "completed": issue.completed,
@@ -755,21 +755,21 @@ impl McpServer {
                 total_issues,
                 completed_count,
                 completed_issues.iter()
-                    .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
+                    .map(|issue| format!("• {}", issue.name))
                     .collect::<Vec<_>>()
                     .join("\n")
             )
         } else {
             let active_list = active_issues
                 .iter()
-                .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
+                .map(|issue| format!("• {}", issue.name))
                 .collect::<Vec<_>>()
                 .join("\n");
 
             let completed_list = if completed_count > 0 {
                 completed_issues
                     .iter()
-                    .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
+                    .map(|issue| format!("• {}", issue.name))
                     .collect::<Vec<_>>()
                     .join("\n")
             } else {
@@ -802,7 +802,7 @@ impl McpServer {
 
         let mut summary = String::from("\nPending issues:\n");
         for issue in &displayed_issues {
-            summary.push_str(&format!("  - #{:06}: {}\n", issue.number, issue.name));
+            summary.push_str(&format!("  - {}\n", issue.name));
         }
 
         if pending_count > max_items {
@@ -879,7 +879,7 @@ impl McpServer {
     ) -> std::result::Result<(Issue, String), McpError> {
         let issue_storage = self.issue_storage.write().await;
         let current_issue = issue_storage
-            .get_issue(&request.name)
+            .get_issue(request.name.as_str())
             .await
             .map_err(|e| match e {
                 SwissArmyHammerError::IssueNotFound(_) => {
@@ -896,7 +896,7 @@ impl McpServer {
     /// Update the issue with enhanced error handling
     async fn update_issue_with_content(
         &self,
-        issue_name: &IssueName,
+        issue_name: &str,
         final_content: String,
     ) -> std::result::Result<Issue, McpError> {
         let issue_storage = self.issue_storage.write().await;
@@ -930,10 +930,8 @@ impl McpServer {
             Self::generate_change_summary(&current_issue.content, &updated_issue.content, append);
 
         let response_text = format!(
-            "✅ Successfully updated issue #{:06} - {}\n\n📋 Issue Details:\n• Number: {}\n• Name: {}\n• File: {}\n• Status: {}\n\n📊 Changes:\n• {}\n\n📝 Updated Content:\n{}",
-            updated_issue.number,
+            "✅ Successfully updated issue {}\n\n📋 Issue Details:\n• Name: {}\n• File: {}\n• Status: {}\n\n📊 Changes:\n• {}\n\n📝 Updated Content:\n{}",
             updated_issue.name,
-            updated_issue.number,
             updated_issue.name,
             updated_issue.file_path.display(),
             if updated_issue.completed { "Completed" } else { "Active" },
@@ -992,7 +990,7 @@ impl McpServer {
 
         // Update the issue
         let updated_issue = self
-            .update_issue_with_content(&request.name, final_content)
+            .update_issue_with_content(request.name.as_str(), final_content)
             .await?;
 
         // Generate and return the response
@@ -1086,7 +1084,7 @@ impl McpServer {
                 ));
             }
         };
-        let issue = match issue_storage.get_issue(&issue_name_type).await {
+        let issue = match issue_storage.get_issue(issue_name_type.as_str()).await {
             Ok(issue) => issue,
             Err(SwissArmyHammerError::IssueNotFound(_)) => {
                 // Handle orphaned issue branch
@@ -1120,11 +1118,9 @@ impl McpServer {
         };
 
         let response_text = format!(
-            "{} Current issue: #{:06} - {}\n\n📋 Issue Details:\n• Number: {}\n• Name: {}\n• Status: {}\n• Branch: {}\n• File: {}\n\n📝 Content:\n{}",
+            "{} Current issue: {}\n\n📋 Issue Details:\n• Name: {}\n• Status: {}\n• Branch: {}\n• File: {}\n\n📝 Content:\n{}",
             status_emoji,
-            issue.number,
             issue.name,
-            issue.number,
             issue.name,
             status_text,
             branch,
@@ -1186,7 +1182,7 @@ impl McpServer {
     ) -> std::result::Result<CallToolResult, McpError> {
         // Validate the issue exists
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue(&request.name).await {
+        let issue = match issue_storage.get_issue(request.name.as_str()).await {
             Ok(issue) => issue,
             Err(SwissArmyHammerError::IssueNotFound(_)) => {
                 return Ok(Self::create_error_response(format!(
@@ -1388,7 +1384,7 @@ impl McpServer {
     ) -> std::result::Result<CallToolResult, McpError> {
         // First get the issue to determine its details
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue(&request.name).await {
+        let issue = match issue_storage.get_issue(request.name.as_str()).await {
             Ok(issue) => issue,
             Err(_e) => {
                 return Ok(CallToolResult {
@@ -1560,7 +1556,8 @@ impl McpServer {
 
         // Filter to only pending (non-completed) issues
         // Issues are already sorted alphabetically by name in list_issues()
-        let pending_issues: Vec<&Issue> = all_issues.iter().filter(|issue| !issue.completed).collect();
+        let pending_issues: Vec<&Issue> =
+            all_issues.iter().filter(|issue| !issue.completed).collect();
 
         if pending_issues.is_empty() {
             Ok(CallToolResult {
@@ -2490,7 +2487,7 @@ mod tests {
         // Check that the response contains expected information
         let text_content = &call_result.content[0];
         if let RawContent::Text(text) = &text_content.raw {
-            assert!(text.text.contains("Created issue #"));
+            assert!(text.text.contains("Created issue"));
             assert!(text.text.contains("test_issue"));
             assert!(text.text.contains(" at "));
         } else {
@@ -2627,43 +2624,6 @@ mod tests {
         } else {
             panic!("Expected text content, got: {:?}", text_content.raw);
         }
-    }
-
-    #[tokio::test]
-    async fn test_handle_issue_create_sequential_numbering() {
-        // Test that multiple issues get sequential numbers
-        let library = PromptLibrary::new();
-        let server = McpServer::new(library).unwrap();
-
-        // Create first issue
-        let request1 = CreateIssueRequest {
-            name: Some(IssueName::new("first_issue".to_string()).unwrap()),
-            content: "First issue content".to_string(),
-        };
-
-        let result1 = server.handle_issue_create(request1).await;
-        assert!(result1.is_ok(), "First issue creation should succeed");
-
-        let call_result1 = result1.unwrap();
-        let first_issue_number = extract_issue_number_from_response(&call_result1);
-
-        // Create second issue
-        let request2 = CreateIssueRequest {
-            name: Some(IssueName::new("second_issue".to_string()).unwrap()),
-            content: "Second issue content".to_string(),
-        };
-
-        let result2 = server.handle_issue_create(request2).await;
-        assert!(result2.is_ok(), "Second issue creation should succeed");
-
-        let call_result2 = result2.unwrap();
-        let second_issue_number = extract_issue_number_from_response(&call_result2);
-
-        // Verify the second issue has a higher number than the first
-        assert!(
-            second_issue_number > first_issue_number,
-            "Second issue number ({second_issue_number}) should be greater than first issue number ({first_issue_number})"
-        );
     }
 
     #[test]
@@ -2884,7 +2844,7 @@ mod tests {
             // Verify response content
             assert!(!response.content.is_empty());
             if let RawContent::Text(text_content) = &response.content[0].raw {
-                assert!(text_content.text.contains("Created issue #"));
+                assert!(text_content.text.contains("Created issue"));
                 assert!(text_content.text.contains("test_mcp_issue"));
             } else {
                 panic!("Expected text response");
@@ -3829,8 +3789,11 @@ mod tests {
                 assert!(text.text.contains("• Active:"));
                 assert!(text.text.contains("50%"));
 
-                // Check issue numbering format
-                assert!(text.text.contains("#000001") || text.text.contains("#000002"));
+                // Check issue names are present
+                assert!(
+                    text.text.contains("format_test_active")
+                        || text.text.contains("format_test_completed")
+                );
 
                 // Check proper emoji usage
                 assert!(text.text.contains("⏳"));
@@ -4121,18 +4084,13 @@ mod tests {
         // Check that the response contains expected information
         let text_content = &call_result.content[0];
         if let RawContent::Text(text) = &text_content.raw {
-            assert!(text.text.contains("Created issue #"));
+            assert!(text.text.contains("Created issue"));
 
-            // Extract the issue number to verify filename format
-            let start = text.text.find("Created issue #").unwrap() + "Created issue #".len();
-            let end = text.text[start..].find(' ').unwrap() + start;
-            let issue_number_str = &text.text[start..end];
-
-            // Verify the filename is in the nameless format (e.g., "000123.md")
-            // and not the named format (e.g., "000123_unnamed.md")
+            // Verify that the text contains information about file path
+            // For nameless issues, the system now creates a ULID-based name
             assert!(
-                text.text.contains(&format!("{issue_number_str}.md")),
-                "Nameless issue should create filename like 000123.md, got: {}",
+                text.text.contains(".md"),
+                "Response should contain the markdown file extension: {}",
                 text.text
             );
             assert!(

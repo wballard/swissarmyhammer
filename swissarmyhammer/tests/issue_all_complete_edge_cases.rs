@@ -113,7 +113,7 @@ async fn test_corrupted_issue_files() {
         // Should contain the original numbered issue
         assert!(text
             .text
-            .contains(&format!("#{:06} - {}", issue.number, issue.name)));
+            .contains(&format!("{}", issue.name)));
         // Should contain the non-numbered issue (with auto-assigned virtual number)
         assert!(text.text.contains("invalid_format"));
     } else {
@@ -224,8 +224,8 @@ async fn test_symlink_handling() {
 
     // Create a symlink pointing to the active issue from the complete directory
     // This could potentially confuse the completion detection logic
-    let original_file = issues_dir.join(format!("{:06}_{}.md", issue.number, issue.name));
-    let symlink_file = complete_dir.join(format!("{:06}_{}_symlink.md", issue.number, issue.name));
+    let original_file = issues_dir.join(format!("{}.md", issue.name));
+    let symlink_file = complete_dir.join(format!("{}_symlink.md", issue.name));
 
     #[cfg(unix)]
     {
@@ -321,7 +321,7 @@ async fn test_cache_invalidation_bug() {
         .issue_storage
         .write()
         .await
-        .mark_complete_by_number(issue.number.value())
+        .mark_complete(&issue.name)
         .await
         .unwrap();
 

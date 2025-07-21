@@ -22,7 +22,7 @@ where
         .unwrap_or(default)
 }
 
-/// Load an environment variable as an Option<T>
+/// Load an environment variable as an `Option<T>`
 pub fn load_env_optional<T>(key: &str) -> Option<T>
 where
     T: FromStr,

@@ -13,11 +13,17 @@ pub enum MigrationError {
 
     /// Migration validation error
     #[error("Migration validation error: {message}")]
-    Validation { message: String },
+    Validation {
+        /// Detailed validation error message
+        message: String,
+    },
 
     /// Migration rollback error
     #[error("Migration rollback failed: {message}")]
-    Rollback { message: String },
+    Rollback {
+        /// Detailed rollback error message
+        message: String,
+    },
 }
 
 /// Represents a single database migration
@@ -356,13 +362,13 @@ impl MigrationRunner {
         let mut sorted_versions: Vec<_> = versions.into_iter().collect();
         sorted_versions.sort();
 
-        for i in 0..sorted_versions.len() {
+        for (i, &version) in sorted_versions.iter().enumerate() {
             let expected = i as i64 + 1;
-            if sorted_versions[i] != expected {
+            if version != expected {
                 return Err(MigrationError::Validation {
                     message: format!(
                         "Migration version gap detected: expected {}, found {}",
-                        expected, sorted_versions[i]
+                        expected, version
                     ),
                 });
             }

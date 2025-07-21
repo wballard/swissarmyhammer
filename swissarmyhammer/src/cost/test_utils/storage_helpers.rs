@@ -14,21 +14,54 @@ use crate::cost::{
 #[cfg(feature = "database")]
 use crate::cost::database::{CostDatabase, DatabaseConfig};
 use crate::issues::filesystem::{Issue, IssueNumber, IssueStorage};
+use chrono::Utc;
 use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::sync::RwLock;
-use chrono::Utc;
+
+/// Standardized error conversion utilities for consistent error handling
+pub mod error_conversion {
+    use crate::cost::CostError;
+
+    /// Convert IO errors to CostError with context
+    pub fn io_error(context: &str, error: std::io::Error) -> CostError {
+        CostError::InvalidInput {
+            message: format!("{}: {}", context, error),
+        }
+    }
+
+    /// Convert storage errors to CostError with context
+    pub fn storage_error(context: &str, error: impl std::fmt::Display) -> CostError {
+        CostError::InvalidInput {
+            message: format!("{}: {}", context, error),
+        }
+    }
+
+    /// Convert parsing errors to CostError with context
+    pub fn parse_error(context: &str, error: impl std::fmt::Display) -> CostError {
+        CostError::InvalidInput {
+            message: format!("{}: {}", context, error),
+        }
+    }
+
+    /// Convert generic errors to CostError with context
+    pub fn generic_error(context: &str, error: impl std::fmt::Display) -> CostError {
+        CostError::InvalidInput {
+            message: format!("{}: {}", context, error),
+        }
+    }
+}
 
 /// Test harness for coordinating multi-backend storage testing
-pub struct StorageTestHarness {
+pub struct StorageTestHarness<S: IssueStorage> {
     pub tracker: CostTracker,
     pub calculator: CostCalculator,
     pub formatter: CostSectionFormatter,
     pub temp_dir: TempDir,
-    pub issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
+    pub issue_storage: Arc<RwLock<S>>,
     #[cfg(feature = "database")]
     pub database: Option<CostDatabase>,
     #[cfg(not(feature = "database"))]
@@ -58,7 +91,7 @@ impl Default for StorageTestConfig {
     }
 }
 
-impl StorageTestHarness {
+impl StorageTestHarness<MockStorageForTesting> {
     /// Create a new storage test harness with default configuration
     pub async fn new() -> Result<Self, CostError> {
         Self::with_config(StorageTestConfig::default()).await
@@ -67,17 +100,15 @@ impl StorageTestHarness {
     /// Create a storage test harness with custom configuration
     pub async fn with_config(config: StorageTestConfig) -> Result<Self, CostError> {
         let temp_dir = TempDir::new()
-            .map_err(|e| CostError::InvalidInput {
-                message: format!("Failed to create temp directory: {}", e),
-            })?;
+            .map_err(|e| error_conversion::io_error("Failed to create temp directory", e))?;
 
         let tracker = CostTracker::new();
         let calculator = CostCalculator::paid_default();
         let formatter = CostSectionFormatter::default();
 
         // Create mock issue storage
-        let issue_storage: Arc<RwLock<Box<dyn IssueStorage>>> = 
-            Arc::new(RwLock::new(Box::new(MockStorageForTesting::new())));
+        let issue_storage: Arc<RwLock<MockStorageForTesting>> =
+            Arc::new(RwLock::new(MockStorageForTesting::new()));
 
         #[cfg(feature = "database")]
         let database = if config.enable_database {
@@ -110,19 +141,27 @@ impl StorageTestHarness {
     /// Create a test issue with cost tracking enabled
     pub async fn create_test_issue(&mut self, issue_name: &str) -> Result<IssueId, CostError> {
         let issue_id = IssueId::new(format!("test-{}", issue_name))?;
-        
+
         // Initialize issue in storage if enabled
         if self.test_config.enable_markdown_storage {
             let storage = self.issue_storage.read().await;
-            storage.create_issue(issue_id.as_str().to_string(), "Test issue content".to_string()).await
-                .map_err(|e| CostError::InvalidInput { message: format!("Failed to create test issue: {}", e) })?;
+            storage
+                .create_issue(
+                    issue_id.as_str().to_string(),
+                    "Test issue content".to_string(),
+                )
+                .await
+                .map_err(|e| error_conversion::storage_error("Failed to create test issue", e))?;
         }
-        
+
         Ok(issue_id)
     }
 
     /// Start a cost session for testing
-    pub fn start_cost_session(&mut self, issue_id: IssueId) -> Result<crate::cost::CostSessionId, CostError> {
+    pub fn start_cost_session(
+        &mut self,
+        issue_id: IssueId,
+    ) -> Result<crate::cost::CostSessionId, CostError> {
         self.tracker.start_session(issue_id)
     }
 
@@ -133,17 +172,17 @@ impl StorageTestHarness {
         call_count: usize,
     ) -> Result<Vec<crate::cost::ApiCallId>, CostError> {
         let mut call_ids = Vec::new();
-        
+
         for i in 0..call_count {
             let api_call = ApiCall::new(
                 format!("https://api.anthropic.com/v1/messages/{}", i),
                 "claude-3-sonnet-20241022",
             )?;
-            
+
             let call_id = self.tracker.add_api_call(session_id, api_call)?;
             call_ids.push(call_id);
         }
-        
+
         Ok(call_ids)
     }
 
@@ -157,7 +196,7 @@ impl StorageTestHarness {
             let input_tokens = 100 + (i as u32 * 50);
             let output_tokens = 150 + (i as u32 * 75);
             let success = i % 4 != 0; // 75% success rate
-            
+
             self.tracker.complete_api_call(
                 session_id,
                 call_id,
@@ -175,7 +214,7 @@ impl StorageTestHarness {
                 },
             )?;
         }
-        
+
         Ok(())
     }
 
@@ -187,11 +226,13 @@ impl StorageTestHarness {
     ) -> Result<StorageResults, CostError> {
         // Complete the session
         self.tracker.complete_session(session_id, status)?;
-        
-        let session = self.tracker.get_session(session_id)
-            .ok_or_else(|| CostError::SessionNotFound {
-                session_id: *session_id,
-            })?;
+
+        let session =
+            self.tracker
+                .get_session(session_id)
+                .ok_or_else(|| CostError::SessionNotFound {
+                    session_id: *session_id,
+                })?;
 
         let mut results = StorageResults::new();
 
@@ -200,11 +241,13 @@ impl StorageTestHarness {
             let cost_data = self.create_issue_cost_data(session)?;
             let markdown_content = self.formatter.format_cost_section(&cost_data);
             results.markdown_content = Some(markdown_content);
-            
+
             // Store in issue storage - use mark_complete_with_cost
             let storage = self.issue_storage.read().await;
-            storage.mark_complete_with_cost(1, cost_data.clone()).await
-                .map_err(|e| CostError::InvalidInput { message: format!("Failed to store cost data: {}", e) })?;
+            storage
+                .mark_complete_with_cost(1, cost_data.clone())
+                .await
+                .map_err(|e| error_conversion::storage_error("Failed to store cost data", e))?;
         }
 
         // Store in database if enabled
@@ -215,7 +258,7 @@ impl StorageTestHarness {
                 results.database_stored = true;
             }
         }
-        
+
         #[cfg(not(feature = "database"))]
         if self.test_config.enable_database {
             // Database feature not available - mark as not stored but don't treat as failure
@@ -233,52 +276,73 @@ impl StorageTestHarness {
     /// Create issue cost data from a completed session
     fn create_issue_cost_data(&self, session: &CostSession) -> Result<IssueCostData, CostError> {
         use crate::cost::formatting::{CostSummaryStats, CurrencyAmount};
-        
+
         let cost_calculation = self.calculator.calculate_session_cost(session)?;
-        
+
         // Create currency amount from cost calculation
         let total_cost = if cost_calculation.total_cost > rust_decimal::Decimal::ZERO {
             Some(CurrencyAmount::new(cost_calculation.total_cost))
         } else {
             None
         };
-        
+
         // Create summary stats
-        let average_cost_per_call = if !session.api_calls.is_empty() && cost_calculation.total_cost > rust_decimal::Decimal::ZERO {
-            Some(CurrencyAmount::new(cost_calculation.total_cost / rust_decimal::Decimal::from(session.api_calls.len())))
+        let average_cost_per_call = if !session.api_calls.is_empty()
+            && cost_calculation.total_cost > rust_decimal::Decimal::ZERO
+        {
+            Some(CurrencyAmount::new(
+                cost_calculation.total_cost / rust_decimal::Decimal::from(session.api_calls.len()),
+            ))
         } else {
             None
         };
-        
+
         // Find most expensive call
-        let most_expensive_call = session.api_calls.values()
+        let most_expensive_call = session
+            .api_calls
+            .values()
             .filter_map(|call| {
                 if call.is_completed() {
-                    self.calculator.calculate_tokens_cost(call.input_tokens, call.output_tokens, &call.model).ok()
+                    self.calculator
+                        .calculate_tokens_cost(call.input_tokens, call.output_tokens, &call.model)
+                        .ok()
                         .map(|calc| CurrencyAmount::new(calc.total_cost))
                 } else {
                     None
                 }
             })
             .max_by(|a, b| a.amount().cmp(&b.amount()));
-        
+
         let summary_stats = CostSummaryStats {
             average_cost_per_call,
             most_expensive_call,
             token_efficiency: if cost_calculation.input_tokens > 0 {
-                Some(rust_decimal::Decimal::from(cost_calculation.output_tokens) / rust_decimal::Decimal::from(cost_calculation.input_tokens))
+                Some(
+                    rust_decimal::Decimal::from(cost_calculation.output_tokens)
+                        / rust_decimal::Decimal::from(cost_calculation.input_tokens),
+                )
             } else {
                 None
             },
-            total_duration: session.total_duration.map(|d| crate::cost::formatting::SessionDuration::new(d)),
+            total_duration: session
+                .total_duration
+                .map(|d| crate::cost::formatting::SessionDuration::new(d)),
             successful_calls: crate::cost::formatting::ApiCallCount::new(
-                session.api_calls.values().filter(|call| matches!(call.status, crate::cost::ApiCallStatus::Success)).count() as u32
+                session
+                    .api_calls
+                    .values()
+                    .filter(|call| matches!(call.status, crate::cost::ApiCallStatus::Success))
+                    .count() as u32,
             ),
             failed_calls: crate::cost::formatting::ApiCallCount::new(
-                session.api_calls.values().filter(|call| !matches!(call.status, crate::cost::ApiCallStatus::Success)).count() as u32
+                session
+                    .api_calls
+                    .values()
+                    .filter(|call| !matches!(call.status, crate::cost::ApiCallStatus::Success))
+                    .count() as u32,
             ),
         };
-        
+
         Ok(IssueCostData {
             session_data: session.clone(),
             total_cost,
@@ -298,6 +362,41 @@ impl StorageTestHarness {
     }
 }
 
+impl<S: IssueStorage> StorageTestHarness<S> {
+    /// Create a new storage test harness with custom storage implementation
+    pub fn with_storage(
+        storage: S,
+        temp_dir: TempDir,
+        test_config: StorageTestConfig,
+    ) -> Result<Self, CostError> {
+        let tracker = CostTracker::new();
+        let calculator = CostCalculator::paid_default();
+        let formatter = CostSectionFormatter::default();
+        let issue_storage = Arc::new(RwLock::new(storage));
+
+        #[cfg(feature = "database")]
+        let database = None; // Custom storage implementations don't automatically get database
+
+        #[cfg(not(feature = "database"))]
+        let database = ();
+
+        Ok(Self {
+            tracker,
+            calculator,
+            formatter,
+            temp_dir,
+            issue_storage,
+            database,
+            test_config,
+        })
+    }
+
+    /// Get a reference to the issue storage
+    pub fn storage(&self) -> &Arc<RwLock<S>> {
+        &self.issue_storage
+    }
+}
+
 /// Results from multi-backend storage operations
 #[derive(Debug, Default)]
 pub struct StorageResults {
@@ -314,19 +413,19 @@ impl StorageResults {
     /// Check if all configured backends were successfully updated
     pub fn all_backends_success(&self, config: &StorageTestConfig) -> bool {
         let markdown_ok = !config.enable_markdown_storage || self.markdown_content.is_some();
-        
+
         // Database is OK if:
         // - Database is not enabled in config, OR
-        // - Database feature is not available (compile-time), OR  
+        // - Database feature is not available (compile-time), OR
         // - Database was successfully stored
         #[cfg(feature = "database")]
         let database_ok = !config.enable_database || self.database_stored;
-        
+
         #[cfg(not(feature = "database"))]
         let database_ok = true; // Always OK when feature is not available
-        
+
         let metrics_ok = !config.enable_metrics_integration || self.metrics_updated;
-        
+
         markdown_ok && database_ok && metrics_ok
     }
 }
@@ -357,17 +456,33 @@ impl MultiBackendValidator {
     }
 
     /// Validate markdown content against expected data
-    pub fn validate_markdown_content(&self, session_id: &str, content: &str) -> Result<bool, CostError> {
-        let expected = self.expected_data.get(session_id)
-            .ok_or_else(|| CostError::InvalidInput {
-                message: format!("No expected data for session {}", session_id),
-            })?;
+    pub fn validate_markdown_content(
+        &self,
+        session_id: &str,
+        content: &str,
+    ) -> Result<bool, CostError> {
+        let expected =
+            self.expected_data
+                .get(session_id)
+                .ok_or_else(|| CostError::InvalidInput {
+                    message: format!("No expected data for session {}", session_id),
+                })?;
 
         // Check for properly formatted markdown fields
-        let contains_cost = content.contains(&format!("**Total Cost**: ${:.2}", expected.total_cost));
-        let contains_calls = content.contains(&format!("**Total API Calls**: {}", expected.total_api_calls));
-        let contains_input = content.contains(&format!("**Total Input Tokens**: {}", expected.input_tokens));
-        let contains_output = content.contains(&format!("**Total Output Tokens**: {}", expected.output_tokens));
+        let contains_cost =
+            content.contains(&format!("**Total Cost**: ${:.2}", expected.total_cost));
+        let contains_calls = content.contains(&format!(
+            "**Total API Calls**: {}",
+            expected.total_api_calls
+        ));
+        let contains_input = content.contains(&format!(
+            "**Total Input Tokens**: {}",
+            expected.input_tokens
+        ));
+        let contains_output = content.contains(&format!(
+            "**Total Output Tokens**: {}",
+            expected.output_tokens
+        ));
 
         Ok(contains_cost && contains_calls && contains_input && contains_output)
     }
@@ -380,16 +495,15 @@ impl MultiBackendValidator {
         database: &CostDatabase,
     ) -> Result<bool, CostError> {
         use crate::cost::database::queries::{TimePeriod, TrendQuery};
-        
-        let session_id_parsed = session_id.parse()
-            .map_err(|_| CostError::InvalidInput {
-                message: "Invalid session ID format".to_string(),
-            })?;
+
+        let session_id_parsed = session_id
+            .parse()
+            .map_err(|e| error_conversion::parse_error("Invalid session ID format", e))?;
 
         // Query database for session data
         let trend_query = TrendQuery::new(TimePeriod::Day, 1);
         let trends = database.get_cost_trends(trend_query).await?;
-        
+
         // Validate at least one trend entry exists
         Ok(!trends.is_empty())
     }
@@ -414,34 +528,48 @@ impl MockStorageForTesting {
         }
     }
 
+    /// Helper method to create Issue structs with consistent defaults
+    fn create_mock_issue(number: u32, name: String, content: String, completed: bool) -> Issue {
+        let base_path = if completed { "/tmp/complete" } else { "/tmp" };
+        Issue {
+            number: IssueNumber::new(number).unwrap(),
+            name,
+            content,
+            completed,
+            file_path: PathBuf::from(&format!("{}/mock.md", base_path)),
+            created_at: Utc::now(),
+        }
+    }
+
     pub async fn create_test_issue(&mut self, issue_id: &IssueId) -> Result<Issue, CostError> {
         let issue_data = MockIssueData {
             issue_id: issue_id.as_str().to_string(),
             content: format!("# Test Issue {}\n\nTest issue content\n", issue_id.as_str()),
             cost_data: None,
         };
-        
-        let issue = Issue {
-            number: IssueNumber::new(1).unwrap(), // Mock number
-            name: issue_id.as_str().to_string(),
-            content: issue_data.content.clone(),
-            completed: false,
-            file_path: PathBuf::from("/tmp/mock.md"),
-            created_at: Utc::now(),
-        };
-        
-        self.issues.insert(issue_id.as_str().to_string(), issue_data);
+
+        let issue = Self::create_mock_issue(
+            1, // Mock number
+            issue_id.as_str().to_string(),
+            issue_data.content.clone(),
+            false,
+        );
+
+        self.issues
+            .insert(issue_id.as_str().to_string(), issue_data);
         Ok(issue)
     }
 
     pub async fn update_with_cost_data(
-        &mut self, 
-        issue_id: &IssueId, 
-        cost_data: &IssueCostData
+        &mut self,
+        issue_id: &IssueId,
+        cost_data: &IssueCostData,
     ) -> Result<(), CostError> {
         if let Some(issue) = self.issues.get_mut(issue_id.as_str()) {
             issue.cost_data = Some(cost_data.clone());
-            issue.content.push_str("\n## Cost Analysis\n[Cost data would be inserted here]\n");
+            issue
+                .content
+                .push_str("\n## Cost Analysis\n[Cost data would be inserted here]\n");
         }
         Ok(())
     }
@@ -456,61 +584,41 @@ impl IssueStorage for MockStorageForTesting {
     async fn list_issues(&self) -> crate::error::Result<Vec<Issue>> {
         let mut issues = Vec::new();
         for (id, data) in &self.issues {
-            let issue = Issue {
-                number: IssueNumber::new(1).unwrap(),
-                name: id.clone(),
-                content: data.content.clone(),
-                completed: false,
-                file_path: PathBuf::from("/tmp/mock.md"),
-                created_at: Utc::now(),
-            };
+            let issue = Self::create_mock_issue(1, id.clone(), data.content.clone(), false);
             issues.push(issue);
         }
         Ok(issues)
     }
 
     async fn get_issue(&self, number: u32) -> crate::error::Result<Issue> {
-        Ok(Issue {
-            number: IssueNumber::new(number).unwrap(),
-            name: format!("mock-issue-{}", number),
-            content: "Mock issue content".to_string(),
-            completed: false,
-            file_path: PathBuf::from("/tmp/mock.md"),
-            created_at: Utc::now(),
-        })
+        Ok(Self::create_mock_issue(
+            number,
+            format!("mock-issue-{}", number),
+            "Mock issue content".to_string(),
+            false,
+        ))
     }
 
     async fn create_issue(&self, name: String, content: String) -> crate::error::Result<Issue> {
-        Ok(Issue {
-            number: IssueNumber::new(1).unwrap(),
-            name,
-            content,
-            completed: false,
-            file_path: PathBuf::from("/tmp/mock.md"),
-            created_at: Utc::now(),
-        })
+        Ok(Self::create_mock_issue(1, name, content, false))
     }
 
     async fn update_issue(&self, number: u32, content: String) -> crate::error::Result<Issue> {
-        Ok(Issue {
-            number: IssueNumber::new(number).unwrap(),
-            name: format!("updated-issue-{}", number),
+        Ok(Self::create_mock_issue(
+            number,
+            format!("updated-issue-{}", number),
             content,
-            completed: false,
-            file_path: PathBuf::from("/tmp/mock.md"),
-            created_at: Utc::now(),
-        })
+            false,
+        ))
     }
 
     async fn mark_complete(&self, number: u32) -> crate::error::Result<Issue> {
-        Ok(Issue {
-            number: IssueNumber::new(number).unwrap(),
-            name: format!("completed-issue-{}", number),
-            content: "Completed issue content".to_string(),
-            completed: true,
-            file_path: PathBuf::from("/tmp/complete/mock.md"),
-            created_at: Utc::now(),
-        })
+        Ok(Self::create_mock_issue(
+            number,
+            format!("completed-issue-{}", number),
+            "Completed issue content".to_string(),
+            true,
+        ))
     }
 
     async fn mark_complete_with_cost(
@@ -518,17 +626,18 @@ impl IssueStorage for MockStorageForTesting {
         number: u32,
         _cost_data: crate::cost::IssueCostData,
     ) -> crate::error::Result<Issue> {
-        Ok(Issue {
-            number: IssueNumber::new(number).unwrap(),
-            name: format!("completed-with-cost-{}", number),
-            content: "Completed issue with cost data".to_string(),
-            completed: true,
-            file_path: PathBuf::from("/tmp/complete/mock.md"),
-            created_at: Utc::now(),
-        })
+        Ok(Self::create_mock_issue(
+            number,
+            format!("completed-with-cost-{}", number),
+            "Completed issue with cost data".to_string(),
+            true,
+        ))
     }
 
-    async fn create_issues_batch(&self, issues: Vec<(String, String)>) -> crate::error::Result<Vec<Issue>> {
+    async fn create_issues_batch(
+        &self,
+        issues: Vec<(String, String)>,
+    ) -> crate::error::Result<Vec<Issue>> {
         let mut result = Vec::new();
         for (name, content) in issues {
             result.push(self.create_issue(name, content).await?);
@@ -544,7 +653,10 @@ impl IssueStorage for MockStorageForTesting {
         Ok(result)
     }
 
-    async fn update_issues_batch(&self, updates: Vec<(u32, String)>) -> crate::error::Result<Vec<Issue>> {
+    async fn update_issues_batch(
+        &self,
+        updates: Vec<(u32, String)>,
+    ) -> crate::error::Result<Vec<Issue>> {
         let mut result = Vec::new();
         for (number, content) in updates {
             result.push(self.update_issue(number, content).await?);
@@ -577,7 +689,8 @@ impl PerformanceValidator {
 
     /// Start timing a performance test
     pub fn start_timing(&mut self, test_name: &str) {
-        self.start_times.insert(test_name.to_string(), std::time::Instant::now());
+        self.start_times
+            .insert(test_name.to_string(), std::time::Instant::now());
     }
 
     /// Stop timing and record benchmark
@@ -592,7 +705,11 @@ impl PerformanceValidator {
     }
 
     /// Assert performance bounds
-    pub fn assert_performance_bounds(&self, test_name: &str, max_duration: std::time::Duration) -> bool {
+    pub fn assert_performance_bounds(
+        &self,
+        test_name: &str,
+        max_duration: std::time::Duration,
+    ) -> bool {
         if let Some(actual_duration) = self.benchmarks.get(test_name) {
             *actual_duration <= max_duration
         } else {
@@ -625,10 +742,12 @@ mod tests {
             input_tokens: 1000,
             output_tokens: 1500,
         };
-        
+
         validator.expect_session_data("test-session", expected.clone());
-        
+
         let markdown = "**Total Cost**: $0.25\n**Total API Calls**: 3\n**Total Input Tokens**: 1000\n**Total Output Tokens**: 1500";
-        assert!(validator.validate_markdown_content("test-session", markdown).unwrap());
+        assert!(validator
+            .validate_markdown_content("test-session", markdown)
+            .unwrap());
     }
 }

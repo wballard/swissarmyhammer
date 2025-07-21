@@ -17,7 +17,10 @@ pub enum QueryError {
 
     /// Invalid query parameters
     #[error("Invalid query parameters: {message}")]
-    InvalidParameters { message: String },
+    InvalidParameters {
+        /// Detailed error message describing invalid parameters
+        message: String,
+    },
 
     /// No data found for query
     #[error("No data found for the specified query parameters")]
@@ -96,7 +99,7 @@ impl TrendQuery {
         Self {
             period: TimePeriod::Custom,
             start_date: Some(start_date),
-            end_date: end_date,
+            end_date,
             group_by_hours: None,
             issue_ids: None,
             pricing_model: None,

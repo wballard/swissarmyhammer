@@ -26,6 +26,12 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tracing::warn;
 
+/// Cost trend data points containing timestamps and cost values
+pub type CostTrend = Vec<(DateTime<Utc>, Decimal)>;
+
+/// Performance trend data points containing timestamps and efficiency metrics  
+pub type PerformanceTrend = Vec<(DateTime<Utc>, f64)>;
+
 /// Configuration for workflow metrics collection and memory management
 #[derive(Debug, Clone)]
 pub struct WorkflowMetricsConfig {
@@ -595,10 +601,7 @@ impl WorkflowMetrics {
     }
 
     /// Build cost and efficiency trends from run data
-    fn build_cost_trends(
-        &self,
-        runs: &[&RunMetrics],
-    ) -> (Vec<(DateTime<Utc>, Decimal)>, Vec<(DateTime<Utc>, f64)>) {
+    fn build_cost_trends(&self, runs: &[&RunMetrics]) -> (CostTrend, PerformanceTrend) {
         let cost_trend: Vec<_> = runs
             .iter()
             .filter_map(|run| {

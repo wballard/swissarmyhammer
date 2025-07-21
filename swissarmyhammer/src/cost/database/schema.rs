@@ -18,11 +18,17 @@ pub enum DatabaseError {
 
     /// Database migration error
     #[error("Database migration error: {message}")]
-    Migration { message: String },
+    Migration {
+        /// Detailed migration error message
+        message: String,
+    },
 
     /// Invalid data error
     #[error("Invalid data: {message}")]
-    InvalidData { message: String },
+    InvalidData {
+        /// Detailed invalid data error message
+        message: String,
+    },
 
     /// Serialization error
     #[error("Serialization error: {0}")]
@@ -34,7 +40,10 @@ pub enum DatabaseError {
 
     /// Transaction error
     #[error("Transaction error: {message}")]
-    Transaction { message: String },
+    Transaction {
+        /// Detailed transaction error message
+        message: String,
+    },
 }
 
 /// Cost analytics database

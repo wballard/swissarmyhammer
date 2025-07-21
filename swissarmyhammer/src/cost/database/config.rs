@@ -40,15 +40,36 @@ const MAX_RETENTION_DAYS: u32 = 3650;
 pub enum DatabaseConfigError {
     /// Invalid connection timeout
     #[error("Connection timeout must be between {min} and {max} seconds, got: {value}")]
-    InvalidConnectionTimeout { value: u64, min: u64, max: u64 },
+    InvalidConnectionTimeout {
+        /// The invalid timeout value provided
+        value: u64,
+        /// Minimum allowed timeout in seconds
+        min: u64,
+        /// Maximum allowed timeout in seconds
+        max: u64,
+    },
 
     /// Invalid max connections
     #[error("Max connections must be between {min} and {max}, got: {value}")]
-    InvalidMaxConnections { value: u32, min: u32, max: u32 },
+    InvalidMaxConnections {
+        /// The invalid max connections value provided
+        value: u32,
+        /// Minimum allowed connections
+        min: u32,
+        /// Maximum allowed connections
+        max: u32,
+    },
 
     /// Invalid retention days
     #[error("Retention days must be between {min} and {max}, got: {value}")]
-    InvalidRetentionDays { value: u32, min: u32, max: u32 },
+    InvalidRetentionDays {
+        /// The invalid retention days value provided
+        value: u32,
+        /// Minimum allowed retention days
+        min: u32,
+        /// Maximum allowed retention days
+        max: u32,
+    },
 
     /// Invalid file path
     #[error("Database file path cannot be empty")]
@@ -151,8 +172,8 @@ impl DatabaseConfig {
 
         // Validate connection timeout
         let timeout_secs = self.connection_timeout.as_secs();
-        if timeout_secs < MIN_CONNECTION_TIMEOUT_SECONDS
-            || timeout_secs > MAX_CONNECTION_TIMEOUT_SECONDS
+        if !(MIN_CONNECTION_TIMEOUT_SECONDS..=MAX_CONNECTION_TIMEOUT_SECONDS)
+            .contains(&timeout_secs)
         {
             return Err(DatabaseConfigError::InvalidConnectionTimeout {
                 value: timeout_secs,

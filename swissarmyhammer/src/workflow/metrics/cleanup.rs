@@ -18,7 +18,10 @@ impl WorkflowMetrics {
         completed_runs.sort_by_key(|(_, completed_at)| *completed_at);
 
         // Remove the oldest runs to get back under the limit
-        let excess_count = self.run_metrics.len().saturating_sub(self.config.max_run_metrics);
+        let excess_count = self
+            .run_metrics
+            .len()
+            .saturating_sub(self.config.max_run_metrics);
         completed_runs
             .into_iter()
             .take(excess_count)
@@ -54,7 +57,8 @@ impl WorkflowMetrics {
         }
 
         // Clean up old workflow summary metrics
-        let workflow_cutoff_date = now - chrono::Duration::days(self.config.max_workflow_summary_age_days);
+        let workflow_cutoff_date =
+            now - chrono::Duration::days(self.config.max_workflow_summary_age_days);
         let workflows_to_remove: Vec<_> = self
             .workflow_metrics
             .iter()

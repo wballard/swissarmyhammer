@@ -578,7 +578,7 @@ impl McpServer {
     ///
     /// # Arguments
     ///
-    /// * `request` - The mark complete request containing the issue number
+    /// * `request` - The mark complete request containing the issue name
     ///
     /// # Returns
     ///
@@ -956,7 +956,7 @@ impl McpServer {
     ///
     /// # Arguments
     ///
-    /// * `request` - The update request containing issue number and new content
+    /// * `request` - The update request containing issue name and new content
     ///
     /// # Returns
     ///
@@ -1171,7 +1171,7 @@ impl McpServer {
     ///
     /// # Arguments
     ///
-    /// * `request` - The work request containing the issue number
+    /// * `request` - The work request containing the issue name
     ///
     /// # Returns
     ///
@@ -1369,11 +1369,11 @@ impl McpServer {
     /// Handle the issue_merge tool operation.
     ///
     /// Merges the work branch for an issue back to the main branch.
-    /// The branch name is determined from the issue number and name.
+    /// The branch name is determined from the issue name and name.
     ///
     /// # Arguments
     ///
-    /// * `request` - The merge request containing the issue number
+    /// * `request` - The merge request containing the issue name
     ///
     /// # Returns
     ///
@@ -2084,18 +2084,6 @@ mod tests {
     use super::*;
     use crate::prompts::Prompt;
 
-    /// Extract issue number from a CallToolResult response
-    fn extract_issue_number_from_response(call_result: &CallToolResult) -> u32 {
-        let text_content = &call_result.content[0];
-        if let RawContent::Text(text) = &text_content.raw {
-            let start = text.text.find("Created issue #").unwrap() + "Created issue #".len();
-            let end = text.text[start..].find(' ').unwrap() + start;
-            let number_str = &text.text[start..end];
-            number_str.parse::<u32>().unwrap()
-        } else {
-            panic!("Expected text content, got: {:?}", text_content.raw);
-        }
-    }
 
     fn extract_issue_name_from_create_request(request: &CreateIssueRequest) -> IssueName {
         if let Some(ref name) = request.name {

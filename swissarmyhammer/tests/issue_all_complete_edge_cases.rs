@@ -113,7 +113,7 @@ async fn test_corrupted_issue_files() {
         // Should contain the original numbered issue
         assert!(text
             .text
-            .contains(&format!("{}", issue.name)));
+            .contains(&issue.name.to_string()));
         // Should contain the non-numbered issue (with auto-assigned virtual number)
         assert!(text.text.contains("invalid_format"));
     } else {

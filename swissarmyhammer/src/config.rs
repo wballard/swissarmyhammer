@@ -10,16 +10,8 @@ use crate::common::env_loader::EnvLoader;
 pub struct Config {
     /// Prefix for issue branches (default: "issue/")
     pub issue_branch_prefix: String,
-    /// Width for issue numbers in display (default: 6)
-    pub issue_number_width: usize,
     /// Maximum number of pending issues to display in summary (default: 5)
     pub max_pending_issues_in_summary: usize,
-    /// Minimum issue number allowed (default: 1)
-    pub min_issue_number: u32,
-    /// Maximum issue number allowed (default: 999_999)
-    pub max_issue_number: u32,
-    /// Number of digits for issue numbering in filenames (default: 6)
-    pub issue_number_digits: usize,
     /// Maximum content length for issue content (default: 50000)
     pub max_content_length: usize,
     /// Maximum line length for issue content (default: 10000)
@@ -30,9 +22,17 @@ pub struct Config {
     pub cache_ttl_seconds: u64,
     /// Maximum cache size (default: 1000)
     pub cache_max_size: usize,
-    /// Base number for virtual issue numbering (default: 500_000)
+    /// Issue number width for formatting (default: 6)
+    pub issue_number_width: usize,
+    /// Minimum issue number (default: 1)
+    pub min_issue_number: u32,
+    /// Maximum issue number (default: 999_999)
+    pub max_issue_number: u32,
+    /// Issue number digits (default: 6)
+    pub issue_number_digits: usize,
+    /// Virtual issue number base (default: 500_000)
     pub virtual_issue_number_base: u32,
-    /// Range for virtual issue numbers (default: 500_000, so virtual numbers go from base to base+range-1)
+    /// Virtual issue number range (default: 500_000)
     pub virtual_issue_number_range: u32,
 }
 
@@ -40,16 +40,16 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             issue_branch_prefix: "issue/".to_string(),
-            issue_number_width: 6,
             max_pending_issues_in_summary: 5,
-            min_issue_number: 1,
-            max_issue_number: 999_999,
-            issue_number_digits: 6,
             max_content_length: 50000,
             max_line_length: 10000,
             max_issue_name_length: 100,
             cache_ttl_seconds: 300,
             cache_max_size: 1000,
+            issue_number_width: 6,
+            min_issue_number: 1,
+            max_issue_number: 999_999,
+            issue_number_digits: 6,
             virtual_issue_number_base: 500_000,
             virtual_issue_number_range: 500_000,
         }
@@ -64,16 +64,16 @@ impl Config {
 
         Self {
             issue_branch_prefix: loader.load_string("ISSUE_BRANCH_PREFIX", "issue/"),
-            issue_number_width: loader.load_parsed("ISSUE_NUMBER_WIDTH", 6),
             max_pending_issues_in_summary: loader.load_parsed("MAX_PENDING_ISSUES_IN_SUMMARY", 5),
-            min_issue_number: loader.load_parsed("MIN_ISSUE_NUMBER", 1),
-            max_issue_number: loader.load_parsed("MAX_ISSUE_NUMBER", 999_999),
-            issue_number_digits: loader.load_parsed("ISSUE_NUMBER_DIGITS", 6),
             max_content_length: loader.load_parsed("MAX_CONTENT_LENGTH", 50000),
             max_line_length: loader.load_parsed("MAX_LINE_LENGTH", 10000),
             max_issue_name_length: loader.load_parsed("MAX_ISSUE_NAME_LENGTH", 100),
             cache_ttl_seconds: loader.load_parsed("CACHE_TTL_SECONDS", 300),
             cache_max_size: loader.load_parsed("CACHE_MAX_SIZE", 1000),
+            issue_number_width: loader.load_parsed("ISSUE_NUMBER_WIDTH", 6),
+            min_issue_number: loader.load_parsed("MIN_ISSUE_NUMBER", 1),
+            max_issue_number: loader.load_parsed("MAX_ISSUE_NUMBER", 999_999),
+            issue_number_digits: loader.load_parsed("ISSUE_NUMBER_DIGITS", 6),
             virtual_issue_number_base: loader.load_parsed("VIRTUAL_ISSUE_NUMBER_BASE", 500_000),
             virtual_issue_number_range: loader.load_parsed("VIRTUAL_ISSUE_NUMBER_RANGE", 500_000),
         }

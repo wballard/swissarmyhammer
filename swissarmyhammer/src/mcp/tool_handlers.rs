@@ -89,7 +89,7 @@ impl ToolHandlers {
     ///
     /// # Arguments
     ///
-    /// * `request` - The mark complete request containing the issue number
+    /// * `request` - The mark complete request containing the issue name
     ///
     /// # Returns
     ///
@@ -256,7 +256,7 @@ impl ToolHandlers {
     ///
     /// # Arguments
     ///
-    /// * `request` - The update request containing issue number and new content
+    /// * `request` - The update request containing issue name and new content
     ///
     /// # Returns
     ///
@@ -328,7 +328,7 @@ impl ToolHandlers {
     ///
     /// # Arguments
     ///
-    /// * `request` - The work request containing the issue number
+    /// * `request` - The work request containing the issue name
     ///
     /// # Returns
     ///
@@ -373,11 +373,11 @@ impl ToolHandlers {
     /// Handle the issue_merge tool operation.
     ///
     /// Merges the work branch for an issue back to the main branch.
-    /// The branch name is determined from the issue number and name.
+    /// The branch name is determined from the issue name and name.
     ///
     /// # Arguments
     ///
-    /// * `request` - The merge request containing the issue number
+    /// * `request` - The merge request containing the issue name
     ///
     /// # Returns
     ///

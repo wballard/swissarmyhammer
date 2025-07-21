@@ -1,4 +1,5 @@
 use crate::error::{Result, SwissArmyHammerError};
+use crate::config::Config;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -6,8 +7,6 @@ use std::path::{Path, PathBuf};
 use tokio::sync::Mutex;
 use tracing::debug;
 
-/// Maximum issue number supported (6 digits)
-use crate::config::Config;
 
 // IssueNumber type eliminated - we now use issue names (filename without .md) as the primary identifier
 
@@ -105,7 +104,7 @@ impl FileSystemIssueStorage {
 
     /// Parse issue from file path
     ///
-    /// Parses an issue from a file path, extracting the issue number and name from the filename
+    /// Parses an issue from a file path, extracting the issue name and name from the filename
     /// and reading the content from the file. The filename must follow the format:
     /// `<nnnnnn>_<name>.md` where `nnnnnn` is a 6-digit zero-padded number.
     ///
@@ -117,7 +116,7 @@ impl FileSystemIssueStorage {
     ///
     /// Returns `Ok(Issue)` if the file is successfully parsed, or an error if:
     /// - The filename doesn't follow the expected format
-    /// - The issue number is invalid or exceeds the maximum
+    /// - The issue name is invalid or exceeds the maximum
     /// - The file cannot be read
     ///
     /// # Examples
@@ -146,8 +145,15 @@ impl FileSystemIssueStorage {
                 )
             })?;
 
-        // Parse filename to extract the proper name part
-        let (_number, name) = parse_any_issue_filename(filename)?;
+        // Extract issue name from filename
+        // For numbered files (000123_name), extract just the name part
+        // For non-numbered files (just_a_name), use the whole filename
+        let name = if let Ok((_, name_part)) = parse_issue_filename(filename) {
+            name_part
+        } else {
+            // If parsing as numbered format fails, use the whole filename
+            filename.to_string()
+        };
 
         // Read file content
         let content = fs::read_to_string(path).map_err(SwissArmyHammerError::Io)?;
@@ -176,56 +182,6 @@ impl FileSystemIssueStorage {
         })
     }
 
-    /// Generate a virtual number for non-numbered files with collision resistance
-    ///
-    /// Uses multiple hash functions and deterministic probing to reduce collision
-    /// probability while maintaining deterministic behavior (same filename always
-    /// gets the same virtual number).
-    ///
-    /// # Arguments
-    ///
-    /// * `filename` - The filename to generate a virtual number for
-    ///
-    /// # Returns
-    ///
-    /// A virtual number in the configured range that's deterministically derived
-    /// from the filename with reduced collision probability.
-    fn generate_virtual_number_with_collision_resistance(&self, filename: &str) -> u32 {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let config = Config::global();
-
-        // Use multiple hash seeds for better distribution
-        let hash_seeds = [0u64, 1099511627776u64, 2199023255552u64]; // Powers of 2 spread apart
-
-        let mut best_hash = 0u64;
-
-        // Combine multiple hash functions for better distribution
-        for seed in hash_seeds {
-            let mut hasher = DefaultHasher::new();
-            seed.hash(&mut hasher);
-            filename.hash(&mut hasher);
-            let hash = hasher.finish();
-
-            // XOR combine the hashes for better distribution
-            best_hash ^= hash;
-        }
-
-        // Use additional entropy from filename characteristics
-        let char_sum: u32 = filename.chars().map(|c| c as u32).sum();
-        let length_factor = filename.len() as u64;
-
-        // Combine all entropy sources
-        let combined_hash = best_hash
-            .wrapping_add(char_sum as u64 * 31)
-            .wrapping_add(length_factor * 17);
-
-        // Map to virtual number range with better distribution
-        let virtual_offset = (combined_hash % config.virtual_issue_number_range as u64) as u32;
-
-        config.virtual_issue_number_base + virtual_offset
-    }
 
     /// List issues in a directory
     ///
@@ -299,7 +255,7 @@ impl FileSystemIssueStorage {
     ///
     /// # Arguments
     ///
-    /// * `number` - The issue number to use
+    /// * `number` - The issue name to use
     /// * `name` - The issue name (will be sanitized for filesystem safety)
     /// * `content` - The markdown content to write to the file
     ///
@@ -450,7 +406,7 @@ impl IssueStorage for FileSystemIssueStorage {
 
         // Create the filename and file path
         let filename = create_safe_filename(&issue_name);
-        let file_path = self.state.issues_dir.join(format!("{}.md", filename));
+        let file_path = self.state.issues_dir.join(format!("{filename}.md"));
 
         // Write the content to the file
         fs::write(&file_path, &content).map_err(SwissArmyHammerError::Io)?;
@@ -538,43 +494,44 @@ impl IssueStorage for FileSystemIssueStorage {
     }
 }
 
-/// Format issue number as 6-digit string with leading zeros
+/// Format issue name as 6-digit string with leading zeros
 pub fn format_issue_number(number: u32) -> String {
     format!("{number:06}")
 }
 
-/// Parse issue number from string
+/// Parse issue number from 6-digit string
 pub fn parse_issue_number(s: &str) -> Result<u32> {
-    if s.len() != Config::global().issue_number_digits {
-        return Err(SwissArmyHammerError::InvalidIssueNumber(format!(
-            "Issue number must be exactly {} digits (e.g., '000123'), got {} digits: '{}'",
-            Config::global().issue_number_digits,
-            s.len(),
-            s
-        )));
+    if s.len() != 6 {
+        return Err(SwissArmyHammerError::Storage(format!("Issue number must be 6 digits, got: {s}")));
+    }
+    
+    s.parse::<u32>()
+        .map_err(|_| SwissArmyHammerError::Storage(format!("Issue number must be numeric, got: {s}")))
+}
+
+/// Parse issue filename in numbered format (e.g., "000123_bug_fix")
+pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
+    if filename.is_empty() {
+        return Err(SwissArmyHammerError::Storage("Empty filename".to_string()));
     }
 
-    let number = s.parse::<u32>().map_err(|_| {
-        SwissArmyHammerError::InvalidIssueNumber(format!(
-            "Issue number must contain only digits (e.g., '000123'), got: '{s}'"
-        ))
-    })?;
-
-    if number > Config::global().max_issue_number {
-        return Err(SwissArmyHammerError::InvalidIssueNumber(format!(
-            "Issue number {} exceeds maximum allowed value ({}). Use 6-digit format: 000001-{}",
-            number,
-            Config::global().max_issue_number,
-            Config::global().max_issue_number
-        )));
+    // Find the first underscore
+    if let Some(underscore_pos) = filename.find('_') {
+        let number_part = &filename[..underscore_pos];
+        let name_part = &filename[underscore_pos + 1..];
+        
+        // Parse the number part
+        let number = parse_issue_number(number_part)?;
+        
+        Ok((number, name_part.to_string()))
+    } else {
+        Err(SwissArmyHammerError::Storage(format!("Invalid filename format, missing underscore: {filename}")))
     }
-
-    Ok(number)
 }
 
 /// Extract issue info from filename
 ///
-/// Parses an issue filename in the format `<nnnnnn>_<name>` and returns the issue number
+/// Parses an issue filename in the format `<nnnnnn>_<name>` and returns the issue name
 /// and name as a tuple. The filename must follow the strict 6-digit format where the number
 /// is zero-padded and separated from the name by an underscore.
 ///
@@ -636,36 +593,6 @@ pub fn parse_issue_number(s: &str) -> Result<u32> {
 /// // Invalid: number too large
 /// parse_issue_filename("1_000_000_test").unwrap();
 /// ```
-pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
-    // Try to parse the number part first
-    let number_part = if filename.len() == Config::global().issue_number_digits {
-        // Nameless format: "000123"
-        filename
-    } else if filename.len() > Config::global().issue_number_digits
-        && filename.chars().nth(Config::global().issue_number_digits) == Some('_')
-    {
-        // Named format: "000123_name" or "000123_" (empty name)
-        &filename[..Config::global().issue_number_digits]
-    } else {
-        return Err(SwissArmyHammerError::Other(format!(
-            "Invalid filename format: expected <nnnnnn> or <nnnnnn>_<name> (e.g., '000123' or '000123_bug_fix'), got: '{filename}'"
-        )));
-    };
-
-    let number = parse_issue_number(number_part)?;
-
-    // Extract the name part (if any)
-    let name = if filename.len() == Config::global().issue_number_digits {
-        // Nameless format
-        String::new()
-    } else {
-        // Named format - everything after the underscore (may be empty)
-        filename[Config::global().issue_number_digits + 1..].to_string()
-    };
-
-    Ok((number, name))
-}
-
 /// Parse any issue filename format (numbered or non-numbered)
 ///
 /// This function provides flexible parsing of issue filenames, supporting both the
@@ -697,7 +624,7 @@ pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
 ///
 /// Non-numbered files (where this function returns `None` for the number) are assigned
 /// virtual numbers in the range [`Config::global().virtual_issue_number_base`..] based
-/// on a hash of the filename. This ensures consistent issue numbering while maintaining
+/// on a hash of the filename. This ensures consistent issue nameing while maintaining
 /// flexibility in naming.
 ///
 /// # Arguments
@@ -785,20 +712,19 @@ pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
 /// assert_eq!(name, "meeting-notes");
 /// ```
 pub fn parse_any_issue_filename(filename: &str) -> Result<(Option<u32>, String)> {
-    // First try to parse as numbered format
-    if let Ok((number, name)) = parse_issue_filename(filename) {
-        return Ok((Some(number), name));
-    }
-
-    // If that fails, treat the entire filename as the issue name
-    // Validate that the filename is not empty and is safe
     if filename.is_empty() {
         return Err(SwissArmyHammerError::Other(
             "Issue filename cannot be empty".to_string(),
         ));
     }
-
-    Ok((None, filename.to_string()))
+    
+    // Try to parse as numbered format first
+    if let Ok((number, name)) = parse_issue_filename(filename) {
+        Ok((Some(number), name))
+    } else {
+        // Not a numbered format, treat as non-numbered
+        Ok((None, filename.to_string()))
+    }
 }
 
 /// Create safe filename from issue name
@@ -1049,14 +975,14 @@ pub fn validate_issue_name(name: &str) -> Result<()> {
 pub fn extract_issue_name_from_filename(filename: &str) -> String {
     // Remove .md extension if present
     let name_without_ext = filename.strip_suffix(".md").unwrap_or(filename);
-
-    // Try to parse as numbered format first
-    if let Ok((_number, name)) = parse_issue_filename(name_without_ext) {
-        return name;
+    
+    // Try to parse as numbered format and extract just the name part
+    if let Ok((_, name_part)) = parse_issue_filename(name_without_ext) {
+        name_part
+    } else {
+        // If not a numbered format, return the whole filename (without .md extension)
+        name_without_ext.to_string()
     }
-
-    // If that fails, use the entire filename as the issue name
-    name_without_ext.to_string()
 }
 
 /// Check if a file path represents a valid issue file
@@ -1088,7 +1014,7 @@ pub fn extract_issue_name_from_filename(filename: &str) -> String {
 ///
 /// ## Virtual Numbering
 ///
-/// Non-numbered files are assigned virtual issue numbers in the range
+/// Non-numbered files are assigned virtual issue names in the range
 /// [`Config::global().virtual_issue_number_base`..`Config::global().virtual_issue_number_base + Config::global().virtual_issue_number_range`]
 /// based on a hash of the filename. This ensures consistent numbering while avoiding
 /// conflicts with traditionally numbered issues.
@@ -1132,7 +1058,28 @@ pub fn is_issue_file(path: &Path) -> bool {
     !filename.is_empty()
 }
 
-impl FileSystemIssueStorage {}
+impl FileSystemIssueStorage {
+    /// Generate a virtual issue number with collision resistance
+    /// This method generates a deterministic virtual number for a given filename
+    /// that falls within the virtual number range defined in config
+    pub fn generate_virtual_number_with_collision_resistance(&self, filename: &str) -> u32 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let config = Config::global();
+        
+        // Use a hash of the filename to generate a deterministic number
+        let mut hasher = DefaultHasher::new();
+        filename.hash(&mut hasher);
+        let hash = hasher.finish();
+        
+        // Map the hash to the virtual number range
+        let range = config.virtual_issue_number_range;
+        let offset = (hash % range as u64) as u32;
+        
+        config.virtual_issue_number_base + offset
+    }
+}
 
 /// New simplified approach: filename without .md extension is the issue name
 ///
@@ -1202,7 +1149,7 @@ mod tests {
         for num in valid_numbers {
             assert!(
                 num <= Config::global().max_issue_number,
-                "Issue number {num} should be valid"
+                "Issue name {num} should be valid"
             );
         }
 
@@ -1211,7 +1158,7 @@ mod tests {
         for num in invalid_numbers {
             assert!(
                 num > Config::global().max_issue_number,
-                "Issue number {num} should be invalid"
+                "Issue name {num} should be invalid"
             );
         }
     }
@@ -1477,15 +1424,15 @@ mod tests {
         let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
 
         // Create multiple issues
-        let issue1 = storage
+        let _issue1 = storage
             .create_issue("first".to_string(), "content1".to_string())
             .await
             .unwrap();
-        let issue2 = storage
+        let _issue2 = storage
             .create_issue("second".to_string(), "content2".to_string())
             .await
             .unwrap();
-        let issue3 = storage
+        let _issue3 = storage
             .create_issue("third".to_string(), "content3".to_string())
             .await
             .unwrap();
@@ -1669,7 +1616,7 @@ mod tests {
         assert_eq!(sorted_issues[3].name.as_str(), "valid");
 
         // The other 3 should be non-numbered with virtual numbers >= virtual_base
-        for issue in sorted_issues.iter().take(4).skip(1) {
+        for _issue in sorted_issues.iter().take(4).skip(1) {
             // Virtual number logic removed - name-based approach
         }
     }
@@ -2100,7 +2047,7 @@ mod tests {
             result.is_ok(),
             "Special characters should be valid in non-numbered format"
         );
-        let issue = result.unwrap();
+        let _issue = result.unwrap();
         // Virtual number functionality removed - name-based system now used
 
         // Test nonexistent file
@@ -2243,7 +2190,7 @@ mod tests {
         assert!(!issue1.completed);
 
         // Create second issue - should auto-increment
-        let issue2 = storage
+        let _issue2 = storage
             .create_issue("another_issue".to_string(), "More content".to_string())
             .await
             .unwrap();

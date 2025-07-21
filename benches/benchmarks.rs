@@ -1,8 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use swissarmyhammer::issues::{Issue, IssueNumber};
-use swissarmyhammer::mcp::types::IssueName;
+use swissarmyhammer::issues::Issue;
 use swissarmyhammer::mcp::McpServer;
 use swissarmyhammer::workflow::{
     ConditionType, MermaidParser, State, StateId, StateType, Transition, TransitionCondition,
@@ -357,9 +356,8 @@ fn create_test_issues(count: usize, completed_ratio: f64) -> Vec<Issue> {
 
     for i in 0..count {
         issues.push(Issue {
-            number: IssueNumber::new(i as u32).unwrap(),
-            name: IssueName::from_filesystem(format!("test_issue_{i}")).unwrap(),
-            content: format!("This is test issue number {i}"),
+            name: format!("test_issue_{i}"),
+            content: format!("This is test issue name {i}"),
             completed: i < completed_count,
             file_path: PathBuf::from(format!("test_issue_{i}.md")),
             created_at: chrono::Utc::now(),

@@ -339,7 +339,7 @@ async fn test_performance_with_many_issues() {
             .await
             .create_issue(
                 format!("perf_issue_{i:03}"),
-                format!("Performance test issue number {i}"),
+                format!("Performance test issue name {i}"),
             )
             .await
             .unwrap();

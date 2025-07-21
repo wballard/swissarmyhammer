@@ -108,7 +108,7 @@ Fixes: {{ issues }}
     })
     .add_argument(ArgumentSpec {
         name: "issues".to_string(),
-        description: Some("Related issue numbers".to_string()),
+        description: Some("Related issue names".to_string()),
         required: false,
         default: None,
         type_hint: Some("string".to_string()),

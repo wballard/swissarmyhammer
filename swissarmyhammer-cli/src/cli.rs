@@ -666,16 +666,16 @@ pub enum IssueCommands {
     },
     /// Show issue details
     Show {
-        /// Issue number
-        number: u32,
+        /// Issue name
+        name: String,
         /// Show raw content
         #[arg(short, long)]
         raw: bool,
     },
     /// Update an issue
     Update {
-        /// Issue number
-        number: u32,
+        /// Issue name
+        name: String,
         /// New content (use - for stdin)
         #[arg(short, long)]
         content: Option<String>,
@@ -688,18 +688,18 @@ pub enum IssueCommands {
     },
     /// Mark issue as complete
     Complete {
-        /// Issue number
-        number: u32,
+        /// Issue name
+        name: String,
     },
     /// Start working on an issue
     Work {
-        /// Issue number
-        number: u32,
+        /// Issue name
+        name: String,
     },
     /// Merge completed issue
     Merge {
-        /// Issue number
-        number: u32,
+        /// Issue name
+        name: String,
         /// Keep branch after merge
         #[arg(short, long)]
         keep_branch: bool,

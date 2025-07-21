@@ -863,7 +863,7 @@ pub fn check_swissarmyhammer_config_validation(checks: &mut Vec<Check>) -> Resul
 
     // Load configuration using the same method as the CLI
     let config = Config::new();
-    
+
     // Validate the configuration
     match config.validate() {
         Ok(()) => {
@@ -904,7 +904,10 @@ pub fn check_swissarmyhammer_config_file(checks: &mut Vec<Check>) -> Result<()> 
                     checks.push(Check {
                         name: check_names::SWISSARMYHAMMER_CONFIG_FILE.to_string(),
                         status: CheckStatus::Ok,
-                        message: format!("Configuration file loaded successfully: {:?}", config_path),
+                        message: format!(
+                            "Configuration file loaded successfully: {:?}",
+                            config_path
+                        ),
                         fix: None,
                     });
                 }
@@ -922,8 +925,12 @@ pub fn check_swissarmyhammer_config_file(checks: &mut Vec<Check>) -> Result<()> 
             checks.push(Check {
                 name: check_names::SWISSARMYHAMMER_CONFIG_FILE.to_string(),
                 status: CheckStatus::Ok,
-                message: "No configuration file found (using environment variables and defaults)".to_string(),
-                fix: Some("Run 'swissarmyhammer config init' to create an example configuration file".to_string()),
+                message: "No configuration file found (using environment variables and defaults)"
+                    .to_string(),
+                fix: Some(
+                    "Run 'swissarmyhammer config init' to create an example configuration file"
+                        .to_string(),
+                ),
             });
         }
     }

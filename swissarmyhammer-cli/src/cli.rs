@@ -735,6 +735,7 @@ pub enum IssueCommands {
     Status,
 }
 
+/// Configuration management commands
 #[derive(Subcommand, Debug)]
 pub enum ConfigAction {
     /// Show current configuration values and sources

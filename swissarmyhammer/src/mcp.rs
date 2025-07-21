@@ -52,7 +52,6 @@ struct PreWorkValidation {
 }
 
 /// Constants for issue branch management
-
 /// Request structure for getting a prompt
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct GetPromptRequest {

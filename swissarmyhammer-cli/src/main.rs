@@ -1,3 +1,8 @@
+// SwissArmyHammer CLI - Command-line interface for prompt management
+//
+// This binary provides the main CLI interface for SwissArmyHammer,
+// a powerful tool for managing and organizing development prompts.
+
 use std::process;
 mod cli;
 mod completions;
@@ -19,6 +24,9 @@ use clap::CommandFactory;
 use cli::{Cli, Commands, ConfigAction};
 use exit_codes::{EXIT_ERROR, EXIT_SUCCESS, EXIT_WARNING};
 use logging::FileWriterGuard;
+
+/// Default configuration filename
+const CONFIG_FILENAME: &str = "swissarmyhammer.yaml";
 
 #[tokio::main]
 async fn main() {
@@ -342,7 +350,10 @@ fn run_config(action: ConfigAction) -> i32 {
 }
 
 /// Handle the specific configuration command action
-fn handle_config_command(action: ConfigAction, config: &swissarmyhammer::config::Config) -> Result<(), Box<dyn std::error::Error>> {
+fn handle_config_command(
+    action: ConfigAction,
+    config: &swissarmyhammer::config::Config,
+) -> Result<(), Box<dyn std::error::Error>> {
     use swissarmyhammer::config::Config;
 
     match action {
@@ -351,7 +362,10 @@ fn handle_config_command(action: ConfigAction, config: &swissarmyhammer::config:
             println!("base_branch: {}", config.base_branch);
             println!("issue_branch_prefix: {}", config.issue_branch_prefix);
             println!("issue_number_width: {}", config.issue_number_width);
-            println!("max_pending_issues_in_summary: {}", config.max_pending_issues_in_summary);
+            println!(
+                "max_pending_issues_in_summary: {}",
+                config.max_pending_issues_in_summary
+            );
             println!("min_issue_number: {}", config.min_issue_number);
             println!("max_issue_number: {}", config.max_issue_number);
             println!("issue_number_digits: {}", config.issue_number_digits);
@@ -360,9 +374,15 @@ fn handle_config_command(action: ConfigAction, config: &swissarmyhammer::config:
             println!("max_issue_name_length: {}", config.max_issue_name_length);
             println!("cache_ttl_seconds: {}", config.cache_ttl_seconds);
             println!("cache_max_size: {}", config.cache_max_size);
-            println!("virtual_issue_number_base: {}", config.virtual_issue_number_base);
-            println!("virtual_issue_number_range: {}", config.virtual_issue_number_range);
-            
+            println!(
+                "virtual_issue_number_base: {}",
+                config.virtual_issue_number_base
+            );
+            println!(
+                "virtual_issue_number_range: {}",
+                config.virtual_issue_number_range
+            );
+
             // Show configuration file location if found
             if let Some(config_file) = Config::find_yaml_config_file() {
                 println!("\n📍 Configuration File: {:?}", config_file);
@@ -370,49 +390,55 @@ fn handle_config_command(action: ConfigAction, config: &swissarmyhammer::config:
                 println!("\n📍 Configuration File: None found (using environment variables and defaults)");
             }
         }
-        
-        ConfigAction::Validate => {
-            match config.validate() {
-                Ok(()) => {
-                    println!("✅ Configuration is valid");
-                }
-                Err(e) => {
-                    println!("❌ Configuration validation failed: {}", e);
-                    println!("\n{}", Config::validation_help());
-                    return Err(Box::new(e));
-                }
+
+        ConfigAction::Validate => match config.validate() {
+            Ok(()) => {
+                println!("✅ Configuration is valid");
             }
-        }
-        
+            Err(e) => {
+                println!("❌ Configuration validation failed: {}", e);
+                println!("\n{}", Config::validation_help());
+                return Err(format!("Configuration validation failed: {}", e).into());
+            }
+        },
+
         ConfigAction::Init => {
-            let config_path = "swissarmyhammer.yaml";
-            
+            let config_path = CONFIG_FILENAME;
+
             if std::path::Path::new(config_path).exists() {
                 eprintln!("❌ Configuration file already exists: {}", config_path);
                 eprintln!("Remove it first or use a different location.");
-                return Err("Configuration file already exists".into());
+                return Err(format!("Configuration file '{}' already exists. Remove it first or use a different location.", config_path).into());
             }
-            
-            std::fs::write(config_path, Config::example_yaml_config())?;
+
+            std::fs::write(config_path, Config::example_yaml_config()).map_err(|e| {
+                format!(
+                    "Failed to write configuration file '{}': {}",
+                    config_path, e
+                )
+            })?;
             println!("✅ Created example configuration file: {}", config_path);
             println!("Edit this file to customize your configuration.");
         }
-        
+
         ConfigAction::Guide => {
             println!("📖 Configuration Help\n");
             println!("SwissArmyHammer supports configuration via:");
-            println!("  1. YAML file (swissarmyhammer.yaml) - highest precedence");
+            println!("  1. YAML file ({}) - highest precedence", CONFIG_FILENAME);
             println!("  2. Environment variables (SWISSARMYHAMMER_*) - medium precedence");
             println!("  3. Built-in defaults - lowest precedence");
             println!("\nConfiguration file locations searched:");
-            println!("  1. Current directory: ./swissarmyhammer.yaml");
-            println!("  2. User config directory: ~/.config/swissarmyhammer/swissarmyhammer.yaml");
-            println!("  3. User home directory: ~/swissarmyhammer.yaml");
+            println!("  1. Current directory: ./{}", CONFIG_FILENAME);
+            println!(
+                "  2. User config directory: ~/.config/swissarmyhammer/{}",
+                CONFIG_FILENAME
+            );
+            println!("  3. User home directory: ~/{}", CONFIG_FILENAME);
             println!("\nExample configuration file:");
             println!("{}", Config::example_yaml_config());
             println!("{}", Config::validation_help());
         }
     }
-    
+
     Ok(())
 }

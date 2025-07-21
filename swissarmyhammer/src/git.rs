@@ -4,8 +4,8 @@
 //! including creating work branches, switching branches, and merging
 //! completed work back to the main branch.
 
-use crate::{Result, SwissArmyHammerError};
 use crate::config::Config;
+use crate::{Result, SwissArmyHammerError};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -28,7 +28,7 @@ impl GitOperations {
         // Verify this is a git repository
         Self::verify_git_repo(&work_dir)?;
 
-        Ok(Self { 
+        Ok(Self {
             work_dir,
             base_branch: config.base_branch.clone(),
         })
@@ -39,7 +39,7 @@ impl GitOperations {
         // Verify this is a git repository
         Self::verify_git_repo(&work_dir)?;
 
-        Ok(Self { 
+        Ok(Self {
             work_dir,
             base_branch: config.base_branch.clone(),
         })
@@ -105,7 +105,8 @@ impl GitOperations {
         }
 
         Err(SwissArmyHammerError::Other(format!(
-            "No base branch '{}', main, or master branch found", self.base_branch
+            "No base branch '{}', main, or master branch found",
+            self.base_branch
         )))
     }
 

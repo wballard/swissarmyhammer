@@ -150,3 +150,70 @@ Consider adding (if not present):
 - Provide detailed logging for debugging token discrepancies
 - Test with real-world Claude Code interaction patterns
 - Consider future Claude model changes in token counting
+
+## Proposed Solution
+
+After analyzing the existing codebase, I found that we already have:
+
+1. **Existing Cost Infrastructure**: Robust cost tracking system with `ApiCall`, `CostTracker`, and `CostCalculator` structures
+2. **MCP Integration**: Cost tracking wrapper for MCP handlers with basic token extraction
+3. **Partial Token Extraction**: Basic parsing of Claude API responses in `mcp/cost_tracking.rs`
+
+### Architecture Overview
+
+The solution builds on the existing infrastructure by creating dedicated token counting modules:
+
+```
+swissarmyhammer/src/cost/
+├── mod.rs (existing - update exports)
+├── calculator.rs (existing)
+├── tracker.rs (existing)
+├── token_counter.rs (NEW - primary implementation)
+└── token_estimation.rs (NEW - estimation algorithms)
+```
+
+### Implementation Plan
+
+1. **Create `token_counter.rs`** - Core token counting functionality:
+   - `TokenCounter` struct as main interface
+   - `TokenUsage` structure extending existing usage tracking
+   - `TokenSource` and `ConfidenceLevel` enums
+   - API response parsing with multiple format support
+   - Integration with existing `ApiCall` structures
+
+2. **Create `token_estimation.rs`** - Token estimation algorithms:
+   - Claude-compatible tokenization estimation
+   - Multi-language support with configurable character-per-token ratios
+   - Context-aware estimation (code vs natural language)
+   - Confidence level calculation based on text characteristics
+
+3. **Validation System**:
+   - Compare API-reported vs estimated token counts
+   - Flag discrepancies > configurable threshold (default 10%)
+   - Track validation accuracy over time
+   - Detailed logging for debugging discrepancies
+
+4. **Integration Points**:
+   - Enhance existing `ApiCall.complete()` method to use token validation
+   - Update MCP cost tracking to use improved token counting
+   - Integrate with `CostCalculator` for accurate pricing
+   - Extend existing token extraction in `mcp/cost_tracking.rs`
+
+### Key Features
+
+- **Primary Method**: Extract exact token counts from Claude API responses
+- **Fallback Estimation**: Robust estimation when API data unavailable
+- **Validation**: Automatic comparison and discrepancy detection
+- **Performance**: Optimized for high-volume operations
+- **Extensibility**: Support for future Claude model changes
+- **Integration**: Seamless integration with existing cost tracking
+
+### Testing Strategy
+
+- Unit tests for token counting accuracy with known examples
+- Integration tests with existing cost tracking system
+- Performance benchmarks for large text processing
+- Edge case testing (empty input, special characters, large texts)
+- Real-world validation with Claude API responses
+
+This approach leverages the existing robust foundation while adding the sophisticated token counting capabilities requested in the issue.

@@ -5,16 +5,28 @@
 //! cost calculation capabilities throughout issue processing.
 
 pub mod calculator;
+pub mod token_counter;
+pub mod token_estimation;
 pub mod tracker;
 
 #[cfg(test)]
 pub mod integration_tests;
 
 #[cfg(test)]
+pub mod token_integration_tests;
+
+#[cfg(test)]
 pub mod test_utils;
 
 pub use calculator::{
     CostCalculation, CostCalculator, MaxPlanConfig, PaidPlanConfig, PricingModel, PricingRates,
+};
+pub use token_counter::{
+    ApiTokenExtractor, ConfidenceLevel, TokenCounter, TokenSource, TokenUsage, TokenValidator,
+    ValidationResult, ValidationStats,
+};
+pub use token_estimation::{
+    ContentType, EstimationConfig, Language, TextAnalyzer, TokenEstimator,
 };
 pub use tracker::{
     ApiCall, ApiCallId, ApiCallStatus, CostError, CostSession, CostSessionId, CostSessionStatus,

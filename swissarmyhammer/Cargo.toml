@@ -71,6 +71,9 @@ which = "8.0.0"
 # Financial calculations
 rust_decimal = { version = "1.0", features = ["serde", "macros"] }
 
+# Text processing
+unicode-normalization = "0.1"
+
 # Syntax highlighting
 syntect = { workspace = true }
 

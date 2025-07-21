@@ -121,11 +121,12 @@ impl Migration {
 
     /// Rollback the migration (run down SQL)
     pub async fn rollback(&self, tx: &mut Transaction<'_, Sqlite>) -> Result<(), MigrationError> {
-        let down_sql = self.down_sql.as_ref().ok_or_else(|| {
-            MigrationError::Rollback {
+        let down_sql = self
+            .down_sql
+            .as_ref()
+            .ok_or_else(|| MigrationError::Rollback {
                 message: format!("Migration {} has no rollback SQL", self.version),
-            }
-        })?;
+            })?;
 
         warn!(
             "Rolling back migration {}: {}",
@@ -172,13 +173,12 @@ impl MigrationRunner {
 
     /// Get all available migrations
     fn get_available_migrations() -> Vec<Migration> {
-        vec![
-            Migration::new(
-                1,
-                "Create core cost tracking tables",
-                vec![
-                    // cost_sessions table
-                    r#"
+        vec![Migration::new(
+            1,
+            "Create core cost tracking tables",
+            vec![
+                // cost_sessions table
+                r#"
                     CREATE TABLE cost_sessions (
                         id TEXT PRIMARY KEY,
                         issue_id TEXT NOT NULL,
@@ -193,9 +193,10 @@ impl MigrationRunner {
                         session_duration_ms INTEGER,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
-                    "#.to_string(),
-                    // api_calls table
-                    r#"
+                    "#
+                .to_string(),
+                // api_calls table
+                r#"
                     CREATE TABLE api_calls (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         session_id TEXT NOT NULL,
@@ -212,35 +213,32 @@ impl MigrationRunner {
                         error_message TEXT,
                         FOREIGN KEY (session_id) REFERENCES cost_sessions(id)
                     )
-                    "#.to_string(),
-                    // Indexes for cost_sessions
-                    "CREATE INDEX idx_cost_sessions_issue_id ON cost_sessions(issue_id)".to_string(),
-                    "CREATE INDEX idx_cost_sessions_started_at ON cost_sessions(started_at)".to_string(),
-                    // Indexes for api_calls  
-                    "CREATE INDEX idx_api_calls_session_id ON api_calls(session_id)".to_string(),
-                    "CREATE INDEX idx_api_calls_timestamp ON api_calls(timestamp)".to_string(),
-                    "CREATE INDEX idx_api_calls_call_id ON api_calls(call_id)".to_string(),
-                ],
-                Some(vec![
-                    "DROP INDEX IF EXISTS idx_api_calls_call_id".to_string(),
-                    "DROP INDEX IF EXISTS idx_api_calls_timestamp".to_string(),
-                    "DROP INDEX IF EXISTS idx_api_calls_session_id".to_string(),
-                    "DROP INDEX IF EXISTS idx_cost_sessions_started_at".to_string(),
-                    "DROP INDEX IF EXISTS idx_cost_sessions_issue_id".to_string(),
-                    "DROP TABLE IF EXISTS api_calls".to_string(),
-                    "DROP TABLE IF EXISTS cost_sessions".to_string(),
-                ]),
-            ),
-        ]
+                    "#
+                .to_string(),
+                // Indexes for cost_sessions
+                "CREATE INDEX idx_cost_sessions_issue_id ON cost_sessions(issue_id)".to_string(),
+                "CREATE INDEX idx_cost_sessions_started_at ON cost_sessions(started_at)"
+                    .to_string(),
+                // Indexes for api_calls
+                "CREATE INDEX idx_api_calls_session_id ON api_calls(session_id)".to_string(),
+                "CREATE INDEX idx_api_calls_timestamp ON api_calls(timestamp)".to_string(),
+                "CREATE INDEX idx_api_calls_call_id ON api_calls(call_id)".to_string(),
+            ],
+            Some(vec![
+                "DROP INDEX IF EXISTS idx_api_calls_call_id".to_string(),
+                "DROP INDEX IF EXISTS idx_api_calls_timestamp".to_string(),
+                "DROP INDEX IF EXISTS idx_api_calls_session_id".to_string(),
+                "DROP INDEX IF EXISTS idx_cost_sessions_started_at".to_string(),
+                "DROP INDEX IF EXISTS idx_cost_sessions_issue_id".to_string(),
+                "DROP TABLE IF EXISTS api_calls".to_string(),
+                "DROP TABLE IF EXISTS cost_sessions".to_string(),
+            ]),
+        )]
     }
 
     /// Get the target migration version (highest available version)
     pub fn target_version(&self) -> i64 {
-        self.migrations
-            .iter()
-            .map(|m| m.version)
-            .max()
-            .unwrap_or(0)
+        self.migrations.iter().map(|m| m.version).max().unwrap_or(0)
     }
 
     /// Get migrations to apply to reach target version from current version
@@ -252,7 +250,11 @@ impl MigrationRunner {
     }
 
     /// Get migrations to rollback from current version to target version
-    pub fn get_rollback_migrations(&self, current_version: i64, target_version: i64) -> Vec<&Migration> {
+    pub fn get_rollback_migrations(
+        &self,
+        current_version: i64,
+        target_version: i64,
+    ) -> Vec<&Migration> {
         if target_version >= current_version {
             return vec![];
         }
@@ -520,7 +522,12 @@ mod tests {
         sorted_versions.sort();
 
         for (i, &version) in sorted_versions.iter().enumerate() {
-            assert_eq!(version, i as i64 + 1, "Version gap detected at position {}", i);
+            assert_eq!(
+                version,
+                i as i64 + 1,
+                "Version gap detected at position {}",
+                i
+            );
         }
     }
 

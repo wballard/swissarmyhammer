@@ -230,7 +230,7 @@ mod tests {
         );
 
         // Update cost metrics should trigger trend updates
-        metrics.update_cost_metrics(&run_id, cost_metrics.clone());
+        metrics.update_cost_metrics(&run_id, cost_metrics);
 
         // Check that trends were updated
         let global_metrics = metrics.get_global_metrics();

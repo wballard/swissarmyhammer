@@ -142,7 +142,8 @@ impl TrendQuery {
             _ => {
                 if self.start_date.is_some() || self.end_date.is_some() {
                     return Err(QueryError::InvalidParameters {
-                        message: "start_date and end_date should only be set for custom period".to_string(),
+                        message: "start_date and end_date should only be set for custom period"
+                            .to_string(),
                     });
                 }
             }
@@ -164,16 +165,21 @@ impl TrendQuery {
     pub fn get_date_range(&self) -> Result<(DateTime<Utc>, DateTime<Utc>), QueryError> {
         match self.period {
             TimePeriod::Custom => {
-                let start = self.start_date.ok_or_else(|| QueryError::InvalidParameters {
-                    message: "start_date is required for custom period".to_string(),
-                })?;
+                let start = self
+                    .start_date
+                    .ok_or_else(|| QueryError::InvalidParameters {
+                        message: "start_date is required for custom period".to_string(),
+                    })?;
                 let end = self.end_date.unwrap_or_else(Utc::now);
                 Ok((start, end))
             }
             _ => {
-                let start = self.period.start_date().ok_or_else(|| QueryError::InvalidParameters {
-                    message: "Invalid time period".to_string(),
-                })?;
+                let start =
+                    self.period
+                        .start_date()
+                        .ok_or_else(|| QueryError::InvalidParameters {
+                            message: "Invalid time period".to_string(),
+                        })?;
                 let end = Utc::now();
                 Ok((start, end))
             }
@@ -350,10 +356,8 @@ impl<'a> CostAnalytics<'a> {
             interval_minutes, interval_minutes
         );
 
-        let mut params: Vec<Box<dyn sqlx::Encode<'_, sqlx::Sqlite> + Send>> = vec![
-            Box::new(start_date),
-            Box::new(end_date),
-        ];
+        let mut params: Vec<Box<dyn sqlx::Encode<'_, sqlx::Sqlite> + Send>> =
+            vec![Box::new(start_date), Box::new(end_date)];
 
         // Add issue ID filter
         if let Some(ref issue_ids) = query.issue_ids {
@@ -376,16 +380,16 @@ impl<'a> CostAnalytics<'a> {
 
         // Execute query using raw SQL since we have dynamic parameters
         let mut query_builder = sqlx::query_as::<_, CostTrend>(&sql);
-        
+
         // Bind parameters
         query_builder = query_builder.bind(start_date).bind(end_date);
-        
+
         if let Some(ref issue_ids) = query.issue_ids {
             for issue_id in issue_ids {
                 query_builder = query_builder.bind(issue_id);
             }
         }
-        
+
         if let Some(ref pricing_model) = query.pricing_model {
             query_builder = query_builder.bind(pricing_model);
         }
@@ -586,7 +590,9 @@ impl<'a> CostAnalytics<'a> {
         start_date: Option<DateTime<Utc>>,
         end_date: Option<DateTime<Utc>>,
     ) -> Result<String, QueryError> {
-        let summaries = self.get_issue_cost_summary(period, start_date, end_date).await?;
+        let summaries = self
+            .get_issue_cost_summary(period, start_date, end_date)
+            .await?;
 
         let mut csv = String::new();
         csv.push_str("issue_id,total_cost,session_count,total_calls,total_input_tokens,total_output_tokens,avg_cost_per_session,first_session,last_session\n");

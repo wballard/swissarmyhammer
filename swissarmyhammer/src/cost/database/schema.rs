@@ -47,11 +47,11 @@ pub enum DatabaseError {
 ///
 /// ```no_run
 /// use swissarmyhammer::cost::database::{CostDatabase, DatabaseConfig};
-/// 
+///
 /// # tokio_test::block_on(async {
 /// let config = DatabaseConfig::default();
 /// let database = CostDatabase::new(config).await?;
-/// 
+///
 /// // Check if database is available
 /// if database.is_available() {
 ///     println!("Database storage enabled");
@@ -92,7 +92,7 @@ impl CostDatabase {
     ///     file_path: "./costs.db".into(),
     ///     ..DatabaseConfig::default()
     /// };
-    /// 
+    ///
     /// let database = CostDatabase::new(config).await?;
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// # });
@@ -144,16 +144,14 @@ impl CostDatabase {
         }
 
         // Build connection options
-        let connection_options = SqliteConnectOptions::from_str(
-            &format!(
-                "sqlite://{}",
-                self.config
-                    .file_path_str()
-                    .ok_or_else(|| DatabaseError::Transaction {
-                        message: "Invalid database file path".to_string(),
-                    })?
-            ),
-        )?
+        let connection_options = SqliteConnectOptions::from_str(&format!(
+            "sqlite://{}",
+            self.config
+                .file_path_str()
+                .ok_or_else(|| DatabaseError::Transaction {
+                    message: "Invalid database file path".to_string(),
+                })?
+        ))?
         .create_if_missing(true)
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
         .busy_timeout(self.config.connection_timeout);
@@ -190,12 +188,11 @@ impl CostDatabase {
         .await?;
 
         // Check current schema version
-        let current_version: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
-        )
-        .fetch_one(&mut *tx)
-        .await
-        .unwrap_or(0);
+        let current_version: i64 =
+            sqlx::query_scalar("SELECT COALESCE(MAX(version), 0) FROM schema_migrations")
+                .fetch_one(&mut *tx)
+                .await
+                .unwrap_or(0);
 
         info!("Current schema version: {}", current_version);
 
@@ -203,7 +200,7 @@ impl CostDatabase {
         if current_version < 1 {
             info!("Applying migration 1: Create core tables");
             self.apply_migration_1(&mut tx).await?;
-            
+
             sqlx::query("INSERT INTO schema_migrations (version) VALUES (?)")
                 .bind(1)
                 .execute(&mut *tx)
@@ -217,7 +214,10 @@ impl CostDatabase {
     }
 
     /// Apply migration 1: Create core cost tracking tables
-    async fn apply_migration_1(&self, tx: &mut Transaction<'_, Sqlite>) -> Result<(), DatabaseError> {
+    async fn apply_migration_1(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+    ) -> Result<(), DatabaseError> {
         // Create cost_sessions table
         sqlx::query(
             r#"
@@ -382,7 +382,10 @@ impl CostDatabase {
     /// Any database errors are logged but do not propagate.
     pub async fn store_api_call(&self, session_id: &CostSessionId, api_call: &ApiCall) {
         if let Some(ref pool) = self.pool {
-            if let Err(e) = self.store_api_call_to_pool(pool, session_id, api_call).await {
+            if let Err(e) = self
+                .store_api_call_to_pool(pool, session_id, api_call)
+                .await
+            {
                 error!("Failed to store API call: {}", e);
             }
         }
@@ -498,7 +501,9 @@ impl CostDatabase {
     /// Returns None if database is not available or file doesn't exist.
     pub fn file_size(&self) -> Option<u64> {
         if self.config.file_path.exists() {
-            std::fs::metadata(&self.config.file_path).ok().map(|m| m.len())
+            std::fs::metadata(&self.config.file_path)
+                .ok()
+                .map(|m| m.len())
         } else {
             None
         }
@@ -624,7 +629,9 @@ mod tests {
         let mut api_call = ApiCall::new("https://api.test.com", "test-model").unwrap();
         api_call.complete(150, 250, ApiCallStatus::Success, None);
 
-        database.store_api_call(&session.session_id, &api_call).await;
+        database
+            .store_api_call(&session.session_id, &api_call)
+            .await;
 
         // Verify both were stored
         if let Some(pool) = database.pool() {
@@ -734,7 +741,9 @@ mod tests {
         database.store_session(&session).await; // Should not panic
 
         let api_call = ApiCall::new("https://api.test.com", "model").unwrap();
-        database.store_api_call(&session.session_id, &api_call).await; // Should not panic
+        database
+            .store_api_call(&session.session_id, &api_call)
+            .await; // Should not panic
 
         database.cleanup_old_data().await; // Should not panic
     }

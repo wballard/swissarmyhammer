@@ -1,7 +1,7 @@
 //! Optional database storage for cost analytics
 //!
 //! This module provides an optional SQLite database backend for enhanced cost
-//! analytics and reporting. The database storage is completely optional and 
+//! analytics and reporting. The database storage is completely optional and
 //! configurable - the primary storage remains markdown-based for simplicity.
 //!
 //! # Features

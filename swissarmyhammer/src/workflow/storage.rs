@@ -824,7 +824,7 @@ impl WorkflowStorageBackend for CompressedWorkflowStorage {
 
         // Create a temporary workflow with compressed data stored as description
         // This is a workaround since we can't modify the storage interface
-        let mut compressed_workflow = workflow.clone();
+        let mut compressed_workflow = workflow;
         compressed_workflow.description = format!(
             "COMPRESSED_DATA:{}",
             general_purpose::STANDARD.encode(&compressed_data)

@@ -430,7 +430,7 @@ impl WorkflowExecutor {
     ) -> ExecutorResult<()> {
         // Verify the state exists
         if !run.workflow.states.contains_key(&next_state) {
-            return Err(ExecutorError::StateNotFound(next_state.clone()));
+            return Err(ExecutorError::StateNotFound(next_state));
         }
 
         // Track compensation states from transition metadata

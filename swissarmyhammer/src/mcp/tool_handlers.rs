@@ -146,7 +146,7 @@ impl ToolHandlers {
                 return Ok(CallToolResult {
                     content: vec![Annotated::new(
                         RawContent::Text(RawTextContent {
-                            text: error_msg.clone(),
+                            text: error_msg,
                         }),
                         None,
                     )],

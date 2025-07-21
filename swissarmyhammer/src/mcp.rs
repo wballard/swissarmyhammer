@@ -143,7 +143,7 @@ impl McpServer {
 
         // Initialize git operations with work_dir - make it optional for tests
         let config = Config::new();
-        let git_ops = match GitOperations::with_work_dir(work_dir.clone(), &config) {
+        let git_ops = match GitOperations::with_work_dir(work_dir, &config) {
             Ok(ops) => Some(ops),
             Err(e) => {
                 tracing::warn!("Git operations not available: {}", e);
@@ -292,7 +292,7 @@ impl McpServer {
         let content = if let Some(args) = arguments {
             library.render_prompt(name, args)?
         } else {
-            prompt.template.clone()
+            prompt.template
         };
 
         Ok(content)

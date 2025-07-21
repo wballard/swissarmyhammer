@@ -39,8 +39,8 @@ pub use tracker::{
 
 #[cfg(feature = "database")]
 pub use database::{
-    CostAnalytics, CostDatabase, DatabaseConfig, DatabaseConfigError, DatabaseError,
-    Migration, MigrationError, MigrationRunner,
+    CostAnalytics, CostDatabase, DatabaseConfig, DatabaseConfigError, DatabaseError, Migration,
+    MigrationError, MigrationRunner,
 };
 
 #[cfg(feature = "database")]

@@ -40,27 +40,15 @@ const MAX_RETENTION_DAYS: u32 = 3650;
 pub enum DatabaseConfigError {
     /// Invalid connection timeout
     #[error("Connection timeout must be between {min} and {max} seconds, got: {value}")]
-    InvalidConnectionTimeout {
-        value: u64,
-        min: u64,
-        max: u64,
-    },
+    InvalidConnectionTimeout { value: u64, min: u64, max: u64 },
 
     /// Invalid max connections
     #[error("Max connections must be between {min} and {max}, got: {value}")]
-    InvalidMaxConnections {
-        value: u32,
-        min: u32,
-        max: u32,
-    },
+    InvalidMaxConnections { value: u32, min: u32, max: u32 },
 
     /// Invalid retention days
     #[error("Retention days must be between {min} and {max}, got: {value}")]
-    InvalidRetentionDays {
-        value: u32,
-        min: u32,
-        max: u32,
-    },
+    InvalidRetentionDays { value: u32, min: u32, max: u32 },
 
     /// Invalid file path
     #[error("Database file path cannot be empty")]
@@ -326,10 +314,7 @@ mod tests {
         let result = config.validate();
         assert!(matches!(
             result,
-            Err(DatabaseConfigError::InvalidConnectionTimeout {
-                value: 400,
-                ..
-            })
+            Err(DatabaseConfigError::InvalidConnectionTimeout { value: 400, .. })
         ));
     }
 
@@ -356,10 +341,7 @@ mod tests {
         let result = config.validate();
         assert!(matches!(
             result,
-            Err(DatabaseConfigError::InvalidMaxConnections {
-                value: 1000,
-                ..
-            })
+            Err(DatabaseConfigError::InvalidMaxConnections { value: 1000, .. })
         ));
     }
 
@@ -386,10 +368,7 @@ mod tests {
         let result = config.validate();
         assert!(matches!(
             result,
-            Err(DatabaseConfigError::InvalidRetentionDays {
-                value: 5000,
-                ..
-            })
+            Err(DatabaseConfigError::InvalidRetentionDays { value: 5000, .. })
         ));
     }
 

@@ -3,15 +3,6 @@
 use super::WorkflowMetrics;
 use chrono::Utc;
 
-/// Maximum number of run metrics to keep in memory
-pub const MAX_RUN_METRICS: usize = 1000;
-
-/// Maximum age of completed runs before cleanup (in days)
-pub const MAX_COMPLETED_RUN_AGE_DAYS: i64 = 7;
-
-/// Maximum age of workflow summary metrics before cleanup (in days)
-pub const MAX_WORKFLOW_SUMMARY_AGE_DAYS: i64 = 30;
-
 impl WorkflowMetrics {
     /// Clean up old run metrics when limit is exceeded
     pub(super) fn cleanup_old_run_metrics(&mut self) {
@@ -27,7 +18,7 @@ impl WorkflowMetrics {
         completed_runs.sort_by_key(|(_, completed_at)| *completed_at);
 
         // Remove the oldest runs to get back under the limit
-        let excess_count = self.run_metrics.len().saturating_sub(MAX_RUN_METRICS);
+        let excess_count = self.run_metrics.len().saturating_sub(self.config.max_run_metrics);
         completed_runs
             .into_iter()
             .take(excess_count)
@@ -43,7 +34,7 @@ impl WorkflowMetrics {
         let mut removed_workflows = 0;
 
         // Clean up old completed runs
-        let cutoff_date = now - chrono::Duration::days(MAX_COMPLETED_RUN_AGE_DAYS);
+        let cutoff_date = now - chrono::Duration::days(self.config.max_completed_run_age_days);
         let runs_to_remove: Vec<_> = self
             .run_metrics
             .iter()
@@ -63,7 +54,7 @@ impl WorkflowMetrics {
         }
 
         // Clean up old workflow summary metrics
-        let workflow_cutoff_date = now - chrono::Duration::days(MAX_WORKFLOW_SUMMARY_AGE_DAYS);
+        let workflow_cutoff_date = now - chrono::Duration::days(self.config.max_workflow_summary_age_days);
         let workflows_to_remove: Vec<_> = self
             .workflow_metrics
             .iter()

@@ -14,7 +14,6 @@ pub mod cost_integration_tests;
 pub mod performance_tests;
 
 // Re-export from submodules
-pub use cleanup::MAX_RUN_METRICS;
 pub use cost::{ActionCostBreakdown, CostMetrics};
 pub use trends::ResourceTrends;
 
@@ -36,6 +35,12 @@ pub struct WorkflowMetricsConfig {
     pub max_state_durations_per_run: usize,
     /// Maximum number of data points to keep in resource trends
     pub max_trend_data_points: usize,
+    /// Maximum number of run metrics to keep in memory
+    pub max_run_metrics: usize,
+    /// Maximum age of completed runs before cleanup (in days)
+    pub max_completed_run_age_days: i64,
+    /// Maximum age of workflow summary metrics before cleanup (in days)
+    pub max_workflow_summary_age_days: i64,
 }
 
 impl Default for WorkflowMetricsConfig {
@@ -44,6 +49,9 @@ impl Default for WorkflowMetricsConfig {
             max_workflow_metrics: 100,
             max_state_durations_per_run: 50,
             max_trend_data_points: 100,
+            max_run_metrics: 1000,
+            max_completed_run_age_days: 7,
+            max_workflow_summary_age_days: 30,
         }
     }
 }
@@ -235,7 +243,7 @@ impl WorkflowMetrics {
         }
         let run_metrics = RunMetrics {
             run_id,
-            workflow_name: workflow_name.clone(),
+            workflow_name,
             started_at: Utc::now(),
             completed_at: None,
             status: WorkflowRunStatus::Running,
@@ -251,7 +259,7 @@ impl WorkflowMetrics {
         self.run_metrics.insert(run_id, run_metrics);
 
         // Enforce bounds checking - remove oldest run metrics if we exceed the limit
-        if self.run_metrics.len() > MAX_RUN_METRICS {
+        if self.run_metrics.len() > self.config.max_run_metrics {
             self.cleanup_old_run_metrics();
         }
 

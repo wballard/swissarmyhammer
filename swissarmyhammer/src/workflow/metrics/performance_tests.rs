@@ -80,7 +80,7 @@ mod performance_tests {
         // Verify all metrics were processed
         assert_eq!(
             metrics.run_metrics.len(),
-            NUM_RUNS.min(super::super::cleanup::MAX_RUN_METRICS)
+            NUM_RUNS.min(metrics.config.max_run_metrics)
         );
 
         let global_metrics = metrics.get_global_metrics();

@@ -20,6 +20,7 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
 /// MCP module structure
+pub mod cost_tracking;
 pub mod error_handling;
 pub mod file_watcher;
 pub mod responses;

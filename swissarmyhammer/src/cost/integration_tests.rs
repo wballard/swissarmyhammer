@@ -51,7 +51,10 @@ pub fn complete_api_call_with_realistic_data(
 }
 
 /// Helper function to create multiple test sessions for integration testing
-fn create_workflow_test_sessions(tracker: &mut CostTracker, num_sessions: u32) -> Result<Vec<CostSessionId>, crate::cost::CostError> {
+fn create_workflow_test_sessions(
+    tracker: &mut CostTracker,
+    num_sessions: u32,
+) -> Result<Vec<CostSessionId>, crate::cost::CostError> {
     let issue_ids: Vec<_> = (1..=num_sessions)
         .map(|i| create_test_issue_id(&format!("workflow-{}", i)).unwrap())
         .collect();
@@ -67,8 +70,8 @@ fn create_workflow_test_sessions(tracker: &mut CostTracker, num_sessions: u32) -
 
 /// Helper function to add and complete API calls for integration testing
 async fn add_and_complete_api_calls(
-    tracker: &mut CostTracker, 
-    session_ids: &[CostSessionId]
+    tracker: &mut CostTracker,
+    session_ids: &[CostSessionId],
 ) -> Result<Vec<(CostSessionId, crate::cost::ApiCallId)>, crate::cost::CostError> {
     let models = ["claude-3-sonnet-20241022", "claude-3-haiku-20240229"];
     let mut all_call_ids = Vec::new();
@@ -119,10 +122,10 @@ async fn add_and_complete_api_calls(
 fn calculate_and_verify_costs(
     tracker: &CostTracker,
     calculator: &CostCalculator,
-    session_ids: &[CostSessionId]
+    session_ids: &[CostSessionId],
 ) -> Result<Decimal, crate::cost::CostError> {
     let mut total_workflow_cost = Decimal::ZERO;
-    
+
     for session_id in session_ids {
         let session = tracker.get_session(session_id).unwrap();
         let cost_calculation = calculator.calculate_session_cost(session)?;
@@ -131,14 +134,14 @@ fn calculate_and_verify_costs(
         assert_eq!(session.api_call_count(), 3);
         total_workflow_cost += cost_calculation.total_cost;
     }
-    
+
     Ok(total_workflow_cost)
 }
 
 /// Helper function to complete sessions with different outcomes
 fn complete_workflow_sessions(
     tracker: &mut CostTracker,
-    session_ids: &[CostSessionId]
+    session_ids: &[CostSessionId],
 ) -> Result<(), crate::cost::CostError> {
     for (i, session_id) in session_ids.iter().enumerate() {
         let status = if i % 2 == 0 {
@@ -158,14 +161,15 @@ async fn test_complete_cost_tracking_workflow() {
     let calculator = CostCalculator::paid_default();
 
     // Phase 1: Create test sessions
-    let session_ids = create_workflow_test_sessions(&mut tracker, 5)
-        .expect("Should create test sessions");
+    let session_ids =
+        create_workflow_test_sessions(&mut tracker, 5).expect("Should create test sessions");
 
     assert_eq!(tracker.session_count(), 5);
     assert_eq!(tracker.active_session_count(), 5);
 
     // Phase 2 & 3: Add and complete API calls
-    add_and_complete_api_calls(&mut tracker, &session_ids).await
+    add_and_complete_api_calls(&mut tracker, &session_ids)
+        .await
         .expect("Should add and complete API calls");
 
     // Phase 4: Calculate and verify costs
@@ -173,8 +177,7 @@ async fn test_complete_cost_tracking_workflow() {
         .expect("Should calculate and verify costs");
 
     // Phase 5: Complete sessions
-    complete_workflow_sessions(&mut tracker, &session_ids)
-        .expect("Should complete sessions");
+    complete_workflow_sessions(&mut tracker, &session_ids).expect("Should complete sessions");
 
     // Phase 6: Verify final state
     assert_eq!(tracker.session_count(), 5);
@@ -256,17 +259,17 @@ async fn test_configuration_integration() {
 
 /// Helper function to create concurrent test sessions
 fn create_concurrent_test_sessions(
-    tracker: &mut CostTracker, 
-    num_sessions: usize
+    tracker: &mut CostTracker,
+    num_sessions: usize,
 ) -> Result<Vec<CostSessionId>, crate::cost::CostError> {
     let mut session_ids = Vec::new();
-    
+
     for i in 0..num_sessions {
         let issue_id = create_test_issue_id(&format!("concurrent-{}", i))?;
         let session_id = tracker.start_session(issue_id)?;
         session_ids.push(session_id);
     }
-    
+
     Ok(session_ids)
 }
 
@@ -274,17 +277,18 @@ fn create_concurrent_test_sessions(
 async fn process_concurrent_api_calls(
     tracker: &mut CostTracker,
     session_ids: &[CostSessionId],
-    calls_per_session: usize
+    calls_per_session: usize,
 ) -> Result<Vec<(CostSessionId, crate::cost::ApiCallId, usize, usize)>, crate::cost::CostError> {
     let mut all_calls = Vec::new();
-    
+
     // Add API calls to all sessions
     for (session_index, session_id) in session_ids.iter().enumerate() {
         for call_index in 0..calls_per_session {
             let api_call = create_test_api_call(
                 &format!("concurrent/{}/{}", session_index, call_index),
                 "claude-3-sonnet-20241022",
-            ).unwrap();
+            )
+            .unwrap();
 
             let call_id = tracker.add_api_call(session_id, api_call)?;
             all_calls.push((*session_id, call_id, session_index, call_index));
@@ -308,7 +312,7 @@ async fn process_concurrent_api_calls(
         // Add small delay to simulate realistic timing
         sleep(Duration::from_millis(1)).await;
     }
-    
+
     Ok(all_calls)
 }
 
@@ -317,7 +321,7 @@ fn verify_concurrent_sessions_state(
     tracker: &CostTracker,
     calculator: &CostCalculator,
     session_ids: &[CostSessionId],
-    calls_per_session: usize
+    calls_per_session: usize,
 ) -> Result<(), crate::cost::CostError> {
     for session_id in session_ids {
         let session = tracker.get_session(session_id).unwrap();
@@ -333,7 +337,7 @@ fn verify_concurrent_sessions_state(
 /// Helper function to complete concurrent sessions with different outcomes
 fn complete_concurrent_sessions(
     tracker: &mut CostTracker,
-    session_ids: &[CostSessionId]
+    session_ids: &[CostSessionId],
 ) -> Result<(), crate::cost::CostError> {
     for (i, session_id) in session_ids.iter().enumerate() {
         let status = if i % 3 == 0 {
@@ -364,10 +368,11 @@ async fn test_concurrent_sessions() {
     assert_eq!(tracker.active_session_count(), NUM_SESSIONS);
 
     // Phase 2 & 3: Process API calls concurrently
-    process_concurrent_api_calls(&mut tracker, &session_ids, CALLS_PER_SESSION).await
+    process_concurrent_api_calls(&mut tracker, &session_ids, CALLS_PER_SESSION)
+        .await
         .expect("Should process concurrent API calls");
 
-    // Phase 4: Verify session state and costs  
+    // Phase 4: Verify session state and costs
     verify_concurrent_sessions_state(&tracker, &calculator, &session_ids, CALLS_PER_SESSION)
         .expect("Should verify concurrent sessions state");
 
@@ -530,13 +535,13 @@ fn measure_session_creation_performance(
 ) -> (Duration, Vec<CostSessionId>) {
     let start_time = Instant::now();
     let mut session_ids = Vec::new();
-    
+
     for i in 0..num_sessions {
         let issue_id = create_test_issue_id(&format!("perf-{}", i)).unwrap();
         let session_id = tracker.start_session(issue_id).unwrap();
         session_ids.push(session_id);
     }
-    
+
     (start_time.elapsed(), session_ids)
 }
 
@@ -602,13 +607,13 @@ fn measure_session_completion_performance(
     session_ids: &[CostSessionId],
 ) -> Duration {
     let start = Instant::now();
-    
+
     for session_id in session_ids {
         tracker
             .complete_session(session_id, CostSessionStatus::Completed)
             .unwrap();
     }
-    
+
     start.elapsed()
 }
 
@@ -666,67 +671,21 @@ async fn test_performance_characteristics() {
     let start_time = Instant::now();
 
     // Phase 1: Measure session creation performance
-    let mut session_ids = Vec::new();
-    for i in 0..PERF_SESSIONS {
-        let issue_id = create_test_issue_id(&format!("perf-{}", i)).unwrap();
-        let session_id = tracker.start_session(issue_id).unwrap();
-        session_ids.push(session_id);
-    }
+    let (session_creation_time, session_ids) =
+        measure_session_creation_performance(&mut tracker, PERF_SESSIONS);
 
-    let session_creation_time = start_time.elapsed();
+    // Phase 2: Measure API call performance
+    let (api_creation_time, completion_time) =
+        measure_api_call_performance(&mut tracker, &session_ids, PERF_CALLS_PER_SESSION).await;
 
-    // Phase 2: Measure API call addition performance
-    let api_start = Instant::now();
-    let mut all_calls = Vec::new();
+    // Phase 3: Measure cost calculation performance
+    let (calculation_time, total_cost) =
+        measure_cost_calculation_performance(&tracker, &calculator, &session_ids);
 
-    for session_id in &session_ids {
-        for j in 0..PERF_CALLS_PER_SESSION {
-            let api_call = create_test_api_call(&format!("perf/{}", j), "claude-3-sonnet").unwrap();
-            let call_id = tracker.add_api_call(session_id, api_call).unwrap();
-            all_calls.push((*session_id, call_id));
-        }
-    }
+    // Phase 4: Measure session completion performance
+    let session_completion_time =
+        measure_session_completion_performance(&mut tracker, &session_ids);
 
-    let api_creation_time = api_start.elapsed();
-
-    // Phase 3: Measure completion performance
-    let completion_start = Instant::now();
-    for (i, (session_id, call_id)) in all_calls.iter().enumerate() {
-        tracker
-            .complete_api_call(
-                session_id,
-                call_id,
-                100 + (i as u32 % 1000),
-                200 + (i as u32 % 800),
-                ApiCallStatus::Success,
-                None,
-            )
-            .unwrap();
-    }
-
-    let completion_time = completion_start.elapsed();
-
-    // Phase 4: Measure cost calculation performance
-    let calc_start = Instant::now();
-    let mut total_cost = Decimal::ZERO;
-
-    for session_id in &session_ids {
-        let session = tracker.get_session(session_id).unwrap();
-        let cost_calculation = calculator.calculate_session_cost(session).unwrap();
-        total_cost += cost_calculation.total_cost;
-    }
-
-    let calculation_time = calc_start.elapsed();
-
-    // Phase 5: Measure session completion performance
-    let session_completion_start = Instant::now();
-    for session_id in &session_ids {
-        tracker
-            .complete_session(session_id, CostSessionStatus::Completed)
-            .unwrap();
-    }
-
-    let session_completion_time = session_completion_start.elapsed();
     let total_time = start_time.elapsed();
 
     // Verify results
@@ -734,36 +693,14 @@ async fn test_performance_characteristics() {
     assert_eq!(tracker.completed_session_count(), PERF_SESSIONS);
     assert!(total_cost > Decimal::ZERO);
 
-    // Performance assertions (generous bounds for CI environments)
-    assert!(
-        session_creation_time < Duration::from_secs(5),
-        "Session creation took too long: {:?}",
-        session_creation_time
-    );
-    assert!(
-        api_creation_time < Duration::from_secs(10),
-        "API call creation took too long: {:?}",
-        api_creation_time
-    );
-    assert!(
-        completion_time < Duration::from_secs(10),
-        "API call completion took too long: {:?}",
-        completion_time
-    );
-    assert!(
-        calculation_time < Duration::from_secs(5),
-        "Cost calculation took too long: {:?}",
-        calculation_time
-    );
-    assert!(
-        session_completion_time < Duration::from_secs(5),
-        "Session completion took too long: {:?}",
-        session_completion_time
-    );
-    assert!(
-        total_time < Duration::from_secs(30),
-        "Total performance test took too long: {:?}",
-        total_time
+    // Performance assertions using helper function
+    assert_performance_bounds(
+        session_creation_time,
+        api_creation_time,
+        completion_time,
+        calculation_time,
+        session_completion_time,
+        total_time,
     );
 
     // Memory usage should be reasonable

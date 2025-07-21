@@ -117,6 +117,39 @@ Prepares for:
 - [ ] Integration tests with real MCP scenarios
 - [ ] Graceful degradation when cost tracking fails
 
+## Proposed Solution
+
+I will implement MCP protocol integration for cost tracking through the following approach:
+
+### 1. Architecture Design
+- Create a `CostTrackingMcpHandler` wrapper that decorates existing MCP handlers
+- Use the decorator pattern to add cost tracking without modifying core MCP logic
+- Integrate with the existing `CostTracker` from step 000190
+- Maintain session context through thread-local storage or request context
+
+### 2. Implementation Steps
+1. **Analyze existing MCP structure** - Review current `src/mcp/` module to understand handler patterns
+2. **Create cost tracking middleware** - Implement wrapper handler in `src/mcp/cost_tracking.rs`
+3. **Token extraction logic** - Parse Claude API response headers and body for usage data
+4. **Session management** - Associate API calls with active cost tracking sessions
+5. **Error handling** - Ensure cost tracking gracefully handles API failures
+6. **Integration testing** - Verify token extraction accuracy and session association
+
+### 3. Key Components
+- `CostTrackingMcpHandler<T>` - Generic wrapper for any MCP handler
+- `TokenUsageExtractor` - Parses API responses for token data
+- `SessionContextManager` - Links API calls to cost tracking sessions
+- Integration with existing `CostTracker::record_api_call()` method
+
+### 4. Testing Strategy
+- Unit tests for token extraction accuracy
+- Integration tests with mock MCP scenarios  
+- Performance benchmarks to ensure minimal overhead
+- Error condition handling tests
+- Concurrent session validation
+
+This approach ensures minimal disruption to existing MCP functionality while providing comprehensive cost tracking capabilities.
+
 ## Notes
 
 - Follow existing MCP patterns and error handling

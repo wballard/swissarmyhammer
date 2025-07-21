@@ -2736,9 +2736,9 @@ mod tests {
 
             // Do not change the working directory to avoid affecting other tests
 
-            // Initialize git repo for testing
+            // Initialize git repo for testing with explicit main branch
             Command::new("git")
-                .args(["init"])
+                .args(["init", "--initial-branch=main"])
                 .current_dir(&temp_path)
                 .output()
                 .expect("Failed to init git repo");

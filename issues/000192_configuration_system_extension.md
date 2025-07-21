@@ -126,3 +126,43 @@ This step integrates with:
 - Ensure configuration changes don't require application restart where possible
 - Support both development and production configuration patterns
 - Consider future configuration needs (model-specific pricing, etc.)
+
+## Proposed Solution
+
+### Implementation Plan
+
+1. **Create CostTrackingConfig struct** with nested structs for organization:
+   - `CostTrackingConfig` - main struct with all cost tracking settings
+   - `PricingConfig` - pricing model and rates
+   - `SessionManagementConfig` - session management settings  
+   - `AggregationConfig` - data aggregation settings
+   - `ReportingConfig` - reporting preferences
+
+2. **Integration approach**:
+   - Add `cost_tracking: Option<CostTrackingConfig>` to main `Config` struct
+   - Use Option to make cost tracking completely optional
+   - Extend `YamlConfig` with cost tracking section
+   - Follow existing precedence: YAML > ENV > DEFAULTS
+
+3. **Environment variable naming**:
+   - Use `SAH_COST_*` prefix as specified in requirements
+   - Map nested struct fields to flattened env vars
+   - Example: `SAH_COST_PRICING_MODEL`, `SAH_COST_INPUT_TOKEN_COST`
+
+4. **Validation strategy**:
+   - Validate pricing model values ("paid" or "max")
+   - Ensure positive values for costs and limits
+   - Check reasonable ranges for session/retention settings
+   - Use existing validation patterns and error types
+
+5. **Default values**:
+   - Cost tracking disabled by default (`enabled: false`)
+   - Pricing model defaults to "paid" 
+   - Use current Claude Code pricing as defaults
+   - Reasonable defaults for session management and retention
+
+6. **Testing approach**:
+   - Unit tests for struct deserialization and validation
+   - Integration tests for YAML parsing and env var precedence
+   - Backward compatibility tests ensuring existing configs still work
+   - Property-based tests for validation ranges

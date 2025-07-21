@@ -6,6 +6,7 @@
 use crate::common::env_loader::EnvLoader;
 use serde::Deserialize;
 use thiserror::Error;
+use rust_decimal::Decimal;
 
 const DEFAULT_BASE_BRANCH: &str = "main";
 const MAX_ISSUE_BRANCH_PREFIX_LENGTH: usize = 50;
@@ -15,6 +16,136 @@ const CONFIG_FILENAME: &str = "swissarmyhammer.yaml";
 
 // Invalid characters for git branch names (comprehensive validation used by both Config and YamlConfig)
 const INVALID_BRANCH_CHARS_YAML: [char; 9] = ['\0', ' ', '~', '^', ':', '?', '*', '[', '\\'];
+
+// Cost tracking configuration constants
+const COST_ENV_PREFIX: &str = "SAH_COST";
+const DEFAULT_INPUT_TOKEN_COST: &str = "0.000015";
+const DEFAULT_OUTPUT_TOKEN_COST: &str = "0.000075";
+
+/// Pricing configuration for cost tracking
+#[derive(Debug, Clone, Deserialize)]
+pub struct PricingConfig {
+    /// Input token cost in USD per token
+    #[serde(default = "default_input_token_cost")]
+    pub input_token_cost: Decimal,
+    /// Output token cost in USD per token
+    #[serde(default = "default_output_token_cost")]
+    pub output_token_cost: Decimal,
+}
+
+fn default_input_token_cost() -> Decimal {
+    DEFAULT_INPUT_TOKEN_COST.parse().expect("Invalid default input token cost")
+}
+
+fn default_output_token_cost() -> Decimal {
+    DEFAULT_OUTPUT_TOKEN_COST.parse().expect("Invalid default output token cost")
+}
+
+impl Default for PricingConfig {
+    fn default() -> Self {
+        Self {
+            input_token_cost: DEFAULT_INPUT_TOKEN_COST.parse().expect("Invalid default input token cost"),
+            output_token_cost: DEFAULT_OUTPUT_TOKEN_COST.parse().expect("Invalid default output token cost"),
+        }
+    }
+}
+
+/// Session management configuration for cost tracking
+#[derive(Debug, Clone, Deserialize)]
+pub struct SessionManagementConfig {
+    /// Maximum number of concurrent sessions
+    pub max_concurrent_sessions: u32,
+    /// Session timeout in hours
+    pub session_timeout_hours: u32,
+    /// Cleanup interval in hours
+    pub cleanup_interval_hours: u32,
+}
+
+impl Default for SessionManagementConfig {
+    fn default() -> Self {
+        Self {
+            max_concurrent_sessions: 100,
+            session_timeout_hours: 24,
+            cleanup_interval_hours: 6,
+        }
+    }
+}
+
+/// Aggregation configuration for cost tracking
+#[derive(Debug, Clone, Deserialize)]
+pub struct AggregationConfig {
+    /// Enable data aggregation
+    pub enabled: bool,
+    /// Data retention period in days
+    pub retention_days: u32,
+    /// Maximum number of stored sessions
+    pub max_stored_sessions: u32,
+}
+
+impl Default for AggregationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            retention_days: 90,
+            max_stored_sessions: 10000,
+        }
+    }
+}
+
+/// Reporting configuration for cost tracking
+#[derive(Debug, Clone, Deserialize)]
+pub struct ReportingConfig {
+    /// Include cost information in issue reports
+    pub include_in_issues: bool,
+    /// Provide detailed breakdown of costs
+    pub detailed_breakdown: bool,
+    /// Number of decimal places for cost precision
+    pub cost_precision_decimals: u8,
+}
+
+impl Default for ReportingConfig {
+    fn default() -> Self {
+        Self {
+            include_in_issues: true,
+            detailed_breakdown: true,
+            cost_precision_decimals: 4,
+        }
+    }
+}
+
+/// Cost tracking configuration
+#[derive(Debug, Clone, Deserialize)]
+pub struct CostTrackingConfig {
+    /// Enable cost tracking
+    pub enabled: bool,
+    /// Pricing model: "paid" or "max"
+    pub pricing_model: String,
+    /// Pricing configuration
+    #[serde(default)]
+    pub rates: PricingConfig,
+    /// Session management configuration
+    #[serde(default)]
+    pub session_management: SessionManagementConfig,
+    /// Aggregation configuration
+    #[serde(default)]
+    pub aggregation: AggregationConfig,
+    /// Reporting configuration
+    #[serde(default)]
+    pub reporting: ReportingConfig,
+}
+
+impl Default for CostTrackingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            pricing_model: "paid".to_string(),
+            rates: PricingConfig::default(),
+            session_management: SessionManagementConfig::default(),
+            aggregation: AggregationConfig::default(),
+            reporting: ReportingConfig::default(),
+        }
+    }
+}
 
 /// Errors that can occur during configuration loading
 #[derive(Debug, Error)]
@@ -97,6 +228,8 @@ pub struct Config {
     pub min_issue_number_width: usize,
     /// Maximum issue number width (default: 10)
     pub max_issue_number_width: usize,
+    /// Cost tracking configuration (optional)
+    pub cost_tracking: Option<CostTrackingConfig>,
 }
 
 impl Default for Config {
@@ -120,6 +253,7 @@ impl Default for Config {
             max_issue_branch_prefix_length: MAX_ISSUE_BRANCH_PREFIX_LENGTH,
             min_issue_number_width: 1,
             max_issue_number_width: 10,
+            cost_tracking: None,
         }
     }
 }
@@ -221,6 +355,67 @@ impl Config {
             loader.load_parsed("MIN_ISSUE_NUMBER_WIDTH", self.min_issue_number_width);
         self.max_issue_number_width =
             loader.load_parsed("MAX_ISSUE_NUMBER_WIDTH", self.max_issue_number_width);
+
+        // Load cost tracking configuration from environment variables
+        self.apply_cost_tracking_env_vars();
+    }
+
+    /// Apply cost tracking environment variables to this config
+    ///
+    /// Loads cost tracking configuration from environment variables with the SAH_COST prefix.
+    /// This creates a new CostTrackingConfig if any SAH_COST_* environment variables are set.
+    fn apply_cost_tracking_env_vars(&mut self) {
+        let cost_loader = EnvLoader::new(COST_ENV_PREFIX);
+
+        // Check if the main tracking enabled variable is set to determine if we should create config
+        if let Some(enabled) = cost_loader.load_optional::<bool>("TRACKING_ENABLED") {
+            // Load all cost tracking configuration from environment variables
+            let pricing_model = cost_loader.load_string("PRICING_MODEL", "paid");
+            let input_token_cost_str = cost_loader.load_string("INPUT_TOKEN_COST", DEFAULT_INPUT_TOKEN_COST);
+            let output_token_cost_str = cost_loader.load_string("OUTPUT_TOKEN_COST", DEFAULT_OUTPUT_TOKEN_COST);
+            
+            // Parse decimal values carefully
+            let input_cost = input_token_cost_str.parse::<Decimal>()
+                .unwrap_or_else(|_| DEFAULT_INPUT_TOKEN_COST.parse().expect("Invalid default input token cost"));
+            let output_cost = output_token_cost_str.parse::<Decimal>()
+                .unwrap_or_else(|_| DEFAULT_OUTPUT_TOKEN_COST.parse().expect("Invalid default output token cost"));
+
+            let max_concurrent_sessions = cost_loader.load_parsed("MAX_CONCURRENT_SESSIONS", 100u32);
+            let session_timeout_hours = cost_loader.load_parsed("SESSION_TIMEOUT_HOURS", 24u32);
+            let cleanup_interval_hours = cost_loader.load_parsed("CLEANUP_INTERVAL_HOURS", 6u32);
+            let aggregation_enabled = cost_loader.load_parsed("AGGREGATION_ENABLED", true);
+            let retention_days = cost_loader.load_parsed("RETENTION_DAYS", 90u32);
+            let max_stored_sessions = cost_loader.load_parsed("MAX_STORED_SESSIONS", 10000u32);
+            let include_in_issues = cost_loader.load_parsed("INCLUDE_IN_ISSUES", true);
+            let detailed_breakdown = cost_loader.load_parsed("DETAILED_BREAKDOWN", true);
+            let cost_precision_decimals = cost_loader.load_parsed("COST_PRECISION_DECIMALS", 4u8);
+
+            let cost_tracking_config = CostTrackingConfig {
+                enabled,
+                pricing_model,
+                rates: PricingConfig {
+                    input_token_cost: input_cost,
+                    output_token_cost: output_cost,
+                },
+                session_management: SessionManagementConfig {
+                    max_concurrent_sessions,
+                    session_timeout_hours,
+                    cleanup_interval_hours,
+                },
+                aggregation: AggregationConfig {
+                    enabled: aggregation_enabled,
+                    retention_days,
+                    max_stored_sessions,
+                },
+                reporting: ReportingConfig {
+                    include_in_issues,
+                    detailed_breakdown,
+                    cost_precision_decimals,
+                },
+            };
+
+            self.cost_tracking = Some(cost_tracking_config);
+        }
     }
 
     /// Get the global configuration instance
@@ -340,6 +535,11 @@ impl Config {
         // Validate string lengths
         self.validate_string_lengths()?;
 
+        // Validate cost tracking configuration if present
+        if let Some(ref cost_tracking) = self.cost_tracking {
+            self.validate_cost_tracking(cost_tracking)?;
+        }
+
         Ok(())
     }
 
@@ -421,6 +621,88 @@ impl Config {
                     "issue_branch_prefix cannot exceed {} characters",
                     self.max_issue_branch_prefix_length
                 ),
+            });
+        }
+
+        Ok(())
+    }
+
+    /// Validate cost tracking configuration
+    fn validate_cost_tracking(&self, config: &CostTrackingConfig) -> Result<(), ConfigError> {
+        // Validate pricing model
+        if config.pricing_model != "paid" && config.pricing_model != "max" {
+            return Err(ConfigError::InvalidValue {
+                field: "cost_tracking.pricing_model".to_string(),
+                value: config.pricing_model.clone(),
+                hint: "pricing_model must be either 'paid' or 'max'".to_string(),
+            });
+        }
+
+        // Validate positive costs
+        if config.rates.input_token_cost <= rust_decimal::Decimal::ZERO {
+            return Err(ConfigError::InvalidValue {
+                field: "cost_tracking.rates.input_token_cost".to_string(),
+                value: config.rates.input_token_cost.to_string(),
+                hint: "input_token_cost must be positive".to_string(),
+            });
+        }
+
+        if config.rates.output_token_cost <= rust_decimal::Decimal::ZERO {
+            return Err(ConfigError::InvalidValue {
+                field: "cost_tracking.rates.output_token_cost".to_string(),
+                value: config.rates.output_token_cost.to_string(),
+                hint: "output_token_cost must be positive".to_string(),
+            });
+        }
+
+        // Validate reasonable session management values
+        if config.session_management.max_concurrent_sessions == 0 {
+            return Err(ConfigError::InvalidValue {
+                field: "cost_tracking.session_management.max_concurrent_sessions".to_string(),
+                value: config.session_management.max_concurrent_sessions.to_string(),
+                hint: "max_concurrent_sessions must be greater than 0".to_string(),
+            });
+        }
+
+        if config.session_management.session_timeout_hours == 0 {
+            return Err(ConfigError::InvalidValue {
+                field: "cost_tracking.session_management.session_timeout_hours".to_string(),
+                value: config.session_management.session_timeout_hours.to_string(),
+                hint: "session_timeout_hours must be greater than 0".to_string(),
+            });
+        }
+
+        if config.session_management.cleanup_interval_hours == 0 {
+            return Err(ConfigError::InvalidValue {
+                field: "cost_tracking.session_management.cleanup_interval_hours".to_string(),
+                value: config.session_management.cleanup_interval_hours.to_string(),
+                hint: "cleanup_interval_hours must be greater than 0".to_string(),
+            });
+        }
+
+        // Validate aggregation settings
+        if config.aggregation.retention_days == 0 {
+            return Err(ConfigError::InvalidValue {
+                field: "cost_tracking.aggregation.retention_days".to_string(),
+                value: config.aggregation.retention_days.to_string(),
+                hint: "retention_days must be greater than 0".to_string(),
+            });
+        }
+
+        if config.aggregation.max_stored_sessions == 0 {
+            return Err(ConfigError::InvalidValue {
+                field: "cost_tracking.aggregation.max_stored_sessions".to_string(),
+                value: config.aggregation.max_stored_sessions.to_string(),
+                hint: "max_stored_sessions must be greater than 0".to_string(),
+            });
+        }
+
+        // Validate reporting settings
+        if config.reporting.cost_precision_decimals > 10 {
+            return Err(ConfigError::InvalidValue {
+                field: "cost_tracking.reporting.cost_precision_decimals".to_string(),
+                value: config.reporting.cost_precision_decimals.to_string(),
+                hint: "cost_precision_decimals cannot exceed 10".to_string(),
             });
         }
 
@@ -549,6 +831,8 @@ For more help, see: https://github.com/wballard/swissarmyhammer/docs/configurati
 pub struct YamlConfig {
     /// Base branch for pull requests
     pub base_branch: Option<String>,
+    /// Cost tracking configuration
+    pub cost_tracking: Option<CostTrackingConfig>,
 }
 
 impl YamlConfig {
@@ -557,6 +841,9 @@ impl YamlConfig {
     pub fn apply_to_config(&self, config: &mut Config) {
         if let Some(ref base_branch) = self.base_branch {
             config.base_branch = base_branch.clone();
+        }
+        if let Some(ref cost_tracking) = self.cost_tracking {
+            config.cost_tracking = Some(cost_tracking.clone());
         }
     }
 
@@ -632,11 +919,13 @@ impl YamlConfig {
     ///
     /// let config = YamlConfig {
     ///     base_branch: Some("main".to_string()),
+    ///     cost_tracking: None,
     /// };
     /// assert!(config.validate().is_ok());
     ///
     /// let invalid_config = YamlConfig {
     ///     base_branch: Some("".to_string()),
+    ///     cost_tracking: None,
     /// };
     /// assert!(invalid_config.validate().is_err());
     /// ```
@@ -644,6 +933,11 @@ impl YamlConfig {
         // Validate base_branch if provided
         if let Some(ref base_branch) = self.base_branch {
             Self::validate_branch_name(base_branch)?;
+        }
+
+        // Validate cost tracking configuration if provided
+        if let Some(ref cost_tracking) = self.cost_tracking {
+            Self::validate_cost_tracking_config(cost_tracking)?;
         }
 
         Ok(())
@@ -663,6 +957,55 @@ impl YamlConfig {
                 }
             }
         }
+    }
+
+    /// Validate cost tracking configuration
+    fn validate_cost_tracking_config(config: &CostTrackingConfig) -> Result<(), String> {
+        // Validate pricing model
+        if config.pricing_model != "paid" && config.pricing_model != "max" {
+            return Err(format!(
+                "Invalid pricing model '{}'. Must be 'paid' or 'max'",
+                config.pricing_model
+            ));
+        }
+
+        // Validate positive costs
+        if config.rates.input_token_cost <= rust_decimal::Decimal::ZERO {
+            return Err("input_token_cost must be positive".to_string());
+        }
+
+        if config.rates.output_token_cost <= rust_decimal::Decimal::ZERO {
+            return Err("output_token_cost must be positive".to_string());
+        }
+
+        // Validate reasonable session management values
+        if config.session_management.max_concurrent_sessions == 0 {
+            return Err("max_concurrent_sessions must be greater than 0".to_string());
+        }
+
+        if config.session_management.session_timeout_hours == 0 {
+            return Err("session_timeout_hours must be greater than 0".to_string());
+        }
+
+        if config.session_management.cleanup_interval_hours == 0 {
+            return Err("cleanup_interval_hours must be greater than 0".to_string());
+        }
+
+        // Validate aggregation settings
+        if config.aggregation.retention_days == 0 {
+            return Err("retention_days must be greater than 0".to_string());
+        }
+
+        if config.aggregation.max_stored_sessions == 0 {
+            return Err("max_stored_sessions must be greater than 0".to_string());
+        }
+
+        // Validate reporting settings
+        if config.reporting.cost_precision_decimals > 10 {
+            return Err("cost_precision_decimals cannot exceed 10".to_string());
+        }
+
+        Ok(())
     }
 }
 
@@ -810,6 +1153,7 @@ mod tests {
     fn test_yaml_config_apply_to_config_with_values() {
         let yaml_config = YamlConfig {
             base_branch: Some("develop".to_string()),
+            cost_tracking: None,
         };
         let mut config = Config::default();
 
@@ -862,6 +1206,7 @@ base_branch: "feature/test"
     fn test_yaml_config_apply_overwrites_existing_values() {
         let yaml_config = YamlConfig {
             base_branch: Some("staging".to_string()),
+            cost_tracking: None,
         };
 
         // Create config with non-default value
@@ -1050,10 +1395,11 @@ base_branch: "feature/test"
     fn test_yaml_config_validation_valid() {
         let yaml_config = YamlConfig {
             base_branch: Some("main".to_string()),
+            cost_tracking: None,
         };
         assert!(yaml_config.validate().is_ok());
 
-        let yaml_config_none = YamlConfig { base_branch: None };
+        let yaml_config_none = YamlConfig { base_branch: None, cost_tracking: None };
         assert!(yaml_config_none.validate().is_ok());
     }
 
@@ -1062,12 +1408,14 @@ base_branch: "feature/test"
         // Empty branch name
         let yaml_config = YamlConfig {
             base_branch: Some("".to_string()),
+            cost_tracking: None,
         };
         assert!(yaml_config.validate().is_err());
 
         // Whitespace only branch name
         let yaml_config = YamlConfig {
             base_branch: Some("   ".to_string()),
+            cost_tracking: None,
         };
         assert!(yaml_config.validate().is_err());
 
@@ -1076,6 +1424,7 @@ base_branch: "feature/test"
         for invalid_char in invalid_chars {
             let yaml_config = YamlConfig {
                 base_branch: Some(format!("branch{}", invalid_char)),
+                cost_tracking: None,
             };
             assert!(yaml_config.validate().is_err());
         }
@@ -1083,40 +1432,47 @@ base_branch: "feature/test"
         // Branch name with consecutive dots
         let yaml_config = YamlConfig {
             base_branch: Some("branch..name".to_string()),
+            cost_tracking: None,
         };
         assert!(yaml_config.validate().is_err());
 
         // Branch name starting/ending with dot
         let yaml_config = YamlConfig {
             base_branch: Some(".branch".to_string()),
+            cost_tracking: None,
         };
         assert!(yaml_config.validate().is_err());
 
         let yaml_config = YamlConfig {
             base_branch: Some("branch.".to_string()),
+            cost_tracking: None,
         };
         assert!(yaml_config.validate().is_err());
 
         // Branch name starting/ending with slash
         let yaml_config = YamlConfig {
             base_branch: Some("/branch".to_string()),
+            cost_tracking: None,
         };
         assert!(yaml_config.validate().is_err());
 
         let yaml_config = YamlConfig {
             base_branch: Some("branch/".to_string()),
+            cost_tracking: None,
         };
         assert!(yaml_config.validate().is_err());
 
         // Branch name ending with .lock
         let yaml_config = YamlConfig {
             base_branch: Some("branch.lock".to_string()),
+            cost_tracking: None,
         };
         assert!(yaml_config.validate().is_err());
 
         // Branch name too long
         let yaml_config = YamlConfig {
             base_branch: Some("a".repeat(256)),
+            cost_tracking: None,
         };
         assert!(yaml_config.validate().is_err());
     }
@@ -1136,6 +1492,7 @@ base_branch: "feature/test"
         for valid_name in valid_names {
             let yaml_config = YamlConfig {
                 base_branch: Some(valid_name.to_string()),
+                cost_tracking: None,
             };
             assert!(
                 yaml_config.validate().is_ok(),
@@ -1485,6 +1842,7 @@ base_branch: "feature/test"
     fn test_yaml_config_validate_yaml_values_empty_base_branch() {
         let yaml_config = YamlConfig {
             base_branch: Some("".to_string()),
+            cost_tracking: None,
         };
 
         let result = yaml_config.validate_yaml_values();
@@ -1504,10 +1862,11 @@ base_branch: "feature/test"
     fn test_yaml_config_validate_yaml_values_success() {
         let yaml_config = YamlConfig {
             base_branch: Some("main".to_string()),
+            cost_tracking: None,
         };
         assert!(yaml_config.validate_yaml_values().is_ok());
 
-        let yaml_config_none = YamlConfig { base_branch: None };
+        let yaml_config_none = YamlConfig { base_branch: None, cost_tracking: None };
         assert!(yaml_config_none.validate_yaml_values().is_ok());
     }
 
@@ -1625,6 +1984,7 @@ base_branch: "develop"
 
         let yaml_config = YamlConfig {
             base_branch: Some("custom".to_string()),
+            cost_tracking: None,
         };
 
         yaml_config.apply_to_config(&mut config);
@@ -1637,7 +1997,7 @@ base_branch: "develop"
         let mut config = Config::default();
         let original_base_branch = config.base_branch.clone();
 
-        let yaml_config = YamlConfig { base_branch: None };
+        let yaml_config = YamlConfig { base_branch: None, cost_tracking: None };
 
         yaml_config.apply_to_config(&mut config);
         assert_eq!(config.base_branch, original_base_branch);
@@ -1971,5 +2331,311 @@ mod config_benchmarks {
             "Config loading too slow: {}ms average",
             avg_duration.as_millis()
         );
+    }
+}
+
+#[cfg(test)]
+mod cost_tracking_tests {
+    use super::*;
+    use std::env;
+
+    #[test]
+    fn test_cost_tracking_config_default() {
+        let config = CostTrackingConfig::default();
+        assert_eq!(config.enabled, false);
+        assert_eq!(config.pricing_model, "paid");
+        assert_eq!(config.rates.input_token_cost.to_string(), "0.000015");
+        assert_eq!(config.rates.output_token_cost.to_string(), "0.000075");
+        assert_eq!(config.session_management.max_concurrent_sessions, 100);
+        assert_eq!(config.session_management.session_timeout_hours, 24);
+        assert_eq!(config.session_management.cleanup_interval_hours, 6);
+        assert!(config.aggregation.enabled);
+        assert_eq!(config.aggregation.retention_days, 90);
+        assert_eq!(config.aggregation.max_stored_sessions, 10000);
+        assert!(config.reporting.include_in_issues);
+        assert!(config.reporting.detailed_breakdown);
+        assert_eq!(config.reporting.cost_precision_decimals, 4);
+    }
+
+    #[test]
+    fn test_config_with_no_cost_tracking() {
+        let config = Config::default();
+        assert!(config.cost_tracking.is_none());
+    }
+
+    #[test]
+    fn test_yaml_config_cost_tracking_deserialization() {
+        let yaml_content = r#"
+cost_tracking:
+  enabled: true
+  pricing_model: "max"
+  rates:
+    input_token_cost: 0.00003
+    output_token_cost: 0.00012
+  session_management:
+    max_concurrent_sessions: 200
+    session_timeout_hours: 48
+    cleanup_interval_hours: 12
+  aggregation:
+    enabled: false
+    retention_days: 30
+    max_stored_sessions: 5000
+  reporting:
+    include_in_issues: false
+    detailed_breakdown: false
+    cost_precision_decimals: 2
+"#;
+        let yaml_config: YamlConfig = serde_yaml::from_str(yaml_content).unwrap();
+        assert!(yaml_config.cost_tracking.is_some());
+        
+        let cost_tracking = yaml_config.cost_tracking.unwrap();
+        assert!(cost_tracking.enabled);
+        assert_eq!(cost_tracking.pricing_model, "max");
+        assert_eq!(cost_tracking.rates.input_token_cost.to_string(), "0.00003");
+        assert_eq!(cost_tracking.rates.output_token_cost.to_string(), "0.00012");
+        assert_eq!(cost_tracking.session_management.max_concurrent_sessions, 200);
+        assert_eq!(cost_tracking.session_management.session_timeout_hours, 48);
+        assert_eq!(cost_tracking.session_management.cleanup_interval_hours, 12);
+        assert!(!cost_tracking.aggregation.enabled);
+        assert_eq!(cost_tracking.aggregation.retention_days, 30);
+        assert_eq!(cost_tracking.aggregation.max_stored_sessions, 5000);
+        assert!(!cost_tracking.reporting.include_in_issues);
+        assert!(!cost_tracking.reporting.detailed_breakdown);
+        assert_eq!(cost_tracking.reporting.cost_precision_decimals, 2);
+    }
+
+    #[test]
+    fn test_yaml_config_partial_cost_tracking() {
+        let yaml_content = r#"
+cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+"#;
+        let yaml_config: YamlConfig = serde_yaml::from_str(yaml_content).unwrap();
+        assert!(yaml_config.cost_tracking.is_some());
+        
+        let cost_tracking = yaml_config.cost_tracking.unwrap();
+        assert!(cost_tracking.enabled);
+        assert_eq!(cost_tracking.pricing_model, "paid");
+        // Should use defaults for missing fields
+        assert_eq!(cost_tracking.rates.input_token_cost.to_string(), "0.000015");
+        assert_eq!(cost_tracking.session_management.max_concurrent_sessions, 100);
+    }
+
+    #[test]
+    fn test_yaml_config_apply_cost_tracking() {
+        let yaml_config = YamlConfig {
+            base_branch: None,
+            cost_tracking: Some(CostTrackingConfig {
+                enabled: true,
+                pricing_model: "max".to_string(),
+                ..Default::default()
+            }),
+        };
+        let mut config = Config::default();
+        
+        // Initially no cost tracking
+        assert!(config.cost_tracking.is_none());
+        
+        yaml_config.apply_to_config(&mut config);
+        
+        // Should now have cost tracking from YAML
+        assert!(config.cost_tracking.is_some());
+        let cost_tracking = config.cost_tracking.unwrap();
+        assert!(cost_tracking.enabled);
+        assert_eq!(cost_tracking.pricing_model, "max");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_cost_tracking_env_vars() {
+        // Save original values
+        let original_enabled = env::var("SAH_COST_TRACKING_ENABLED").ok();
+        let original_pricing = env::var("SAH_COST_PRICING_MODEL").ok();
+        let original_input_cost = env::var("SAH_COST_INPUT_TOKEN_COST").ok();
+        let original_output_cost = env::var("SAH_COST_OUTPUT_TOKEN_COST").ok();
+        
+        // Set test environment variables
+        env::set_var("SAH_COST_TRACKING_ENABLED", "true");
+        env::set_var("SAH_COST_PRICING_MODEL", "max");
+        env::set_var("SAH_COST_INPUT_TOKEN_COST", "0.00005");
+        env::set_var("SAH_COST_OUTPUT_TOKEN_COST", "0.0002");
+        env::set_var("SAH_COST_MAX_CONCURRENT_SESSIONS", "150");
+        
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let original_dir = std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+        
+        let config = Config::new();
+        assert!(config.cost_tracking.is_some());
+        
+        let cost_tracking = config.cost_tracking.unwrap();
+        assert!(cost_tracking.enabled);
+        assert_eq!(cost_tracking.pricing_model, "max");
+        assert_eq!(cost_tracking.rates.input_token_cost.to_string(), "0.00005");
+        assert_eq!(cost_tracking.rates.output_token_cost.to_string(), "0.0002");
+        assert_eq!(cost_tracking.session_management.max_concurrent_sessions, 150);
+        
+        // Restore original values
+        std::env::set_current_dir(original_dir).expect("Could not restore original directory");
+        match original_enabled {
+            Some(val) => env::set_var("SAH_COST_TRACKING_ENABLED", val),
+            None => env::remove_var("SAH_COST_TRACKING_ENABLED"),
+        }
+        match original_pricing {
+            Some(val) => env::set_var("SAH_COST_PRICING_MODEL", val),
+            None => env::remove_var("SAH_COST_PRICING_MODEL"),
+        }
+        match original_input_cost {
+            Some(val) => env::set_var("SAH_COST_INPUT_TOKEN_COST", val),
+            None => env::remove_var("SAH_COST_INPUT_TOKEN_COST"),
+        }
+        match original_output_cost {
+            Some(val) => env::set_var("SAH_COST_OUTPUT_TOKEN_COST", val),
+            None => env::remove_var("SAH_COST_OUTPUT_TOKEN_COST"),
+        }
+        env::remove_var("SAH_COST_MAX_CONCURRENT_SESSIONS");
+    }
+
+    #[test]
+    fn test_cost_tracking_validation_valid() {
+        let config = CostTrackingConfig::default();
+        let main_config = Config {
+            cost_tracking: Some(config),
+            ..Default::default()
+        };
+        assert!(main_config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_cost_tracking_validation_invalid_pricing_model() {
+        let config = CostTrackingConfig {
+            pricing_model: "invalid".to_string(),
+            ..Default::default()
+        };
+        let main_config = Config {
+            cost_tracking: Some(config),
+            ..Default::default()
+        };
+        let result = main_config.validate();
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ConfigError::InvalidValue { field, value, .. } => {
+                assert_eq!(field, "cost_tracking.pricing_model");
+                assert_eq!(value, "invalid");
+            }
+            _ => panic!("Expected InvalidValue error"),
+        }
+    }
+
+    #[test]
+    fn test_cost_tracking_validation_negative_costs() {
+        use rust_decimal::Decimal;
+        
+        let config = CostTrackingConfig {
+            rates: PricingConfig {
+                input_token_cost: Decimal::new(-1, 6), // -0.000001
+                output_token_cost: Decimal::new(75, 6), // 0.000075
+            },
+            ..Default::default()
+        };
+        let main_config = Config {
+            cost_tracking: Some(config),
+            ..Default::default()
+        };
+        let result = main_config.validate();
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ConfigError::InvalidValue { field, .. } => {
+                assert_eq!(field, "cost_tracking.rates.input_token_cost");
+            }
+            _ => panic!("Expected InvalidValue error"),
+        }
+    }
+
+    #[test]
+    fn test_cost_tracking_validation_zero_sessions() {
+        let config = CostTrackingConfig {
+            session_management: SessionManagementConfig {
+                max_concurrent_sessions: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let main_config = Config {
+            cost_tracking: Some(config),
+            ..Default::default()
+        };
+        let result = main_config.validate();
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ConfigError::InvalidValue { field, .. } => {
+                assert_eq!(field, "cost_tracking.session_management.max_concurrent_sessions");
+            }
+            _ => panic!("Expected InvalidValue error"),
+        }
+    }
+
+    #[test]
+    fn test_yaml_cost_tracking_validation() {
+        use rust_decimal::Decimal;
+        
+        let invalid_config = CostTrackingConfig {
+            pricing_model: "invalid_model".to_string(),
+            rates: PricingConfig {
+                input_token_cost: Decimal::ZERO,
+                output_token_cost: Decimal::new(75, 6),
+            },
+            ..Default::default()
+        };
+        
+        let result = YamlConfig::validate_cost_tracking_config(&invalid_config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid pricing model"));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_cost_tracking_precedence() {
+        use tempfile::TempDir;
+        
+        // Test that YAML overrides environment variables for cost tracking
+        let temp_dir = TempDir::new().unwrap();
+        let yaml_path = temp_dir.path().join("swissarmyhammer.yaml");
+        std::fs::write(&yaml_path, r#"
+cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+  rates:
+    input_token_cost: 0.00001
+"#).unwrap();
+
+        // Set conflicting environment variable
+        env::set_var("SAH_COST_TRACKING_ENABLED", "false");
+        env::set_var("SAH_COST_PRICING_MODEL", "max");
+        env::set_var("SAH_COST_INPUT_TOKEN_COST", "0.00009");
+
+        let original_dir = std::env::current_dir().unwrap_or_else(|_| temp_dir.path().to_path_buf());
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        // Verify the YAML file exists and is readable
+        assert!(yaml_path.exists(), "YAML config file should exist");
+        let yaml_content = std::fs::read_to_string(&yaml_path).unwrap();
+        assert!(yaml_content.contains("enabled: true"), "YAML should contain enabled: true");
+
+        let config = Config::new();
+        assert!(config.cost_tracking.is_some(), "Cost tracking config should exist");
+        
+        let cost_tracking = config.cost_tracking.unwrap();
+        // YAML should override env vars
+        assert!(cost_tracking.enabled, "YAML enabled=true should override env enabled=false"); // YAML value, not env value
+        assert_eq!(cost_tracking.pricing_model, "paid"); // YAML value, not env value
+        assert_eq!(cost_tracking.rates.input_token_cost.to_string(), "0.00001"); // YAML value, not env value
+
+        // Cleanup
+        std::env::set_current_dir(original_dir).expect("Could not restore original directory");
+        env::remove_var("SAH_COST_TRACKING_ENABLED");
+        env::remove_var("SAH_COST_PRICING_MODEL");
+        env::remove_var("SAH_COST_INPUT_TOKEN_COST");
     }
 }

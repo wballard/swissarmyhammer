@@ -257,6 +257,12 @@ pub struct MergeIssueRequest {
     pub delete_branch: bool,
 }
 
+/// Request to get the next issue to work on
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct NextIssueRequest {
+    // No parameters needed - returns first pending issue alphabetically
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

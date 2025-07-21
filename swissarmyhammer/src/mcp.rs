@@ -30,7 +30,7 @@ pub mod utils;
 use responses::create_issue_response;
 use types::{
     AllCompleteRequest, CreateIssueRequest, CurrentIssueRequest, IssueName, MarkCompleteRequest,
-    MergeIssueRequest, UpdateIssueRequest, WorkIssueRequest,
+    MergeIssueRequest, NextIssueRequest, UpdateIssueRequest, WorkIssueRequest,
 };
 
 use utils::validate_issue_name;
@@ -1524,6 +1524,69 @@ impl McpServer {
         }
     }
 
+    /// Handle the issue_next tool operation.
+    ///
+    /// Determines the next issue to work on by returning the first pending issue
+    /// in alphabetical order by name.
+    ///
+    /// # Arguments
+    ///
+    /// * `_request` - The next issue request (no parameters needed)
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result with next issue name
+    async fn handle_issue_next(
+        &self,
+        _request: NextIssueRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        let issue_storage = self.issue_storage.read().await;
+
+        // Get all issues
+        let all_issues = match issue_storage.list_issues().await {
+            Ok(issues) => issues,
+            Err(e) => {
+                return Ok(CallToolResult {
+                    content: vec![Annotated::new(
+                        RawContent::Text(RawTextContent {
+                            text: format!("Failed to list issues: {e}"),
+                        }),
+                        None,
+                    )],
+                    is_error: Some(true),
+                });
+            }
+        };
+
+        // Filter to only pending (non-completed) issues
+        // Issues are already sorted alphabetically by name in list_issues()
+        let pending_issues: Vec<&Issue> = all_issues.iter().filter(|issue| !issue.completed).collect();
+
+        if pending_issues.is_empty() {
+            Ok(CallToolResult {
+                content: vec![Annotated::new(
+                    RawContent::Text(RawTextContent {
+                        text: "No pending issues found. All issues are completed!".to_string(),
+                    }),
+                    None,
+                )],
+                is_error: Some(false),
+            })
+        } else {
+            // Return the first pending issue (alphabetically first)
+            let next_issue = pending_issues[0];
+            Ok(CallToolResult {
+                content: vec![Annotated::new(
+                    RawContent::Text(RawTextContent {
+                        text: format!("Next issue: {}", next_issue.name.as_str()),
+                    }),
+                    None,
+                )],
+                is_error: Some(false),
+            })
+        }
+    }
+
     /// Validate repository state before merging
     fn validate_pre_merge_state(
         &self,
@@ -1906,6 +1969,12 @@ impl ServerHandler for McpServer {
                 input_schema: Self::generate_tool_schema::<MergeIssueRequest>(),
                 annotations: None,
             },
+            Tool {
+                name: "issue_next".into(),
+                description: Some("Get the next issue to work on. Returns the first pending issue alphabetically by name.".into()),
+                input_schema: Self::generate_tool_schema::<NextIssueRequest>(),
+                annotations: None,
+            },
         ];
 
         Ok(ListToolsResult {
@@ -1974,6 +2043,14 @@ impl ServerHandler for McpServer {
                 ))
                 .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
                 self.handle_issue_merge(req).await
+            }
+
+            "issue_next" => {
+                let req: NextIssueRequest = serde_json::from_value(serde_json::Value::Object(
+                    request.arguments.clone().unwrap_or_default(),
+                ))
+                .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
+                self.handle_issue_next(req).await
             }
 
             _ => Err(McpError::invalid_request(

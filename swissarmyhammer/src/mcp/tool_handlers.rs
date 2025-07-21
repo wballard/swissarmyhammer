@@ -528,6 +528,7 @@ impl ToolHandlers {
         }
     }
 
+
     /// Helper method to format issue branch names consistently
     fn format_issue_branch_name(issue_name: &str) -> String {
         format!("issue/{issue_name}")

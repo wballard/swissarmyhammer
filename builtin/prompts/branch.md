@@ -1,6 +1,6 @@
 ---
 title: issue_branch
-description: Create an issue work branch
+description: Create an issue work branch for the next issue to work
 ---
 
 ## Goal
@@ -14,6 +14,6 @@ Create a work branch for an issue.
 
 ## Process
 
-- use the issue_current tool to determine which issue to work
-- use the issue_work tool to establish the correct working branch for the current issue
+- use the issue_next tool to determine which issue to work
+- use the issue_work tool to establish the correct working branch
 - report your progress

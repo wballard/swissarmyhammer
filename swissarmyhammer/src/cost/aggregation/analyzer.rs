@@ -20,13 +20,13 @@ use std::sync::Arc;
 use thiserror::Error;
 
 /// Maximum number of issues to analyze in a single aggregation run
-const MAX_ISSUES_PER_AGGREGATION: usize = 10000;
+pub const DEFAULT_MAX_ISSUES_PER_AGGREGATION: usize = 10000;
 
 /// Minimum number of data points needed for statistical analysis
 const MIN_DATA_POINTS_FOR_STATISTICS: usize = 3;
 
 /// Outlier threshold in standard deviations
-const DEFAULT_OUTLIER_THRESHOLD: f64 = 2.0;
+pub const DEFAULT_OUTLIER_THRESHOLD: f64 = 2.0;
 
 /// Cost aggregation errors
 #[derive(Error, Debug)]
@@ -200,16 +200,16 @@ impl CostAggregator {
         }
 
         // Limit the number of issues to prevent memory issues
-        if issue_costs.len() > MAX_ISSUES_PER_AGGREGATION {
+        if issue_costs.len() > self.config.max_issues_per_aggregation {
             tracing::warn!(
                 "Too many issues for aggregation ({} > {}), truncating",
                 issue_costs.len(),
-                MAX_ISSUES_PER_AGGREGATION
+                self.config.max_issues_per_aggregation
             );
 
             let mut sorted_issues: Vec<_> = issue_costs.into_iter().collect();
             sorted_issues.sort_by(|a, b| b.1.cmp(&a.1)); // Sort by cost descending
-            sorted_issues.truncate(MAX_ISSUES_PER_AGGREGATION);
+            sorted_issues.truncate(self.config.max_issues_per_aggregation);
             issue_costs = sorted_issues.into_iter().collect();
         }
 
@@ -297,7 +297,7 @@ impl CostAggregator {
     ) -> AggregationResult<Option<Decimal>> {
         // Look for cost section in markdown
         if let Some(cost_section) = self.find_cost_section(content) {
-            self.parse_cost_from_section(&cost_section)
+            self.parse_cost_from_section(cost_section)
                 .map(Some)
                 .ok_or_else(|| AggregationError::CostParsing {
                     issue_id: "unknown".to_string(),

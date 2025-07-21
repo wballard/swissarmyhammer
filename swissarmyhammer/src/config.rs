@@ -4,6 +4,7 @@
 //! and sensible defaults for all configurable constants throughout the application.
 
 use crate::common::env_loader::EnvLoader;
+use crate::cost::aggregation::analyzer::{DEFAULT_OUTLIER_THRESHOLD, DEFAULT_MAX_ISSUES_PER_AGGREGATION};
 use rust_decimal::Decimal;
 use serde::Deserialize;
 use thiserror::Error;
@@ -156,6 +157,8 @@ pub struct AggregationConfig {
     pub include_issues_days: Option<u32>,
     /// Maximum number of sessions to store
     pub max_stored_sessions: u32,
+    /// Maximum number of issues to analyze in a single aggregation run
+    pub max_issues_per_aggregation: usize,
 }
 
 impl Default for AggregationConfig {
@@ -165,10 +168,11 @@ impl Default for AggregationConfig {
             scan_interval_hours: 24,
             retention_days: DEFAULT_RETENTION_DAYS,
             trend_analysis_days: 30,
-            outlier_threshold: 2.0,
+            outlier_threshold: DEFAULT_OUTLIER_THRESHOLD,
             min_issues_for_analysis: 3,
             include_issues_days: None,
             max_stored_sessions: 10000,
+            max_issues_per_aggregation: DEFAULT_MAX_ISSUES_PER_AGGREGATION,
         }
     }
 }
@@ -533,10 +537,11 @@ impl Config {
             scan_interval_hours: 24,
             retention_days,
             trend_analysis_days: 30,
-            outlier_threshold: 2.0,
+            outlier_threshold: DEFAULT_OUTLIER_THRESHOLD,
             min_issues_for_analysis: 3,
             include_issues_days: None,
             max_stored_sessions,
+            max_issues_per_aggregation: DEFAULT_MAX_ISSUES_PER_AGGREGATION,
         }
     }
 
@@ -2555,6 +2560,7 @@ cost_tracking:
     min_issues_for_analysis: 3
     include_issues_days: null
     max_stored_sessions: 5000
+    max_issues_per_aggregation: 10000
   reporting:
     include_in_issues: false
     detailed_breakdown: false
@@ -2577,6 +2583,7 @@ cost_tracking:
         assert!(!cost_tracking.aggregation.enabled);
         assert_eq!(cost_tracking.aggregation.retention_days, 30);
         assert_eq!(cost_tracking.aggregation.max_stored_sessions, 5000);
+        assert_eq!(cost_tracking.aggregation.max_issues_per_aggregation, 10000);
         assert!(!cost_tracking.reporting.include_in_issues);
         assert!(!cost_tracking.reporting.detailed_breakdown);
         assert_eq!(cost_tracking.reporting.cost_precision_decimals, 2);
@@ -2863,10 +2870,11 @@ cost_tracking:
                 scan_interval_hours: 24,
                 retention_days: 1,
                 trend_analysis_days: 30,
-                outlier_threshold: 2.0,
+                outlier_threshold: DEFAULT_OUTLIER_THRESHOLD,
                 min_issues_for_analysis: 3,
                 include_issues_days: None,
                 max_stored_sessions: 1,
+                max_issues_per_aggregation: DEFAULT_MAX_ISSUES_PER_AGGREGATION,
             },
             reporting: ReportingConfig {
                 include_in_issues: false,
@@ -2965,10 +2973,11 @@ cost_tracking:
                 scan_interval_hours: 24,
                 retention_days: u32::MAX,
                 trend_analysis_days: 30,
-                outlier_threshold: 2.0,
+                outlier_threshold: DEFAULT_OUTLIER_THRESHOLD,
                 min_issues_for_analysis: 3,
                 include_issues_days: None,
                 max_stored_sessions: u32::MAX,
+                max_issues_per_aggregation: DEFAULT_MAX_ISSUES_PER_AGGREGATION,
             },
             reporting: ReportingConfig::default(),
         };
@@ -3080,10 +3089,11 @@ cost_tracking:
                     scan_interval_hours: 24,
                     retention_days: 30,
                     trend_analysis_days: 30,
-                    outlier_threshold: 2.0,
+                    outlier_threshold: DEFAULT_OUTLIER_THRESHOLD,
                     min_issues_for_analysis: 3,
                     include_issues_days: None,
                     max_stored_sessions: 1000,
+                    max_issues_per_aggregation: DEFAULT_MAX_ISSUES_PER_AGGREGATION,
                 },
                 reporting: ReportingConfig {
                     include_in_issues: include_issues,

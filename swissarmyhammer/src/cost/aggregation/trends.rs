@@ -15,7 +15,12 @@ use thiserror::Error;
 pub enum TrendError {
     /// Insufficient data for trend analysis
     #[error("Insufficient data: need at least {required} points, got {actual}")]
-    InsufficientData { required: usize, actual: usize },
+    InsufficientData { 
+        /// Minimum number of data points required
+        required: usize, 
+        /// Actual number of data points available
+        actual: usize 
+    },
 
     /// Mathematical calculation error
     #[error("Calculation error: {0}")]
@@ -262,10 +267,10 @@ impl TrendAnalyzer {
     /// Calculate confidence in trend analysis
     fn calculate_confidence(&self, r_squared: f64, data_points: usize) -> f64 {
         // Confidence increases with R² and number of data points
-        let r_squared_factor = r_squared.max(0.0).min(1.0);
+        let r_squared_factor = r_squared.clamp(0.0, 1.0);
         let sample_size_factor = (data_points as f64).ln() / 10.0;
 
-        (r_squared_factor + sample_size_factor).min(1.0).max(0.0)
+        (r_squared_factor + sample_size_factor).clamp(0.0, 1.0)
     }
 
     /// Calculate volatility (standard deviation of changes)
@@ -420,6 +425,6 @@ impl TrendAnalyzer {
         let volatility_factor = 1.0 / (1.0 + volatility);
         let correlation_factor = r_squared;
 
-        (volatility_factor * 0.4 + correlation_factor * 0.6).min(1.0).max(0.0)
+        (volatility_factor * 0.4 + correlation_factor * 0.6).clamp(0.0, 1.0)
     }
 }

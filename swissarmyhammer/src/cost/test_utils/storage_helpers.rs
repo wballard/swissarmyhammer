@@ -57,25 +57,38 @@ pub mod error_conversion {
 
 /// Test harness for coordinating multi-backend storage testing
 pub struct StorageTestHarness<S: IssueStorage> {
+    /// Cost tracking component
     pub tracker: CostTracker,
+    /// Cost calculation component
     pub calculator: CostCalculator,
+    /// Cost section formatting component
     pub formatter: CostSectionFormatter,
+    /// Temporary directory for test files
     pub temp_dir: TempDir,
+    /// Issue storage backend under test
     pub issue_storage: Arc<RwLock<S>>,
+    /// Optional cost database for enhanced testing
     #[cfg(feature = "database")]
     pub database: Option<CostDatabase>,
+    /// Placeholder when database feature is disabled
     #[cfg(not(feature = "database"))]
     pub database: (),
+    /// Test configuration settings
     pub test_config: StorageTestConfig,
 }
 
 /// Configuration for storage testing scenarios
 #[derive(Debug, Clone)]
 pub struct StorageTestConfig {
+    /// Enable database storage backend testing
     pub enable_database: bool,
+    /// Enable markdown file storage testing
     pub enable_markdown_storage: bool,
+    /// Enable metrics integration testing
     pub enable_metrics_integration: bool,
+    /// Run tests in simulation mode without real storage
     pub simulation_mode: bool,
+    /// Enable performance measurement during testing
     pub performance_testing: bool,
 }
 
@@ -400,8 +413,11 @@ impl<S: IssueStorage> StorageTestHarness<S> {
 /// Results from multi-backend storage operations
 #[derive(Debug, Default)]
 pub struct StorageResults {
+    /// Markdown content that was stored, if any
     pub markdown_content: Option<String>,
+    /// Whether data was successfully stored in database
     pub database_stored: bool,
+    /// Whether metrics were successfully updated
     pub metrics_updated: bool,
 }
 
@@ -435,15 +451,21 @@ pub struct MultiBackendValidator {
     expected_data: HashMap<String, ExpectedCostData>,
 }
 
+/// Expected cost data for validation purposes
 #[derive(Debug, Clone)]
 pub struct ExpectedCostData {
+    /// Total expected cost for the operation
     pub total_cost: Decimal,
+    /// Total number of API calls made
     pub total_api_calls: usize,
+    /// Number of input tokens consumed
     pub input_tokens: u32,
+    /// Number of output tokens generated
     pub output_tokens: u32,
 }
 
 impl MultiBackendValidator {
+    /// Create a new multi-backend validator
     pub fn new() -> Self {
         Self {
             expected_data: HashMap::new(),
@@ -516,12 +538,12 @@ pub struct MockStorageForTesting {
 
 #[derive(Debug, Clone)]
 struct MockIssueData {
-    issue_id: String,
     content: String,
     cost_data: Option<IssueCostData>,
 }
 
 impl MockStorageForTesting {
+    /// Create a new mock storage for testing
     pub fn new() -> Self {
         Self {
             issues: HashMap::new(),
@@ -541,9 +563,9 @@ impl MockStorageForTesting {
         }
     }
 
+    /// Create a test issue with default content
     pub async fn create_test_issue(&mut self, issue_id: &IssueId) -> Result<Issue, CostError> {
         let issue_data = MockIssueData {
-            issue_id: issue_id.as_str().to_string(),
             content: format!("# Test Issue {}\n\nTest issue content\n", issue_id.as_str()),
             cost_data: None,
         };
@@ -560,6 +582,7 @@ impl MockStorageForTesting {
         Ok(issue)
     }
 
+    /// Update an issue with cost data
     pub async fn update_with_cost_data(
         &mut self,
         issue_id: &IssueId,
@@ -574,6 +597,7 @@ impl MockStorageForTesting {
         Ok(())
     }
 
+    /// Get cost data for a specific issue
     pub fn get_issue_cost_data(&self, issue_id: &IssueId) -> Option<&IssueCostData> {
         self.issues.get(issue_id.as_str())?.cost_data.as_ref()
     }
@@ -680,6 +704,7 @@ pub struct PerformanceValidator {
 }
 
 impl PerformanceValidator {
+    /// Create a new performance validator
     pub fn new() -> Self {
         Self {
             start_times: HashMap::new(),

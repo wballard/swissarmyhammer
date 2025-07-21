@@ -176,18 +176,12 @@ pub struct ChartPoint {
 }
 
 /// Report generator with multiple format support
+#[derive(Default)]
 pub struct ReportGenerator {
     /// Default report configuration
     config: ReportConfig,
 }
 
-impl Default for ReportGenerator {
-    fn default() -> Self {
-        Self {
-            config: ReportConfig::default(),
-        }
-    }
-}
 
 impl ReportGenerator {
     /// Create a new report generator with custom configuration
@@ -449,10 +443,10 @@ impl ReportGenerator {
         output.push_str(&format!("# Generated: {}\n", self.format_date(report.metadata.generated_at)));
         output.push_str(&format!("# Total Cost: {}\n", self.format_currency(report.summary.total_cost)));
         output.push_str(&format!("# Total Issues: {}\n", report.summary.total_issues));
-        output.push_str("\n");
+        output.push('\n');
 
         // Export each table section
-        for (_section_name, section) in &report.sections {
+        for section in report.sections.values() {
             if let ReportContent::Table(table_data) = &section.content {
                 output.push_str(&format!("# {}\n", section.title));
                 output.push_str(&table_data.headers.join(","));
@@ -497,13 +491,13 @@ impl ReportGenerator {
                     for row in &table.rows {
                         output.push_str(&format!("| {} |\n", row.join(" | ")));
                     }
-                    output.push_str("\n");
+                    output.push('\n');
                 }
                 ReportContent::KeyValue(kv) => {
                     for (key, value) in kv {
                         output.push_str(&format!("- **{}**: {}\n", key, value));
                     }
-                    output.push_str("\n");
+                    output.push('\n');
                 }
                 ReportContent::Chart(_) => {
                     output.push_str("*Chart data available in JSON format*\n\n");

@@ -10,11 +10,12 @@ use swissarmyhammer::issues::{
     CachedIssueStorage, FileSystemIssueStorage, InstrumentedIssueStorage, Issue, IssueCache,
     IssueNumber, IssueStorage, Operation, PerformanceMetrics,
 };
+use swissarmyhammer::mcp::types::IssueName;
 
 fn create_test_issue(number: u32, name: &str) -> Issue {
     Issue {
-        number: IssueNumber::from(number),
-        name: name.to_string(),
+        number: IssueNumber::new(number).unwrap(),
+        name: IssueName::from_filesystem(name.to_string()).unwrap(),
         content: format!("Test content for issue {number}"),
         completed: false,
         file_path: PathBuf::from(format!("test_{number}.md")),
@@ -219,12 +220,16 @@ fn benchmark_cached_storage_operations(c: &mut Criterion) {
 
                         // First access - cache miss
                         for i in 1..=count {
-                            let _issue = cached_storage.get_issue(i).await.unwrap();
+                            let issue_name =
+                                IssueName::from_filesystem(format!("test_{i}")).unwrap();
+                            let _issue = cached_storage.get_issue(&issue_name).await.unwrap();
                         }
 
                         // Second access - cache hit
                         for i in 1..=count {
-                            let _issue = cached_storage.get_issue(i).await.unwrap();
+                            let issue_name =
+                                IssueName::from_filesystem(format!("test_{i}")).unwrap();
+                            let _issue = cached_storage.get_issue(&issue_name).await.unwrap();
                         }
                     });
                 });
@@ -298,7 +303,9 @@ fn benchmark_batch_operations(c: &mut Criterion) {
 
                         // Individual gets
                         for i in 1..=batch_size {
-                            let _issue = storage.get_issue(i).await.unwrap();
+                            let issue_name =
+                                IssueName::from_filesystem(format!("test_{i}")).unwrap();
+                            let _issue = storage.get_issue(&issue_name).await.unwrap();
                         }
                     });
                 });
@@ -322,8 +329,11 @@ fn benchmark_batch_operations(c: &mut Criterion) {
                         }
 
                         // Batch get
-                        let numbers: Vec<u32> = (1..=batch_size).collect();
-                        let _issues = storage.get_issues_batch(numbers).await.unwrap();
+                        let names: Vec<IssueName> = (1..=batch_size)
+                            .map(|i| IssueName::from_filesystem(format!("test_{i}")).unwrap())
+                            .collect();
+                        let name_refs: Vec<&IssueName> = names.iter().collect();
+                        let _issues = storage.get_issues_batch(name_refs).await.unwrap();
                     });
                 });
             },
@@ -397,13 +407,17 @@ fn benchmark_instrumented_storage(c: &mut Criterion) {
 
                         // Read issues
                         for i in 1..=count {
-                            let _issue = instrumented_storage.get_issue(i).await.unwrap();
+                            let issue_name =
+                                IssueName::from_filesystem(format!("test_{i}")).unwrap();
+                            let _issue = instrumented_storage.get_issue(&issue_name).await.unwrap();
                         }
 
                         // Update issues
                         for i in 1..=count {
+                            let issue_name =
+                                IssueName::from_filesystem(format!("test_{i}")).unwrap();
                             let _issue = instrumented_storage
-                                .update_issue(i, format!("Updated content {i}"))
+                                .update_issue(&issue_name, format!("Updated content {i}"))
                                 .await
                                 .unwrap();
                         }
@@ -451,8 +465,12 @@ fn benchmark_combined_cache_and_metrics(c: &mut Criterion) {
                         // Read issues multiple times to test cache performance
                         for _ in 0..3 {
                             for i in 1..=count {
-                                let _issue =
-                                    instrumented_cached_storage.get_issue(i).await.unwrap();
+                                let issue_name =
+                                    IssueName::from_filesystem(format!("test_{i}")).unwrap();
+                                let _issue = instrumented_cached_storage
+                                    .get_issue(&issue_name)
+                                    .await
+                                    .unwrap();
                             }
                         }
 

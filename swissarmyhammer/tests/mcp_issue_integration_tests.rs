@@ -306,7 +306,7 @@ async fn test_git_integration_edge_cases() {
     if let Some(git) = git_ops.as_ref() {
         let main_branch = git.main_branch().unwrap();
         git.checkout_branch(&main_branch).unwrap();
-        
+
         // Now working on another issue should succeed
         let result = git.create_work_branch(&issue2.name);
         assert!(result.is_ok());

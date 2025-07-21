@@ -1305,11 +1305,12 @@ impl McpServer {
             Ok(branch) => branch,
             Err(e) => {
                 let (error_msg, recovery_suggestions) = match &e {
-                    SwissArmyHammerError::Other(msg) if msg.contains("ABORT ERROR") => {
+                    e if e.is_abort_error() => {
                         // ABORT ERROR should exit completely without recovery suggestions
+                        let msg = e.abort_error_message().unwrap_or_else(|| e.to_string());
                         return Ok(CallToolResult {
                             content: vec![Annotated::new(
-                                RawContent::Text(RawTextContent { text: msg.clone() }),
+                                RawContent::Text(RawTextContent { text: msg }),
                                 None,
                             )],
                             is_error: Some(true),

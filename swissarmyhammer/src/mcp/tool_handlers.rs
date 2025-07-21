@@ -373,8 +373,8 @@ impl ToolHandlers {
                 ))),
                 Err(e) => {
                     // Check if this is an ABORT ERROR - if so, return it directly
-                    let error_msg = e.to_string();
-                    if error_msg.contains("ABORT ERROR") {
+                    if e.is_abort_error() {
+                        let error_msg = e.abort_error_message().unwrap_or_else(|| e.to_string());
                         Ok(create_error_response(error_msg))
                     } else {
                         Ok(create_error_response(format!(

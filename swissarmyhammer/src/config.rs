@@ -92,6 +92,25 @@ impl Config {
         CONFIG.get_or_init(Config::new)
     }
 
+    /// Find the swissarmyhammer.yaml configuration file in the current directory
+    /// Returns Some(path) if found, None if not found
+    #[allow(dead_code)] // Will be used in future config loading implementation
+    fn find_yaml_config_file() -> Option<std::path::PathBuf> {
+        use std::path::Path;
+
+        let config_path = Path::new("swissarmyhammer.yaml");
+
+        if config_path.exists() && config_path.is_file() {
+            tracing::debug!("Found configuration file: {:?}", config_path);
+            Some(config_path.to_path_buf())
+        } else {
+            tracing::debug!(
+                "No swissarmyhammer.yaml configuration file found in current directory"
+            );
+            None
+        }
+    }
+
     /// Reset the global configuration (for testing purposes)
     #[cfg(test)]
     pub fn reset_global() {
@@ -304,9 +323,9 @@ base_branch: "feature/test"
         };
 
         // Create config with non-default value
-        let mut config = Config { 
-            base_branch: "custom".to_string(), 
-            ..Default::default() 
+        let mut config = Config {
+            base_branch: "custom".to_string(),
+            ..Default::default()
         };
 
         // Verify initial custom value
@@ -317,5 +336,108 @@ base_branch: "feature/test"
 
         // Verify YAML config overwrote the existing value
         assert_eq!(config.base_branch, "staging");
+    }
+
+    #[test]
+    fn test_find_yaml_config_file_not_found() {
+        // Ensure we're in a directory that doesn't have the config file
+        let original_dir = std::env::current_dir().unwrap();
+        let temp_dir = std::env::temp_dir();
+        std::env::set_current_dir(&temp_dir).unwrap();
+
+        // Remove any existing config file in temp dir
+        let config_path = temp_dir.join("swissarmyhammer.yaml");
+        let _ = std::fs::remove_file(&config_path);
+
+        let result = Config::find_yaml_config_file();
+        assert!(result.is_none());
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[test]
+    fn test_find_yaml_config_file_found() {
+        use std::fs::File;
+        use std::io::Write;
+
+        // Create a unique temporary directory
+        let test_dir =
+            std::env::temp_dir().join(format!("swissarmyhammer_test_{}", std::process::id()));
+        std::fs::create_dir_all(&test_dir).unwrap();
+
+        // Create config file in the test directory
+        let config_path = test_dir.join("swissarmyhammer.yaml");
+        let mut file = File::create(&config_path).unwrap();
+        writeln!(file, "base_branch: test").unwrap();
+        drop(file);
+
+        // Change to test directory
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&test_dir).unwrap();
+
+        let result = Config::find_yaml_config_file();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().file_name().unwrap(), "swissarmyhammer.yaml");
+
+        // Clean up
+        std::env::set_current_dir(original_dir).unwrap();
+        std::fs::remove_dir_all(&test_dir).unwrap();
+    }
+
+    #[test]
+    fn test_find_yaml_config_file_directory_not_file() {
+        // Create a unique temporary directory
+        let test_dir =
+            std::env::temp_dir().join(format!("swissarmyhammer_test_dir_{}", std::process::id()));
+        std::fs::create_dir_all(&test_dir).unwrap();
+
+        // Create a directory with the config name
+        let config_dir = test_dir.join("swissarmyhammer.yaml");
+        std::fs::create_dir_all(&config_dir).unwrap();
+
+        // Change to test directory
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&test_dir).unwrap();
+
+        let result = Config::find_yaml_config_file();
+        assert!(result.is_none());
+
+        // Clean up
+        std::env::set_current_dir(original_dir).unwrap();
+        std::fs::remove_dir_all(&test_dir).unwrap();
+    }
+
+    #[test]
+    fn test_find_yaml_config_file_path_handling() {
+        use std::fs::File;
+        use std::io::Write;
+
+        // Create a unique temporary directory
+        let test_dir =
+            std::env::temp_dir().join(format!("swissarmyhammer_test_path_{}", std::process::id()));
+        std::fs::create_dir_all(&test_dir).unwrap();
+
+        // Create config file in the test directory
+        let config_path = test_dir.join("swissarmyhammer.yaml");
+        let mut file = File::create(&config_path).unwrap();
+        writeln!(file, "base_branch: test").unwrap();
+        drop(file);
+
+        // Change to test directory
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&test_dir).unwrap();
+
+        let result = Config::find_yaml_config_file();
+        assert!(result.is_some());
+        let found_path = result.unwrap();
+
+        // Verify the path is properly constructed
+        assert!(found_path.is_file());
+        assert_eq!(found_path.file_name().unwrap(), "swissarmyhammer.yaml");
+
+        // Clean up
+        std::env::set_current_dir(original_dir).unwrap();
+        std::fs::remove_dir_all(&test_dir).unwrap();
     }
 }

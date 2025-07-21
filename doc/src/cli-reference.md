@@ -113,6 +113,8 @@ SwissArmyHammer looks for prompts in these directories (in order):
 
 Manage SwissArmyHammer configuration.
 
+For detailed configuration guide and examples, see [Configuration](configuration.md). For complete schema reference, see [Configuration Schema](configuration-schema.md).
+
 #### Subcommands
 
 ##### `config show`

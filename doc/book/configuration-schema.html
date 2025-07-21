@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Testing and Debugging - SwissArmyHammer Documentation</title>
+        <title>Configuration Schema Reference - SwissArmyHammer Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -147,7 +147,7 @@
                         <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/testing-guide.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/configuration-schema.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -181,220 +181,93 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="testing-and-debugging-guide"><a class="header" href="#testing-and-debugging-guide">Testing and Debugging Guide</a></h1>
-<p>This guide covers testing strategies, debugging techniques, and best practices for working with SwissArmyHammer prompts.</p>
-<h2 id="interactive-testing"><a class="header" href="#interactive-testing">Interactive Testing</a></h2>
-<h3 id="basic-testing-workflow"><a class="header" href="#basic-testing-workflow">Basic Testing Workflow</a></h3>
-<p>The <code>test</code> command provides an interactive environment for testing prompts:</p>
-<pre><code class="language-bash"># Start interactive testing
-swissarmyhammer test code-review
+                        <h1 id="configuration-schema-reference"><a class="header" href="#configuration-schema-reference">Configuration Schema Reference</a></h1>
+<p>This page provides a complete reference for the <code>swissarmyhammer.yaml</code> configuration file schema.</p>
+<p>For configuration basics and examples, see the <a href="configuration.html">Configuration Guide</a>. For CLI configuration commands, see the <a href="cli-reference.html#configuration-commands">CLI Reference</a>.</p>
+<h2 id="schema-definition"><a class="header" href="#schema-definition">Schema Definition</a></h2>
+<pre><code class="language-yaml"># SwissArmyHammer configuration schema
+type: object
+properties:
+  base_branch:
+    type: string
+    description: Base branch that pull requests will merge into
+    default: "main"
+    pattern: "^[a-zA-Z0-9._/-]+$"
+    minLength: 1
+    maxLength: 200
+  issue_branch_prefix:
+    type: string
+    description: Prefix for issue branches
+    default: "issue/"
+    minLength: 1
+    maxLength: 50
+  issue_number_width:
+    type: integer
+    description: Width for issue numbers in display
+    default: 6
+    minimum: 1
+    maximum: 10
 </code></pre>
-<p>This will:</p>
-<ol>
-<li>Load the specified prompt</li>
-<li>Prompt for required arguments</li>
-<li>Show optional arguments with defaults</li>
-<li>Render the template</li>
-<li>Display the result</li>
-<li>Offer additional actions (copy, save, retry)</li>
-</ol>
-<h3 id="testing-with-predefined-arguments"><a class="header" href="#testing-with-predefined-arguments">Testing with Predefined Arguments</a></h3>
-<pre><code class="language-bash"># Test with known arguments
-swissarmyhammer test code-review \
-  --arg code="fn main() { println!(\"Hello\"); }" \
-  --arg language="rust"
-
-# Copy result directly to clipboard
-swissarmyhammer test email-template \
-  --arg recipient="John" \
-  --arg subject="Meeting" \
-  --copy
-</code></pre>
-<h2 id="debugging-template-issues"><a class="header" href="#debugging-template-issues">Debugging Template Issues</a></h2>
-<h3 id="common-template-problems"><a class="header" href="#common-template-problems">Common Template Problems</a></h3>
-<h4 id="missing-variables"><a class="header" href="#missing-variables">Missing Variables</a></h4>
-<pre><code class="language-liquid">&lt;!-- Problem: undefined variable --&gt;
-Hello {{name}}
-
-&lt;!-- Solution: provide default --&gt;
-Hello {{ name | default: "Guest" }}
-</code></pre>
-<h4 id="type-mismatches"><a class="header" href="#type-mismatches">Type Mismatches</a></h4>
-<pre><code class="language-liquid">&lt;!-- Problem: trying to use string methods on numbers --&gt;
-{{ count | upcase }}
-
-&lt;!-- Solution: convert types --&gt;
-{{ count | append: " items" }}
-</code></pre>
-<h4 id="loop-issues"><a class="header" href="#loop-issues">Loop Issues</a></h4>
-<pre><code class="language-liquid">&lt;!-- Problem: not checking for empty arrays --&gt;
-{% for item in items %}
-  - {{ item }}
-{% endfor %}
-
-&lt;!-- Solution: check array exists and has items --&gt;
-{% if items and items.size &gt; 0 %}
-  {% for item in items %}
-    - {{ item }}
-  {% endfor %}
-{% else %}
-  No items found.
-{% endif %}
-</code></pre>
-<h3 id="debug-mode"><a class="header" href="#debug-mode">Debug Mode</a></h3>
-<p>Use debug mode to see detailed template processing:</p>
-<pre><code class="language-bash">swissarmyhammer test prompt-name --debug
-</code></pre>
-<p>Debug output includes:</p>
+<h2 id="validation-rules"><a class="header" href="#validation-rules">Validation Rules</a></h2>
+<h3 id="base_branch"><a class="header" href="#base_branch"><code>base_branch</code></a></h3>
 <ul>
-<li>Variable resolution steps</li>
-<li>Filter application results</li>
-<li>Conditional evaluation</li>
-<li>Loop iteration details</li>
-<li>Performance timing</li>
+<li>Must be a valid git branch name</li>
+<li>Cannot be empty</li>
+<li>Cannot contain spaces or special characters: <code>~ ^ : ? * [ \</code></li>
+<li>Maximum length: 200 characters</li>
+<li>Examples of valid values: <code>main</code>, <code>develop</code>, <code>feature/v2</code>, <code>release-1.0</code></li>
+<li>Examples of invalid values: <code>""</code>, <code>branch with spaces</code>, <code>branch~invalid</code></li>
 </ul>
-<h2 id="validation-strategies"><a class="header" href="#validation-strategies">Validation Strategies</a></h2>
-<h3 id="argument-validation"><a class="header" href="#argument-validation">Argument Validation</a></h3>
-<p>Test with different argument combinations:</p>
-<pre><code class="language-bash"># Test required arguments only
-swissarmyhammer test prompt-name --arg required_arg="value"
-
-# Test with all arguments
-swissarmyhammer test prompt-name \
-  --arg required_arg="value" \
-  --arg optional_arg="optional_value"
-
-# Test with edge cases
-swissarmyhammer test prompt-name \
-  --arg text="" \
-  --arg number="0" \
-  --arg array="[]"
-</code></pre>
-<h3 id="template-edge-cases"><a class="header" href="#template-edge-cases">Template Edge Cases</a></h3>
-<p>Create test cases for common scenarios:</p>
-<ol>
-<li><strong>Empty inputs</strong></li>
-<li><strong>Very long inputs</strong></li>
-<li><strong>Special characters</strong></li>
-<li><strong>Unicode content</strong></li>
-<li><strong>Null/undefined values</strong></li>
-</ol>
-<h3 id="automated-testing"><a class="header" href="#automated-testing">Automated Testing</a></h3>
-<p>For prompt libraries, create test scripts:</p>
-<pre><code class="language-bash">#!/bin/bash
-# test-all-prompts.sh
-
-PROMPTS=$(swissarmyhammer search --json "" --limit 100 | jq -r '.results[].id')
-
-for prompt in $PROMPTS; do
-    echo "Testing $prompt..."
-    if swissarmyhammer test "$prompt" --arg placeholder="test" 2&gt;/dev/null; then
-        echo "✓ $prompt"
-    else
-        echo "✗ $prompt"
-    fi
-done
-</code></pre>
-<h2 id="performance-testing"><a class="header" href="#performance-testing">Performance Testing</a></h2>
-<h3 id="measuring-render-time"><a class="header" href="#measuring-render-time">Measuring Render Time</a></h3>
-<pre><code class="language-bash"># Time a complex template
-time swissarmyhammer test complex-template \
-  --arg large_data="$(cat large-file.json)"
-
-# Use debug mode for detailed timing
-swissarmyhammer test template-name --debug | grep "Performance:"
-</code></pre>
-<h3 id="memory-usage-testing"><a class="header" href="#memory-usage-testing">Memory Usage Testing</a></h3>
-<p>For large templates or data:</p>
-<pre><code class="language-bash"># Monitor memory usage during rendering
-/usr/bin/time -v swissarmyhammer test large-template \
-  --arg big_data="$(cat massive-dataset.json)"
-</code></pre>
-<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
-<h3 id="writing-testable-prompts"><a class="header" href="#writing-testable-prompts">Writing Testable Prompts</a></h3>
-<ol>
-<li><strong>Provide sensible defaults</strong> for optional arguments</li>
-<li><strong>Handle empty/null inputs</strong> gracefully</li>
-<li><strong>Use meaningful argument names</strong></li>
-<li><strong>Include example values</strong> in descriptions</li>
-<li><strong>Test with realistic data sizes</strong></li>
-</ol>
-<h3 id="testing-workflow"><a class="header" href="#testing-workflow">Testing Workflow</a></h3>
-<ol>
-<li><strong>Start simple</strong>: Test with minimal arguments</li>
-<li><strong>Add complexity</strong>: Test with full argument sets</li>
-<li><strong>Test edge cases</strong>: Empty, null, large inputs</li>
-<li><strong>Validate output</strong>: Ensure rendered content makes sense</li>
-<li><strong>Performance check</strong>: Verify reasonable render times</li>
-</ol>
-<h3 id="debugging-tips"><a class="header" href="#debugging-tips">Debugging Tips</a></h3>
-<ol>
-<li><strong>Use debug mode</strong> for complex templates</li>
-<li><strong>Test filters individually</strong> in simple templates</li>
-<li><strong>Validate JSON/YAML</strong> with external tools</li>
-<li><strong>Check argument types</strong> match expectations</li>
-<li><strong>Use raw mode</strong> to see unprocessed templates</li>
-</ol>
-<h2 id="integration-with-development"><a class="header" href="#integration-with-development">Integration with Development</a></h2>
-<h3 id="ide-integration"><a class="header" href="#ide-integration">IDE Integration</a></h3>
-<p>Many editors support SwissArmyHammer testing:</p>
-<pre><code class="language-bash"># VS Code task example
-{
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "label": "Test Current Prompt",
-      "type": "shell",
-      "command": "swissarmyhammer",
-      "args": ["test", "${fileBasenameNoExtension}"],
-      "group": "test",
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": false,
-        "panel": "shared"
-      }
-    }
-  ]
-}
-</code></pre>
-<h3 id="continuous-integration"><a class="header" href="#continuous-integration">Continuous Integration</a></h3>
-<p>Add prompt testing to CI pipelines:</p>
-<pre><code class="language-yaml"># .github/workflows/test-prompts.yml
-name: Test Prompts
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Install SwissArmyHammer
-        run: cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
-      - name: Test all prompts
-        run: |
-          for prompt in prompts/*.md; do
-            name=$(basename "$prompt" .md)
-            echo "Testing $name..."
-            swissarmyhammer test "$name" --arg test="ci_validation"
-          done
-</code></pre>
-<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<h3 id="issue_branch_prefix"><a class="header" href="#issue_branch_prefix"><code>issue_branch_prefix</code></a></h3>
 <ul>
-<li><a href="./cli-test.html"><code>test</code> command</a> - Command reference</li>
-<li><a href="./template-variables.html">Template Variables</a> - Template syntax</li>
-<li><a href="./custom-filters.html">Custom Filters</a> - Filter reference</li>
+<li>Must be a non-empty string</li>
+<li>Cannot exceed 50 characters</li>
+<li>Used as the prefix for all issue branches</li>
+<li>Examples of valid values: <code>issue/</code>, <code>feature/</code>, <code>bug/</code>, <code>task-</code></li>
+<li>Examples of invalid values: <code>""</code> (empty string), <code>very-long-prefix-that-exceeds-the-maximum-length</code></li>
 </ul>
+<h3 id="issue_number_width"><a class="header" href="#issue_number_width"><code>issue_number_width</code></a></h3>
+<ul>
+<li>Must be a positive integer</li>
+<li>Minimum value: 1</li>
+<li>Maximum value: 10</li>
+<li>Determines the padding width for issue numbers in display</li>
+<li>Examples of valid values: <code>6</code>, <code>4</code>, <code>8</code></li>
+<li>Examples of invalid values: <code>0</code>, <code>11</code>, <code>-1</code></li>
+</ul>
+<h2 id="configuration-file-discovery"><a class="header" href="#configuration-file-discovery">Configuration File Discovery</a></h2>
+<p>SwissArmyHammer looks for configuration files in this order:</p>
+<ol>
+<li><code>./swissarmyhammer.yaml</code> in the current working directory</li>
+</ol>
+<p>If no configuration file is found, SwissArmyHammer will use environment variables and built-in defaults.</p>
+<h2 id="environment-variable-mapping"><a class="header" href="#environment-variable-mapping">Environment Variable Mapping</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Configuration Key</th><th>Environment Variable</th><th>Default Value</th></tr></thead><tbody>
+<tr><td><code>base_branch</code></td><td><code>SWISSARMYHAMMER_BASE_BRANCH</code></td><td><code>"main"</code></td></tr>
+<tr><td><code>issue_branch_prefix</code></td><td><code>SWISSARMYHAMMER_ISSUE_BRANCH_PREFIX</code></td><td><code>"issue/"</code></td></tr>
+<tr><td><code>issue_number_width</code></td><td><code>SWISSARMYHAMMER_ISSUE_NUMBER_WIDTH</code></td><td><code>6</code></td></tr>
+</tbody></table>
+</div>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<p>Configuration errors are handled gracefully:</p>
+<ul>
+<li><strong>File not found</strong>: Uses environment variables and defaults</li>
+<li><strong>Invalid YAML syntax</strong>: Shows detailed parsing error with line numbers</li>
+<li><strong>Invalid values</strong>: Shows validation error with helpful hints</li>
+<li><strong>Permission errors</strong>: Falls back to environment variables and defaults</li>
+</ul>
+<p>All configuration errors include helpful error messages and suggestions for resolution.</p>
+<p>For more configuration troubleshooting help, see the <a href="troubleshooting.html#configuration-issues">Troubleshooting Guide</a>.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="search-guide.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="configuration.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="sharing-guide.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="file-watching.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -404,11 +277,11 @@ jobs:
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="search-guide.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="configuration.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="sharing-guide.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="file-watching.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

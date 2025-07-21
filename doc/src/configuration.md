@@ -16,9 +16,17 @@ Place a `swissarmyhammer.yaml` file in your repository root to configure SwissAr
 
 # Base branch that pull requests will merge into
 base_branch: "main"
+
+# Prefix for issue branches
+issue_branch_prefix: "issue/"
+
+# Width for issue numbers in display  
+issue_number_width: 6
 ```
 
 ### Supported Options
+
+For detailed validation rules and complete schema reference, see [Configuration Schema](configuration-schema.md).
 
 #### `base_branch`
 - **Type**: String
@@ -26,12 +34,26 @@ base_branch: "main"
 - **Description**: The base branch that pull requests will merge into
 - **Example**: `base_branch: "develop"`
 
+#### `issue_branch_prefix`
+- **Type**: String
+- **Default**: `"issue/"`
+- **Description**: Prefix for issue branches
+- **Example**: `issue_branch_prefix: "feature/"`
+
+#### `issue_number_width`
+- **Type**: Integer
+- **Default**: `6`
+- **Description**: Width for issue numbers in display
+- **Example**: `issue_number_width: 8`
+
 ## Environment Variables
 
 All configuration options can be set via environment variables with the `SWISSARMYHAMMER_` prefix:
 
 ```bash
 export SWISSARMYHAMMER_BASE_BRANCH="develop"
+export SWISSARMYHAMMER_ISSUE_BRANCH_PREFIX="feature/"
+export SWISSARMYHAMMER_ISSUE_NUMBER_WIDTH="8"
 ```
 
 ## Configuration Precedence
@@ -45,6 +67,8 @@ Configuration values are loaded in the following order:
 Later sources override earlier ones, so YAML configuration takes precedence over environment variables, which take precedence over defaults.
 
 ## CLI Configuration Management
+
+For complete CLI command reference, see [CLI Reference](cli-reference.md#configuration-commands).
 
 ### View Current Configuration
 ```bash
@@ -104,3 +128,5 @@ base_branch: "release/current"
 - Check for conflicting environment variables
 
 For more help, run: `swissarmyhammer config help`
+
+For additional configuration troubleshooting, see the [Troubleshooting Guide](troubleshooting.md#configuration-issues).

@@ -37,6 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc.js"></script>
@@ -93,10 +94,13 @@
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
@@ -150,7 +154,12 @@
 
                 <div id="search-wrapper" class="hidden">
                     <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
                     </form>
                     <div id="searchresults-outer" class="searchresults-outer hidden">
                         <div id="searchresults-header" class="searchresults-header"></div>
@@ -172,9 +181,25 @@
                     <main>
                         <h1 id="swissarmyhammer"><a class="header" href="#swissarmyhammer">SwissArmyHammer</a></h1>
 <p><strong>The MCP server for managing prompts as markdown files</strong></p>
-<p>SwissArmyHammer is a powerful Model Context Protocol (MCP) server that lets you manage AI prompts as simple markdown files. It seamlessly integrates with Claude Code and other MCP-compatible tools, providing a flexible and organized way to work with AI prompts.</p>
-<h2 id="what-is-swissarmyhammer"><a class="header" href="#what-is-swissarmyhammer">What is SwissArmyHammer?</a></h2>
-<p>SwissArmyHammer transforms how you work with AI prompts by:</p>
+<p>SwissArmyHammer solves the problem of AI prompt management by providing a comprehensive solution that treats prompts as first-class citizens in your development workflow. Unlike scattered prompt files or hard-coded templates, SwissArmyHammer offers a structured, versioned, and collaborative approach to prompt engineering.</p>
+<h2 id="the-problem"><a class="header" href="#the-problem">The Problem</a></h2>
+<p>Developers and AI practitioners face several challenges when working with AI prompts:</p>
+<ul>
+<li><strong>Scattered Management</strong>: Prompts are often stored in various locations, making them hard to find and maintain</li>
+<li><strong>No Version Control</strong>: Changes to prompts are difficult to track and rollback</li>
+<li><strong>Limited Reusability</strong>: Prompts are often duplicated or slightly modified across projects</li>
+<li><strong>Poor Collaboration</strong>: Team members can’t easily share and improve prompts together</li>
+<li><strong>No Standardization</strong>: Different projects use different prompt formats and structures</li>
+</ul>
+<h2 id="the-solution"><a class="header" href="#the-solution">The Solution</a></h2>
+<p>SwissArmyHammer addresses these challenges by providing:</p>
+<p><strong>Unified Prompt Management</strong>: Store all prompts as markdown files with YAML front matter in a hierarchical structure that supports built-in, user, and project-specific prompts.</p>
+<p><strong>Version Control Integration</strong>: Since prompts are plain markdown files, they work seamlessly with Git and other version control systems.</p>
+<p><strong>Template Engine</strong>: Powerful Liquid templating with custom filters allows for dynamic, reusable prompts that can be customized for different contexts.</p>
+<p><strong>MCP Protocol Support</strong>: Native integration with Claude Code and other MCP-compatible tools means prompts are available where you need them.</p>
+<p><strong>Developer-Friendly Tools</strong>: Rich CLI with validation, search, and diagnostic capabilities ensures prompt quality and discoverability.</p>
+<h2 id="how-swissarmyhammer-works"><a class="header" href="#how-swissarmyhammer-works">How SwissArmyHammer Works</a></h2>
+<p>SwissArmyHammer transforms your prompt workflow through:</p>
 <ul>
 <li><strong>📁 File-based prompt management</strong> - Store prompts as markdown files with YAML front matter</li>
 <li><strong>🔄 Live reloading</strong> - Changes to prompt files are automatically detected and reloaded</li>
@@ -183,12 +208,25 @@
 <li><strong>🗂️ Organized hierarchy</strong> - Support for built-in, user, and local prompt directories</li>
 <li><strong>🛠️ Developer-friendly</strong> - Rich CLI with diagnostics and shell completions</li>
 </ul>
-<h2 id="key-features"><a class="header" href="#key-features">Key Features</a></h2>
-<h3 id="-quick-setup"><a class="header" href="#-quick-setup">🚀 Quick Setup</a></h3>
-<p>Get started by installing with Cargo:</p>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="installation"><a class="header" href="#installation">Installation</a></h3>
 <pre><code class="language-bash">cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
 </code></pre>
-<p>This requires Rust 1.70+ to be installed. Get Rust from <a href="https://rustup.rs/">rustup.rs</a>.</p>
+<h3 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h3>
+<ol>
+<li><strong>Create a prompt directory</strong>: <code>mkdir ~/.swissarmyhammer/prompts</code></li>
+<li><strong>Configure Claude Code</strong>: Add SwissArmyHammer to your MCP configuration</li>
+<li><strong>Create your first prompt</strong>: Use the simple markdown + YAML format</li>
+<li><strong>Start using prompts</strong>: Available immediately in Claude Code</li>
+</ol>
+<h3 id="key-benefits"><a class="header" href="#key-benefits">Key Benefits</a></h3>
+<ul>
+<li><strong>🔧 Zero Configuration</strong>: Works out of the box with sensible defaults</li>
+<li><strong>📱 Cross-Platform</strong>: Runs on macOS, Linux, and Windows</li>
+<li><strong>🔄 Real-Time Updates</strong>: File changes are automatically detected and reloaded</li>
+<li><strong>🎯 Type Safe</strong>: Rust implementation provides reliability and performance</li>
+<li><strong>🌐 Community Driven</strong>: Open source with active development and contributions</li>
+</ul>
 <h3 id="-simple-prompt-format"><a class="header" href="#-simple-prompt-format">📝 Simple Prompt Format</a></h3>
 <p>Create prompts using familiar markdown with YAML front matter:</p>
 <pre><code class="language-markdown">---
@@ -228,14 +266,34 @@ Focus on:
 <p>The <code>doctor</code> command helps troubleshoot setup issues:</p>
 <pre><code class="language-bash">swissarmyhammer doctor
 </code></pre>
-<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
-<p>SwissArmyHammer is perfect for:</p>
+<h2 id="who-should-use-swissarmyhammer"><a class="header" href="#who-should-use-swissarmyhammer">Who Should Use SwissArmyHammer?</a></h2>
+<h3 id="development-teams"><a class="header" href="#development-teams">Development Teams</a></h3>
 <ul>
-<li><strong>Development Teams</strong> - Share and standardize AI prompts across your team</li>
-<li><strong>Individual Developers</strong> - Organize your personal prompt library</li>
-<li><strong>Content Creators</strong> - Manage writing and editing prompts</li>
-<li><strong>Researchers</strong> - Organize domain-specific prompts and templates</li>
-<li><strong>Students</strong> - Build a learning-focused prompt collection</li>
+<li><strong>Standardize prompts</strong> across projects and team members</li>
+<li><strong>Version control</strong> prompt changes with Git integration</li>
+<li><strong>Code review</strong> prompt modifications like any other code</li>
+<li><strong>Share libraries</strong> of tested, proven prompts</li>
+</ul>
+<h3 id="individual-developers"><a class="header" href="#individual-developers">Individual Developers</a></h3>
+<ul>
+<li><strong>Organize personal prompts</strong> in a structured hierarchy</li>
+<li><strong>Reuse prompts</strong> across different projects and contexts</li>
+<li><strong>Build expertise</strong> through curated prompt collections</li>
+<li><strong>Integrate seamlessly</strong> with existing development workflows</li>
+</ul>
+<h3 id="content-creators--researchers"><a class="header" href="#content-creators--researchers">Content Creators &amp; Researchers</a></h3>
+<ul>
+<li><strong>Manage specialized prompts</strong> for specific domains</li>
+<li><strong>Create template libraries</strong> for common content types</li>
+<li><strong>Collaborate effectively</strong> on prompt development</li>
+<li><strong>Maintain quality</strong> through validation and testing</li>
+</ul>
+<h3 id="students--educators"><a class="header" href="#students--educators">Students &amp; Educators</a></h3>
+<ul>
+<li><strong>Learn prompt engineering</strong> through structured examples</li>
+<li><strong>Build knowledge bases</strong> of educational prompts</li>
+<li><strong>Share resources</strong> with classmates and colleagues</li>
+<li><strong>Track progress</strong> through versioned prompt evolution</li>
 </ul>
 <h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
 <p>SwissArmyHammer follows a simple but powerful architecture:</p>
@@ -250,19 +308,28 @@ Focus on:
                        │ (Auto-reload)    │
                        └──────────────────┘
 </code></pre>
-<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
-<p>Ready to get started? Check out our <a href="./installation.html">Installation Guide</a> or jump straight to creating <a href="./first-prompt.html">Your First Prompt</a>.</p>
-<p>For integration with Claude Code, see our <a href="./claude-code-integration.html">Claude Code Integration</a> guide.</p>
-<h2 id="community"><a class="header" href="#community">Community</a></h2>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ol>
+<li><strong><a href="./installation.html">Install SwissArmyHammer</a></strong> - Get up and running quickly</li>
+<li><strong><a href="./first-prompt.html">Create Your First Prompt</a></strong> - Learn the basics</li>
+<li><strong><a href="./claude-code-integration.html">Integrate with Claude Code</a></strong> - Connect to your AI assistant</li>
+<li><strong><a href="./advanced-prompts.html">Explore Advanced Features</a></strong> - Unlock the full potential</li>
+</ol>
+<h2 id="why-choose-swissarmyhammer"><a class="header" href="#why-choose-swissarmyhammer">Why Choose SwissArmyHammer?</a></h2>
+<p><strong>Proven Architecture</strong>: Built on well-tested technologies like Rust, Liquid templating, and the MCP protocol.</p>
+<p><strong>Active Development</strong>: Regular updates, bug fixes, and new features based on community feedback.</p>
+<p><strong>Comprehensive Documentation</strong>: Detailed guides, examples, and API reference to get you productive quickly.</p>
+<p><strong>Open Source</strong>: MIT licensed with a welcoming community for contributions and feedback.</p>
+<h2 id="join-the-community"><a class="header" href="#join-the-community">Join the Community</a></h2>
 <ul>
-<li><strong>GitHub</strong>: <a href="https://github.com/wballard/swissarmyhammer">github.com/wballard/swissarmyhammer</a></li>
-<li><strong>Issues</strong>: Report bugs and request features</li>
-<li><strong>Discussions</strong>: Community Q&amp;A and sharing</li>
-<li><strong>Contributing</strong>: See our <a href="./contributing.html">Contributing Guide</a></li>
+<li><strong><a href="https://github.com/wballard/swissarmyhammer">GitHub Repository</a></strong> - Source code, issues, and discussions</li>
+<li><strong><a href="./contributing.html">Contributing Guide</a></strong> - How to contribute to the project</li>
+<li><strong><a href="https://github.com/wballard/swissarmyhammer/issues">Issue Tracker</a></strong> - Report bugs and request features</li>
+<li><strong><a href="https://github.com/wballard/swissarmyhammer/discussions">Discussions</a></strong> - Community Q&amp;A and sharing</li>
 </ul>
 <h2 id="license"><a class="header" href="#license">License</a></h2>
 <p>SwissArmyHammer is open source software licensed under the MIT License. See the <a href="./license.html">License</a> page for details.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="installation-1"><a class="header" href="#installation-1">Installation</a></h1>
 <h2 id="quick-install-recommended"><a class="header" href="#quick-install-recommended">Quick Install (Recommended)</a></h2>
 <p>To update SwissArmyHammer to the latest version:</p>
 <pre><code class="language-bash"># Update from git repository
@@ -322,7 +389,7 @@ swissarmyhammer completion fish &gt; ~/.config/fish/completions/swissarmyhammer.
 swissarmyhammer completion powershell &gt;&gt; $PROFILE
 </code></pre>
 <p>Remember to reload your shell or start a new terminal session for completions to take effect.</p>
-<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<h2 id="next-steps-1"><a class="header" href="#next-steps-1">Next Steps</a></h2>
 <p>Once installed, continue to the <a href="./quick-start.html">Quick Start</a> guide to set up SwissArmyHammer with Claude Code and create your first prompt.</p>
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
 <h3 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h3>
@@ -334,7 +401,7 @@ swissarmyhammer completion powershell &gt;&gt; $PROFILE
 <p>For more help, check the <a href="./troubleshooting.html">Troubleshooting</a> guide or run:</p>
 <pre><code class="language-bash">swissarmyhammer doctor
 </code></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="quick-start-1"><a class="header" href="#quick-start-1">Quick Start</a></h1>
 <p>Get up and running with SwissArmyHammer in just a few minutes.</p>
 <h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
 <p>Before you begin, make sure you have:</p>
@@ -698,7 +765,7 @@ swissarmyhammer doctor
 <li><strong>Don’t forget to test</strong> your YAML syntax</li>
 <li><strong>Don’t use overly complex template logic</strong> in your first prompts</li>
 </ul>
-<h2 id="next-steps-1"><a class="header" href="#next-steps-1">Next Steps</a></h2>
+<h2 id="next-steps-2"><a class="header" href="#next-steps-2">Next Steps</a></h2>
 <p>Now that you’ve created your first prompt, you can:</p>
 <ol>
 <li><strong>Create more prompts</strong> for different use cases</li>
@@ -1036,7 +1103,7 @@ Create a {{length}} summary of this text:
 
 Focus on the key points and main ideas.
 </code></pre>
-<h2 id="next-steps-2"><a class="header" href="#next-steps-2">Next Steps</a></h2>
+<h2 id="next-steps-3"><a class="header" href="#next-steps-3">Next Steps</a></h2>
 <ul>
 <li>Learn about <a href="./yaml-front-matter.html">YAML Front Matter</a> in detail</li>
 <li>Explore <a href="./template-variables.html">Template Variables</a> and Liquid syntax</li>
@@ -1523,7 +1590,7 @@ arguments:
 <li><strong>Check the logs</strong> - SwissArmyHammer provides detailed error messages</li>
 <li><strong>Start simple</strong> - Begin with minimal front matter and add complexity</li>
 </ol>
-<h2 id="next-steps-3"><a class="header" href="#next-steps-3">Next Steps</a></h2>
+<h2 id="next-steps-4"><a class="header" href="#next-steps-4">Next Steps</a></h2>
 <ul>
 <li>Learn about <a href="./template-variables.html">Template Variables</a> to use your arguments</li>
 <li>Explore <a href="./custom-filters.html">Custom Filters</a> for advanced text processing</li>
@@ -3197,7 +3264,7 @@ swissarmyhammer list --format json | jq -r '.[] | .name' | sort | uniq -d
 echo "Files not following naming convention:"
 find prompts -name "*.md" | grep -v "[a-z0-9-]*.md"
 </code></pre>
-<h2 id="next-steps-4"><a class="header" href="#next-steps-4">Next Steps</a></h2>
+<h2 id="next-steps-5"><a class="header" href="#next-steps-5">Next Steps</a></h2>
 <ul>
 <li>See <a href="./creating-prompts.html">Creating Prompts</a> for prompt creation guidelines</li>
 <li>Learn about <a href="./advanced-prompts.html">Advanced Prompts</a> for complex scenarios</li>
@@ -3208,7 +3275,7 @@ find prompts -name "*.md" | grep -v "[a-z0-9-]*.md"
 <p>SwissArmyHammer integrates seamlessly with <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a> through the Model Context Protocol (MCP). This guide shows you how to set up and use SwissArmyHammer with Claude Code.</p>
 <h2 id="what-is-mcp"><a class="header" href="#what-is-mcp">What is MCP?</a></h2>
 <p>The <a href="https://github.com/anthropics/model-context-protocol">Model Context Protocol</a> allows AI assistants like Claude to access external tools and data sources. SwissArmyHammer acts as an MCP server, providing Claude Code with access to your prompt library.</p>
-<h2 id="installation-1"><a class="header" href="#installation-1">Installation</a></h2>
+<h2 id="installation-2"><a class="header" href="#installation-2">Installation</a></h2>
 <h3 id="1-install-swissarmyhammer"><a class="header" href="#1-install-swissarmyhammer">1. Install SwissArmyHammer</a></h3>
 <p>See the <a href="./installation.html">Installation Guide</a> for detailed instructions. The quickest method:</p>
 <pre><code class="language-bash"># Install using the install script
@@ -3303,7 +3370,7 @@ arguments:
 <h4 id="3-live-reloading"><a class="header" href="#3-live-reloading">3. Live Reloading</a></h4>
 <p>Changes to prompt files are automatically detected and reloaded.</p>
 <h3 id="using-prompts"><a class="header" href="#using-prompts">Using Prompts</a></h3>
-<h4 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h4>
+<h4 id="basic-usage-1"><a class="header" href="#basic-usage-1">Basic Usage</a></h4>
 <ol>
 <li><strong>Select a Prompt</strong>: Choose from available SwissArmyHammer prompts</li>
 <li><strong>Fill Arguments</strong>: Provide required and optional parameters</li>
@@ -3611,7 +3678,7 @@ swissarmyhammer test project-code-review --code "print('hello')" --component "ut
 # 5. Start using in Claude Code
 echo "Setup complete! Restart Claude Code to use your prompts."
 </code></pre>
-<h2 id="next-steps-5"><a class="header" href="#next-steps-5">Next Steps</a></h2>
+<h2 id="next-steps-6"><a class="header" href="#next-steps-6">Next Steps</a></h2>
 <ul>
 <li>Explore <a href="./builtin-prompts.html">Built-in Prompts</a> to see what’s available</li>
 <li>Learn <a href="./creating-prompts.html">Creating Prompts</a> to build custom prompts</li>
@@ -3621,14 +3688,14 @@ echo "Setup complete! Restart Claude Code to use your prompts."
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="command-line-interface"><a class="header" href="#command-line-interface">Command Line Interface</a></h1>
 <p>SwissArmyHammer provides a comprehensive command-line interface for managing prompts, running the MCP server, and integrating with your development workflow.</p>
-<h2 id="installation-2"><a class="header" href="#installation-2">Installation</a></h2>
+<h2 id="installation-3"><a class="header" href="#installation-3">Installation</a></h2>
 <pre><code class="language-bash"># Install from Git repository (requires Rust)
 cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
 
 # Ensure ~/.cargo/bin is in your PATH
 export PATH="$HOME/.cargo/bin:$PATH"
 </code></pre>
-<h2 id="basic-usage-1"><a class="header" href="#basic-usage-1">Basic Usage</a></h2>
+<h2 id="basic-usage-2"><a class="header" href="#basic-usage-2">Basic Usage</a></h2>
 <pre><code class="language-bash">swissarmyhammer [COMMAND] [OPTIONS]
 </code></pre>
 <h2 id="global-options"><a class="header" href="#global-options">Global Options</a></h2>
@@ -3641,6 +3708,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 <tr><td><a href="./cli-serve.html"><code>serve</code></a></td><td>Run as MCP server for Claude Code integration</td></tr>
 <tr><td><a href="./cli-search.html"><code>search</code></a></td><td>Search and discover prompts with powerful filtering</td></tr>
 <tr><td><a href="./cli-test.html"><code>test</code></a></td><td>Interactively test prompts with arguments</td></tr>
+<tr><td><a href="cli-reference.html#configuration-commands"><code>config</code></a></td><td>Manage SwissArmyHammer configuration</td></tr>
 <tr><td><a href="./cli-doctor.html"><code>doctor</code></a></td><td>Diagnose configuration and setup issues</td></tr>
 <tr><td><a href="./cli-completion.html"><code>completion</code></a></td><td>Generate shell completion scripts</td></tr>
 </tbody></table>
@@ -3675,6 +3743,19 @@ swissarmyhammer completion bash &gt; ~/.bash_completion.d/swissarmyhammer
 # Generate Zsh completions
 swissarmyhammer completion zsh &gt; ~/.zfunc/_swissarmyhammer
 </code></pre>
+<h3 id="manage-configuration"><a class="header" href="#manage-configuration">Manage Configuration</a></h3>
+<pre><code class="language-bash"># View current configuration
+swissarmyhammer config show
+
+# Validate configuration
+swissarmyhammer config validate
+
+# Generate example configuration
+swissarmyhammer config init
+
+# Get configuration help
+swissarmyhammer config help
+</code></pre>
 <h2 id="exit-codes"><a class="header" href="#exit-codes">Exit Codes</a></h2>
 <ul>
 <li><code>0</code> - Success</li>
@@ -3691,6 +3772,35 @@ swissarmyhammer completion zsh &gt; ~/.zfunc/_swissarmyhammer
 <li>User prompts: <code>~/.swissarmyhammer/prompts/</code></li>
 <li>Local prompts: <code>./.swissarmyhammer/prompts/</code> (current directory)</li>
 </ol>
+<h2 id="configuration-commands"><a class="header" href="#configuration-commands">Configuration Commands</a></h2>
+<h3 id="swissarmyhammer-config"><a class="header" href="#swissarmyhammer-config"><code>swissarmyhammer config</code></a></h3>
+<p>Manage SwissArmyHammer configuration.</p>
+<p>For detailed configuration guide and examples, see <a href="configuration.html">Configuration</a>. For complete schema reference, see <a href="configuration-schema.html">Configuration Schema</a>.</p>
+<h4 id="subcommands"><a class="header" href="#subcommands">Subcommands</a></h4>
+<h5 id="config-show"><a class="header" href="#config-show"><code>config show</code></a></h5>
+<p>Display current configuration values and their sources.</p>
+<pre><code class="language-bash">swissarmyhammer config show
+</code></pre>
+<p>Example output:</p>
+<pre><code>📋 Current Configuration:
+base_branch: main
+issue_branch_prefix: issue/
+issue_number_width: 6
+</code></pre>
+<h5 id="config-validate"><a class="header" href="#config-validate"><code>config validate</code></a></h5>
+<p>Validate the current configuration for errors.</p>
+<pre><code class="language-bash">swissarmyhammer config validate
+</code></pre>
+<p>Returns exit code 0 if valid, 1 if invalid.</p>
+<h5 id="config-init"><a class="header" href="#config-init"><code>config init</code></a></h5>
+<p>Generate an example configuration file in the current directory.</p>
+<pre><code class="language-bash">swissarmyhammer config init
+</code></pre>
+<p>Creates <code>swissarmyhammer.yaml</code> with example configuration.</p>
+<h5 id="config-help"><a class="header" href="#config-help"><code>config help</code></a></h5>
+<p>Show detailed configuration help and documentation.</p>
+<pre><code class="language-bash">swissarmyhammer config help
+</code></pre>
 <p>For detailed command documentation, see the individual command pages linked in the table above.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="serve-command"><a class="header" href="#serve-command">serve Command</a></h1>
 <p>The <code>serve</code> command starts SwissArmyHammer as a Model Context Protocol (MCP) server, making your prompts available to Claude Code and other MCP clients.</p>
@@ -4116,7 +4226,7 @@ swissarmyhammer serve --watch false --debug
 # Keep prompts in version control
 git add prompts/
 </code></pre>
-<h2 id="next-steps-6"><a class="header" href="#next-steps-6">Next Steps</a></h2>
+<h2 id="next-steps-7"><a class="header" href="#next-steps-7">Next Steps</a></h2>
 <ul>
 <li>Learn about <a href="./claude-code-integration.html">Claude Code Integration</a> setup</li>
 <li>Explore <a href="./configuration.html">Configuration</a> options</li>
@@ -5028,7 +5138,7 @@ swissarmyhammer doctor --check config --check prompts
 # Use verbose mode for details
 swissarmyhammer doctor --verbose
 </code></pre>
-<h2 id="next-steps-7"><a class="header" href="#next-steps-7">Next Steps</a></h2>
+<h2 id="next-steps-8"><a class="header" href="#next-steps-8">Next Steps</a></h2>
 <ul>
 <li>Fix any issues identified by doctor</li>
 <li>Set up regular health monitoring</li>
@@ -5360,7 +5470,7 @@ echo "Completions installed to $COMPLETION_DIR"
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="rust-library-guide"><a class="header" href="#rust-library-guide">Rust Library Guide</a></h1>
 <p>SwissArmyHammer is available as a Rust library (<code>swissarmyhammer</code>) that you can integrate into your own applications. This guide covers installation, basic usage, and advanced integration patterns.</p>
-<h2 id="installation-3"><a class="header" href="#installation-3">Installation</a></h2>
+<h2 id="installation-4"><a class="header" href="#installation-4">Installation</a></h2>
 <p>Add SwissArmyHammer to your <code>Cargo.toml</code>:</p>
 <pre><code class="language-toml">[dependencies]
 swissarmyhammer = { git = "https://github.com/wballard/swissarmyhammer", features = ["full"] }
@@ -5382,28 +5492,30 @@ swissarmyhammer = {
 <li><code>storage</code> - Advanced storage backends</li>
 <li><code>full</code> - All features enabled</li>
 </ul>
-<h2 id="quick-start-1"><a class="header" href="#quick-start-1">Quick Start</a></h2>
+<h2 id="quick-start-2"><a class="header" href="#quick-start-2">Quick Start</a></h2>
 <h3 id="basic-prompt-library"><a class="header" href="#basic-prompt-library">Basic Prompt Library</a></h3>
 <pre><code class="language-rust">use swissarmyhammer::{PromptLibrary, ArgumentSpec};
 use std::collections::HashMap;
 
-#[tokio::main]
-async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     // Create a new prompt library
     let mut library = PromptLibrary::new();
     
     // Add prompts from a directory
-    library.add_directory("./.swissarmyhammer/prompts").await?;
+    let count = library.add_directory("./.swissarmyhammer/prompts")?;
+    println!("Loaded {} prompts from directory", count);
     
     // List available prompts
-    for prompt_id in library.list_prompts() {
+    for prompt_id in library.list() {
         println!("Available prompt: {}", prompt_id);
     }
     
     // Get a specific prompt
     let prompt = library.get("code-review")?;
-    println!("Title: {}", prompt.title());
-    println!("Description: {}", prompt.description());
+    println!("Name: {}", prompt.name);
+    if let Some(description) = &amp;prompt.description {
+        println!("Description: {}", description);
+    }
     
     // Prepare arguments
     let mut args = HashMap::new();
@@ -5417,28 +5529,9 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     Ok(())
 }</code></pre>
 <h3 id="custom-prompt-creation"><a class="header" href="#custom-prompt-creation">Custom Prompt Creation</a></h3>
-<pre><code class="language-rust">use swissarmyhammer::{Prompt, ArgumentSpec, PromptMetadata};
+<pre><code class="language-rust">use swissarmyhammer::{Prompt, ArgumentSpec};
 
 fn create_custom_prompt() -&gt; Result&lt;Prompt, Box&lt;dyn std::error::Error&gt;&gt; {
-    let metadata = PromptMetadata {
-        title: "Custom Code Review".to_string(),
-        description: "A custom code review prompt".to_string(),
-        arguments: vec![
-            ArgumentSpec {
-                name: "code".to_string(),
-                description: "Code to review".to_string(),
-                required: true,
-                default: None,
-            },
-            ArgumentSpec {
-                name: "focus".to_string(),
-                description: "Review focus area".to_string(),
-                required: false,
-                default: Some("general".to_string()),
-            },
-        ],
-    };
-    
     let template = r#"
 <span class="boring">Code Review: {{ focus | capitalize }}
 </span>
@@ -5455,7 +5548,25 @@ Perform a general code review covering style, bugs, and maintainability.
 {% endif %}
 "#;
     
-    Prompt::from_parts(metadata, template)
+    let prompt = Prompt::new("custom-code-review", template)
+        .with_description("A custom code review prompt")
+        .with_category("development")
+        .add_argument(ArgumentSpec {
+            name: "code".to_string(),
+            description: Some("Code to review".to_string()),
+            required: true,
+            default: None,
+            type_hint: Some("string".to_string()),
+        })
+        .add_argument(ArgumentSpec {
+            name: "focus".to_string(),
+            description: Some("Review focus area".to_string()),
+            required: false,
+            default: Some("general".to_string()),
+            type_hint: Some("string".to_string()),
+        });
+    
+    Ok(prompt)
 }
 </code></pre>
 <h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
@@ -5466,28 +5577,31 @@ Perform a general code review covering style, bugs, and maintainability.
 let mut library = PromptLibrary::new();
 
 // Add prompts from various sources
-library.add_directory("./.swissarmyhammer/prompts").await?;
-library.add_file("./special-prompt.md").await?;
-library.add_builtin_prompts();
+library.add_directory("./.swissarmyhammer/prompts")?;
+library.add_from_file("./special-prompt.md")?;
 
 // Query prompts
-let prompts = library.list_prompts();
+let prompts = library.list();
 let prompt = library.get("prompt-id")?;
 let filtered = library.filter_by_category("review");
 
-// Search prompts
-let results = library.search("code review")?;</code></pre>
+// Search prompts (if search feature is enabled)
+let results = library.search("code review")?</code></pre>
 <h3 id="prompt"><a class="header" href="#prompt">Prompt</a></h3>
 <p>Individual prompt with metadata and template.</p>
 <pre><code class="language-rust">use swissarmyhammer::Prompt;
+use std::collections::HashMap;
 
-// Load from file
-let prompt = Prompt::from_file("./.swissarmyhammer/prompts/review.md").await?;
+// Load from file using PromptLoader
+let loader = swissarmyhammer::PromptLoader::new();
+let prompt = loader.load_file("./.swissarmyhammer/prompts/review.md")?;
 
 // Access metadata
-println!("Title: {}", prompt.title());
-println!("Description: {}", prompt.description());
-for arg in prompt.arguments() {
+println!("Name: {}", prompt.name);
+if let Some(description) = &amp;prompt.description {
+    println!("Description: {}", description);
+}
+for arg in &amp;prompt.arguments {
     println!("Argument: {} (required: {})", arg.name, arg.required);
 }
 
@@ -5655,7 +5769,8 @@ async fn get_prompt(
 #[tokio::main]
 async fn main() {
     let mut library = PromptLibrary::new();
-    library.add_directory("./.swissarmyhammer/prompts").await.unwrap();
+    library.add_directory("./.swissarmyhammer/prompts").await
+        .expect("Failed to load prompts directory");
     let shared_library = Arc::new(RwLock::new(library));
 
     let app = Router::new()
@@ -5668,10 +5783,12 @@ async fn main() {
             move |path| get_prompt(path, lib)
         }));
 
-    axum::Server::bind(&amp;"0.0.0.0:3000".parse().unwrap())
+    let addr = "0.0.0.0:3000".parse()
+        .expect("Failed to parse server address");
+    axum::Server::bind(&amp;addr)
         .serve(app.into_make_service())
         .await
-        .unwrap();
+        .expect("Failed to start server");
 }</code></pre>
 <h3 id="cli-tool-integration"><a class="header" href="#cli-tool-integration">CLI Tool Integration</a></h3>
 <pre><code class="language-rust">use clap::{Arg, Command};
@@ -5694,7 +5811,8 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     let mut library = PromptLibrary::new();
     library.add_directory("./.swissarmyhammer/prompts").await?;
 
-    let prompt_id = matches.value_of("prompt").unwrap();
+    let prompt_id = matches.value_of("prompt")
+        .expect("Prompt ID is required");
     let prompt = library.get(prompt_id)?;
 
     let mut args = std::collections::HashMap::new();
@@ -5781,11 +5899,13 @@ async fn test_prompt_rendering() {
     
     library.add_test_prompt(test_case);
     
-    let prompt = library.get("test-prompt").unwrap();
+    let prompt = library.get("test-prompt")
+        .expect("Test prompt should exist");
     let mut args = std::collections::HashMap::new();
     args.insert("name".to_string(), "World".to_string());
     
-    let result = prompt.render(&amp;args).unwrap();
+    let result = prompt.render(&amp;args)
+        .expect("Template rendering should succeed");
     assert_eq!(result, "Hello World!");
 }</code></pre>
 <h2 id="performance-considerations-1"><a class="header" href="#performance-considerations-1">Performance Considerations</a></h2>
@@ -6100,7 +6220,7 @@ impl StorageBackend for DatabaseBackend {
 <p>For more examples and advanced usage patterns, see the <a href="./library-examples.html">Library Examples</a> page.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="library-examples"><a class="header" href="#library-examples">Library Examples</a></h1>
 <p>This guide provides practical examples of using SwissArmyHammer as a Rust library in your applications.</p>
-<h2 id="basic-usage-2"><a class="header" href="#basic-usage-2">Basic Usage</a></h2>
+<h2 id="basic-usage-3"><a class="header" href="#basic-usage-3">Basic Usage</a></h2>
 <h3 id="adding-to-your-project"><a class="header" href="#adding-to-your-project">Adding to Your Project</a></h3>
 <p>Add SwissArmyHammer to your <code>Cargo.toml</code>:</p>
 <pre><code class="language-toml">[dependencies]
@@ -6658,7 +6778,7 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     
     Ok(())
 }</code></pre>
-<h2 id="next-steps-8"><a class="header" href="#next-steps-8">Next Steps</a></h2>
+<h2 id="next-steps-9"><a class="header" href="#next-steps-9">Next Steps</a></h2>
 <ul>
 <li>Review the <a href="./library-api.html">Library API</a> reference</li>
 <li>Learn about <a href="./library-usage.html">Library Usage</a> patterns</li>
@@ -6666,6 +6786,7 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 <li>Check the <a href="./api-reference.html">API Documentation</a> for detailed information</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="-rustdoc-api-documentation"><a class="header" href="#-rustdoc-api-documentation">🔗 Rustdoc API Documentation</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="-docsrs-api-reference"><a class="header" href="#-docsrs-api-reference">📚 docs.rs API Reference</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="advanced-prompt-techniques"><a class="header" href="#advanced-prompt-techniques">Advanced Prompt Techniques</a></h1>
 <p>This guide covers advanced techniques for creating sophisticated and powerful prompts with SwissArmyHammer.</p>
 <h2 id="composable-prompts"><a class="header" href="#composable-prompts">Composable Prompts</a></h2>
@@ -7708,7 +7829,7 @@ Based on initial analysis, focus on readability and structure improvements.
 {% comment %} Reuse header in multiple places {% endcomment %}
 {{header}}
 </code></pre>
-<h2 id="next-steps-9"><a class="header" href="#next-steps-9">Next Steps</a></h2>
+<h2 id="next-steps-10"><a class="header" href="#next-steps-10">Next Steps</a></h2>
 <ul>
 <li>Explore <a href="./custom-filters.html">Custom Filters</a> for extending functionality</li>
 <li>Learn about <a href="./prompt-organization.html">Prompt Organization</a> for managing complex prompts</li>
@@ -7748,31 +7869,19 @@ tags:
 
 This workflow processes data through multiple stages.
 
-```mermaid
-stateDiagram-v2
-    [*] --&gt; Start
-    Start --&gt; Process
-    Process --&gt; Success: OnSuccess
-    Process --&gt; Failure: OnFailure
-    Success --&gt; [*]
-    Failure --&gt; [*]
+For a complete example, see: [Simple Workflow](../examples/workflows/simple-workflow.md)
+
+## Actions
+
+- Start: Execute prompt "setup" with input="${data}"
+- Process: Execute prompt "main-task"
+- Success: Log "Task completed successfully"
+- Failure: Log error "Task failed: ${error}"
 </code></pre>
-<h2 id="actions"><a class="header" href="#actions">Actions</a></h2>
-<ul>
-<li>Start: Execute prompt “setup” with input=“${data}”</li>
-<li>Process: Execute prompt “main-task”</li>
-<li>Success: Log “Task completed successfully”</li>
-<li>Failure: Log error “Task failed: ${error}”</li>
-</ul>
-<pre><code>
-## Workflow Components
-
-### Front Matter
-
-The YAML front matter contains workflow metadata:
-
-```yaml
----
+<h2 id="workflow-components"><a class="header" href="#workflow-components">Workflow Components</a></h2>
+<h3 id="front-matter"><a class="header" href="#front-matter">Front Matter</a></h3>
+<p>The YAML front matter contains workflow metadata:</p>
+<pre><code class="language-yaml">---
 name: workflow-id           # Unique identifier for the workflow
 title: Workflow Title       # Human-readable title
 description: Description    # What the workflow does
@@ -7846,21 +7955,7 @@ tags:                      # Tags for organization
 </ul>
 <p>This automatic detection ensures that branching logic works correctly without requiring explicit choice state declarations in the Mermaid diagram.</p>
 <h3 id="parallel-execution"><a class="header" href="#parallel-execution">Parallel Execution</a></h3>
-<pre><code class="language-mermaid">stateDiagram-v2
-    [*] --&gt; Setup
-    Setup --&gt; fork1: Always
-    
-    state fork1 &lt;&lt;fork&gt;&gt;
-    fork1 --&gt; TaskA
-    fork1 --&gt; TaskB
-    
-    TaskA --&gt; join1: Always
-    TaskB --&gt; join1: Always
-    
-    state join1 &lt;&lt;join&gt;&gt;
-    join1 --&gt; Finish
-    Finish --&gt; [*]
-</code></pre>
+<p>See: <a href="../examples/workflows/parallel-workflow.html">Parallel Workflow</a></p>
 <h2 id="action-reference"><a class="header" href="#action-reference">Action Reference</a></h2>
 <h3 id="execute-prompt"><a class="header" href="#execute-prompt">Execute Prompt</a></h3>
 <p>Execute a SwissArmyHammer prompt:</p>
@@ -7963,6 +8058,8 @@ swissarmyhammer flow run data-processor --set user.name=Alice --set user.role=ad
 </ul>
 <h2 id="error-handling-8"><a class="header" href="#error-handling-8">Error Handling</a></h2>
 <p>Workflows provide robust error handling:</p>
+<h3 id="retry-logic"><a class="header" href="#retry-logic">Retry Logic</a></h3>
+<p><strong>Note</strong>: Retry logic is handled automatically by Claude’s infrastructure. SwissArmyHammer workflows do not need to implement application-level retry mechanisms as Claude will automatically retry failed requests according to its built-in retry policies. This eliminates the need for manual retry implementation in your workflow logic.</p>
 <h3 id="try-catch-pattern"><a class="header" href="#try-catch-pattern">Try-Catch Pattern</a></h3>
 <pre><code class="language-mermaid">stateDiagram-v2
     [*] --&gt; Try
@@ -7979,20 +8076,36 @@ swissarmyhammer flow run data-processor --set user.name=Alice --set user.role=ad
 - Recovery: Execute prompt "cleanup"
 - Success: Log "Operation completed successfully"
 </code></pre>
-<h3 id="retry-pattern"><a class="header" href="#retry-pattern">Retry Pattern</a></h3>
-<pre><code class="language-mermaid">stateDiagram-v2
-    [*] --&gt; Attempt
-    Attempt --&gt; Success: OnSuccess
-    Attempt --&gt; Wait: OnFailure
-    Wait --&gt; Attempt
-    Success --&gt; [*]
-</code></pre>
+<h3 id="abort-error-handling"><a class="header" href="#abort-error-handling">Abort Error Handling</a></h3>
+<p>Workflows support immediate termination through abort errors. When a prompt action’s result begins with <code>ABORT ERROR:</code>, the workflow immediately exits all the way back to the root workflow with an error.</p>
+<h4 id="how-abort-errors-work"><a class="header" href="#how-abort-errors-work">How Abort Errors Work</a></h4>
+<ol>
+<li><strong>Detection</strong>: When a prompt returns a response starting with <code>ABORT ERROR:</code>, it triggers immediate termination</li>
+<li><strong>Propagation</strong>: The error bypasses all normal error handling (retries, compensation, transitions)</li>
+<li><strong>Root Exit</strong>: In nested workflows, the abort error propagates through all parent workflows to the root</li>
+</ol>
+<h4 id="example-usage"><a class="header" href="#example-usage">Example Usage</a></h4>
+<p>See: <a href="../examples/workflows/user-confirmation-workflow.html">User Confirmation Workflow</a></p>
 <pre><code class="language-markdown">## Actions
 
-- Attempt: Execute prompt "network-call"
-- Wait: Wait 5 seconds
-- Success: Log "Network call succeeded"
+- UserConfirmation: Execute prompt "confirm-destructive-action"
+- ProcessData: Execute prompt "process-user-data"
+- Complete: Log "Processing completed"
 </code></pre>
+<p>If the <code>confirm-destructive-action</code> prompt returns <code>ABORT ERROR: User cancelled the operation</code>, the workflow immediately terminates without executing ProcessData or Complete states.</p>
+<h4 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h4>
+<ul>
+<li><strong>User Cancellation</strong>: Allow users to cancel long-running operations</li>
+<li><strong>Critical Failures</strong>: Immediately stop on unrecoverable errors</li>
+<li><strong>Safety Checks</strong>: Abort when safety conditions are not met</li>
+</ul>
+<h4 id="important-notes"><a class="header" href="#important-notes">Important Notes</a></h4>
+<ul>
+<li>Abort errors only trigger when the response <strong>starts with</strong> <code>ABORT ERROR:</code> (case-sensitive)</li>
+<li>The error message after <code>ABORT ERROR:</code> is propagated in the error</li>
+<li>Abort errors cannot be caught or handled within the workflow</li>
+<li>In sub-workflows, abort errors bubble up to terminate the parent workflow</li>
+</ul>
 <h2 id="best-practices-11"><a class="header" href="#best-practices-11">Best Practices</a></h2>
 <h3 id="1-keep-states-focused"><a class="header" href="#1-keep-states-focused">1. Keep States Focused</a></h3>
 <p>Each state should perform one clear action:</p>
@@ -8065,7 +8178,7 @@ stateDiagram-v2
     NotifyComplete --&gt; [*]
     NotifyError --&gt; [*]
 </code></pre>
-<h2 id="actions-1"><a class="header" href="#actions-1">Actions</a></h2>
+<h2 id="actions"><a class="header" href="#actions">Actions</a></h2>
 <ul>
 <li>Initialize: Log “Starting {{ environment | default: ‘development’ }} data processing for file: ${input_file}”</li>
 <li>ValidateFormat: Execute prompt “validate-json-schema” with file=“${input_file}” schema=“{{ schema | default: ‘default-schema.json’ }}”</li>
@@ -8224,7 +8337,7 @@ swissarmyhammer flow visualize workflow-name --run &lt;run_id&gt;
 <li>Variable usage</li>
 <li>Circular dependencies</li>
 </ul>
-<h2 id="next-steps-10"><a class="header" href="#next-steps-10">Next Steps</a></h2>
+<h2 id="next-steps-11"><a class="header" href="#next-steps-11">Next Steps</a></h2>
 <ul>
 <li>Explore <a href="./workflow-examples.html">Example Workflows</a> for practical patterns</li>
 <li>Read about <a href="./workflow-patterns.html">Workflow Patterns</a> for common solutions</li>
@@ -8512,7 +8625,7 @@ stateDiagram-v2
     NotifySuccess --&gt; [*]
     NotifyFailure --&gt; [*]
 </code></pre>
-<h2 id="actions-2"><a class="header" href="#actions-2">Actions</a></h2>
+<h2 id="actions-1"><a class="header" href="#actions-1">Actions</a></h2>
 <ul>
 <li>Initialize: Log “Starting test run for ${branch_name}”</li>
 <li>RunTests: Execute prompt “run-test-suite” with suite=“${test_suite}” parallel=“${parallel_tests}”</li>
@@ -8576,7 +8689,7 @@ stateDiagram-v2
 </code></pre>
 </li>
 </ol>
-<h2 id="next-steps-11"><a class="header" href="#next-steps-11">Next Steps</a></h2>
+<h2 id="next-steps-12"><a class="header" href="#next-steps-12">Next Steps</a></h2>
 <ul>
 <li>Explore <a href="./workflow-patterns.html">Workflow Patterns</a> for advanced techniques</li>
 <li>Read the main <a href="./workflows.html">Workflows Documentation</a> for detailed reference</li>
@@ -9783,7 +9896,7 @@ install_script: |
   mkdir -p ~/.swissarmyhammer/prompts/projects/microservices
   cp prompts/*.md ~/.swissarmyhammer/prompts/projects/microservices/
 </code></pre>
-<h2 id="next-steps-12"><a class="header" href="#next-steps-12">Next Steps</a></h2>
+<h2 id="next-steps-13"><a class="header" href="#next-steps-13">Next Steps</a></h2>
 <ul>
 <li>Read <a href="./prompt-organization.html">Prompt Organization</a> for structure best practices</li>
 <li>See <a href="./contributing.html">Contributing</a> for contribution guidelines</li>
@@ -10274,7 +10387,7 @@ export MCP_PROXY=http://localhost:3334
 <li><strong>Version your changes</strong> - Maintain compatibility</li>
 <li><strong>Document extensions</strong> - Help client implementers</li>
 </ol>
-<h2 id="next-steps-13"><a class="header" href="#next-steps-13">Next Steps</a></h2>
+<h2 id="next-steps-14"><a class="header" href="#next-steps-14">Next Steps</a></h2>
 <ul>
 <li>Implement <a href="./claude-code-integration.html">Claude Code Integration</a></li>
 <li>Review <a href="./api-reference.html">API Reference</a> for details</li>
@@ -10282,686 +10395,189 @@ export MCP_PROXY=http://localhost:3334
 <li>Check <a href="./examples.html">Examples</a> for implementation patterns</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="configuration-3"><a class="header" href="#configuration-3">Configuration</a></h1>
-<p>SwissArmyHammer offers flexible configuration options through configuration files, environment variables, and command-line arguments. This guide covers all configuration methods and settings.</p>
+<p>SwissArmyHammer supports flexible configuration through multiple sources, with a clear precedence hierarchy:</p>
+<ol>
+<li><strong>YAML Configuration File</strong> (highest precedence)</li>
+<li><strong>Environment Variables</strong> (medium precedence)</li>
+<li><strong>Built-in Defaults</strong> (lowest precedence)</li>
+</ol>
 <h2 id="configuration-file-2"><a class="header" href="#configuration-file-2">Configuration File</a></h2>
-<h3 id="location"><a class="header" href="#location">Location</a></h3>
-<p>SwissArmyHammer looks for configuration files in this order:</p>
-<ol>
-<li><code>./swissarmyhammer.toml</code> (current directory)</li>
-<li><code>~/.swissarmyhammer/config.toml</code> (user directory)</li>
-<li><code>/etc/swissarmyhammer/config.toml</code> (system-wide)</li>
-</ol>
-<h3 id="format"><a class="header" href="#format">Format</a></h3>
-<p>Configuration uses TOML format:</p>
-<pre><code class="language-toml"># ~/.swissarmyhammer/config.toml
+<p>Place a <code>swissarmyhammer.yaml</code> file in your repository root to configure SwissArmyHammer:</p>
+<pre><code class="language-yaml"># swissarmyhammer.yaml
+# Configuration for Swiss Army Hammer
 
-# Server configuration
-[server]
-host = "localhost"
-port = 8080
-debug = false
-timeout = 30000  # milliseconds
+# Base branch that pull requests will merge into
+base_branch: "main"
 
-# Prompt directories
-[prompts]
-directories = [
-    "~/.swissarmyhammer/prompts",
-    "./.swissarmyhammer/prompts",
-    "/opt/company/prompts"
-]
-builtin = true
-watch = true
+# Prefix for issue branches
+issue_branch_prefix: "issue/"
 
-# File watching configuration
-[watch]
-enabled = true
-poll_interval = 1000  # milliseconds
-max_depth = 5
-ignore_patterns = [
-    "*.tmp",
-    "*.swp",
-    ".git/*",
-    "__pycache__/*"
-]
-
-# Logging configuration
-[log]
-level = "info"  # debug, info, warn, error
-file = "~/.swissarmyhammer/logs/server.log"
-rotate = true
-max_size = "10MB"
-max_age = 30  # days
-
-# Cache configuration
-[cache]
-enabled = true
-directory = "~/.swissarmyhammer/cache"
-ttl = 3600  # seconds
-max_size = "100MB"
-
-# Template engine configuration
-[template]
-strict_variables = false
-strict_filters = false
-custom_filters_path = "~/.swissarmyhammer/filters"
-
-# Security settings
-[security]
-allow_file_access = false
-allow_network_access = false
-sandbox_mode = true
-allowed_domains = ["api.company.com", "github.com"]
-
-# MCP specific settings
-[mcp]
-protocol_version = "1.0"
-capabilities = ["prompts", "notifications"]
-max_prompt_size = 1048576  # 1MB
-compression = true
+# Width for issue numbers in display  
+issue_number_width: 6
 </code></pre>
-<h2 id="environment-variables-5"><a class="header" href="#environment-variables-5">Environment Variables</a></h2>
-<p>All configuration options can be set via environment variables:</p>
-<h3 id="naming-convention"><a class="header" href="#naming-convention">Naming Convention</a></h3>
+<h3 id="supported-options"><a class="header" href="#supported-options">Supported Options</a></h3>
+<p>For detailed validation rules and complete schema reference, see <a href="configuration-schema.html">Configuration Schema</a>.</p>
+<h4 id="base_branch"><a class="header" href="#base_branch"><code>base_branch</code></a></h4>
 <ul>
-<li>Prefix: <code>SWISSARMYHAMMER_</code></li>
-<li>Nested values use underscores: <code>SECTION_KEY</code></li>
-<li>Arrays use comma separation</li>
+<li><strong>Type</strong>: String</li>
+<li><strong>Default</strong>: <code>"main"</code></li>
+<li><strong>Description</strong>: The base branch that pull requests will merge into</li>
+<li><strong>Example</strong>: <code>base_branch: "develop"</code></li>
 </ul>
-<h3 id="examples-11"><a class="header" href="#examples-11">Examples</a></h3>
-<pre><code class="language-bash"># Server settings
-export SWISSARMYHAMMER_SERVER_HOST=0.0.0.0
-export SWISSARMYHAMMER_SERVER_PORT=9000
-export SWISSARMYHAMMER_SERVER_DEBUG=true
-
-# Prompt directories (comma-separated)
-export SWISSARMYHAMMER_PROMPTS_DIRECTORIES="/opt/prompts,~/my-prompts"
-export SWISSARMYHAMMER_PROMPTS_BUILTIN=false
-
-# Logging
-export SWISSARMYHAMMER_LOG_LEVEL=debug
-export SWISSARMYHAMMER_LOG_FILE=/var/log/swissarmyhammer.log
-
-# File watching
-export SWISSARMYHAMMER_WATCH_ENABLED=true
-export SWISSARMYHAMMER_WATCH_POLL_INTERVAL=2000
-
-# Security
-export SWISSARMYHAMMER_SECURITY_SANDBOX_MODE=true
-export SWISSARMYHAMMER_SECURITY_ALLOWED_DOMAINS="api.example.com,cdn.example.com"
+<h4 id="issue_branch_prefix"><a class="header" href="#issue_branch_prefix"><code>issue_branch_prefix</code></a></h4>
+<ul>
+<li><strong>Type</strong>: String</li>
+<li><strong>Default</strong>: <code>"issue/"</code></li>
+<li><strong>Description</strong>: Prefix for issue branches</li>
+<li><strong>Example</strong>: <code>issue_branch_prefix: "feature/"</code></li>
+</ul>
+<h4 id="issue_number_width"><a class="header" href="#issue_number_width"><code>issue_number_width</code></a></h4>
+<ul>
+<li><strong>Type</strong>: Integer</li>
+<li><strong>Default</strong>: <code>6</code></li>
+<li><strong>Description</strong>: Width for issue numbers in display</li>
+<li><strong>Example</strong>: <code>issue_number_width: 8</code></li>
+</ul>
+<h2 id="environment-variables-5"><a class="header" href="#environment-variables-5">Environment Variables</a></h2>
+<p>All configuration options can be set via environment variables with the <code>SWISSARMYHAMMER_</code> prefix:</p>
+<pre><code class="language-bash">export SWISSARMYHAMMER_BASE_BRANCH="develop"
+export SWISSARMYHAMMER_ISSUE_BRANCH_PREFIX="feature/"
+export SWISSARMYHAMMER_ISSUE_NUMBER_WIDTH="8"
 </code></pre>
-<h3 id="precedence"><a class="header" href="#precedence">Precedence</a></h3>
-<p>Configuration precedence (highest to lowest):</p>
+<h2 id="configuration-precedence"><a class="header" href="#configuration-precedence">Configuration Precedence</a></h2>
+<p>Configuration values are loaded in the following order:</p>
 <ol>
-<li>Command-line arguments</li>
-<li>Environment variables</li>
-<li>Configuration files</li>
-<li>Default values</li>
+<li><strong>YAML file</strong>: Values from <code>swissarmyhammer.yaml</code> (if present)</li>
+<li><strong>Environment variables</strong>: <code>SWISSARMYHAMMER_*</code> environment variables</li>
+<li><strong>Defaults</strong>: Built-in default values</li>
 </ol>
-<h2 id="command-line-options"><a class="header" href="#command-line-options">Command-Line Options</a></h2>
-<h3 id="global-options-1"><a class="header" href="#global-options-1">Global Options</a></h3>
-<pre><code class="language-bash">swissarmyhammer [GLOBAL_OPTIONS] &lt;COMMAND&gt; [COMMAND_OPTIONS]
-
-Global Options:
-  --config &lt;FILE&gt;     Use specific configuration file
-  --verbose          Enable verbose output
-  --quiet            Suppress non-error output
-  --no-color         Disable colored output
-  --json             Output in JSON format
-  --help             Show help information
-  --version          Show version information
+<p>Later sources override earlier ones, so YAML configuration takes precedence over environment variables, which take precedence over defaults.</p>
+<h2 id="cli-configuration-management"><a class="header" href="#cli-configuration-management">CLI Configuration Management</a></h2>
+<p>For complete CLI command reference, see <a href="cli-reference.html#configuration-commands">CLI Reference</a>.</p>
+<h3 id="view-current-configuration"><a class="header" href="#view-current-configuration">View Current Configuration</a></h3>
+<pre><code class="language-bash">swissarmyhammer config show
 </code></pre>
-<h3 id="per-command-configuration"><a class="header" href="#per-command-configuration">Per-Command Configuration</a></h3>
-<p>Override configuration for specific commands:</p>
-<pre><code class="language-bash"># Override server settings
-swissarmyhammer serve --host 0.0.0.0 --port 9000 --debug
-
-# Override prompt directories
-swissarmyhammer serve --prompts /custom/prompts --no-builtin
-
-# Override logging
-swissarmyhammer serve --log-level debug --log-file server.log
-</code></pre>
-<h2 id="configuration-sections"><a class="header" href="#configuration-sections">Configuration Sections</a></h2>
-<h3 id="server-configuration-1"><a class="header" href="#server-configuration-1">Server Configuration</a></h3>
-<p>Controls the MCP server behavior:</p>
-<pre><code class="language-toml">[server]
-# Network binding
-host = "localhost"      # IP address or hostname
-port = 8080            # Port number (0 for auto-assign)
-
-# Performance
-workers = 4            # Number of worker threads
-max_connections = 100  # Maximum concurrent connections
-timeout = 30000        # Request timeout in milliseconds
-
-# Debugging
-debug = false          # Enable debug mode
-trace = false          # Enable trace logging
-metrics = true         # Enable metrics collection
-</code></pre>
-<h3 id="prompt-configuration"><a class="header" href="#prompt-configuration">Prompt Configuration</a></h3>
-<p>Manages prompt loading and directories:</p>
-<pre><code class="language-toml">[prompts]
-# Directories to load prompts from
-directories = [
-    "~/.swissarmyhammer/prompts",    # User prompts
-    "./.swissarmyhammer/prompts",                      # Project prompts
-    "/opt/shared/prompts"             # Shared prompts
-]
-
-# Loading behavior
-builtin = true          # Include built-in prompts
-watch = true            # Enable file watching
-recursive = true        # Scan directories recursively
-follow_symlinks = false # Follow symbolic links
-
-# Filtering
-include_patterns = ["*.md", "*.markdown"]
-exclude_patterns = ["*.draft.md", "test-*"]
-
-# Validation
-strict_validation = true     # Fail on invalid prompts
-required_fields = ["name", "description"]
-max_file_size = "1MB"       # Maximum prompt file size
-</code></pre>
-<h3 id="file-watching-2"><a class="header" href="#file-watching-2">File Watching</a></h3>
-<p>Configure file system monitoring:</p>
-<pre><code class="language-toml">[watch]
-enabled = true              # Enable/disable watching
-strategy = "efficient"      # efficient, aggressive, polling
-
-# Polling strategy settings
-poll_interval = 1000        # Milliseconds between polls
-poll_timeout = 100          # Polling timeout
-
-# Watch behavior
-debounce = 500             # Milliseconds to wait for changes to settle
-max_depth = 10             # Maximum directory depth
-batch_events = true        # Batch multiple changes
-
-# Ignore patterns
-ignore_patterns = [
-    "*.tmp",
-    "*.swp",
-    "*.bak",
-    ".git/**",
-    ".svn/**",
-    "__pycache__/**",
-    "node_modules/**"
-]
-
-# Performance
-max_watches = 10000        # Maximum number of watches
-event_buffer_size = 1000   # Event queue size
-</code></pre>
-<h3 id="logging"><a class="header" href="#logging">Logging</a></h3>
-<p>Configure logging behavior:</p>
-<pre><code class="language-toml">[log]
-# Log level: trace, debug, info, warn, error
-level = "info"
-
-# Console output
-console = true
-console_format = "pretty"  # pretty, json, compact
-console_colors = true
-
-# File logging
-file = "~/.swissarmyhammer/logs/server.log"
-file_format = "json"
-rotate = true
-max_size = "10MB"
-max_files = 5
-max_age = 30  # days
-
-# Log filtering
-include_modules = ["server", "prompts"]
-exclude_modules = ["watcher"]
-
-# Performance
-buffer_size = 8192
-async = true
-</code></pre>
-<h3 id="cache-configuration"><a class="header" href="#cache-configuration">Cache Configuration</a></h3>
-<p>Control caching behavior:</p>
-<pre><code class="language-toml">[cache]
-enabled = true
-directory = "~/.swissarmyhammer/cache"
-
-# Cache strategy
-strategy = "lru"           # lru, lfu, ttl
-max_entries = 1000
-max_size = "100MB"
-
-# Time-based settings
-ttl = 3600                # Default TTL in seconds
-refresh_ahead = 300       # Refresh cache 5 minutes before expiry
-
-# Cache categories
-[cache.prompts]
-enabled = true
-ttl = 7200
-
-[cache.templates]
-enabled = true
-ttl = 3600
-
-[cache.search]
-enabled = false           # Disable search result caching
-</code></pre>
-<h3 id="template-engine-2"><a class="header" href="#template-engine-2">Template Engine</a></h3>
-<p>Configure Liquid template processing:</p>
-<pre><code class="language-toml">[template]
-# Parsing
-strict_variables = false   # Error on undefined variables
-strict_filters = false     # Error on undefined filters
-error_mode = "warn"        # warn, error, ignore
-
-# Custom extensions
-custom_filters_path = "~/.swissarmyhammer/filters"
-custom_tags_path = "~/.swissarmyhammer/tags"
-
-# Security
-allow_includes = true
-include_paths = ["~/.swissarmyhammer/includes"]
-max_render_depth = 10
-max_iterations = 1000
-
-# Performance
-cache_templates = true
-compile_cache = "~/.swissarmyhammer/template_cache"
-</code></pre>
-<h3 id="security-settings"><a class="header" href="#security-settings">Security Settings</a></h3>
-<p>Control security features:</p>
-<pre><code class="language-toml">[security]
-# Sandboxing
-sandbox_mode = true        # Enable security sandbox
-allow_file_access = false  # Allow template file access
-allow_network_access = false # Allow network requests
-allow_system_access = false # Allow system commands
-
-# Network security
-allowed_domains = [
-    "api.company.com",
-    "cdn.company.com",
-    "github.com"
-]
-blocked_domains = [
-    "malicious.site"
-]
-
-# File security
-allowed_paths = [
-    "~/Documents/projects",
-    "/opt/shared/data"
-]
-blocked_paths = [
-    "/etc",
-    "/sys",
-    "~/.ssh"
-]
-
-# Content security
-max_input_size = "10MB"
-max_output_size = "50MB"
-sanitize_html = true
-</code></pre>
-<h2 id="configuration-profiles"><a class="header" href="#configuration-profiles">Configuration Profiles</a></h2>
-<h3 id="using-profiles"><a class="header" href="#using-profiles">Using Profiles</a></h3>
-<p>Define multiple configuration profiles:</p>
-<pre><code class="language-toml"># Default configuration
-[default]
-server.host = "localhost"
-server.port = 8080
-log.level = "info"
-
-# Development profile
-[profiles.development]
-server.debug = true
-log.level = "debug"
-cache.enabled = false
-template.strict_variables = true
-
-# Production profile
-[profiles.production]
-server.host = "0.0.0.0"
-server.workers = 8
-log.level = "warn"
-security.sandbox_mode = true
-
-# Testing profile
-[profiles.test]
-server.port = 0  # Auto-assign
-log.file = "/tmp/test.log"
-prompts.directories = ["./test/fixtures"]
-</code></pre>
-<h3 id="activating-profiles"><a class="header" href="#activating-profiles">Activating Profiles</a></h3>
-<pre><code class="language-bash"># Via environment variable
-export SWISSARMYHAMMER_PROFILE=production
-swissarmyhammer serve
-
-# Via command line
-swissarmyhammer --profile development serve
-
-# Multiple profiles (later overrides earlier)
-swissarmyhammer --profile production --profile custom serve
-</code></pre>
-<h2 id="advanced-configuration"><a class="header" href="#advanced-configuration">Advanced Configuration</a></h2>
-<h3 id="dynamic-configuration"><a class="header" href="#dynamic-configuration">Dynamic Configuration</a></h3>
-<p>Load configuration from external sources:</p>
-<pre><code class="language-toml">[config]
-# Load additional config from URL
-remote_config = "https://config.company.com/swissarmyhammer"
-remote_check_interval = 300  # seconds
-
-# Load from environment-specific file
-env_config = "/etc/swissarmyhammer/config.${ENV}.toml"
-
-# Merge strategy
-merge_strategy = "deep"  # deep, shallow, replace
-</code></pre>
-<h3 id="hooks-configuration"><a class="header" href="#hooks-configuration">Hooks Configuration</a></h3>
-<p>Configure lifecycle hooks:</p>
-<pre><code class="language-toml">[hooks]
-# Startup hooks
-pre_start = [
-    "~/scripts/pre-start.sh",
-    "/opt/swissarmyhammer/hooks/validate.py"
-]
-post_start = [
-    "~/scripts/notify-start.sh"
-]
-
-# Shutdown hooks
-pre_stop = [
-    "~/scripts/save-state.sh"
-]
-post_stop = [
-    "~/scripts/cleanup.sh"
-]
-
-# Prompt hooks
-pre_load = "~/scripts/validate-prompt.sh"
-post_load = "~/scripts/index-prompt.sh"
-
-# Error hooks
-on_error = "~/scripts/error-handler.sh"
-
-# Hook configuration
-[hooks.config]
-timeout = 30           # seconds
-fail_on_error = false  # Continue if hook fails
-environment = {
-    CUSTOM_VAR = "value"
-}
-</code></pre>
-<h3 id="performance-tuning"><a class="header" href="#performance-tuning">Performance Tuning</a></h3>
-<p>Optimize for different scenarios:</p>
-<pre><code class="language-toml">[performance]
-# Threading
-thread_pool_size = 8
-async_workers = 4
-io_threads = 2
-
-# Memory
-max_memory = "2GB"
-gc_interval = 300      # seconds
-cache_pressure = 0.8   # Evict cache at 80% memory
-
-# Network
-connection_pool_size = 50
-keep_alive = true
-tcp_nodelay = true
-socket_timeout = 30
-
-# File I/O
-read_buffer_size = 8192
-write_buffer_size = 8192
-use_mmap = true        # Memory-mapped files
-
-# Optimizations
-lazy_loading = true
-parallel_parsing = true
-compress_cache = true
-</code></pre>
-<h3 id="monitoring-configuration"><a class="header" href="#monitoring-configuration">Monitoring Configuration</a></h3>
-<p>Enable monitoring and metrics:</p>
-<pre><code class="language-toml">[monitoring]
-enabled = true
-
-# Metrics collection
-[monitoring.metrics]
-enabled = true
-interval = 60          # seconds
-retention = 7          # days
-
-# Metrics to collect
-collect = [
-    "cpu_usage",
-    "memory_usage",
-    "prompt_count",
-    "request_rate",
-    "error_rate",
-    "cache_hit_rate"
-]
-
-# Export metrics
-[monitoring.export]
-format = "prometheus"  # prometheus, json, statsd
-endpoint = "http://metrics.company.com:9090"
-labels = {
-    service = "swissarmyhammer",
-    environment = "production"
-}
-
-# Health checks
-[monitoring.health]
-enabled = true
-endpoint = "/health"
-checks = [
-    "server_status",
-    "prompt_loading",
-    "file_watcher",
-    "cache_status"
-]
-</code></pre>
-<h2 id="configuration-examples"><a class="header" href="#configuration-examples">Configuration Examples</a></h2>
-<h3 id="minimal-configuration"><a class="header" href="#minimal-configuration">Minimal Configuration</a></h3>
-<pre><code class="language-toml"># Minimal working configuration
-[server]
-host = "localhost"
-port = 8080
-
-[prompts]
-directories = ["~/.swissarmyhammer/prompts"]
-</code></pre>
-<h3 id="development-configuration"><a class="header" href="#development-configuration">Development Configuration</a></h3>
-<pre><code class="language-toml"># Development-optimized configuration
-[server]
-host = "localhost"
-port = 8080
-debug = true
-
-[prompts]
-directories = [
-    "./.swissarmyhammer/prompts",
-    "~/.swissarmyhammer/prompts"
-]
-watch = true
-
-[log]
-level = "debug"
-console = true
-
-[cache]
-enabled = false  # Disable caching for development
-
-[template]
-strict_variables = true  # Catch template errors early
-</code></pre>
-<h3 id="production-configuration"><a class="header" href="#production-configuration">Production Configuration</a></h3>
-<pre><code class="language-toml"># Production-optimized configuration
-[server]
-host = "0.0.0.0"
-port = 80
-workers = 8
-timeout = 60000
-
-[prompts]
-directories = [
-    "/opt/swissarmyhammer/prompts",
-    "/var/lib/swissarmyhammer/prompts"
-]
-builtin = true
-watch = false  # Disable for performance
-
-[log]
-level = "warn"
-file = "/var/log/swissarmyhammer/server.log"
-rotate = true
-max_size = "100MB"
-max_files = 10
-
-[cache]
-enabled = true
-strategy = "lru"
-max_size = "1GB"
-
-[security]
-sandbox_mode = true
-allow_file_access = false
-allow_network_access = false
-
-[monitoring]
-enabled = true
-metrics.enabled = true
-health.enabled = true
-</code></pre>
-<h3 id="high-performance-configuration"><a class="header" href="#high-performance-configuration">High-Performance Configuration</a></h3>
-<pre><code class="language-toml"># Optimized for high load
-[server]
-workers = 16
-max_connections = 1000
-timeout = 120000
-
-[performance]
-thread_pool_size = 32
-async_workers = 16
-connection_pool_size = 200
-lazy_loading = true
-parallel_parsing = true
-
-[cache]
-enabled = true
-strategy = "lfu"
-max_size = "4GB"
-refresh_ahead = 600
-
-[watch]
-enabled = false  # Disable for performance
-
-[log]
-level = "error"  # Minimize logging overhead
-async = true
-buffer_size = 65536
-</code></pre>
-<h2 id="configuration-validation"><a class="header" href="#configuration-validation">Configuration Validation</a></h2>
 <h3 id="validate-configuration"><a class="header" href="#validate-configuration">Validate Configuration</a></h3>
-<pre><code class="language-bash"># Validate configuration file
-swissarmyhammer config validate
-
-# Validate specific file
-swissarmyhammer config validate --file custom-config.toml
-
-# Show effective configuration
-swissarmyhammer config show
-
-# Show configuration with sources
-swissarmyhammer config show --sources
+<pre><code class="language-bash">swissarmyhammer config validate
 </code></pre>
-<h3 id="configuration-schema"><a class="header" href="#configuration-schema">Configuration Schema</a></h3>
-<pre><code class="language-bash"># Generate configuration schema
-swissarmyhammer config schema &gt; config-schema.json
-
-# Validate against schema
-swissarmyhammer config validate --schema config-schema.json
+<h3 id="generate-example-configuration"><a class="header" href="#generate-example-configuration">Generate Example Configuration</a></h3>
+<pre><code class="language-bash">swissarmyhammer config init
 </code></pre>
-<h2 id="best-practices-16"><a class="header" href="#best-practices-16">Best Practices</a></h2>
-<h3 id="1-use-profiles"><a class="header" href="#1-use-profiles">1. Use Profiles</a></h3>
-<p>Separate configurations for different environments:</p>
-<pre><code class="language-toml">[profiles.local]
-server.debug = true
-
-[profiles.staging]
-server.host = "staging.company.com"
-
-[profiles.production]
-server.host = "0.0.0.0"
-security.sandbox_mode = true
+<h3 id="get-configuration-help"><a class="header" href="#get-configuration-help">Get Configuration Help</a></h3>
+<pre><code class="language-bash">swissarmyhammer config help
 </code></pre>
-<h3 id="2-secure-sensitive-data"><a class="header" href="#2-secure-sensitive-data">2. Secure Sensitive Data</a></h3>
-<p>Never store secrets in configuration files:</p>
-<pre><code class="language-toml"># Bad
-api_key = "sk-1234567890abcdef"
-
-# Good - use environment variables
-api_key = "${API_KEY}"
+<h2 id="common-configuration-examples"><a class="header" href="#common-configuration-examples">Common Configuration Examples</a></h2>
+<h3 id="development-team-setup"><a class="header" href="#development-team-setup">Development Team Setup</a></h3>
+<pre><code class="language-yaml"># Development team targeting develop branch
+base_branch: "develop"
 </code></pre>
-<h3 id="3-document-configuration"><a class="header" href="#3-document-configuration">3. Document Configuration</a></h3>
-<p>Add comments explaining non-obvious settings:</p>
-<pre><code class="language-toml"># Increase timeout for slow network environments
-timeout = 60000  # 1 minute
-
-# Disable caching during development to see changes immediately
-[cache]
-enabled = false  # TODO: Enable for production
+<h3 id="open-source-project-1"><a class="header" href="#open-source-project-1">Open Source Project</a></h3>
+<pre><code class="language-yaml"># Open source project with main branch
+base_branch: "main"
 </code></pre>
-<h3 id="4-version-control"><a class="header" href="#4-version-control">4. Version Control</a></h3>
-<p>Track configuration changes:</p>
-<pre><code class="language-bash"># .gitignore
-config.local.toml
-config.production.toml
-
-# Track example configuration
-config.example.toml
-</code></pre>
-<h3 id="5-validate-changes"><a class="header" href="#5-validate-changes">5. Validate Changes</a></h3>
-<p>Always validate configuration changes:</p>
-<pre><code class="language-bash"># Before deploying
-swissarmyhammer config validate --file new-config.toml
-
-# Test with dry run
-swissarmyhammer serve --config new-config.toml --dry-run
+<h3 id="enterprise-setup-1"><a class="header" href="#enterprise-setup-1">Enterprise Setup</a></h3>
+<pre><code class="language-yaml"># Enterprise with release branches
+base_branch: "release/current"
 </code></pre>
 <h2 id="troubleshooting-9"><a class="header" href="#troubleshooting-9">Troubleshooting</a></h2>
 <h3 id="configuration-not-loading"><a class="header" href="#configuration-not-loading">Configuration Not Loading</a></h3>
 <ol>
-<li>Check file exists and is readable</li>
-<li>Validate TOML syntax</li>
-<li>Check environment variable names</li>
-<li>Review precedence order</li>
+<li>Check that <code>swissarmyhammer.yaml</code> is in the repository root</li>
+<li>Validate YAML syntax: <code>swissarmyhammer config validate</code></li>
+<li>Check file permissions and accessibility</li>
 </ol>
-<h3 id="performance-issues-3"><a class="header" href="#performance-issues-3">Performance Issues</a></h3>
-<ol>
-<li>Disable file watching in production</li>
-<li>Tune cache settings</li>
-<li>Adjust worker counts</li>
-<li>Enable performance monitoring</li>
-</ol>
-<h3 id="security-warnings"><a class="header" href="#security-warnings">Security Warnings</a></h3>
-<ol>
-<li>Review security settings</li>
-<li>Enable sandbox mode</li>
-<li>Restrict file and network access</li>
-<li>Update allowed domains</li>
-</ol>
-<h2 id="next-steps-14"><a class="header" href="#next-steps-14">Next Steps</a></h2>
+<h3 id="invalid-configuration-values"><a class="header" href="#invalid-configuration-values">Invalid Configuration Values</a></h3>
 <ul>
-<li>See <a href="./cli-reference.html">CLI Reference</a> for command-line options</li>
-<li>Learn about <a href="./file-watching.html">File Watching</a> configuration</li>
-<li>Explore <a href="./troubleshooting.html">Troubleshooting</a> for common issues</li>
-<li>Read <a href="./security.html">Security</a> for security best practices</li>
+<li>Run <code>swissarmyhammer config validate</code> for detailed error messages</li>
+<li>Check that branch names are valid git branch names</li>
+<li>Ensure all values match expected types and formats</li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="file-watching-3"><a class="header" href="#file-watching-3">File Watching</a></h1>
+<h3 id="configuration-conflicts"><a class="header" href="#configuration-conflicts">Configuration Conflicts</a></h3>
+<ul>
+<li>Use <code>swissarmyhammer config show</code> to see current active configuration</li>
+<li>Remember: YAML file &gt; Environment variables &gt; Defaults</li>
+<li>Check for conflicting environment variables</li>
+</ul>
+<p>For more help, run: <code>swissarmyhammer config help</code></p>
+<p>For additional configuration troubleshooting, see the <a href="troubleshooting.html#configuration-issues">Troubleshooting Guide</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="configuration-schema-reference"><a class="header" href="#configuration-schema-reference">Configuration Schema Reference</a></h1>
+<p>This page provides a complete reference for the <code>swissarmyhammer.yaml</code> configuration file schema.</p>
+<p>For configuration basics and examples, see the <a href="configuration.html">Configuration Guide</a>. For CLI configuration commands, see the <a href="cli-reference.html#configuration-commands">CLI Reference</a>.</p>
+<h2 id="schema-definition"><a class="header" href="#schema-definition">Schema Definition</a></h2>
+<pre><code class="language-yaml"># SwissArmyHammer configuration schema
+type: object
+properties:
+  base_branch:
+    type: string
+    description: Base branch that pull requests will merge into
+    default: "main"
+    pattern: "^[a-zA-Z0-9._/-]+$"
+    minLength: 1
+    maxLength: 200
+  issue_branch_prefix:
+    type: string
+    description: Prefix for issue branches
+    default: "issue/"
+    minLength: 1
+    maxLength: 50
+  issue_number_width:
+    type: integer
+    description: Width for issue numbers in display
+    default: 6
+    minimum: 1
+    maximum: 10
+</code></pre>
+<h2 id="validation-rules-1"><a class="header" href="#validation-rules-1">Validation Rules</a></h2>
+<h3 id="base_branch-1"><a class="header" href="#base_branch-1"><code>base_branch</code></a></h3>
+<ul>
+<li>Must be a valid git branch name</li>
+<li>Cannot be empty</li>
+<li>Cannot contain spaces or special characters: <code>~ ^ : ? * [ \</code></li>
+<li>Maximum length: 200 characters</li>
+<li>Examples of valid values: <code>main</code>, <code>develop</code>, <code>feature/v2</code>, <code>release-1.0</code></li>
+<li>Examples of invalid values: <code>""</code>, <code>branch with spaces</code>, <code>branch~invalid</code></li>
+</ul>
+<h3 id="issue_branch_prefix-1"><a class="header" href="#issue_branch_prefix-1"><code>issue_branch_prefix</code></a></h3>
+<ul>
+<li>Must be a non-empty string</li>
+<li>Cannot exceed 50 characters</li>
+<li>Used as the prefix for all issue branches</li>
+<li>Examples of valid values: <code>issue/</code>, <code>feature/</code>, <code>bug/</code>, <code>task-</code></li>
+<li>Examples of invalid values: <code>""</code> (empty string), <code>very-long-prefix-that-exceeds-the-maximum-length</code></li>
+</ul>
+<h3 id="issue_number_width-1"><a class="header" href="#issue_number_width-1"><code>issue_number_width</code></a></h3>
+<ul>
+<li>Must be a positive integer</li>
+<li>Minimum value: 1</li>
+<li>Maximum value: 10</li>
+<li>Determines the padding width for issue numbers in display</li>
+<li>Examples of valid values: <code>6</code>, <code>4</code>, <code>8</code></li>
+<li>Examples of invalid values: <code>0</code>, <code>11</code>, <code>-1</code></li>
+</ul>
+<h2 id="configuration-file-discovery"><a class="header" href="#configuration-file-discovery">Configuration File Discovery</a></h2>
+<p>SwissArmyHammer looks for configuration files in this order:</p>
+<ol>
+<li><code>./swissarmyhammer.yaml</code> in the current working directory</li>
+</ol>
+<p>If no configuration file is found, SwissArmyHammer will use environment variables and built-in defaults.</p>
+<h2 id="environment-variable-mapping"><a class="header" href="#environment-variable-mapping">Environment Variable Mapping</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Configuration Key</th><th>Environment Variable</th><th>Default Value</th></tr></thead><tbody>
+<tr><td><code>base_branch</code></td><td><code>SWISSARMYHAMMER_BASE_BRANCH</code></td><td><code>"main"</code></td></tr>
+<tr><td><code>issue_branch_prefix</code></td><td><code>SWISSARMYHAMMER_ISSUE_BRANCH_PREFIX</code></td><td><code>"issue/"</code></td></tr>
+<tr><td><code>issue_number_width</code></td><td><code>SWISSARMYHAMMER_ISSUE_NUMBER_WIDTH</code></td><td><code>6</code></td></tr>
+</tbody></table>
+</div>
+<h2 id="error-handling-10"><a class="header" href="#error-handling-10">Error Handling</a></h2>
+<p>Configuration errors are handled gracefully:</p>
+<ul>
+<li><strong>File not found</strong>: Uses environment variables and defaults</li>
+<li><strong>Invalid YAML syntax</strong>: Shows detailed parsing error with line numbers</li>
+<li><strong>Invalid values</strong>: Shows validation error with helpful hints</li>
+<li><strong>Permission errors</strong>: Falls back to environment variables and defaults</li>
+</ul>
+<p>All configuration errors include helpful error messages and suggestions for resolution.</p>
+<p>For more configuration troubleshooting help, see the <a href="troubleshooting.html#configuration-issues">Troubleshooting Guide</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="file-watching-2"><a class="header" href="#file-watching-2">File Watching</a></h1>
 <p>SwissArmyHammer includes a powerful file watching system that automatically detects and reloads prompt changes without restarting the server.</p>
 <h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
 <p>The file watcher monitors your prompt directories for changes and automatically:</p>
@@ -11304,7 +10920,7 @@ curl http://localhost:3333/api/watcher/events
 # Trigger manual reload
 curl -X POST http://localhost:3333/api/watcher/reload
 </code></pre>
-<h2 id="best-practices-17"><a class="header" href="#best-practices-17">Best Practices</a></h2>
+<h2 id="best-practices-16"><a class="header" href="#best-practices-16">Best Practices</a></h2>
 <h3 id="development"><a class="header" href="#development">Development</a></h3>
 <ol>
 <li><strong>Use aggressive watching</strong> for immediate feedback</li>
@@ -11699,7 +11315,7 @@ Override chain for 'code-review':
 # Test with override preview
 swissarmyhammer test code-review --preview-overrides
 </code></pre>
-<h2 id="best-practices-18"><a class="header" href="#best-practices-18">Best Practices</a></h2>
+<h2 id="best-practices-17"><a class="header" href="#best-practices-17">Best Practices</a></h2>
 <h3 id="1-minimal-overrides"><a class="header" href="#1-minimal-overrides">1. Minimal Overrides</a></h3>
 <p>Override only what needs to change:</p>
 <pre><code class="language-yaml"># Good: Override specific fields
@@ -12145,7 +11761,7 @@ swissarmyhammer validate --overrides
 <pre><code class="language-bash">swissarmyhammer test example --topic "testing prompts"
 </code></pre>
 <h2 id="usage-patterns"><a class="header" href="#usage-patterns">Usage Patterns</a></h2>
-<h3 id="basic-usage-3"><a class="header" href="#basic-usage-3">Basic Usage</a></h3>
+<h3 id="basic-usage-4"><a class="header" href="#basic-usage-4">Basic Usage</a></h3>
 <pre><code class="language-bash"># Use a prompt with default arguments
 swissarmyhammer test review/code --file_path "main.py"
 
@@ -12171,7 +11787,7 @@ swissarmyhammer test test/unit --code "$(cat service.py)" --style "TDD"
 swissarmyhammer test review/security --code "$(cat auth.js)" --severity_threshold "medium" &gt; security.md
 swissarmyhammer test test/unit --code "$(cat auth.js)" --focus "security edge cases"
 </code></pre>
-<h2 id="best-practices-19"><a class="header" href="#best-practices-19">Best Practices</a></h2>
+<h2 id="best-practices-18"><a class="header" href="#best-practices-18">Best Practices</a></h2>
 <ol>
 <li><strong>Choose the Right Prompt</strong> - Select prompts that match your specific task</li>
 <li><strong>Provide Context</strong> - Use optional arguments to give more context</li>
@@ -12189,8 +11805,345 @@ swissarmyhammer test test/unit --code "$(cat auth.js)" --focus "security edge ca
 </ol>
 <p>For more information on creating custom prompts, see <a href="./creating-prompts.html">Creating Prompts</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="custom-filters-reference-1"><a class="header" href="#custom-filters-reference-1">Custom Filters Reference</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="examples-12"><a class="header" href="#examples-12">Examples</a></h1>
-<p>This page provides real-world examples of using SwissArmyHammer for various development tasks.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="examples-11"><a class="header" href="#examples-11">Examples</a></h1>
+<p>This page provides real-world examples of using SwissArmyHammer for various development tasks. Each example demonstrates practical usage patterns and best practices for prompt engineering.</p>
+<h2 id="overview-6"><a class="header" href="#overview-6">Overview</a></h2>
+<p>SwissArmyHammer excels at organizing and managing prompts for:</p>
+<ul>
+<li><strong>Development workflows</strong> - Code review, testing, debugging</li>
+<li><strong>Documentation tasks</strong> - API docs, user guides, technical writing</li>
+<li><strong>Security analysis</strong> - Code audits, vulnerability assessment</li>
+<li><strong>Content creation</strong> - Blog posts, marketing copy, educational materials</li>
+<li><strong>Data processing</strong> - Analysis, transformation, reporting</li>
+</ul>
+<h2 id="new-advanced-prompts"><a class="header" href="#new-advanced-prompts">New Advanced Prompts</a></h2>
+<h3 id="ai-code-assistant"><a class="header" href="#ai-code-assistant">AI Code Assistant</a></h3>
+<p>Intelligent code assistance with context awareness:</p>
+<pre><code class="language-markdown">---
+title: AI Code Assistant
+description: Intelligent code assistance with context awareness
+category: development
+tags: ["coding", "assistance", "refactoring", "optimization"]
+arguments:
+  - name: code
+    description: The code to analyze and improve
+    required: true
+  - name: language
+    description: Programming language
+    required: true
+  - name: task
+    description: Specific task to perform
+    required: true
+    default: "improve"
+  - name: context
+    description: Additional context about the code
+    required: false
+---
+
+# AI Code Assistant
+
+You are an expert {{ language }} developer. Please help me with the following task: **{{ task }}**
+
+## Code to analyze:
+
+```{{ language }}
+{{ code }}
+</code></pre>
+<p>{% if context %}</p>
+<h2 id="additional-context"><a class="header" href="#additional-context">Additional context:</a></h2>
+<p>{{ context }}
+{% endif %}</p>
+<h2 id="instructions"><a class="header" href="#instructions">Instructions:</a></h2>
+<p>{% if task == “improve” %}
+Please improve this code by:</p>
+<ol>
+<li>Identifying potential issues or inefficiencies</li>
+<li>Suggesting optimizations</li>
+<li>Ensuring best practices are followed</li>
+<li>Improving readability and maintainability
+{% elsif task == “refactor” %}
+Please refactor this code to:</li>
+<li>Improve structure and organization</li>
+<li>Extract reusable components</li>
+<li>Reduce complexity</li>
+<li>Follow {{ language }} conventions
+{% elsif task == “optimize” %}
+Please optimize this code for:</li>
+<li>Performance improvements</li>
+<li>Memory efficiency</li>
+<li>Algorithmic complexity</li>
+<li>Resource usage
+{% elsif task == “debug” %}
+Please help debug this code by:</li>
+<li>Identifying potential bugs</li>
+<li>Analyzing logic errors</li>
+<li>Suggesting fixes</li>
+<li>Explaining the root cause
+{% elsif task == “document” %}
+Please document this code by:</li>
+<li>Adding clear docstrings/comments</li>
+<li>Explaining complex logic</li>
+<li>Providing usage examples</li>
+<li>Describing parameters and return values
+{% else %}
+Please analyze this code and provide assistance with: {{ task }}
+{% endif %}</li>
+</ol>
+<h2 id="response-format"><a class="header" href="#response-format">Response format:</a></h2>
+<ul>
+<li><strong>Analysis</strong>: What you found in the code</li>
+<li><strong>Recommendations</strong>: Specific improvements to make</li>
+<li><strong>Updated Code</strong>: The improved version</li>
+<li><strong>Explanation</strong>: Why these changes improve the code</li>
+</ul>
+<pre><code>
+### Security Audit
+Comprehensive security analysis following OWASP guidelines:
+```markdown
+---
+title: Security Audit
+description: Comprehensive security analysis and recommendations
+category: security
+tags: ["security", "audit", "vulnerability", "analysis"]
+arguments:
+  - name: code
+    description: Code to audit for security issues
+    required: true
+  - name: language
+    description: Programming language
+    required: true
+  - name: context
+    description: Application context and environment
+    required: false
+  - name: compliance
+    description: Compliance standards to check against
+    required: false
+    default: "OWASP"
+  - name: severity_level
+    description: Minimum severity level to report
+    required: false
+    default: "medium"
+---
+
+# Security Audit
+
+You are a cybersecurity expert conducting a comprehensive security audit of {{ language }} code.
+
+## Code to Audit
+
+```{{ language }}
+{{ code }}
+</code></pre>
+<p>{% if context %}</p>
+<h2 id="application-context"><a class="header" href="#application-context">Application Context</a></h2>
+<p>{{ context }}
+{% endif %}</p>
+<h2 id="audit-scope"><a class="header" href="#audit-scope">Audit Scope</a></h2>
+<h3 id="security-standards"><a class="header" href="#security-standards">Security Standards</a></h3>
+<p>{% if compliance == “OWASP” %}
+Evaluate against OWASP Top 10 security risks:</p>
+<ol>
+<li><strong>A01:2021 - Broken Access Control</strong></li>
+<li><strong>A02:2021 - Cryptographic Failures</strong></li>
+<li><strong>A03:2021 - Injection</strong></li>
+<li><strong>A04:2021 - Insecure Design</strong></li>
+<li><strong>A05:2021 - Security Misconfiguration</strong></li>
+<li><strong>A06:2021 - Vulnerable and Outdated Components</strong></li>
+<li><strong>A07:2021 - Identification and Authentication Failures</strong></li>
+<li><strong>A08:2021 - Software and Data Integrity Failures</strong></li>
+<li><strong>A09:2021 - Security Logging and Monitoring Failures</strong></li>
+<li><strong>A10:2021 - Server-Side Request Forgery (SSRF)</strong>
+{% else %}
+Evaluate against {{ compliance }} security standards and requirements.
+{% endif %}</li>
+</ol>
+<h3 id="-language--capitalize--specific-security-concerns"><a class="header" href="#-language--capitalize--specific-security-concerns">{{ language | capitalize }}-Specific Security Concerns</a></h3>
+<p>{% if language == “javascript” or language == “typescript” %}</p>
+<ul>
+<li><strong>XSS Prevention</strong>: Input sanitization and output encoding</li>
+<li><strong>CSRF Protection</strong>: Token validation and SameSite cookies</li>
+<li><strong>Prototype Pollution</strong>: Object property manipulation</li>
+<li><strong>Dependency Vulnerabilities</strong>: Third-party package security</li>
+<li><strong>Client-Side Security</strong>: Browser-specific vulnerabilities
+{% elsif language == “python” %}</li>
+<li><strong>SQL Injection</strong>: Query parameterization and ORM usage</li>
+<li><strong>Code Injection</strong>: eval() and exec() usage</li>
+<li><strong>Pickle Vulnerabilities</strong>: Insecure deserialization</li>
+<li><strong>Path Traversal</strong>: File system access controls</li>
+<li><strong>Dependency Management</strong>: Package security
+{% elsif language == “java” %}</li>
+<li><strong>Deserialization Vulnerabilities</strong>: Object deserialization</li>
+<li><strong>XML External Entity (XXE)</strong>: XML parser configuration</li>
+<li><strong>Path Traversal</strong>: File system access</li>
+<li><strong>SQL Injection</strong>: PreparedStatement usage</li>
+<li><strong>Reflection Attacks</strong>: Dynamic code execution
+{% elsif language == “rust” %}</li>
+<li><strong>Memory Safety</strong>: While Rust prevents many issues, check for unsafe blocks</li>
+<li><strong>Integer Overflow</strong>: Arithmetic operations</li>
+<li><strong>Dependency Security</strong>: Cargo.toml vulnerabilities</li>
+<li><strong>Error Handling</strong>: Information disclosure
+{% elsif language == “go” %}</li>
+<li><strong>SQL Injection</strong>: Query parameterization</li>
+<li><strong>Command Injection</strong>: exec.Command usage</li>
+<li><strong>Path Traversal</strong>: Filepath handling</li>
+<li><strong>Goroutine Security</strong>: Concurrent access patterns
+{% else %}</li>
+<li><strong>Input Validation</strong>: Data sanitization and validation</li>
+<li><strong>Authentication</strong>: Access control mechanisms</li>
+<li><strong>Cryptography</strong>: Secure implementations</li>
+<li><strong>Error Handling</strong>: Information disclosure
+{% endif %}</li>
+</ul>
+<h2 id="audit-report-format"><a class="header" href="#audit-report-format">Audit Report Format</a></h2>
+<h3 id="executive-summary"><a class="header" href="#executive-summary">Executive Summary</a></h3>
+<ul>
+<li>Overall security posture</li>
+<li>Critical findings count</li>
+<li>Risk level assessment</li>
+</ul>
+<h3 id="detailed-findings"><a class="header" href="#detailed-findings">Detailed Findings</a></h3>
+<p>For each vulnerability found:</p>
+<h4 id="finding-n-vulnerability-name"><a class="header" href="#finding-n-vulnerability-name">Finding #N: [Vulnerability Name]</a></h4>
+<ul>
+<li><strong>Severity</strong>: {% if severity_level == “critical” %}CRITICAL{% elsif severity_level == “high” %}HIGH{% elsif severity_level == “medium” %}MEDIUM{% else %}LOW{% endif %} | HIGH | MEDIUM | LOW</li>
+<li><strong>Category</strong>: [OWASP Category or Security Domain]</li>
+<li><strong>Location</strong>: [File/Function/Line number]</li>
+<li><strong>Description</strong>: Detailed explanation of the vulnerability</li>
+<li><strong>Impact</strong>: Potential consequences if exploited</li>
+<li><strong>Evidence</strong>: Code snippets demonstrating the issue</li>
+<li><strong>Remediation</strong>: Specific steps to fix the vulnerability</li>
+<li><strong>Resources</strong>: Links to relevant security guidelines</li>
+</ul>
+<h3 id="recommendations"><a class="header" href="#recommendations">Recommendations</a></h3>
+<ol>
+<li><strong>Immediate Actions</strong>: Critical issues requiring immediate attention</li>
+<li><strong>Short-term Improvements</strong>: High-priority security enhancements</li>
+<li><strong>Long-term Strategy</strong>: Ongoing security practices and policies</li>
+<li><strong>Security Tools</strong>: Recommended tools for ongoing monitoring</li>
+</ol>
+<h3 id="secure-code-examples"><a class="header" href="#secure-code-examples">Secure Code Examples</a></h3>
+<p>Provide corrected code examples that demonstrate:</p>
+<ul>
+<li>Proper input validation</li>
+<li>Secure authentication/authorization</li>
+<li>Safe data handling</li>
+<li>Error handling best practices</li>
+</ul>
+<h2 id="compliance-check"><a class="header" href="#compliance-check">Compliance Check</a></h2>
+<p>{% if compliance %}
+Verify compliance with {{ compliance }} requirements and note any gaps.
+{% endif %}</p>
+<h2 id="security-best-practices"><a class="header" href="#security-best-practices">Security Best Practices</a></h2>
+<p>Include relevant security best practices for {{ language }} development:</p>
+<ul>
+<li>Secure coding guidelines</li>
+<li>Regular security testing</li>
+<li>Dependency management</li>
+<li>Security monitoring</li>
+</ul>
+<p>Report only findings at {{ severity_level }} severity level and above.</p>
+<pre><code>
+### Technical Writer
+Professional technical documentation generation:
+```markdown
+---
+title: Technical Writer
+description: Generate technical documentation with proper structure
+category: documentation
+tags: ["documentation", "technical-writing", "api", "guides"]
+arguments:
+  - name: topic
+    description: What to document
+    required: true
+  - name: audience
+    description: Target audience level
+    required: true
+    default: "developers"
+  - name: format
+    description: Documentation format
+    required: false
+    default: "markdown"
+  - name: sections
+    description: Specific sections to include
+    required: false
+  - name: examples
+    description: Include code examples
+    required: false
+    default: "true"
+---
+
+# Technical Writer
+
+You are a skilled technical writer specializing in {{ format }} documentation for {{ audience }}.
+
+## Task
+Create comprehensive documentation for: **{{ topic }}**
+
+## Target Audience
+{{ audience | capitalize }} - adjust complexity and terminology accordingly.
+
+## Documentation Requirements
+
+### Structure
+{% if format == "markdown" %}
+Use clear Markdown formatting with:
+- Proper heading hierarchy (# ## ###)
+- Code blocks with syntax highlighting
+- Tables for structured data
+- Lists for step-by-step instructions
+{% elsif format == "rst" %}
+Use reStructuredText formatting with:
+- Proper heading hierarchy (===, ---, ...)
+- Code blocks with language specification
+- Tables and lists for organization
+- Cross-references where appropriate
+{% else %}
+Use {{ format }} best practices for formatting and structure.
+{% endif %}
+
+### Content Guidelines
+1. **Clear and Concise**: Use simple, direct language
+2. **Logical Flow**: Organize information in a logical sequence
+3. **Actionable**: Provide specific, actionable instructions
+4. **Complete**: Cover all necessary information
+5. **Accessible**: Make content accessible to {{ audience }}
+
+{% if sections %}
+### Required Sections
+Include these specific sections:
+{{ sections }}
+{% else %}
+### Standard Sections
+Include these standard sections:
+- **Overview**: Brief introduction and purpose
+- **Prerequisites**: What users need before starting
+- **Getting Started**: Basic setup and first steps
+- **Usage**: Detailed usage instructions
+- **Examples**: Practical examples and use cases
+- **Troubleshooting**: Common issues and solutions
+- **Reference**: Detailed API or configuration reference
+{% endif %}
+
+{% if examples == "true" %}
+### Code Examples
+Include practical code examples that:
+- Demonstrate real-world usage
+- Are complete and runnable
+- Include expected outputs
+- Cover common use cases
+- Follow best practices
+{% endif %}
+
+## Quality Standards
+- **Accuracy**: Ensure all information is correct and up-to-date
+- **Completeness**: Cover all aspects users need to know
+- **Clarity**: Use clear, unambiguous language
+- **Consistency**: Maintain consistent style and terminology
+- **Usability**: Make documentation easy to navigate and use
+
+## Output Format
+Provide well-structured {{ format }} documentation that {{ audience }} can immediately use and understand.
+</code></pre>
 <h2 id="basic-prompt-usage"><a class="header" href="#basic-prompt-usage">Basic Prompt Usage</a></h2>
 <h3 id="simple-code-review"><a class="header" href="#simple-code-review">Simple Code Review</a></h3>
 <pre><code class="language-bash"># Review a Python file
@@ -12882,7 +12835,7 @@ swissarmyhammer serve --port 8081
 </li>
 <li>
 <p><strong>Debug mode</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer serve --debug
+<pre><code class="language-bash">swissarmyhammer --debug serve
 </code></pre>
 </li>
 <li>
@@ -12938,12 +12891,12 @@ curl -sSL https://install.sh | bash
 <li>
 <p><strong>Check logs</strong>:</p>
 <pre><code class="language-bash"># Enable debug logging
-swissarmyhammer serve --debug &gt; debug.log 2&gt;&amp;1
+swissarmyhammer --debug serve &gt; debug.log 2&gt;&amp;1
 </code></pre>
 </li>
 <li>
 <p><strong>Validate prompt syntax</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer doctor --check prompts
+<pre><code class="language-bash">swissarmyhammer validate
 </code></pre>
 </li>
 </ol>
@@ -12961,8 +12914,8 @@ ls -la ./.swissarmyhammer/prompts
 </li>
 <li>
 <p><strong>Validate prompts</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer test &lt;prompt-name&gt;
-swissarmyhammer doctor --check prompts --verbose
+<pre><code class="language-bash">swissarmyhammer prompt test &lt;prompt-name&gt;
+swissarmyhammer validate --verbose
 </code></pre>
 </li>
 <li>
@@ -13048,7 +13001,7 @@ description: What this prompt does
 <ol>
 <li>
 <p><strong>Check override hierarchy</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer list --verbose | grep "prompt-name"
+<pre><code class="language-bash">swissarmyhammer prompt list --verbose | grep "prompt-name"
 </code></pre>
 </li>
 <li>
@@ -13060,7 +13013,7 @@ description: What this prompt does
 </ul>
 </li>
 </ol>
-<h2 id="performance-issues-4"><a class="header" href="#performance-issues-4">Performance Issues</a></h2>
+<h2 id="performance-issues-3"><a class="header" href="#performance-issues-3">Performance Issues</a></h2>
 <h3 id="slow-prompt-loading-1"><a class="header" href="#slow-prompt-loading-1">Slow Prompt Loading</a></h3>
 <p><strong>Problem</strong>: Server takes long to start or reload</p>
 <p><strong>Solutions</strong>:</p>
@@ -13157,23 +13110,23 @@ sudo sysctl -p
 </ol>
 <h2 id="cli-command-issues"><a class="header" href="#cli-command-issues">CLI Command Issues</a></h2>
 <h3 id="test-command-fails"><a class="header" href="#test-command-fails">Test Command Fails</a></h3>
-<p><strong>Problem</strong>: <code>swissarmyhammer test</code> errors</p>
+<p><strong>Problem</strong>: <code>swissarmyhammer prompt test</code> errors</p>
 <p><strong>Solutions</strong>:</p>
 <ol>
 <li>
 <p><strong>Check prompt exists</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer list | grep "prompt-name"
+<pre><code class="language-bash">swissarmyhammer prompt list | grep "prompt-name"
 </code></pre>
 </li>
 <li>
 <p><strong>Validate arguments</strong>:</p>
 <pre><code class="language-bash"># Show required arguments
-swissarmyhammer test prompt-name --help
+swissarmyhammer prompt test prompt-name --help
 </code></pre>
 </li>
 <li>
 <p><strong>Debug mode</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer test prompt-name --debug
+<pre><code class="language-bash">swissarmyhammer prompt test prompt-name --debug
 </code></pre>
 </li>
 </ol>
@@ -13248,32 +13201,86 @@ ldd $(which swissarmyhammer)
 <h2 id="debug-techniques"><a class="header" href="#debug-techniques">Debug Techniques</a></h2>
 <h3 id="enable-verbose-logging"><a class="header" href="#enable-verbose-logging">Enable Verbose Logging</a></h3>
 <pre><code class="language-bash"># Server debug mode
-swissarmyhammer serve --debug
+swissarmyhammer --debug serve
 
 # Redirect to file
-swissarmyhammer serve --debug &gt; debug.log 2&gt;&amp;1
+swissarmyhammer --debug serve &gt; debug.log 2&gt;&amp;1
 
 # CLI debug
-RUST_LOG=debug swissarmyhammer test prompt-name
+RUST_LOG=debug swissarmyhammer prompt test prompt-name
 </code></pre>
 <h3 id="check-configuration"><a class="header" href="#check-configuration">Check Configuration</a></h3>
 <pre><code class="language-bash"># Run comprehensive checks
 swissarmyhammer doctor --verbose
 
 # Check specific areas
-swissarmyhammer doctor --check prompts --check mcp
+swissarmyhammer validate --check mcp
 
 # Auto-fix issues
 swissarmyhammer doctor --fix
 </code></pre>
 <h3 id="trace-mcp-communication"><a class="header" href="#trace-mcp-communication">Trace MCP Communication</a></h3>
 <pre><code class="language-bash"># Save MCP messages
-swissarmyhammer serve --debug | grep MCP &gt; mcp-trace.log
+swissarmyhammer --debug serve | grep MCP &gt; mcp-trace.log
 
 # Monitor in real-time
-swissarmyhammer serve --debug | grep -E "(request|response)"
+swissarmyhammer --debug serve | grep -E "(request|response)"
 </code></pre>
+<h2 id="configuration-issues-2"><a class="header" href="#configuration-issues-2">Configuration Issues</a></h2>
+<h3 id="configuration-file-not-loading"><a class="header" href="#configuration-file-not-loading">Configuration File Not Loading</a></h3>
+<p><strong>Problem</strong>: SwissArmyHammer isn’t using my configuration file.</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>Ensure the file is named exactly <code>swissarmyhammer.yaml</code></li>
+<li>Place the file in your repository root (same directory where you run SwissArmyHammer)</li>
+<li>Check file permissions: <code>ls -la swissarmyhammer.yaml</code></li>
+<li>Validate file syntax: <code>swissarmyhammer config validate</code></li>
+</ol>
+<h3 id="invalid-yaml-syntax-1"><a class="header" href="#invalid-yaml-syntax-1">Invalid YAML Syntax</a></h3>
+<p><strong>Problem</strong>: Getting YAML parsing errors.</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>Check indentation (use spaces, not tabs)</li>
+<li>Ensure proper YAML syntax with online validators</li>
+<li>Quote string values that contain special characters</li>
+<li>Check for trailing spaces or special characters</li>
+</ol>
+<p>Example of common YAML mistakes:</p>
+<pre><code class="language-yaml"># ❌ Wrong - uses tabs for indentation
+base_branch:	"main"
+
+# ❌ Wrong - inconsistent quotes  
+base_branch: 'main"
+
+# ✅ Correct
+base_branch: "main"
+</code></pre>
+<h3 id="branch-name-validation-errors"><a class="header" href="#branch-name-validation-errors">Branch Name Validation Errors</a></h3>
+<p><strong>Problem</strong>: Getting “Invalid configuration value for base_branch”.</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>Remove spaces from branch names: <code>feature branch</code> → <code>feature-branch</code></li>
+<li>Avoid special characters: <code>~ ^ : ? * [ \</code></li>
+<li>Use standard git branch naming conventions</li>
+<li>Check if branch actually exists in your repository</li>
+</ol>
+<h3 id="environment-variables-not-working"><a class="header" href="#environment-variables-not-working">Environment Variables Not Working</a></h3>
+<p><strong>Problem</strong>: Environment variables aren’t being used.</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>Use the correct prefix: <code>SWISSARMYHAMMER_BASE_BRANCH</code></li>
+<li>Export variables in your shell: <code>export SWISSARMYHAMMER_BASE_BRANCH=develop</code></li>
+<li>Check variable is set: <code>echo $SWISSARMYHAMMER_BASE_BRANCH</code></li>
+<li>Remember YAML config overrides environment variables</li>
+</ol>
 <h2 id="getting-help-1"><a class="header" href="#getting-help-1">Getting Help</a></h2>
+<p>For configuration issues:</p>
+<pre><code class="language-bash">swissarmyhammer config help      # Configuration documentation
+swissarmyhammer config validate  # Check current config  
+swissarmyhammer config show      # Show active configuration
+swissarmyhammer doctor          # Overall system health check
+</code></pre>
+<h2 id="general-help"><a class="header" href="#general-help">General Help</a></h2>
 <h3 id="documentation-1"><a class="header" href="#documentation-1">Documentation</a></h3>
 <ul>
 <li>Check this troubleshooting guide first</li>
@@ -13352,7 +13359,7 @@ ps aux | grep swissarmyhammer | grep -v grep
 <h3 id="prompt-not-found"><a class="header" href="#prompt-not-found">“Prompt not found”</a></h3>
 <ul>
 <li>Prompt name doesn’t exist</li>
-<li>Check: <code>swissarmyhammer list</code></li>
+<li>Check: <code>swissarmyhammer prompt list</code></li>
 </ul>
 <h3 id="connection-refused"><a class="header" href="#connection-refused">“Connection refused”</a></h3>
 <ul>
@@ -13379,20 +13386,20 @@ swissarmyhammer export ~/.swissarmyhammer/backups/prompts-$(date +%Y%m%d).tar.gz
 <li>
 <p><strong>Test changes</strong>:</p>
 <pre><code class="language-bash"># Before committing
-swissarmyhammer test new-prompt
-swissarmyhammer doctor --check prompts
+swissarmyhammer prompt test new-prompt
+swissarmyhammer validate
 </code></pre>
 </li>
 <li>
 <p><strong>Monitor logs</strong>:</p>
 <pre><code class="language-bash"># Keep logs for debugging
-swissarmyhammer serve --debug &gt; server.log 2&gt;&amp;1 &amp;
+swissarmyhammer --debug serve &gt; server.log 2&gt;&amp;1 &amp;
 </code></pre>
 </li>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="contributing-1"><a class="header" href="#contributing-1">Contributing</a></h1>
 <p>Thank you for your interest in contributing to SwissArmyHammer! This guide will help you get started with contributing to the project.</p>
-<h2 id="overview-6"><a class="header" href="#overview-6">Overview</a></h2>
+<h2 id="overview-7"><a class="header" href="#overview-7">Overview</a></h2>
 <p>SwissArmyHammer welcomes contributions in many forms:</p>
 <ul>
 <li><strong>Code contributions</strong> - Features, bug fixes, optimizations</li>
@@ -13401,7 +13408,7 @@ swissarmyhammer serve --debug &gt; server.log 2&gt;&amp;1 &amp;
 <li><strong>Bug reports</strong> - Issues and reproducible test cases</li>
 <li><strong>Feature requests</strong> - Ideas and suggestions</li>
 </ul>
-<h2 id="getting-started-1"><a class="header" href="#getting-started-1">Getting Started</a></h2>
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
 <h3 id="prerequisites-1"><a class="header" href="#prerequisites-1">Prerequisites</a></h3>
 <ul>
 <li>Rust 1.70+ (check with <code>rustc --version</code>)</li>
@@ -13815,7 +13822,7 @@ git push -f origin feature/your-feature-name
 <li>Tag release after merge</li>
 <li>Publish to crates.io</li>
 </ol>
-<h2 id="community-1"><a class="header" href="#community-1">Community</a></h2>
+<h2 id="community"><a class="header" href="#community">Community</a></h2>
 <h3 id="getting-help-2"><a class="header" href="#getting-help-2">Getting Help</a></h3>
 <ul>
 <li><strong>GitHub Issues</strong> - Bug reports and features</li>
@@ -14095,7 +14102,7 @@ rust-gdb target/debug/swissarmyhammer
 # Use LLDB
 rust-lldb target/debug/swissarmyhammer
 </code></pre>
-<h3 id="logging-1"><a class="header" href="#logging-1">Logging</a></h3>
+<h3 id="logging"><a class="header" href="#logging">Logging</a></h3>
 <p>Add debug logging to your code:</p>
 <pre><code class="language-rust">use log::{debug, info, warn, error};
 
@@ -14294,7 +14301,7 @@ cargo test -- --test-threads=1
 # Skip slow tests
 cargo test --lib
 </code></pre>
-<h4 id="performance-issues-5"><a class="header" href="#performance-issues-5">Performance Issues</a></h4>
+<h4 id="performance-issues-4"><a class="header" href="#performance-issues-4">Performance Issues</a></h4>
 <pre><code class="language-bash"># Build with debug symbols in release
 cargo build --release --features debug
 
@@ -14380,7 +14387,7 @@ jobs:
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="testing-3"><a class="header" href="#testing-3">Testing</a></h1>
 <p>This guide covers testing practices and strategies for SwissArmyHammer development.</p>
-<h2 id="overview-7"><a class="header" href="#overview-7">Overview</a></h2>
+<h2 id="overview-8"><a class="header" href="#overview-8">Overview</a></h2>
 <p>SwissArmyHammer uses a comprehensive testing approach:</p>
 <ul>
 <li><strong>Unit tests</strong> - Test individual components</li>
@@ -15016,7 +15023,7 @@ jobs:
     - name: Doc Tests
       run: cargo test --doc
 </code></pre>
-<h2 id="best-practices-20"><a class="header" href="#best-practices-20">Best Practices</a></h2>
+<h2 id="best-practices-19"><a class="header" href="#best-practices-19">Best Practices</a></h2>
 <h3 id="1-test-organization"><a class="header" href="#1-test-organization">1. Test Organization</a></h3>
 <ul>
 <li>Keep unit tests with the code</li>
@@ -15063,7 +15070,7 @@ fn test_concurrent_access_safety() { } // Clear test scenario</code></pre>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="release-process-1"><a class="header" href="#release-process-1">Release Process</a></h1>
 <p>This guide documents the release process for SwissArmyHammer, including versioning, testing, building, and publishing.</p>
-<h2 id="overview-8"><a class="header" href="#overview-8">Overview</a></h2>
+<h2 id="overview-9"><a class="header" href="#overview-9">Overview</a></h2>
 <p>SwissArmyHammer follows a structured release process:</p>
 <ol>
 <li><strong>Version Planning</strong> - Determine version number and scope</li>
@@ -15573,7 +15580,7 @@ cargo release patch
 </code></pre>
 </li>
 </ol>
-<h2 id="best-practices-21"><a class="header" href="#best-practices-21">Best Practices</a></h2>
+<h2 id="best-practices-20"><a class="header" href="#best-practices-20">Best Practices</a></h2>
 <ol>
 <li>
 <p><strong>Test Thoroughly</strong></p>
@@ -15631,9 +15638,11 @@ and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semant
 </ul>
 <h3 id="changed"><a class="header" href="#changed">Changed</a></h3>
 <ul>
+<li><strong>BREAKING</strong>: The <code>validate</code> command no longer accepts custom workflow directories via <code>--workflow-dir</code>. Workflows are now only loaded from standard locations (builtin, user <code>~/.swissarmyhammer/workflows</code>, and local <code>./.swissarmyhammer/workflows</code>)</li>
 <li>Improved template rendering performance</li>
 <li>Better error handling in MCP server</li>
 <li>Enhanced file watching efficiency</li>
+<li>Validation error paths for workflows now include source location (e.g., <code>workflow:builtin:example</code> instead of <code>workflow:example</code>)</li>
 </ul>
 <h3 id="fixed"><a class="header" href="#fixed">Fixed</a></h3>
 <ul>
@@ -15944,6 +15953,7 @@ SOFTWARE.
             window.setTimeout(window.print, 100);
         });
         </script>
+
 
     </div>
     </body>

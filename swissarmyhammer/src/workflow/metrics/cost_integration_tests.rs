@@ -20,17 +20,17 @@ mod tests {
         api_calls: usize,
     ) -> CostMetrics {
         let mut cost_metrics = CostMetrics::new(session_id);
-        
+
         // Create a test action breakdown
         let mut breakdown = ActionCostBreakdown::new("test_action".to_string());
         breakdown.cost = total_cost;
         breakdown.input_tokens = input_tokens;
         breakdown.output_tokens = output_tokens;
         breakdown.api_call_count = api_calls;
-        
+
         cost_metrics.add_action_cost("test_action".to_string(), breakdown);
         cost_metrics.complete();
-        
+
         cost_metrics
     }
 
@@ -101,10 +101,10 @@ mod tests {
         let session_id = CostSessionId::new();
 
         // Start a workflow run
-        metrics.start_run(run_id.clone(), workflow_name.clone());
+        metrics.start_run(run_id, workflow_name.clone());
 
         // Start cost tracking
-        metrics.start_cost_tracking(&run_id, session_id.clone());
+        metrics.start_cost_tracking(&run_id, session_id);
 
         // Add some cost data
         let cost_metrics = create_test_cost_metrics(
@@ -142,12 +142,11 @@ mod tests {
             let run_id = WorkflowRunId::new();
             let session_id = CostSessionId::new();
 
-            metrics.start_run(run_id.clone(), workflow_name.clone());
-            metrics.start_cost_tracking(&run_id, session_id.clone());
+            metrics.start_run(run_id, workflow_name.clone());
+            metrics.start_cost_tracking(&run_id, session_id);
 
-            let cost_metrics = create_test_cost_metrics(
-                session_id, cost, input_tokens, output_tokens, api_calls,
-            );
+            let cost_metrics =
+                create_test_cost_metrics(session_id, cost, input_tokens, output_tokens, api_calls);
 
             metrics.update_cost_metrics(&run_id, cost_metrics);
             metrics.complete_run(
@@ -186,12 +185,11 @@ mod tests {
             let session_id = CostSessionId::new();
             let wf_name = WorkflowName::new(workflow_name);
 
-            metrics.start_run(run_id.clone(), wf_name);
-            metrics.start_cost_tracking(&run_id, session_id.clone());
+            metrics.start_run(run_id, wf_name);
+            metrics.start_cost_tracking(&run_id, session_id);
 
-            let cost_metrics = create_test_cost_metrics(
-                session_id, cost, input_tokens, output_tokens, 2,
-            );
+            let cost_metrics =
+                create_test_cost_metrics(session_id, cost, input_tokens, output_tokens, 2);
 
             metrics.update_cost_metrics(&run_id, cost_metrics);
             metrics.complete_run(
@@ -220,8 +218,8 @@ mod tests {
         let workflow_name = WorkflowName::new("test_workflow");
         let session_id = CostSessionId::new();
 
-        metrics.start_run(run_id.clone(), workflow_name);
-        metrics.start_cost_tracking(&run_id, session_id.clone());
+        metrics.start_run(run_id, workflow_name);
+        metrics.start_cost_tracking(&run_id, session_id);
 
         let cost_metrics = create_test_cost_metrics(
             session_id,
@@ -237,8 +235,14 @@ mod tests {
         // Check that trends were updated
         let global_metrics = metrics.get_global_metrics();
         assert_eq!(global_metrics.resource_trends.cost_trend.len(), 1);
-        assert_eq!(global_metrics.resource_trends.token_efficiency_trend.len(), 1);
-        assert_eq!(global_metrics.resource_trends.avg_cost_per_call_trend.len(), 1);
+        assert_eq!(
+            global_metrics.resource_trends.token_efficiency_trend.len(),
+            1
+        );
+        assert_eq!(
+            global_metrics.resource_trends.avg_cost_per_call_trend.len(),
+            1
+        );
 
         // Verify trend values
         let cost_trend_value = global_metrics.resource_trends.cost_trend[0].1;
@@ -258,8 +262,8 @@ mod tests {
         let workflow_name = WorkflowName::new("test_workflow");
         let session_id = CostSessionId::new();
 
-        metrics.start_run(run_id.clone(), workflow_name);
-        metrics.start_cost_tracking(&run_id, session_id.clone());
+        metrics.start_run(run_id, workflow_name);
+        metrics.start_cost_tracking(&run_id, session_id);
 
         // Create cost metrics with zero values to test edge cases
         let cost_metrics = create_test_cost_metrics(
@@ -291,7 +295,7 @@ mod tests {
         let workflow_name = WorkflowName::new("test_workflow");
 
         // Start and complete a run without any cost tracking
-        metrics.start_run(run_id.clone(), workflow_name.clone());
+        metrics.start_run(run_id, workflow_name.clone());
         metrics.complete_run(
             &run_id,
             WorkflowRunStatus::Completed,
@@ -314,7 +318,7 @@ mod tests {
         let run_id = WorkflowRunId::new();
         let workflow_name = WorkflowName::new("test_workflow");
 
-        metrics.start_run(run_id.clone(), workflow_name.clone());
+        metrics.start_run(run_id, workflow_name.clone());
         metrics.record_transition(&run_id);
         metrics.complete_run(
             &run_id,

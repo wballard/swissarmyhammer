@@ -984,7 +984,7 @@ async fn metrics_workflow_command(
                     }
                     println!("Transitions: {}", run_metrics.transition_count);
                     println!("State execution times:");
-                    for (state_id, duration) in &run_metrics.state_durations {
+                    for (state_id, (duration, _)) in &run_metrics.state_durations {
                         println!("  {}: {:.2}s", state_id, duration.as_secs_f64());
                     }
                 }

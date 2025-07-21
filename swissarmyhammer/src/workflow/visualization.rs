@@ -198,7 +198,7 @@ impl ExecutionVisualizer {
 
         // Enhance with timing information from metrics
         for step in &mut trace.execution_path {
-            if let Some(duration) = metrics.state_durations.get(&step.state_id) {
+            if let Some((duration, _)) = metrics.state_durations.get(&step.state_id) {
                 step.duration = Some(*duration);
             }
         }

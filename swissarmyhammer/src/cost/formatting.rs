@@ -141,7 +141,7 @@ impl From<Decimal> for CurrencyAmount {
 
 impl std::ops::Add for CurrencyAmount {
     type Output = Self;
-    
+
     fn add(self, other: Self) -> Self::Output {
         Self(self.0 + other.0)
     }
@@ -185,7 +185,7 @@ impl std::fmt::Display for SessionDuration {
         let total_secs = self.0.as_secs();
         let minutes = total_secs / 60;
         let seconds = total_secs % 60;
-        
+
         if minutes > 0 {
             write!(f, "{}m {}s", minutes, seconds)
         } else {
@@ -223,7 +223,7 @@ impl From<u32> for ApiCallCount {
 
 impl std::ops::Add for ApiCallCount {
     type Output = Self;
-    
+
     fn add(self, other: Self) -> Self::Output {
         Self(self.0 + other.0)
     }
@@ -387,7 +387,6 @@ impl CostSectionFormatter {
         }
     }
 
-
     /// Create IssueCostData from a completed CostSession and pricing model
     pub fn create_issue_cost_data(
         session: CostSession,
@@ -436,7 +435,9 @@ impl CostSectionFormatter {
         // Average cost per call
         let average_cost_per_call = if let Some(total) = total_cost {
             if !calls.is_empty() {
-                Some(CurrencyAmount::from(total.amount() / Decimal::from(calls.len())))
+                Some(CurrencyAmount::from(
+                    total.amount() / Decimal::from(calls.len()),
+                ))
             } else {
                 None
             }
@@ -558,10 +559,7 @@ impl CostSectionFormatter {
 
     /// Format the API call breakdown table
     fn format_api_breakdown(&self, session: &CostSession) -> String {
-        let mut lines = vec![
-            "### API Call Breakdown".to_string(),
-            String::new(),
-        ];
+        let mut lines = vec!["### API Call Breakdown".to_string(), String::new()];
 
         // Table header
         lines.push(
@@ -632,10 +630,13 @@ impl CostSectionFormatter {
         // Success/failure counts
         let total_calls = stats.successful_calls + stats.failed_calls;
         if total_calls.count() > 0 {
-            let success_rate = (stats.successful_calls.count() as f64 / total_calls.count() as f64) * 100.0;
+            let success_rate =
+                (stats.successful_calls.count() as f64 / total_calls.count() as f64) * 100.0;
             lines.push(format!(
                 "- **Success rate**: {:.1}% ({} successful, {} failed)",
-                success_rate, stats.successful_calls.count(), stats.failed_calls.count()
+                success_rate,
+                stats.successful_calls.count(),
+                stats.failed_calls.count()
             ));
         }
 
@@ -738,7 +739,7 @@ mod tests {
         let summary_stats = CostSummaryStats {
             average_cost_per_call: Some(CurrencyAmount(Decimal::new(25, 2))), // $0.25
             most_expensive_call: Some(CurrencyAmount(Decimal::new(30, 2))),   // $0.30
-            token_efficiency: Some(Decimal::new(150, 2)),     // 1.50
+            token_efficiency: Some(Decimal::new(150, 2)),                     // 1.50
             total_duration: session.total_duration.map(SessionDuration::from),
             successful_calls: ApiCallCount(2),
             failed_calls: ApiCallCount(0),

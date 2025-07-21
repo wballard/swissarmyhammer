@@ -774,6 +774,19 @@ impl TestIssueBuilder {
     }
 }
 
+/// Configuration for operation sequence building to reduce parameter count
+#[derive(Debug)]
+struct OperationSequenceConfig {
+    pub test_type: String,
+    pub prefix: String,
+    pub count: usize,
+    pub include_updates: bool,
+    pub include_completions: bool,
+    pub content_type: ContentType,
+    pub content_size: Option<ContentSize>,
+    pub custom_suffix: Option<String>,
+}
+
 /// Factory for creating standardized operation sequences
 #[derive(Debug)]
 pub struct OperationSequenceFactory;
@@ -810,40 +823,31 @@ impl OperationSequenceFactory {
     }
 
     /// Common method to build operation sequences with configurable patterns
-    fn build_operation_sequence(
-        test_type: &str,
-        prefix: &str,
-        count: usize,
-        include_updates: bool,
-        include_completions: bool,
-        content_type: ContentType,
-        content_size: Option<ContentSize>,
-        custom_suffix: Option<&str>,
-    ) -> Vec<mock_mcp::McpOperation> {
+    fn build_operation_sequence(config: OperationSequenceConfig) -> Vec<mock_mcp::McpOperation> {
         let mut operations = Vec::new();
 
-        for i in 0..count {
+        for i in 0..config.count {
             // Create issue operation
             operations.push(Self::build_issue_operation(
-                test_type,
-                prefix,
+                &config.test_type,
+                &config.prefix,
                 i,
                 i,
-                content_type,
-                content_size,
-                custom_suffix,
+                config.content_type,
+                config.content_size,
+                config.custom_suffix.as_deref(),
             ));
 
             // Add update operations based on pattern
-            if include_updates && (i % 2 == 0 || test_type == "basic-crud") {
+            if config.include_updates && (i % 2 == 0 || config.test_type == "basic-crud") {
                 operations.push(mock_mcp::McpOperation::UpdateIssue {
                     number: (i + 1) as u32,
-                    content: format!("Updated content for {} test sequence {}", prefix, i),
+                    content: format!("Updated content for {} test sequence {}", config.prefix, i),
                 });
             }
 
             // Add completion operations based on pattern
-            if include_completions {
+            if config.include_completions {
                 operations.push(mock_mcp::McpOperation::MarkComplete {
                     number: (i + 1) as u32,
                 });
@@ -854,30 +858,30 @@ impl OperationSequenceFactory {
     }
     /// Create a basic CRUD sequence: Create -> Update -> Complete
     pub fn create_basic_crud_sequence(prefix: &str, _id: usize) -> Vec<mock_mcp::McpOperation> {
-        Self::build_operation_sequence(
-            "basic-crud",
-            prefix,
-            1, // Single sequence
-            true, // Include updates
-            true, // Include completions
-            ContentType::Descriptive,
-            None,
-            None,
-        )
+        Self::build_operation_sequence(OperationSequenceConfig {
+            test_type: "basic-crud".to_string(),
+            prefix: prefix.to_string(),
+            count: 1,                  // Single sequence
+            include_updates: true,     // Include updates
+            include_completions: true, // Include completions
+            content_type: ContentType::Descriptive,
+            content_size: None,
+            custom_suffix: None,
+        })
     }
 
     /// Create a performance testing sequence with multiple operations
     pub fn create_performance_sequence(prefix: &str, count: usize) -> Vec<mock_mcp::McpOperation> {
-        Self::build_operation_sequence(
-            "performance",
-            prefix,
+        Self::build_operation_sequence(OperationSequenceConfig {
+            test_type: "performance".to_string(),
+            prefix: prefix.to_string(),
             count,
-            true, // Include updates (every even index)
-            false, // No completions
-            ContentType::Performance,
-            None,
-            None,
-        )
+            include_updates: true,      // Include updates (every even index)
+            include_completions: false, // No completions
+            content_type: ContentType::Performance,
+            content_size: None,
+            custom_suffix: None,
+        })
     }
 
     /// Create a sequence for error resilience testing

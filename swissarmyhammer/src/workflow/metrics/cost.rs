@@ -2,8 +2,8 @@
 
 use crate::cost::{ApiCallId, CostSessionId};
 use chrono::{DateTime, Utc};
-use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;

@@ -38,9 +38,10 @@ fn create_sample_workflow_run() -> WorkflowRun {
 /// Helper function to create sample run metrics
 fn create_sample_run_metrics() -> RunMetrics {
     let mut state_durations = HashMap::new();
-    state_durations.insert(StateId::new("start"), Duration::from_millis(100));
-    state_durations.insert(StateId::new("process"), Duration::from_millis(500));
-    state_durations.insert(StateId::new("end"), Duration::from_millis(50));
+    let now = Utc::now();
+    state_durations.insert(StateId::new("start"), (Duration::from_millis(100), now));
+    state_durations.insert(StateId::new("process"), (Duration::from_millis(500), now));
+    state_durations.insert(StateId::new("end"), (Duration::from_millis(50), now));
 
     RunMetrics {
         run_id: WorkflowRunId::new(),
@@ -129,7 +130,7 @@ mod tests {
 
         // Check that step durations are applied
         for step in &trace.execution_path {
-            if let Some(expected_duration) = metrics.state_durations.get(&step.state_id) {
+            if let Some((expected_duration, _)) = metrics.state_durations.get(&step.state_id) {
                 assert_eq!(step.duration, Some(*expected_duration));
             }
         }

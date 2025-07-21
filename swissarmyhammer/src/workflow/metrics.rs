@@ -25,16 +25,34 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
+use tracing::warn;
 
-/// Maximum number of workflow metrics to keep in memory
-pub const MAX_WORKFLOW_METRICS: usize = 100;
+/// Configuration for workflow metrics collection and memory management
+#[derive(Debug, Clone)]
+pub struct WorkflowMetricsConfig {
+    /// Maximum number of workflow metrics to keep in memory
+    pub max_workflow_metrics: usize,
+    /// Maximum number of state durations per run
+    pub max_state_durations_per_run: usize,
+    /// Maximum number of data points to keep in resource trends
+    pub max_trend_data_points: usize,
+}
 
-/// Maximum number of state durations per run
-pub const MAX_STATE_DURATIONS_PER_RUN: usize = 50;
+impl Default for WorkflowMetricsConfig {
+    fn default() -> Self {
+        Self {
+            max_workflow_metrics: 100,
+            max_state_durations_per_run: 50,
+            max_trend_data_points: 100,
+        }
+    }
+}
 
 /// Metrics collector for workflow execution
 #[derive(Debug, Clone)]
 pub struct WorkflowMetrics {
+    /// Configuration for metrics collection
+    pub config: WorkflowMetricsConfig,
     /// Metrics for individual workflow runs
     pub run_metrics: HashMap<WorkflowRunId, RunMetrics>,
     /// Aggregated metrics by workflow name
@@ -64,8 +82,8 @@ pub struct RunMetrics {
     pub total_duration: Option<Duration>,
     /// Error details if the run failed
     pub error_details: Option<String>,
-    /// Time spent in each state
-    pub state_durations: HashMap<StateId, Duration>,
+    /// Time spent in each state with timestamps for LRU eviction
+    pub state_durations: HashMap<StateId, (Duration, DateTime<Utc>)>,
     /// Memory usage metrics
     pub memory_metrics: Option<MemoryMetrics>,
     /// Cost tracking metrics
@@ -189,9 +207,15 @@ pub struct GlobalCostMetrics {
 }
 
 impl WorkflowMetrics {
-    /// Create a new metrics collector
+    /// Create a new metrics collector with default configuration
     pub fn new() -> Self {
+        Self::with_config(WorkflowMetricsConfig::default())
+    }
+
+    /// Create a new metrics collector with custom configuration
+    pub fn with_config(config: WorkflowMetricsConfig) -> Self {
         Self {
+            config,
             run_metrics: HashMap::new(),
             workflow_metrics: HashMap::new(),
             global_metrics: GlobalMetrics::new(),
@@ -202,6 +226,11 @@ impl WorkflowMetrics {
     pub fn start_run(&mut self, run_id: WorkflowRunId, workflow_name: WorkflowName) {
         // Validate inputs
         if !Self::is_valid_workflow_name(&workflow_name) {
+            warn!(
+                workflow_name = %workflow_name.as_str(),
+                run_id = %run_id,
+                "Attempted to start run with invalid workflow name, ignoring request"
+            );
             return;
         }
         let run_metrics = RunMetrics {
@@ -238,14 +267,22 @@ impl WorkflowMetrics {
     ) {
         if let Some(run_metrics) = self.run_metrics.get_mut(run_id) {
             // Keep only the most recent state durations to prevent unbounded growth
-            if run_metrics.state_durations.len() >= MAX_STATE_DURATIONS_PER_RUN {
-                // Remove a random old entry to make space
-                if let Some(oldest_state) = run_metrics.state_durations.keys().next().cloned() {
-                    run_metrics.state_durations.remove(&oldest_state);
+            if run_metrics.state_durations.len() >= self.config.max_state_durations_per_run {
+                // Find and remove the least recently used (oldest timestamp) entry
+                if let Some(lru_state) = run_metrics
+                    .state_durations
+                    .iter()
+                    .min_by_key(|(_, (_, timestamp))| timestamp)
+                    .map(|(state, _)| state.clone())
+                {
+                    run_metrics.state_durations.remove(&lru_state);
                 }
             }
 
-            run_metrics.state_durations.insert(state_id, duration);
+            let now = Utc::now();
+            run_metrics
+                .state_durations
+                .insert(state_id, (duration, now));
             run_metrics.transition_count += 1;
             self.update_global_metrics();
         }
@@ -320,27 +357,34 @@ impl WorkflowMetrics {
 
     /// Update cost metrics for a run
     pub fn update_cost_metrics(&mut self, run_id: &WorkflowRunId, cost_metrics: CostMetrics) {
+        // Update cost trends in global resource trends before moving the cost_metrics
+        self.update_cost_trends(&cost_metrics);
+
+        // Now get the mutable reference to run_metrics and update it
         if let Some(run_metrics) = self.run_metrics.get_mut(run_id) {
-            run_metrics.cost_metrics = Some(cost_metrics.clone());
-            
-            // Update cost trends in global resource trends
-            self.update_cost_trends(&cost_metrics);
+            run_metrics.cost_metrics = Some(cost_metrics);
         }
     }
 
     /// Update cost trends in global resource trends
     pub fn update_cost_trends(&mut self, cost_metrics: &CostMetrics) {
         // Add cost trend point
-        self.global_metrics.resource_trends.add_cost_point(cost_metrics.total_cost);
-        
+        self.global_metrics
+            .resource_trends
+            .add_cost_point(cost_metrics.total_cost, self.config.max_trend_data_points);
+
         // Add token efficiency trend point if available
         if let Some(efficiency) = cost_metrics.token_efficiency_ratio() {
-            self.global_metrics.resource_trends.add_token_efficiency_point(efficiency);
+            self.global_metrics
+                .resource_trends
+                .add_token_efficiency_point(efficiency, self.config.max_trend_data_points);
         }
-        
+
         // Add average cost per call trend point if available
         if let Some(avg_cost) = cost_metrics.average_cost_per_call() {
-            self.global_metrics.resource_trends.add_avg_cost_per_call_point(avg_cost);
+            self.global_metrics
+                .resource_trends
+                .add_avg_cost_per_call_point(avg_cost, self.config.max_trend_data_points);
         }
     }
 
@@ -384,6 +428,70 @@ impl WorkflowMetrics {
     }
 
     /// Update workflow summary metrics
+    /// Calculate duration statistics for a set of runs
+    fn calculate_duration_stats(
+        &self,
+        runs: &[&RunMetrics],
+    ) -> (Option<Duration>, Option<Duration>, Option<Duration>, f64) {
+        let durations: Vec<_> = runs.iter().filter_map(|run| run.duration).collect();
+        let average_duration = if !durations.is_empty() {
+            let total_nanos: u64 = durations.iter().map(|d| d.as_nanos() as u64).sum();
+            Some(Duration::from_nanos(total_nanos / durations.len() as u64))
+        } else {
+            None
+        };
+
+        let min_duration = durations.iter().min().copied();
+        let max_duration = durations.iter().max().copied();
+
+        let average_transitions = if !runs.is_empty() {
+            runs.iter().map(|run| run.transition_count).sum::<usize>() as f64 / runs.len() as f64
+        } else {
+            0.0
+        };
+
+        (
+            average_duration,
+            min_duration,
+            max_duration,
+            average_transitions,
+        )
+    }
+
+    /// Calculate hot states (most frequently executed states) from run data
+    fn calculate_hot_states(&self, runs: &[&RunMetrics]) -> Vec<StateExecutionCount> {
+        let mut state_counts: HashMap<StateId, usize> = HashMap::new();
+        for run in runs {
+            for state_id in run.state_durations.keys() {
+                *state_counts.entry(state_id.clone()).or_insert(0) += 1;
+            }
+        }
+
+        let mut hot_states: Vec<StateExecutionCount> = state_counts
+            .into_iter()
+            .map(|(state_id, count)| StateExecutionCount { state_id, count })
+            .collect();
+        hot_states.sort_by(|a, b| b.count.cmp(&a.count));
+        hot_states.truncate(10); // Keep only top 10
+
+        hot_states
+    }
+
+    /// Enforce workflow metrics limits by removing oldest entries
+    fn enforce_workflow_metrics_limits(&mut self) {
+        if self.workflow_metrics.len() > self.config.max_workflow_metrics {
+            let oldest_workflow = self
+                .workflow_metrics
+                .iter()
+                .min_by_key(|(_, metrics)| metrics.last_updated)
+                .map(|(name, _)| name.clone());
+
+            if let Some(oldest) = oldest_workflow {
+                self.workflow_metrics.remove(&oldest);
+            }
+        }
+    }
+
     fn update_workflow_summary_metrics(&mut self, workflow_name: &WorkflowName) {
         let runs: Vec<_> = self
             .run_metrics
@@ -409,39 +517,11 @@ impl WorkflowMetrics {
             .filter(|run| run.status == WorkflowRunStatus::Cancelled)
             .count();
 
-        let durations: Vec<_> = runs.iter().filter_map(|run| run.duration).collect();
-        let average_duration = if !durations.is_empty() {
-            let total_nanos: u64 = durations.iter().map(|d| d.as_nanos() as u64).sum();
-            Some(Duration::from_nanos(total_nanos / durations.len() as u64))
-        } else {
-            None
-        };
+        let (average_duration, min_duration, max_duration, average_transitions) =
+            self.calculate_duration_stats(&runs);
 
-        let min_duration = durations.iter().min().copied();
-        let max_duration = durations.iter().max().copied();
+        let hot_states = self.calculate_hot_states(&runs);
 
-        let average_transitions = if total_runs > 0 {
-            runs.iter().map(|run| run.transition_count).sum::<usize>() as f64 / total_runs as f64
-        } else {
-            0.0
-        };
-
-        // Calculate hot states
-        let mut state_counts: HashMap<StateId, usize> = HashMap::new();
-        for run in &runs {
-            for state_id in run.state_durations.keys() {
-                *state_counts.entry(state_id.clone()).or_insert(0) += 1;
-            }
-        }
-
-        let mut hot_states: Vec<StateExecutionCount> = state_counts
-            .into_iter()
-            .map(|(state_id, count)| StateExecutionCount { state_id, count })
-            .collect();
-        hot_states.sort_by(|a, b| b.count.cmp(&a.count));
-        hot_states.truncate(10); // Keep only top 10
-
-        // Calculate cost summary for runs with cost data
         let cost_summary = self.calculate_workflow_cost_summary(&runs);
 
         let summary = WorkflowSummaryMetrics {
@@ -461,35 +541,17 @@ impl WorkflowMetrics {
 
         self.workflow_metrics.insert(workflow_name.clone(), summary);
 
-        // Enforce workflow metrics limit
-        if self.workflow_metrics.len() > MAX_WORKFLOW_METRICS {
-            // Remove oldest workflow metrics
-            let oldest_workflow = self
-                .workflow_metrics
-                .iter()
-                .min_by_key(|(_, metrics)| metrics.last_updated)
-                .map(|(name, _)| name.clone());
-
-            if let Some(oldest) = oldest_workflow {
-                self.workflow_metrics.remove(&oldest);
-            }
-        }
+        self.enforce_workflow_metrics_limits();
     }
 
-    /// Calculate cost summary for a set of workflow runs
-    fn calculate_workflow_cost_summary(&self, runs: &[&RunMetrics]) -> Option<WorkflowCostSummary> {
-        let cost_runs: Vec<_> = runs
-            .iter()
-            .filter_map(|run| run.cost_metrics.as_ref())
-            .collect();
-
-        if cost_runs.is_empty() {
-            return None;
-        }
-
+    /// Calculate basic cost statistics for workflow runs
+    fn calculate_basic_cost_stats(
+        &self,
+        cost_runs: &[&CostMetrics],
+    ) -> (Decimal, Decimal, Decimal, Decimal, u32, u32) {
         let total_cost = cost_runs.iter().map(|cm| cm.total_cost).sum::<Decimal>();
         let total_tokens = cost_runs.iter().map(|cm| cm.total_tokens()).sum::<u32>();
-        
+
         let average_cost = if !cost_runs.is_empty() {
             total_cost / Decimal::from(cost_runs.len())
         } else {
@@ -514,32 +576,54 @@ impl WorkflowMetrics {
             .max()
             .unwrap_or(Decimal::ZERO);
 
-        // Build cost trend from run completion times
+        (
+            total_cost,
+            average_cost,
+            min_cost,
+            max_cost,
+            total_tokens,
+            average_tokens,
+        )
+    }
+
+    /// Build cost and efficiency trends from run data
+    fn build_cost_trends(
+        &self,
+        runs: &[&RunMetrics],
+    ) -> (Vec<(DateTime<Utc>, Decimal)>, Vec<(DateTime<Utc>, f64)>) {
         let cost_trend: Vec<_> = runs
             .iter()
             .filter_map(|run| {
-                run.cost_metrics.as_ref()
+                run.cost_metrics
+                    .as_ref()
                     .and_then(|cm| run.completed_at.map(|completed| (completed, cm.total_cost)))
             })
             .collect();
 
-        // Build efficiency trend
         let efficiency_trend: Vec<_> = runs
             .iter()
             .filter_map(|run| {
-                run.cost_metrics.as_ref()
-                    .and_then(|cm| {
-                        cm.token_efficiency_ratio()
-                            .and_then(|ratio| run.completed_at.map(|completed| (completed, ratio)))
-                    })
+                run.cost_metrics.as_ref().and_then(|cm| {
+                    cm.token_efficiency_ratio()
+                        .and_then(|ratio| run.completed_at.map(|completed| (completed, ratio)))
+                })
             })
             .collect();
 
-        // Find most expensive and most token-intensive actions across all runs
-        let mut all_actions: HashMap<String, (Decimal, u32)> = HashMap::new();
-        for cost_metrics in &cost_runs {
+        (cost_trend, efficiency_trend)
+    }
+
+    /// Find the most expensive and most token-intensive actions
+    fn find_most_expensive_actions(
+        &self,
+        cost_runs: &[&CostMetrics],
+    ) -> (Option<String>, Option<String>) {
+        let mut all_actions: HashMap<&str, (Decimal, u32)> = HashMap::new();
+        for cost_metrics in cost_runs {
             for (action_name, breakdown) in &cost_metrics.cost_by_action {
-                let entry = all_actions.entry(action_name.clone()).or_insert((Decimal::ZERO, 0));
+                let entry = all_actions
+                    .entry(action_name.as_str())
+                    .or_insert((Decimal::ZERO, 0));
                 entry.0 += breakdown.cost;
                 entry.1 += breakdown.total_tokens();
             }
@@ -547,13 +631,35 @@ impl WorkflowMetrics {
 
         let most_expensive_action = all_actions
             .iter()
-            .max_by(|a, b| a.1.0.cmp(&b.1.0))
-            .map(|(name, _)| name.clone());
+            .max_by(|a, b| a.1 .0.cmp(&b.1 .0))
+            .map(|(name, _)| name.to_string());
 
         let most_token_intensive_action = all_actions
             .iter()
             .max_by_key(|&(_, (_, tokens))| tokens)
-            .map(|(name, _)| name.clone());
+            .map(|(name, _)| name.to_string());
+
+        (most_expensive_action, most_token_intensive_action)
+    }
+
+    /// Calculate cost summary for a set of workflow runs
+    fn calculate_workflow_cost_summary(&self, runs: &[&RunMetrics]) -> Option<WorkflowCostSummary> {
+        let cost_runs: Vec<_> = runs
+            .iter()
+            .filter_map(|run| run.cost_metrics.as_ref())
+            .collect();
+
+        if cost_runs.is_empty() {
+            return None;
+        }
+
+        let (total_cost, average_cost, min_cost, max_cost, total_tokens, average_tokens) =
+            self.calculate_basic_cost_stats(&cost_runs);
+
+        let (cost_trend, efficiency_trend) = self.build_cost_trends(runs);
+
+        let (most_expensive_action, most_token_intensive_action) =
+            self.find_most_expensive_actions(&cost_runs);
 
         Some(WorkflowCostSummary {
             total_cost,
@@ -651,9 +757,15 @@ impl WorkflowMetrics {
         };
 
         // Calculate system-wide efficiency ratio
-        let total_input_tokens = cost_runs.iter().map(|cm| cm.total_input_tokens).sum::<u32>();
-        let total_output_tokens = cost_runs.iter().map(|cm| cm.total_output_tokens).sum::<u32>();
-        
+        let total_input_tokens = cost_runs
+            .iter()
+            .map(|cm| cm.total_input_tokens)
+            .sum::<u32>();
+        let total_output_tokens = cost_runs
+            .iter()
+            .map(|cm| cm.total_output_tokens)
+            .sum::<u32>();
+
         let system_efficiency_ratio = if total_input_tokens > 0 {
             total_output_tokens as f64 / total_input_tokens as f64
         } else {

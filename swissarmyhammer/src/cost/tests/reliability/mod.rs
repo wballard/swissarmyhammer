@@ -73,7 +73,7 @@ impl ReliabilityTestConfig {
 
 #[tokio::test]
 async fn test_memory_leak_detection() {
-    let mut harness = CostTrackingTestHarness::new();
+    let harness = CostTrackingTestHarness::new();
     let config = ReliabilityTestConfig::ci_friendly();
 
     // Direct test without execute_test_scenario to avoid lifetime issues
@@ -230,7 +230,7 @@ async fn test_concurrent_session_safety() {
         let worker_handles: Vec<_> = (0..num_workers)
             .map(|worker_id| {
                 let tracker_clone = shared_tracker.clone();
-                let api_gen = harness.api_call_generator.clone();
+                let _api_gen = harness.api_call_generator.clone();
                 let calc = harness.calculator.clone();
 
                 tokio::spawn(async move {
@@ -352,7 +352,7 @@ async fn test_concurrent_session_safety() {
 
 #[tokio::test]
 async fn test_resource_cleanup_effectiveness() {
-    let mut harness = CostTrackingTestHarness::new();
+    let harness = CostTrackingTestHarness::new();
     let config = ReliabilityTestConfig::ci_friendly();
 
     // Direct test without execute_test_scenario to avoid lifetime issues
@@ -457,8 +457,8 @@ async fn test_resource_cleanup_effectiveness() {
 
 #[tokio::test]
 async fn test_graceful_degradation_under_load() {
-    let mut harness = CostTrackingTestHarness::new();
-    let config = ReliabilityTestConfig::ci_friendly();
+    let harness = CostTrackingTestHarness::new();
+    let _config = ReliabilityTestConfig::ci_friendly();
 
     // Direct test without execute_test_scenario to avoid lifetime issues
     tracing::info!("Starting test scenario: graceful_degradation");
@@ -609,7 +609,7 @@ async fn test_graceful_degradation_under_load() {
 
 #[tokio::test]
 async fn test_sustained_operation_stability() {
-    let mut harness = CostTrackingTestHarness::new();
+    let harness = CostTrackingTestHarness::new();
     let config = ReliabilityTestConfig::ci_friendly();
 
     // Direct test without execute_test_scenario to avoid lifetime issues
@@ -747,7 +747,7 @@ async fn test_sustained_operation_stability() {
 async fn simulate_realistic_workflow(
     tracker: Arc<Mutex<crate::cost::CostTracker>>,
     calculator: &crate::cost::calculator::CostCalculator,
-    api_generator: &ApiCallGenerator,
+    _api_generator: &ApiCallGenerator,
     workflow_id: usize,
 ) -> Result<(crate::cost::CostSessionId, Decimal), Box<dyn std::error::Error + Send + Sync>> {
     let issue_id = IssueId::new(format!("realistic-workflow-{}", workflow_id))?;

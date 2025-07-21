@@ -624,7 +624,7 @@ async fn benchmark_memory_usage_patterns() {
 
     let test_future = async {
         let shared_tracker = harness.get_shared_tracker();
-        let api_generator = harness.api_call_generator.clone();
+        let _api_generator = harness.api_call_generator.clone();
 
         // Test memory usage with different session patterns
         let test_patterns = vec![
@@ -820,7 +820,7 @@ async fn benchmark_cost_calculation_performance() {
 
         // Calculate percentiles for calculation times
         calculation_times.sort();
-        let p50 = calculation_times[calculation_times.len() / 2];
+        let _p50 = calculation_times[calculation_times.len() / 2];
         let p95 = calculation_times[calculation_times.len() * 95 / 100];
         let p99 = calculation_times[calculation_times.len() * 99 / 100];
 

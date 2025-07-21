@@ -4,9 +4,6 @@
 //! cost tracking system, validating end-to-end workflows and multi-component
 //! interactions under realistic conditions.
 
-// pub mod system_integration;
-// pub mod workflow_validation;
-// pub mod cross_component_consistency;
 
 use crate::cost::{
     calculator::PricingModel,
@@ -194,7 +191,7 @@ async fn test_complete_system_workflow_with_failures() {
         result
     );
 
-    let (success_count, failure_count, total_cost) = result.unwrap();
+    let (success_count, failure_count, _total_cost) = result.unwrap();
     assert!(
         success_count > 0 || failure_count > 0,
         "Should have some API call results"
@@ -203,7 +200,7 @@ async fn test_complete_system_workflow_with_failures() {
 
 #[tokio::test]
 async fn test_multiple_concurrent_workflows() {
-    let mut harness = CostTrackingTestHarness::new();
+    let harness = CostTrackingTestHarness::new();
 
     // Direct test without execute_test_scenario to avoid lifetime issues
     tracing::info!("Starting test scenario: concurrent_workflows");
@@ -326,7 +323,7 @@ async fn test_multiple_concurrent_workflows() {
 
 #[tokio::test]
 async fn test_system_resource_management() {
-    let mut harness = CostTrackingTestHarness::new();
+    let harness = CostTrackingTestHarness::new();
 
     // Direct test without execute_test_scenario to avoid lifetime issues
     tracing::info!("Starting test scenario: resource_management");
@@ -421,7 +418,7 @@ async fn test_system_resource_management() {
 #[tokio::test]
 async fn test_pricing_model_integration() {
     // Test with paid plan
-    let mut paid_harness =
+    let paid_harness =
         CostTrackingTestHarness::with_pricing_model(PricingModel::paid_with_defaults());
 
     // Direct test without execute_test_scenario to avoid lifetime issues
@@ -482,7 +479,7 @@ async fn test_pricing_model_integration() {
     );
 
     // Test with max plan
-    let mut max_harness =
+    let max_harness =
         CostTrackingTestHarness::with_pricing_model(PricingModel::max_with_tracking());
 
     // Direct test without execute_test_scenario to avoid lifetime issues

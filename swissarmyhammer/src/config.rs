@@ -1521,8 +1521,13 @@ base_branch: "feature/test"
             let _ = std::fs::rename(backup, original);
         }
 
-        // Clean up
-        std::env::set_current_dir(original_dir).expect("Could not restore original directory");
+        // Clean up - try to restore original directory, but don't fail if it doesn't exist
+        if original_dir.exists() {
+            let _ = std::env::set_current_dir(original_dir);
+        } else {
+            // If original dir doesn't exist, just go to a safe directory
+            let _ = std::env::set_current_dir(std::env::temp_dir());
+        }
         std::fs::remove_dir_all(&test_dir).unwrap();
     }
 

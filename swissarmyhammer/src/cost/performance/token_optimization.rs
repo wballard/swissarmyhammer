@@ -426,7 +426,12 @@ impl OptimizedTokenCounter {
     }
 
     /// Count tokens from API response with optimization
-    pub fn count_from_response(&self, response_body: &str) -> Result<TokenUsage, CostError> {
+    pub fn count_from_response(
+        &self,
+        response_body: &str,
+        _estimated_usage: Option<TokenUsage>,
+        _model: &str,
+    ) -> Result<TokenUsage, CostError> {
         // Check cache first
         if let Some(cached_usage) = self.cache.get(response_body) {
             return Ok(cached_usage);
@@ -630,12 +635,12 @@ mod tests {
         let response = r#"{"usage":{"input_tokens":150,"output_tokens":25}}"#;
 
         // First call should miss cache
-        let usage1 = counter.count_from_response(response).unwrap();
+        let usage1 = counter.count_from_response(response, None, "test-model").unwrap();
         assert_eq!(usage1.input_tokens, 150);
         assert_eq!(usage1.output_tokens, 25);
 
         // Second call should hit cache
-        let usage2 = counter.count_from_response(response).unwrap();
+        let usage2 = counter.count_from_response(response, None, "test-model").unwrap();
         assert_eq!(usage2.input_tokens, 150);
         assert_eq!(usage2.output_tokens, 25);
 
@@ -651,7 +656,7 @@ mod tests {
 
         // Invalid JSON should fallback to estimation
         let response = "invalid json response";
-        let usage = counter.count_from_response(response).unwrap();
+        let usage = counter.count_from_response(response, None, "test-model").unwrap();
 
         assert!(usage.is_estimated());
         assert!(usage.total_tokens > 0);

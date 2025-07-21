@@ -96,7 +96,7 @@ async fn property_cost_calculations_non_negative() {
 /// Property: Token counts should be consistent across operations
 #[tokio::test]
 async fn property_token_count_consistency() {
-    let harness = CostTrackingTestHarness::new();
+    let _harness = CostTrackingTestHarness::new();
     let mut token_counter = TokenCounter::new(0.1);
 
     // Test various token patterns with API responses
@@ -361,7 +361,7 @@ async fn property_data_consistency_across_operations() {
 /// Property: Session cleanup completeness
 #[tokio::test]
 async fn property_session_cleanup_completeness() {
-    let mut harness = CostTrackingTestHarness::new();
+    let harness = CostTrackingTestHarness::new();
 
     // Create sessions and complete them
     let session_count = 20;
@@ -590,7 +590,7 @@ async fn property_concurrent_data_integrity() {
 /// Property: API call data preservation
 #[tokio::test]
 async fn property_api_call_data_preservation() {
-    let mut harness = CostTrackingTestHarness::new();
+    let harness = CostTrackingTestHarness::new();
 
     // Test various API call configurations
     let test_configurations = vec![

@@ -357,8 +357,8 @@ async fn test_random_api_call_failures() {
 
 #[tokio::test]
 async fn test_storage_backend_interruptions() {
-    let mut harness = CostTrackingTestHarness::new();
-    let config = ChaosTestConfig::default();
+    let harness = CostTrackingTestHarness::new();
+    let _config = ChaosTestConfig::default();
     let failure_injector = Arc::new(FailureInjector::new());
     failure_injector.enable_storage_failures();
 
@@ -512,8 +512,8 @@ async fn test_concurrent_failures_under_load() {
             .map(|worker_id| {
                 let tracker_clone = shared_tracker.clone();
                 let injector_clone = failure_injector.clone();
-                let api_gen = harness.api_call_generator.clone();
-                let calc = harness.calculator.clone();
+                let _api_gen = harness.api_call_generator.clone();
+                let _calc = harness.calculator.clone();
 
                 tokio::spawn(async move {
                     let mut worker_successes = 0;
@@ -674,7 +674,7 @@ async fn test_concurrent_failures_under_load() {
         "Concurrent failure test should complete: {:?}",
         result
     );
-    let (successes, failures, rate) = result.unwrap().unwrap();
+    let (successes, _failures, _rate) = result.unwrap().unwrap();
     assert!(
         successes > 0,
         "Should have some successful operations under chaos"
@@ -860,7 +860,7 @@ async fn test_recovery_after_failures() {
 
 #[tokio::test]
 async fn test_resource_limit_violations() {
-    let mut harness = CostTrackingTestHarness::new();
+    let harness = CostTrackingTestHarness::new();
     let failure_injector = Arc::new(FailureInjector::new());
     failure_injector.enable_memory_pressure();
 

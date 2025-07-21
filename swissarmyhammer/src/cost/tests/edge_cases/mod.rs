@@ -4,10 +4,6 @@
 //! and edge cases that could cause system failures. These tests ensure robustness
 //! under extreme conditions and validate proper error handling throughout the system.
 
-// pub mod boundary_conditions;
-// pub mod error_scenarios;
-// pub mod malformed_data;
-// pub mod resource_limits;
 
 use crate::cost::{
     calculator::CostCalculator,
@@ -16,6 +12,28 @@ use crate::cost::{
     tracker::{ApiCall, ApiCallStatus, CostError, CostSession, CostSessionStatus, IssueId},
 };
 use rust_decimal::Decimal;
+
+/// Configuration constants for edge case tests
+struct EdgeCaseTestConfig {
+    /// Maximum token limits for extreme testing
+    max_input_tokens: u32,
+    max_output_tokens: u32,
+    /// Minimum expected cost for large token operations
+    expected_min_cost_dollars: i32,
+    /// Maximum URL length for testing
+    max_url_length: usize,
+}
+
+impl Default for EdgeCaseTestConfig {
+    fn default() -> Self {
+        Self {
+            max_input_tokens: 1_000_000,
+            max_output_tokens: 1_000_000,
+            expected_min_cost_dollars: 50,
+            max_url_length: 5000,
+        }
+    }
+}
 
 #[tokio::test]
 async fn test_zero_token_api_calls() {
@@ -114,8 +132,9 @@ async fn test_maximum_token_limits() {
         };
 
         // Test with very large token counts (1M tokens)
-        let max_input_tokens = 1_000_000_u32;
-        let max_output_tokens = 1_000_000_u32;
+        let config = EdgeCaseTestConfig::default();
+        let max_input_tokens = config.max_input_tokens;
+        let max_output_tokens = config.max_output_tokens;
 
         let mut api_call = ApiCall::new(
             "https://api.anthropic.com/v1/messages".to_string(),
@@ -159,7 +178,7 @@ async fn test_maximum_token_limits() {
         );
 
         // Cost should be reasonable for large token counts
-        let expected_min_cost = Decimal::from(50); // Rough minimum for 1M+ tokens
+        let expected_min_cost = Decimal::from(config.expected_min_cost_dollars); // Rough minimum for large token operations
         assert!(
             calculation.total_cost >= expected_min_cost,
             "Large token cost should be substantial"
@@ -286,7 +305,7 @@ async fn test_duplicate_session_creation() {
 
 #[tokio::test]
 async fn test_malformed_api_calls() {
-    let mut harness = CostTrackingTestHarness::new();
+    let harness = CostTrackingTestHarness::new();
 
     // Direct test without execute_test_scenario to avoid lifetime issues
     tracing::info!("Starting test scenario: malformed_api_calls");
@@ -300,7 +319,8 @@ async fn test_malformed_api_calls() {
         };
 
         // Test with extremely long URLs
-        let long_url = "https://api.anthropic.com/".to_string() + &"x".repeat(5000);
+        let config = EdgeCaseTestConfig::default();
+        let long_url = "https://api.anthropic.com/".to_string() + &"x".repeat(config.max_url_length);
         let api_call_result = ApiCall::new(long_url, "claude-3-sonnet-20241022");
 
         match api_call_result {
@@ -555,7 +575,7 @@ async fn test_calculator_edge_cases() {
 
 #[tokio::test]
 async fn test_memory_pressure_scenarios() {
-    let mut harness = CostTrackingTestHarness::new();
+    let harness = CostTrackingTestHarness::new();
 
     // Direct test without execute_test_scenario to avoid lifetime issues
     tracing::info!("Starting test scenario: memory_pressure");

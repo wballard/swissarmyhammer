@@ -9,6 +9,7 @@ pub mod calculator;
 #[cfg(feature = "database")]
 pub mod database;
 pub mod formatting;
+pub mod performance;
 pub mod token_counter;
 pub mod token_estimation;
 pub mod tracker;
@@ -32,6 +33,11 @@ pub use calculator::{
 };
 pub use formatting::{
     CostFormattingConfig, CostSectionFormatter, CostSummaryStats, DetailLevel, IssueCostData,
+};
+pub use performance::{
+    BenchmarkResult, BenchmarkSuite, MemoryPool, OptimizationConfig,
+    OptimizedTokenCounter, PerformanceConfig, PerformanceError, PerformanceMetrics,
+    PerformanceOptimizer, ResourceManager, TokenCache,
 };
 pub use token_counter::{
     ApiTokenExtractor, ConfidenceLevel, TokenCounter, TokenSource, TokenUsage, TokenValidator,

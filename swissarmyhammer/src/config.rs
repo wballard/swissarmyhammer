@@ -5,8 +5,33 @@
 
 use crate::common::env_loader::EnvLoader;
 use serde::Deserialize;
+use thiserror::Error;
 
 const DEFAULT_BASE_BRANCH: &str = "main";
+
+/// Errors that can occur during configuration loading
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    /// Failed to read a configuration file from disk
+    #[error("Failed to read configuration file {path}: {source}")]
+    FileRead {
+        /// Path to the configuration file that could not be read
+        path: std::path::PathBuf,
+        /// Underlying I/O error that occurred during file reading
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// Failed to parse YAML content from a configuration file
+    #[error("Failed to parse YAML configuration from {path}: {source}")]
+    YamlParse {
+        /// Path to the configuration file with invalid YAML content
+        path: std::path::PathBuf,
+        /// Underlying YAML parsing error
+        #[source]
+        source: serde_yaml::Error,
+    },
+}
 
 /// Configuration settings for the SwissArmyHammer application
 #[derive(Debug, Clone)]
@@ -87,44 +112,23 @@ impl Config {
         };
 
         // Apply YAML configuration if available (only overrides values not set by environment)
-        if let Some(yaml_path) = Self::find_yaml_config_file() {
-            match std::fs::read_to_string(&yaml_path) {
-                Ok(yaml_content) => {
-                    match serde_yaml::from_str::<YamlConfig>(&yaml_content) {
-                        Ok(yaml_config) => {
-                            // Validate the loaded configuration
-                            if let Err(validation_error) = yaml_config.validate() {
-                                tracing::warn!(
-                                    "Invalid YAML configuration in {:?}: {}. Using default values instead.",
-                                    yaml_path,
-                                    validation_error
-                                );
-                                return config; // Return without applying invalid config
-                            }
-
-                            tracing::debug!(
-                                "Loaded and validated YAML configuration from {:?}",
-                                yaml_path
-                            );
-                            // YAML config only applies to values that weren't overridden by environment
-                            Self::apply_yaml_config_selectively(&mut config, &yaml_config, &loader);
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to parse YAML configuration from {:?}: {}",
-                                yaml_path,
-                                e
-                            );
-                        }
-                    }
-                }
-                Err(e) => {
+        match YamlConfig::load_or_default() {
+            Ok(yaml_config) => {
+                // Validate the loaded configuration
+                if let Err(validation_error) = yaml_config.validate() {
                     tracing::warn!(
-                        "Failed to read YAML configuration file {:?}: {}",
-                        yaml_path,
-                        e
+                        "Invalid YAML configuration: {}. Using default values instead.",
+                        validation_error
                     );
+                    return config; // Return without applying invalid config
                 }
+
+                tracing::debug!("Loaded and validated YAML configuration");
+                // YAML config only applies to values that weren't overridden by environment
+                Self::apply_yaml_config_selectively(&mut config, &yaml_config, &loader);
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load YAML configuration: {}", e);
             }
         }
 
@@ -270,6 +274,42 @@ impl YamlConfig {
     pub fn apply_to_config(&self, config: &mut Config) {
         if let Some(ref base_branch) = self.base_branch {
             config.base_branch = base_branch.clone();
+        }
+    }
+
+    /// Load YAML configuration from a file path
+    /// Returns the parsed configuration or an error with context
+    pub fn load_from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, ConfigError> {
+        use std::fs;
+
+        let path = path.as_ref();
+        tracing::info!("Loading YAML configuration from: {:?}", path);
+
+        // Read file content
+        let content = fs::read_to_string(path).map_err(|e| ConfigError::FileRead {
+            path: path.to_path_buf(),
+            source: e,
+        })?;
+
+        // Parse YAML content
+        let config: YamlConfig =
+            serde_yaml::from_str(&content).map_err(|e| ConfigError::YamlParse {
+                path: path.to_path_buf(),
+                source: e,
+            })?;
+
+        tracing::info!("Successfully loaded YAML configuration: {:?}", config);
+        Ok(config)
+    }
+
+    /// Try to load YAML configuration, returning default if file not found
+    pub fn load_or_default() -> Result<Self, ConfigError> {
+        match Config::find_yaml_config_file() {
+            Some(path) => Self::load_from_file(path),
+            None => {
+                tracing::debug!("No configuration file found, using default YAML config");
+                Ok(Self::default())
+            }
         }
     }
 
@@ -563,7 +603,9 @@ base_branch: "feature/test"
 
     #[test]
     fn test_find_yaml_config_file_not_found() {
-        let _guard = WORKING_DIR_MUTEX.lock().expect("Failed to lock working directory mutex");
+        let _guard = WORKING_DIR_MUTEX
+            .lock()
+            .expect("Failed to lock working directory mutex");
 
         // Ensure we're in a directory that doesn't have the config file
         let original_dir = std::env::current_dir().unwrap();
@@ -613,7 +655,9 @@ base_branch: "feature/test"
         use std::fs::File;
         use std::io::Write;
 
-        let _guard = WORKING_DIR_MUTEX.lock().expect("Failed to lock working directory mutex");
+        let _guard = WORKING_DIR_MUTEX
+            .lock()
+            .expect("Failed to lock working directory mutex");
 
         // Create a unique temporary directory
         let test_dir =
@@ -641,7 +685,9 @@ base_branch: "feature/test"
 
     #[test]
     fn test_find_yaml_config_file_directory_not_file() {
-        let _guard = WORKING_DIR_MUTEX.lock().expect("Failed to lock working directory mutex");
+        let _guard = WORKING_DIR_MUTEX
+            .lock()
+            .expect("Failed to lock working directory mutex");
 
         // Create a unique temporary directory
         let test_dir =
@@ -696,7 +742,9 @@ base_branch: "feature/test"
         use std::fs::File;
         use std::io::Write;
 
-        let _guard = WORKING_DIR_MUTEX.lock().expect("Failed to lock working directory mutex");
+        let _guard = WORKING_DIR_MUTEX
+            .lock()
+            .expect("Failed to lock working directory mutex");
 
         // Create a unique temporary directory
         let test_dir =
@@ -823,5 +871,246 @@ base_branch: "feature/test"
                 valid_name
             );
         }
+    }
+
+    #[test]
+    fn test_yaml_config_load_from_file_success() {
+        use std::fs::File;
+        use std::io::Write;
+
+        let _guard = WORKING_DIR_MUTEX
+            .lock()
+            .expect("Failed to lock working directory mutex");
+
+        // Create a unique temporary directory
+        let test_dir =
+            std::env::temp_dir().join(format!("swissarmyhammer_load_test_{}", std::process::id()));
+        std::fs::create_dir_all(&test_dir).unwrap();
+
+        // Create valid YAML config file
+        let config_path = test_dir.join("test_config.yaml");
+        let mut file = File::create(&config_path).unwrap();
+        writeln!(file, "base_branch: \"feature/test\"").unwrap();
+        drop(file);
+
+        let result = YamlConfig::load_from_file(&config_path);
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert_eq!(config.base_branch, Some("feature/test".to_string()));
+
+        // Clean up
+        std::fs::remove_dir_all(&test_dir).unwrap();
+    }
+
+    #[test]
+    fn test_yaml_config_load_from_file_file_not_found() {
+        let non_existent_path = std::env::temp_dir().join("non_existent_config.yaml");
+
+        let result = YamlConfig::load_from_file(&non_existent_path);
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            ConfigError::FileRead { path, source: _ } => {
+                assert_eq!(path, non_existent_path);
+            }
+            _ => panic!("Expected FileRead error"),
+        }
+    }
+
+    #[test]
+    fn test_yaml_config_load_from_file_invalid_yaml() {
+        use std::fs::File;
+        use std::io::Write;
+
+        let _guard = WORKING_DIR_MUTEX
+            .lock()
+            .expect("Failed to lock working directory mutex");
+
+        // Create a unique temporary directory
+        let test_dir = std::env::temp_dir().join(format!(
+            "swissarmyhammer_invalid_yaml_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&test_dir).unwrap();
+
+        // Create invalid YAML config file
+        let config_path = test_dir.join("invalid_config.yaml");
+        let mut file = File::create(&config_path).unwrap();
+        writeln!(file, "invalid: yaml: content: [").unwrap(); // Malformed YAML
+        drop(file);
+
+        let result = YamlConfig::load_from_file(&config_path);
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            ConfigError::YamlParse { path, source: _ } => {
+                assert_eq!(path, config_path);
+            }
+            _ => panic!("Expected YamlParse error"),
+        }
+
+        // Clean up
+        std::fs::remove_dir_all(&test_dir).unwrap();
+    }
+
+    #[test]
+    fn test_yaml_config_load_from_file_empty_file() {
+        use std::fs::File;
+
+        let _guard = WORKING_DIR_MUTEX
+            .lock()
+            .expect("Failed to lock working directory mutex");
+
+        // Create a unique temporary directory
+        let test_dir =
+            std::env::temp_dir().join(format!("swissarmyhammer_empty_{}", std::process::id()));
+        std::fs::create_dir_all(&test_dir).unwrap();
+
+        // Create empty YAML config file
+        let config_path = test_dir.join("empty_config.yaml");
+        File::create(&config_path).unwrap();
+
+        let result = YamlConfig::load_from_file(&config_path);
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert!(config.base_branch.is_none()); // Should load as default
+
+        // Clean up
+        std::fs::remove_dir_all(&test_dir).unwrap();
+    }
+
+    #[test]
+    fn test_yaml_config_load_from_file_partial_yaml() {
+        use std::fs::File;
+        use std::io::Write;
+
+        let _guard = WORKING_DIR_MUTEX
+            .lock()
+            .expect("Failed to lock working directory mutex");
+
+        // Create a unique temporary directory
+        let test_dir =
+            std::env::temp_dir().join(format!("swissarmyhammer_partial_{}", std::process::id()));
+        std::fs::create_dir_all(&test_dir).unwrap();
+
+        // Create YAML config file with only comments
+        let config_path = test_dir.join("partial_config.yaml");
+        let mut file = File::create(&config_path).unwrap();
+        writeln!(file, "# This is a comment").unwrap();
+        writeln!(file, "# base_branch: commented_out").unwrap();
+        drop(file);
+
+        let result = YamlConfig::load_from_file(&config_path);
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert!(config.base_branch.is_none()); // Should load with None values
+
+        // Clean up
+        std::fs::remove_dir_all(&test_dir).unwrap();
+    }
+
+    #[test]
+    fn test_yaml_config_load_or_default_with_file() {
+        use std::fs::File;
+        use std::io::Write;
+
+        let _guard = WORKING_DIR_MUTEX
+            .lock()
+            .expect("Failed to lock working directory mutex");
+
+        // Create a unique temporary directory and change to it
+        let test_dir =
+            std::env::temp_dir().join(format!("swissarmyhammer_or_default_{}", std::process::id()));
+        std::fs::create_dir_all(&test_dir).unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&test_dir).unwrap();
+
+        // Create config file in current directory
+        let config_path = test_dir.join("swissarmyhammer.yaml");
+        let mut file = File::create(&config_path).unwrap();
+        writeln!(file, "base_branch: \"develop\"").unwrap();
+        drop(file);
+
+        let result = YamlConfig::load_or_default();
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert_eq!(config.base_branch, Some("develop".to_string()));
+
+        // Clean up
+        std::env::set_current_dir(original_dir).unwrap();
+        std::fs::remove_dir_all(&test_dir).unwrap();
+    }
+
+    #[test]
+    fn test_yaml_config_load_or_default_without_file() {
+        let _guard = WORKING_DIR_MUTEX
+            .lock()
+            .expect("Failed to lock working directory mutex");
+
+        // Create a unique temporary directory and change to it (no config file)
+        let test_dir =
+            std::env::temp_dir().join(format!("swissarmyhammer_no_file_{}", std::process::id()));
+        std::fs::create_dir_all(&test_dir).unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&test_dir).unwrap();
+
+        // Remove any existing config files in home directory locations to ensure clean test
+        let mut backup_paths = Vec::new();
+        if let Some(home_dir) = dirs::home_dir() {
+            let home_config_path = home_dir.join("swissarmyhammer.yaml");
+            let xdg_config_path = home_dir
+                .join(".config")
+                .join("swissarmyhammer")
+                .join("swissarmyhammer.yaml");
+
+            // Backup existing files if they exist
+            if home_config_path.exists() {
+                let backup_path = home_config_path.with_extension("yaml.test_backup2");
+                let _ = std::fs::rename(&home_config_path, &backup_path);
+                backup_paths.push((home_config_path.clone(), backup_path));
+            }
+            if xdg_config_path.exists() {
+                let backup_path = xdg_config_path.with_extension("yaml.test_backup2");
+                let _ = std::fs::rename(&xdg_config_path, &backup_path);
+                backup_paths.push((xdg_config_path.clone(), backup_path));
+            }
+        }
+
+        let result = YamlConfig::load_or_default();
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert!(config.base_branch.is_none()); // Should be default (None)
+
+        // Restore backed up files
+        for (original, backup) in backup_paths {
+            let _ = std::fs::rename(backup, original);
+        }
+
+        // Clean up
+        std::env::set_current_dir(original_dir).unwrap();
+        std::fs::remove_dir_all(&test_dir).unwrap();
+    }
+
+    #[test]
+    fn test_config_error_display() {
+        use std::path::PathBuf;
+
+        // Test FileRead error display
+        let file_error = ConfigError::FileRead {
+            path: PathBuf::from("/test/path.yaml"),
+            source: std::io::Error::new(std::io::ErrorKind::NotFound, "File not found"),
+        };
+        let error_str = format!("{}", file_error);
+        assert!(error_str.contains("Failed to read configuration file"));
+        assert!(error_str.contains("/test/path.yaml"));
+
+        // Test YamlParse error display
+        let yaml_error = ConfigError::YamlParse {
+            path: PathBuf::from("/test/path.yaml"),
+            source: serde_yaml::from_str::<YamlConfig>("invalid: yaml: [").unwrap_err(),
+        };
+        let error_str = format!("{}", yaml_error);
+        assert!(error_str.contains("Failed to parse YAML configuration from"));
+        assert!(error_str.contains("/test/path.yaml"));
     }
 }

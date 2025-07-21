@@ -271,10 +271,11 @@ impl SessionLifecycleHelper {
     }
 }
 
-/// Performance measurement utilities
+/// Performance measurement utilities with memory tracking
 #[derive(Debug, Default)]
 pub struct PerformanceMeasurer {
     measurements: HashMap<String, Duration>,
+    memory_measurements: HashMap<String, MemoryStats>,
 }
 
 impl PerformanceMeasurer {
@@ -292,6 +293,27 @@ impl PerformanceMeasurer {
         let result = f();
         let duration = start.elapsed();
         self.measurements.insert(name.to_string(), duration);
+        result
+    }
+
+    /// Measure execution time and memory usage with cost tracker
+    pub fn measure_with_memory<F, R>(&mut self, name: &str, tracker: &CostTracker, f: F) -> R
+    where
+        F: FnOnce() -> R,
+    {
+        let mut memory_tracker = MemoryUsageTracker::new(tracker);
+        let start = std::time::Instant::now();
+
+        let result = f();
+
+        let duration = start.elapsed();
+        memory_tracker.update_peak(tracker);
+        let memory_stats = memory_tracker.get_stats(tracker);
+
+        self.measurements.insert(name.to_string(), duration);
+        self.memory_measurements
+            .insert(name.to_string(), memory_stats);
+
         result
     }
 
@@ -321,11 +343,55 @@ impl PerformanceMeasurer {
         }
     }
 
-    /// Print performance summary
+    /// Get memory measurement by name
+    pub fn get_memory_measurement(&self, name: &str) -> Option<&MemoryStats> {
+        self.memory_measurements.get(name)
+    }
+
+    /// Assert that memory usage is within acceptable bounds
+    pub fn assert_memory_usage(&self, name: &str, max_sessions: usize, max_cleanup_events: u32) {
+        match self.memory_measurements.get(name) {
+            Some(stats) => {
+                assert!(
+                    stats.validate_memory_usage(max_sessions),
+                    "Memory usage test '{}' exceeded limits: peak {} sessions, current {} sessions (max allowed: {})",
+                    name,
+                    stats.peak_sessions,
+                    stats.current_sessions,
+                    max_sessions
+                );
+
+                // Ensure proper cleanup occurred
+                if max_cleanup_events > 0 {
+                    assert!(
+                        stats.cleanup_events <= max_cleanup_events,
+                        "Memory cleanup test '{}' had {} cleanup events, expected <= {}",
+                        name,
+                        stats.cleanup_events,
+                        max_cleanup_events
+                    );
+                }
+            }
+            None => panic!("No memory measurement found for '{}'.", name),
+        }
+    }
+
+    /// Print comprehensive performance and memory summary
     pub fn print_summary(&self) {
         println!("Performance Summary:");
         for (name, duration) in &self.measurements {
             println!("  {}: {:?}", name, duration);
+
+            if let Some(memory_stats) = self.memory_measurements.get(name) {
+                println!("    Memory - Initial: {}, Peak: {}, Current: {}, Active: {}, Completed: {}, Cleanup: {}",
+                    memory_stats.initial_sessions,
+                    memory_stats.peak_sessions,
+                    memory_stats.current_sessions,
+                    memory_stats.active_sessions,
+                    memory_stats.completed_sessions,
+                    memory_stats.cleanup_events
+                );
+            }
         }
     }
 }
@@ -549,6 +615,384 @@ pub mod async_utils {
     }
 }
 
+/// Content type enumeration for standardized test data generation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContentType {
+    /// Basic test content for simple scenarios
+    Simple,
+    /// Descriptive test scenario content with context
+    Descriptive,
+    /// Performance-focused content for load testing
+    Performance,
+    /// Large content for stress testing
+    LargeContent,
+    /// Minimal content for edge case testing
+    MinimalContent,
+}
+
+/// Content size specification for test data
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContentSize {
+    /// Small content (~10-50 characters)
+    Small,
+    /// Medium content (~100-500 characters)
+    Medium,
+    /// Large content (~1000+ characters)
+    Large,
+    /// Variable size with custom repeat count
+    Variable(usize),
+}
+
+/// Test context for consistent data generation
+#[derive(Debug, Clone)]
+pub struct TestContext {
+    pub test_name: String,
+    pub operation_id: usize,
+    pub workflow_id: usize,
+    pub additional_context: HashMap<String, String>,
+}
+
+impl TestContext {
+    /// Create a new test context
+    pub fn new(test_name: String, operation_id: usize, workflow_id: usize) -> Self {
+        Self {
+            test_name,
+            operation_id,
+            workflow_id,
+            additional_context: HashMap::new(),
+        }
+    }
+
+    /// Add additional context data
+    pub fn with_context(mut self, key: String, value: String) -> Self {
+        self.additional_context.insert(key, value);
+        self
+    }
+}
+
+/// Standardized test issue builder for consistent data generation
+#[derive(Debug, Clone)]
+pub struct TestIssueBuilder {
+    name_prefix: String,
+    content_type: ContentType,
+    content_size: ContentSize,
+    sequence_id: Option<usize>,
+    custom_suffix: Option<String>,
+}
+
+impl Default for TestIssueBuilder {
+    fn default() -> Self {
+        Self {
+            name_prefix: "test-issue".to_string(),
+            content_type: ContentType::Simple,
+            content_size: ContentSize::Medium,
+            sequence_id: None,
+            custom_suffix: None,
+        }
+    }
+}
+
+impl TestIssueBuilder {
+    /// Create a new test issue builder
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the name prefix for the issue
+    pub fn with_name_prefix(mut self, prefix: &str) -> Self {
+        self.name_prefix = prefix.to_string();
+        self
+    }
+
+    /// Set the content type
+    pub fn with_content_type(mut self, content_type: ContentType) -> Self {
+        self.content_type = content_type;
+        self
+    }
+
+    /// Set the content size
+    pub fn with_content_size(mut self, content_size: ContentSize) -> Self {
+        self.content_size = content_size;
+        self
+    }
+
+    /// Set a sequence ID for numbering
+    pub fn with_sequence_id(mut self, id: usize) -> Self {
+        self.sequence_id = Some(id);
+        self
+    }
+
+    /// Add a custom suffix to the name
+    pub fn with_custom_suffix(mut self, suffix: &str) -> Self {
+        self.custom_suffix = Some(suffix.to_string());
+        self
+    }
+
+    /// Build the issue name
+    pub fn build_name(&self) -> String {
+        let mut name = self.name_prefix.clone();
+
+        if let Some(id) = self.sequence_id {
+            name.push_str(&format!("-{}", id));
+        }
+
+        if let Some(suffix) = &self.custom_suffix {
+            name.push_str(&format!("-{}", suffix));
+        }
+
+        name
+    }
+
+    /// Build the issue content
+    pub fn build_content(&self, context: &TestContext) -> String {
+        let base_content = match self.content_type {
+            ContentType::Simple => "Simple test content for basic operations.",
+            ContentType::Descriptive => &format!(
+                "Testing {} scenario: workflow {}, operation {} - comprehensive validation of API interception pipeline.",
+                context.test_name, context.workflow_id, context.operation_id
+            ),
+            ContentType::Performance => &format!(
+                "Performance testing operation {}/{} to measure API interception overhead and system scalability.",
+                context.workflow_id, context.operation_id
+            ),
+            ContentType::LargeContent => "Large content block for stress testing the API interception system with substantial data payloads. This content is designed to test token counting accuracy, memory usage patterns, and overall system performance under load.",
+            ContentType::MinimalContent => "Test",
+        };
+
+        match self.content_size {
+            ContentSize::Small => base_content[..base_content.len().min(50)].to_string(),
+            ContentSize::Medium => base_content.to_string(),
+            ContentSize::Large => format!("{} {}", base_content, base_content.repeat(5)),
+            ContentSize::Variable(repeat_count) => {
+                format!("{} {}", base_content, base_content.repeat(repeat_count))
+            }
+        }
+    }
+}
+
+/// Factory for creating standardized operation sequences
+#[derive(Debug)]
+pub struct OperationSequenceFactory;
+
+impl OperationSequenceFactory {
+    /// Create a basic CRUD sequence: Create -> Update -> Complete
+    pub fn create_basic_crud_sequence(prefix: &str, id: usize) -> Vec<mock_mcp::McpOperation> {
+        let context = TestContext::new("basic-crud".to_string(), 0, id);
+        let issue_builder = TestIssueBuilder::new()
+            .with_name_prefix(prefix)
+            .with_sequence_id(id)
+            .with_content_type(ContentType::Descriptive);
+
+        vec![
+            mock_mcp::McpOperation::CreateIssue {
+                name: issue_builder.build_name(),
+                content: issue_builder.build_content(&context),
+            },
+            mock_mcp::McpOperation::UpdateIssue {
+                number: (id + 1) as u32,
+                content: format!("Updated content for {} test sequence {}", prefix, id),
+            },
+            mock_mcp::McpOperation::MarkComplete {
+                number: (id + 1) as u32,
+            },
+        ]
+    }
+
+    /// Create a performance testing sequence with multiple operations
+    pub fn create_performance_sequence(prefix: &str, count: usize) -> Vec<mock_mcp::McpOperation> {
+        let mut operations = Vec::new();
+
+        for i in 0..count {
+            let context = TestContext::new("performance".to_string(), i, 0);
+            let issue_builder = TestIssueBuilder::new()
+                .with_name_prefix(prefix)
+                .with_sequence_id(i)
+                .with_content_type(ContentType::Performance);
+
+            operations.push(mock_mcp::McpOperation::CreateIssue {
+                name: issue_builder.build_name(),
+                content: issue_builder.build_content(&context),
+            });
+
+            // Add update operations for some entries to create realistic load
+            if i % 2 == 0 {
+                operations.push(mock_mcp::McpOperation::UpdateIssue {
+                    number: (i + 1) as u32,
+                    content: format!("Performance update for {} operation {}", prefix, i),
+                });
+            }
+        }
+
+        operations
+    }
+
+    /// Create a sequence for error resilience testing
+    pub fn create_error_testing_sequence(prefix: &str) -> Vec<mock_mcp::McpOperation> {
+        let context = TestContext::new("error-resilience".to_string(), 0, 0);
+        let issue_builder = TestIssueBuilder::new()
+            .with_name_prefix(prefix)
+            .with_custom_suffix("error-test")
+            .with_content_type(ContentType::Descriptive);
+
+        vec![
+            mock_mcp::McpOperation::CreateIssue {
+                name: issue_builder.build_name(),
+                content: issue_builder.build_content(&context),
+            },
+            // Try to update non-existent issue (should fail gracefully)
+            mock_mcp::McpOperation::UpdateIssue {
+                number: 999,
+                content: "Update for non-existent issue to test error handling".to_string(),
+            },
+            // Try to complete non-existent issue (should fail gracefully)
+            mock_mcp::McpOperation::MarkComplete { number: 998 },
+        ]
+    }
+
+    /// Create concurrent operation sequence for load testing
+    pub fn create_concurrent_sequence(
+        prefix: &str,
+        worker_id: usize,
+        ops_per_workflow: usize,
+    ) -> Vec<mock_mcp::McpOperation> {
+        let mut operations = Vec::new();
+
+        for op_id in 0..ops_per_workflow {
+            let context = TestContext::new("concurrent".to_string(), op_id, worker_id);
+            let issue_builder = TestIssueBuilder::new()
+                .with_name_prefix(prefix)
+                .with_sequence_id(worker_id * ops_per_workflow + op_id)
+                .with_content_type(ContentType::Performance);
+
+            operations.push(mock_mcp::McpOperation::CreateIssue {
+                name: issue_builder.build_name(),
+                content: issue_builder.build_content(&context),
+            });
+        }
+
+        operations
+    }
+
+    /// Create memory stress testing sequence with large content
+    pub fn create_memory_stress_sequence(
+        prefix: &str,
+        system_id: usize,
+        ops_count: usize,
+    ) -> Vec<mock_mcp::McpOperation> {
+        let mut operations = Vec::new();
+
+        for op_id in 0..ops_count {
+            let context = TestContext::new("memory-stress".to_string(), op_id, system_id);
+            let issue_builder = TestIssueBuilder::new()
+                .with_name_prefix(prefix)
+                .with_sequence_id(system_id * ops_count + op_id)
+                .with_content_type(ContentType::LargeContent)
+                .with_content_size(ContentSize::Variable(3)); // Repeat 3 times for stress
+
+            operations.push(mock_mcp::McpOperation::CreateIssue {
+                name: issue_builder.build_name(),
+                content: issue_builder.build_content(&context),
+            });
+        }
+
+        operations
+    }
+}
+
+/// Standardized workflow name generator
+#[derive(Debug)]
+pub struct WorkflowNameGenerator;
+
+impl WorkflowNameGenerator {
+    /// Generate name for functional tests
+    pub fn functional_test(test_type: &str, sequence_id: Option<usize>) -> String {
+        match sequence_id {
+            Some(id) => format!("functional-{}-{}", test_type, id),
+            None => format!("functional-{}", test_type),
+        }
+    }
+
+    /// Generate name for performance tests
+    pub fn performance_test(test_type: &str, batch_id: usize) -> String {
+        format!("performance-{}-batch-{}", test_type, batch_id)
+    }
+
+    /// Generate name for reliability tests
+    pub fn reliability_test(test_type: &str, scenario: &str) -> String {
+        format!("reliability-{}-{}", test_type, scenario)
+    }
+
+    /// Generate name for concurrent tests
+    pub fn concurrent_test(test_type: &str, worker_id: usize) -> String {
+        format!("concurrent-{}-worker-{}", test_type, worker_id)
+    }
+}
+
+/// Standard test configuration factory
+#[derive(Debug)]
+pub struct TestConfigFactory;
+
+/// Standard test configuration structure
+#[derive(Debug, Clone)]
+pub struct StandardTestConfig {
+    pub concurrent_workflows: usize,
+    pub operations_per_workflow: usize,
+    pub expected_duration_limit: Duration,
+    pub memory_cleanup_threshold: usize,
+    pub retry_attempts: usize,
+    pub timeout_duration: Duration,
+}
+
+impl TestConfigFactory {
+    /// Basic test configuration for simple scenarios
+    pub fn basic_test_config() -> StandardTestConfig {
+        StandardTestConfig {
+            concurrent_workflows: 3,
+            operations_per_workflow: 5,
+            expected_duration_limit: Duration::from_secs(30),
+            memory_cleanup_threshold: 10,
+            retry_attempts: 3,
+            timeout_duration: Duration::from_secs(60),
+        }
+    }
+
+    /// Performance test configuration for load testing
+    pub fn performance_test_config() -> StandardTestConfig {
+        StandardTestConfig {
+            concurrent_workflows: 10,
+            operations_per_workflow: 15,
+            expected_duration_limit: Duration::from_secs(120),
+            memory_cleanup_threshold: 50,
+            retry_attempts: 1, // No retries for performance tests
+            timeout_duration: Duration::from_secs(300),
+        }
+    }
+
+    /// Error-prone configuration for resilience testing
+    pub fn error_prone_config() -> StandardTestConfig {
+        StandardTestConfig {
+            concurrent_workflows: 5,
+            operations_per_workflow: 10,
+            expected_duration_limit: Duration::from_secs(60),
+            memory_cleanup_threshold: 20,
+            retry_attempts: 5, // More retries for error scenarios
+            timeout_duration: Duration::from_secs(180),
+        }
+    }
+
+    /// Concurrent test configuration for load testing
+    pub fn concurrent_test_config(concurrency_level: usize) -> StandardTestConfig {
+        StandardTestConfig {
+            concurrent_workflows: concurrency_level,
+            operations_per_workflow: 8,
+            expected_duration_limit: Duration::from_secs(90),
+            memory_cleanup_threshold: concurrency_level * 5,
+            retry_attempts: 2,
+            timeout_duration: Duration::from_secs(240),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -695,5 +1139,46 @@ mod tests {
         let session_ids = simulate_concurrent_session_creation(shared_tracker, 5, 1).await;
         assert!(session_ids.is_ok());
         assert_eq!(session_ids.unwrap().len(), 5);
+    }
+
+    #[test]
+    fn test_standardized_test_data_builders() {
+        // Test issue builder
+        let context = TestContext::new("unit-test".to_string(), 1, 0);
+        let builder = TestIssueBuilder::new()
+            .with_name_prefix("test-builder")
+            .with_sequence_id(42)
+            .with_content_type(ContentType::Descriptive);
+
+        let name = builder.build_name();
+        assert_eq!(name, "test-builder-42");
+
+        let content = builder.build_content(&context);
+        assert!(content.contains("unit-test"));
+        assert!(content.contains("workflow 0"));
+        assert!(content.contains("operation 1"));
+
+        // Test operation sequence factory
+        let crud_ops = OperationSequenceFactory::create_basic_crud_sequence("crud-test", 1);
+        assert_eq!(crud_ops.len(), 3);
+
+        let perf_ops = OperationSequenceFactory::create_performance_sequence("perf-test", 5);
+        assert_eq!(perf_ops.len(), 8); // 5 creates + 3 updates (every even index)
+
+        // Test workflow name generator
+        let func_name = WorkflowNameGenerator::functional_test("pipeline", Some(1));
+        assert_eq!(func_name, "functional-pipeline-1");
+
+        let perf_name = WorkflowNameGenerator::performance_test("overhead", 2);
+        assert_eq!(perf_name, "performance-overhead-batch-2");
+
+        // Test config factory
+        let basic_config = TestConfigFactory::basic_test_config();
+        assert_eq!(basic_config.concurrent_workflows, 3);
+        assert_eq!(basic_config.operations_per_workflow, 5);
+
+        let perf_config = TestConfigFactory::performance_test_config();
+        assert_eq!(perf_config.concurrent_workflows, 10);
+        assert_eq!(perf_config.operations_per_workflow, 15);
     }
 }

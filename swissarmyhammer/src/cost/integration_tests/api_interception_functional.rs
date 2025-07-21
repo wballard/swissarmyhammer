@@ -37,10 +37,34 @@ async fn test_complete_api_interception_pipeline() {
         .await
         .unwrap_or_else(|e| panic!("Complete pipeline workflow failed unexpectedly during API interception test. This indicates a critical issue with the integration between MCP handlers, cost tracking, and token counting systems: {}", e));
 
-    // Validate complete workflow execution
-    assert_eq!(result.operation_results.len(), 3);
-    assert!(result.operation_results.iter().all(|r| r.success));
-    assert!(result.duration > Duration::from_millis(0));
+    // Validate complete workflow execution with specific bounds
+    assert_eq!(
+        result.operation_results.len(),
+        3,
+        "Expected exactly 3 operations (Create, Update, MarkComplete) but got {}",
+        result.operation_results.len()
+    );
+    assert!(
+        result.operation_results.iter().all(|r| r.success),
+        "Not all operations succeeded. Failed operations: {:?}",
+        result
+            .operation_results
+            .iter()
+            .filter(|r| !r.success)
+            .collect::<Vec<_>>()
+    );
+
+    // Workflow duration should be reasonable for 3 operations with 10ms base latency
+    assert!(
+        result.duration >= Duration::from_millis(15),
+        "Workflow duration ({:?}) is too short for 3 operations with 10ms base latency",
+        result.duration
+    );
+    assert!(
+        result.duration <= Duration::from_millis(500),
+        "Workflow duration ({:?}) is unexpectedly long, suggesting performance issues",
+        result.duration
+    );
 
     // Validate session statistics
     if let Some(session_stats) = result.session_stats {
@@ -61,9 +85,41 @@ async fn test_complete_api_interception_pipeline() {
         api_stats.total_calls, api_stats.successful_calls
     );
 
-    // At minimum, verify the performance stats structure is working
-    assert!(api_stats.average_latency >= Duration::from_millis(0));
-    assert!(api_stats.failure_rate >= 0.0 && api_stats.failure_rate <= 1.0);
+    // Validate API performance metrics with realistic bounds
+    assert!(
+        api_stats.average_latency >= Duration::from_millis(5),
+        "Average latency ({:?}) is unrealistically low for mock API with 10ms base latency",
+        api_stats.average_latency
+    );
+    assert!(
+        api_stats.average_latency <= Duration::from_millis(100),
+        "Average latency ({:?}) exceeds reasonable bounds for fast test configuration",
+        api_stats.average_latency
+    );
+
+    // Failure rate validation with meaningful bounds for test configuration
+    assert!(
+        api_stats.failure_rate >= 0.0,
+        "Failure rate ({}) cannot be negative",
+        api_stats.failure_rate
+    );
+    assert!(api_stats.failure_rate <= 0.05,
+        "Failure rate ({}) is too high for test configuration (expected ≤5% for high-reliability test setup)",
+        api_stats.failure_rate);
+
+    // Calls per second should be reasonable for the test load
+    if api_stats.total_calls > 0 {
+        assert!(
+            api_stats.calls_per_second >= 5.0,
+            "Throughput ({} calls/sec) is too low, indicating performance issues",
+            api_stats.calls_per_second
+        );
+        assert!(
+            api_stats.calls_per_second <= 1000.0,
+            "Throughput ({} calls/sec) is unrealistically high for mock system",
+            api_stats.calls_per_second
+        );
+    }
 
     info!("Complete API interception pipeline test passed successfully");
 }

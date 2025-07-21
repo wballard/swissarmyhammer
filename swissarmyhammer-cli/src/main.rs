@@ -283,7 +283,7 @@ async fn run_issue(subcommand: cli::IssueCommands) -> i32 {
 ///
 /// * `quiet` - Only show errors, no warnings or info
 /// * `format` - Output format (text or json)
-/// * `workflow_dirs` - [DEPRECATED] This parameter is ignored
+/// * `workflow_dirs` - \[DEPRECATED\] This parameter is ignored
 ///
 /// # Returns
 ///

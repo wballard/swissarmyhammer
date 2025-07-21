@@ -235,7 +235,7 @@ Examples:
         #[arg(long, value_enum, default_value = "text")]
         format: ValidateFormat,
 
-        /// [DEPRECATED] This parameter is ignored. Workflows are now only loaded from standard locations.
+        /// \[DEPRECATED\] This parameter is ignored. Workflows are now only loaded from standard locations.
         #[arg(long = "workflow-dir", value_name = "DIR", hide = true)]
         workflow_dirs: Vec<String>,
     },

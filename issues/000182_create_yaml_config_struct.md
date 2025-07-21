@@ -72,3 +72,19 @@ Ensure proper error handling for YAML deserialization errors by using appropriat
 
 ## Notes
 This step establishes the foundation for YAML configuration without yet implementing file loading. The Option-based approach allows users to specify only the settings they want to override.
+
+## Proposed Solution
+
+Based on examination of the existing codebase, I will implement the YamlConfig struct as specified in the requirements:
+
+1. **Add necessary imports**: Import serde's Deserialize trait at the top of config.rs
+2. **Create YamlConfig struct**: Implement the struct with proper serde attributes and documentation
+3. **Implement Default trait**: Provide a sensible default implementation that returns None for all optional fields
+4. **Add apply_to_config method**: Create a method that applies YAML configuration values to an existing Config instance
+5. **Write comprehensive tests**: Create unit tests to verify:
+   - Default implementation returns expected values
+   - apply_to_config correctly updates Config fields when values are Some(_)
+   - apply_to_config preserves existing Config values when YAML fields are None
+   - YAML deserialization works correctly with serde_yaml
+
+The implementation will follow the existing patterns in the codebase, maintaining consistency with the current Config struct design and testing approach.

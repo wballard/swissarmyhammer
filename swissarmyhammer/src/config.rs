@@ -4,6 +4,7 @@
 //! and sensible defaults for all configurable constants throughout the application.
 
 use crate::common::env_loader::EnvLoader;
+use serde::Deserialize;
 
 /// Configuration settings for the SwissArmyHammer application
 #[derive(Debug, Clone)]
@@ -95,6 +96,23 @@ impl Config {
         // This is a workaround since OnceLock doesn't have a reset method
         // We can't actually reset the global config in tests due to OnceLock's design
         // Tests should use Config::new() directly instead of global() for testing env vars
+    }
+}
+
+/// Configuration loaded from swissarmyhammer.yaml file
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct YamlConfig {
+    /// Base branch for pull requests
+    pub base_branch: Option<String>,
+}
+
+impl YamlConfig {
+    /// Apply YAML configuration values to an existing Config
+    /// YAML values take precedence over existing values
+    pub fn apply_to_config(&self, config: &mut Config) {
+        if let Some(ref base_branch) = self.base_branch {
+            config.base_branch = base_branch.clone();
+        }
     }
 }
 
@@ -217,5 +235,83 @@ mod tests {
             Some(val) => std::env::set_var("SWISSARMYHAMMER_BASE_BRANCH", val),
             None => std::env::remove_var("SWISSARMYHAMMER_BASE_BRANCH"),
         }
+    }
+
+    #[test]
+    fn test_yaml_config_default() {
+        let yaml_config = YamlConfig::default();
+        assert!(yaml_config.base_branch.is_none());
+    }
+
+    #[test]
+    fn test_yaml_config_apply_to_config_with_values() {
+        let yaml_config = YamlConfig {
+            base_branch: Some("develop".to_string()),
+        };
+        let mut config = Config::default();
+
+        // Verify initial state
+        assert_eq!(config.base_branch, "main");
+
+        // Apply YAML config
+        yaml_config.apply_to_config(&mut config);
+
+        // Verify YAML config took precedence
+        assert_eq!(config.base_branch, "develop");
+    }
+
+    #[test]
+    fn test_yaml_config_apply_to_config_with_none() {
+        let yaml_config = YamlConfig::default(); // all fields are None
+        let mut config = Config::default();
+
+        // Save original value
+        let original_base_branch = config.base_branch.clone();
+
+        // Apply YAML config with None values
+        yaml_config.apply_to_config(&mut config);
+
+        // Verify original values are preserved
+        assert_eq!(config.base_branch, original_base_branch);
+    }
+
+    #[test]
+    fn test_yaml_config_deserialization() {
+        let yaml_content = r#"
+base_branch: "feature/test"
+"#;
+
+        let yaml_config: YamlConfig = serde_yaml::from_str(yaml_content).unwrap();
+        assert_eq!(yaml_config.base_branch, Some("feature/test".to_string()));
+    }
+
+    #[test]
+    fn test_yaml_config_partial_deserialization() {
+        let yaml_content = r#"
+# Empty YAML config
+"#;
+
+        let yaml_config: YamlConfig = serde_yaml::from_str(yaml_content).unwrap();
+        assert!(yaml_config.base_branch.is_none());
+    }
+
+    #[test]
+    fn test_yaml_config_apply_overwrites_existing_values() {
+        let yaml_config = YamlConfig {
+            base_branch: Some("staging".to_string()),
+        };
+
+        // Create config with non-default value
+        let mut config = Config::default();
+        config.base_branch = "custom".to_string();
+
+        // Verify initial custom value
+        assert_eq!(config.base_branch, "custom");
+
+        // Apply YAML config
+        yaml_config.apply_to_config(&mut config);
+
+        // Verify YAML config overwrote the existing value
+        assert_eq!(config.base_branch, "staging");
     }
 }

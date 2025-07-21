@@ -1680,6 +1680,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_validate_all_workflows_uses_standard_locations() {
         // This test verifies that validate_all_workflows now uses WorkflowResolver
         // to load workflows only from standard locations (builtin, user, local)
@@ -1727,6 +1728,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_validate_only_loads_from_standard_locations() {
         // This test ensures that workflows outside standard locations are NOT validated
         let mut validator = Validator::new(false);
@@ -1795,6 +1797,7 @@ stateDiagram-v2
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_validate_command_loads_same_workflows_as_flow_list() {
         // This test ensures consistency between validate and flow list commands
         // Both should load workflows from the same standard locations

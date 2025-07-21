@@ -7,6 +7,12 @@
 pub mod calculator;
 pub mod tracker;
 
+#[cfg(test)]
+pub mod integration_tests;
+
+#[cfg(test)]
+pub mod test_utils;
+
 pub use calculator::{
     CostCalculation, CostCalculator, MaxPlanConfig, PaidPlanConfig, PricingModel, PricingRates,
 };

@@ -57,14 +57,14 @@ async fn test_nested_complete_directory_bug() {
     // Verify the completion status is correct
     for issue in &all_issues {
         match issue.name.as_str() {
-            "legitimate_completed" => {
+            "000001_legitimate_completed" => {
                 // The legitimate completed issue should be marked as completed
                 assert!(
                     issue.completed,
                     "Issue 000001 should be completed (in complete directory)"
                 );
             }
-            "nested_not_completed" => {
+            "000002_nested_not_completed" => {
                 // The nested issue should NOT be completed despite having "complete" in its path
                 assert!(
                     !issue.completed,
@@ -136,8 +136,8 @@ async fn test_path_completion_detection_precision() {
 
     for issue in &all_issues {
         let expected = match issue.name.as_str() {
-            "direct_complete" => true, // direct_complete should be completed
-            _ => false,                // all others should NOT be completed
+            "000001_direct_complete" => true, // direct_complete should be completed
+            _ => false,                       // all others should NOT be completed
         };
 
         assert_eq!(

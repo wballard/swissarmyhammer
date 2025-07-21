@@ -151,10 +151,152 @@ Prepares for:
 - Complete cost tracking workflow
 - User-facing cost reporting
 
+## Proposed Solution
+
+Based on analysis of the existing codebase, I will implement the cost tracking markdown format extension through the following approach:
+
+### 1. Core Components Architecture
+
+#### Cost Formatting Module (`src/cost/formatting.rs`)
+```rust
+pub struct CostSectionFormatter {
+    config: CostFormattingConfig,
+    precision: usize,
+    locale: String,
+}
+
+pub struct IssueCostData {
+    pub session_data: CostSession,
+    pub total_cost: Option<Decimal>,  
+    pub pricing_model: PricingModel,
+    pub summary_stats: CostSummaryStats,
+}
+
+pub struct CostFormattingConfig {
+    pub enabled: bool,
+    pub detail_level: DetailLevel,
+    pub currency_precision: usize,
+    pub show_breakdown_table: bool,
+    pub date_format: String,
+}
+
+pub enum DetailLevel {
+    Summary,
+    Full,
+    Breakdown,
+}
+```
+
+#### Integration Points
+- **FileSystemIssueStorage::mark_complete()**: Extend to append cost sections before moving files
+- **Cost extraction**: Hook into workflow completion to gather cost data from CostTracker
+- **Backward compatibility**: Only append cost sections when cost data is available
+
+### 2. Implementation Strategy
+
+#### Phase 1: Cost Section Generation
+1. Create `CostSectionFormatter::format_cost_section()` 
+2. Implement currency formatting with locale support
+3. Add date/time formatting with UTC handling
+4. Build markdown table generation for API call breakdown
+
+#### Phase 2: Storage Integration  
+1. Modify `move_issue()` to accept optional cost data parameter
+2. Append cost section to markdown content before file operations
+3. Maintain atomicity of file operations
+4. Preserve existing content and formatting
+
+#### Phase 3: Data Collection
+1. Create method to extract cost data from completed sessions  
+2. Match issue numbers to cost session data
+3. Calculate summary statistics and cost totals
+4. Handle missing or partial cost data gracefully
+
+### 3. Technical Implementation Details
+
+#### File Structure Changes
+- **Extend**: `swissarmyhammer/src/issues/filesystem.rs` - Add cost integration to mark_complete
+- **Create**: `swissarmyhammer/src/cost/formatting.rs` - Cost section formatter
+- **Update**: Cost tracker integration for issue completion
+
+#### Markdown Generation Logic
+```rust
+impl CostSectionFormatter {
+    pub fn format_cost_section(&self, cost_data: &IssueCostData) -> String {
+        let mut sections = vec![];
+        
+        // Main cost analysis section
+        sections.push(self.format_cost_summary(&cost_data));
+        
+        // API call breakdown table (if configured)
+        if self.config.show_breakdown_table {
+            sections.push(self.format_api_breakdown(&cost_data.session_data));
+        }
+        
+        // Cost summary statistics
+        sections.push(self.format_cost_statistics(&cost_data.summary_stats));
+        
+        sections.join("\n\n")
+    }
+}
+```
+
+#### Integration Workflow
+1. **Issue Completion Trigger**: `mark_complete(number)` called
+2. **Cost Data Lookup**: Search CostTracker for sessions matching issue 
+3. **Data Processing**: Calculate totals, format timestamps, generate stats
+4. **Markdown Generation**: Create cost section with proper formatting
+5. **File Update**: Append cost section to issue content
+6. **Atomic Move**: Move updated file to completed directory
+
+### 4. Configuration Options
+
+```rust
+pub struct CostFormattingConfig {
+    pub enabled: bool,                    // Enable/disable cost sections
+    pub detail_level: DetailLevel,        // Summary, Full, or Breakdown
+    pub currency_precision: usize,        // Decimal places for currency
+    pub show_breakdown_table: bool,       // Include API call table
+    pub date_format: String,              // ISO 8601 or custom format
+    pub thousands_separator: String,      // For token count formatting  
+    pub include_metadata: bool,           // Session metadata in output
+}
+```
+
+### 5. Error Handling & Edge Cases
+
+- **No Cost Data**: Skip cost section generation, log info message  
+- **Partial Data**: Generate section with available data, note missing info
+- **Multiple Sessions**: Aggregate data across sessions for same issue
+- **File System Errors**: Ensure atomic operations, rollback on failure
+- **Format Validation**: Validate markdown generation, check table structure
+
+### 6. Testing Strategy
+
+#### Unit Tests
+- Cost section markdown generation accuracy
+- Currency and number formatting validation  
+- Date/time formatting correctness
+- Table structure and alignment
+- Edge cases (zero costs, single calls, etc.)
+
+#### Integration Tests  
+- Issue completion with cost data end-to-end
+- Backward compatibility with existing issues
+- Cost section updates and regeneration
+- Error handling for missing cost data
+- Multi-session aggregation
+
+#### Performance Tests
+- Large API call breakdown table generation
+- Multiple issue completion batch operations
+- Memory usage with extensive cost data
+
 ## Success Criteria
 
+- [x] Comprehensive solution design completed
 - [ ] Complete cost section markdown generation
-- [ ] Seamless integration with issue storage system
+- [ ] Seamless integration with issue storage system  
 - [ ] Support for both paid and max plan formatting
 - [ ] Configurable detail levels and formatting options
 - [ ] Backward compatibility with existing issue format

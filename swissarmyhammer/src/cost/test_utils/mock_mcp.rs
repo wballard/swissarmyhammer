@@ -892,6 +892,11 @@ impl crate::issues::IssueStorage for MockIssueStorage {
         }
     }
 
+    async fn mark_complete_with_cost(&self, number: u32, _cost_data: crate::cost::IssueCostData) -> crate::Result<crate::issues::Issue> {
+        // For mock implementation, just mark as complete (cost data handling would be tested separately)
+        self.mark_complete(number).await
+    }
+
     async fn list_issues(&self) -> crate::Result<Vec<crate::issues::Issue>> {
         Ok(self.issues.read().await.values().cloned().collect())
     }

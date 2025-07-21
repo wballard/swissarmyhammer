@@ -62,6 +62,7 @@ pub struct ApiCallRecord {
 /// #     async fn get_issue(&self, _number: u32) -> swissarmyhammer::Result<swissarmyhammer::issues::Issue> { unimplemented!() }
 /// #     async fn update_issue(&self, _number: u32, _content: String) -> swissarmyhammer::Result<swissarmyhammer::issues::Issue> { unimplemented!() }
 /// #     async fn mark_complete(&self, _number: u32) -> swissarmyhammer::Result<swissarmyhammer::issues::Issue> { unimplemented!() }
+/// #     async fn mark_complete_with_cost(&self, _number: u32, _cost_data: swissarmyhammer::cost::IssueCostData) -> swissarmyhammer::Result<swissarmyhammer::issues::Issue> { unimplemented!() }
 /// #     async fn list_issues(&self) -> swissarmyhammer::Result<Vec<swissarmyhammer::issues::Issue>> { unimplemented!() }
 /// #     async fn create_issues_batch(&self, _issues: Vec<(String, String)>) -> swissarmyhammer::Result<Vec<swissarmyhammer::issues::Issue>> { unimplemented!() }
 /// #     async fn get_issues_batch(&self, _numbers: Vec<u32>) -> swissarmyhammer::Result<Vec<swissarmyhammer::issues::Issue>> { unimplemented!() }
@@ -769,6 +770,11 @@ mod tests {
                 content: "test-content".to_string(),
                 created_at: Utc::now(),
             })
+        }
+
+        async fn mark_complete_with_cost(&self, number: u32, _cost_data: crate::cost::IssueCostData) -> crate::Result<crate::issues::Issue> {
+            // For mock implementation, just call mark_complete
+            self.mark_complete(number).await
         }
 
         async fn list_issues(&self) -> crate::Result<Vec<crate::issues::Issue>> {

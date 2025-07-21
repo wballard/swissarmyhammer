@@ -102,6 +102,9 @@ pub trait IssueStorage: Send + Sync {
     /// Mark an issue as complete (move to complete directory)
     async fn mark_complete(&self, number: u32) -> Result<Issue>;
 
+    /// Mark an issue as complete with cost data integration
+    async fn mark_complete_with_cost(&self, number: u32, cost_data: crate::cost::IssueCostData) -> Result<Issue>;
+
     /// Batch operations for better performance
     /// Create multiple issues at once
     async fn create_issues_batch(&self, issues: Vec<(String, String)>) -> Result<Vec<Issue>>;
@@ -428,12 +431,33 @@ impl FileSystemIssueStorage {
         Ok(Issue { content, ..issue })
     }
 
+    /// Move issue between directories with optional cost data integration
+    async fn move_issue_with_cost(
+        &self, 
+        number: u32, 
+        to_completed: bool,
+        cost_data: Option<crate::cost::IssueCostData>
+    ) -> Result<Issue> {
+        self.move_issue_internal(number, to_completed, cost_data).await
+    }
+
     /// Move issue between directories
     async fn move_issue(&self, number: u32, to_completed: bool) -> Result<Issue> {
+        self.move_issue_internal(number, to_completed, None).await
+    }
+
+    /// Internal method for moving issues with optional cost integration
+    async fn move_issue_internal(
+        &self, 
+        number: u32, 
+        to_completed: bool,
+        cost_data: Option<crate::cost::IssueCostData>
+    ) -> Result<Issue> {
         debug!(
-            "Moving issue {} to {}",
+            "Moving issue {} to {} {}",
             number,
-            if to_completed { "completed" } else { "pending" }
+            if to_completed { "completed" } else { "pending" },
+            if cost_data.is_some() { "with cost data" } else { "without cost data" }
         );
 
         // Find current issue
@@ -443,6 +467,36 @@ impl FileSystemIssueStorage {
         if issue.completed == to_completed {
             debug!("Issue {} already in target state", number);
             return Ok(issue);
+        }
+
+        // Add cost section if completing issue and cost data is provided
+        if to_completed && cost_data.is_some() {
+            let cost_data = cost_data.unwrap();
+            let formatter = crate::cost::CostSectionFormatter::default();
+            let cost_section = formatter.format_cost_section(&cost_data);
+            
+            if !cost_section.is_empty() {
+                // Check if cost section already exists
+                if !issue.content.contains("## Cost Analysis") {
+                    // Add cost section to the end of the content
+                    let updated_content = if issue.content.ends_with('\n') {
+                        format!("{}\n{}", issue.content, cost_section)
+                    } else {
+                        format!("{}\n\n{}", issue.content, cost_section)
+                    };
+                    
+                    // Write updated content to the current file
+                    std::fs::write(&issue.file_path, updated_content.clone())
+                        .map_err(SwissArmyHammerError::Io)?;
+                    
+                    // Update issue content in memory
+                    issue.content = updated_content;
+                    
+                    debug!("Added cost section to issue {}", number);
+                } else {
+                    debug!("Cost section already exists in issue {}, skipping", number);
+                }
+            }
         }
 
         // Determine source and target paths
@@ -531,6 +585,10 @@ impl IssueStorage for FileSystemIssueStorage {
 
     async fn mark_complete(&self, number: u32) -> Result<Issue> {
         self.move_issue(number, true).await
+    }
+
+    async fn mark_complete_with_cost(&self, number: u32, cost_data: crate::cost::IssueCostData) -> Result<Issue> {
+        self.move_issue_with_cost(number, true, Some(cost_data)).await
     }
 
     async fn create_issues_batch(&self, issues: Vec<(String, String)>) -> Result<Vec<Issue>> {
@@ -3071,5 +3129,173 @@ mod tests {
         // Verify original issue was not updated
         let retrieved_issue = storage.get_issue(issue.number.value()).await.unwrap();
         assert_eq!(retrieved_issue.content, "Content");
+    }
+
+    #[tokio::test]
+    async fn test_mark_complete_with_cost_data() {
+        use crate::cost::{ApiCall, ApiCallStatus, CostSession, CostSessionStatus, IssueId as CostIssueId, PricingModel, PaidPlanConfig};
+        
+        let temp_dir = tempfile::tempdir().unwrap();
+        let storage = FileSystemIssueStorage::new(temp_dir.path().to_path_buf()).unwrap();
+
+        // Create test issue
+        let issue = storage
+            .create_issue("test_cost_issue".to_string(), "# Test Issue\n\nTest content".to_string())
+            .await
+            .unwrap();
+
+        // Create mock cost data
+        let cost_issue_id = CostIssueId::new("test-issue").unwrap();
+        let mut session = CostSession::new(cost_issue_id);
+        
+        let mut call1 = ApiCall::new("https://api.anthropic.com/v1/messages", "claude-3-sonnet-20241022").unwrap();
+        call1.complete(1000, 1500, ApiCallStatus::Success, None);
+        session.add_api_call(call1).unwrap();
+        
+        let mut call2 = ApiCall::new("https://api.anthropic.com/v1/messages", "claude-3-sonnet-20241022").unwrap();
+        call2.complete(800, 1200, ApiCallStatus::Success, None);
+        session.add_api_call(call2).unwrap();
+        
+        session.complete(CostSessionStatus::Completed).unwrap();
+
+        // Create IssueCostData
+        let pricing_model = PricingModel::Paid(PaidPlanConfig::new_with_defaults());
+        let cost_data = crate::cost::CostSectionFormatter::create_issue_cost_data(
+            session,
+            pricing_model,
+            None, // No calculator for test
+        ).unwrap();
+
+        // Mark complete with cost data
+        let completed_issue = storage
+            .mark_complete_with_cost(issue.number.into(), cost_data)
+            .await
+            .unwrap();
+
+        assert!(completed_issue.completed);
+        assert!(completed_issue.content.contains("## Cost Analysis"));
+        assert!(completed_issue.content.contains("**Total Cost**: Unlimited Plan"));
+        assert!(completed_issue.content.contains("**Total API Calls**: 2"));
+        assert!(completed_issue.content.contains("**Total Input Tokens**: 1,800"));
+        assert!(completed_issue.content.contains("**Total Output Tokens**: 2,700"));
+        
+        // Verify the file was moved to completed directory and contains cost section
+        let completed_content = std::fs::read_to_string(&completed_issue.file_path).unwrap();
+        assert!(completed_content.contains("## Cost Analysis"));
+        assert!(completed_content.contains("### API Call Breakdown"));
+    }
+
+    #[tokio::test]
+    async fn test_mark_complete_with_cost_idempotent() {
+        use crate::cost::{CostSession, CostSessionStatus, IssueId as CostIssueId, PricingModel, MaxPlanConfig};
+        
+        let temp_dir = tempfile::tempdir().unwrap();
+        let storage = FileSystemIssueStorage::new(temp_dir.path().to_path_buf()).unwrap();
+
+        // Create test issue
+        let issue = storage
+            .create_issue("test_cost_idempotent".to_string(), "# Test Issue\n\nTest content".to_string())
+            .await
+            .unwrap();
+
+        // Create mock cost data
+        let cost_issue_id = CostIssueId::new("test-issue").unwrap();
+        let mut session = CostSession::new(cost_issue_id);
+        session.complete(CostSessionStatus::Completed).unwrap();
+
+        let pricing_model = PricingModel::Max(MaxPlanConfig::new(true));
+        let cost_data = crate::cost::CostSectionFormatter::create_issue_cost_data(
+            session,
+            pricing_model,
+            None,
+        ).unwrap();
+
+        // Mark complete with cost data first time
+        let completed_issue1 = storage
+            .mark_complete_with_cost(issue.number.into(), cost_data.clone())
+            .await
+            .unwrap();
+
+        let content_after_first = completed_issue1.content.clone();
+
+        // Mark complete with cost data second time - should not duplicate cost section
+        let completed_issue2 = storage
+            .mark_complete_with_cost(issue.number.into(), cost_data)
+            .await
+            .unwrap();
+
+        assert_eq!(completed_issue1.content, completed_issue2.content);
+        assert_eq!(content_after_first, completed_issue2.content);
+        
+        // Count occurrences of "## Cost Analysis" - should be exactly 1
+        let cost_section_count = completed_issue2.content.matches("## Cost Analysis").count();
+        assert_eq!(cost_section_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_mark_complete_without_cost_data_backwards_compatible() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let storage = FileSystemIssueStorage::new(temp_dir.path().to_path_buf()).unwrap();
+
+        // Create test issue
+        let issue = storage
+            .create_issue("test_backwards_compat".to_string(), "# Test Issue\n\nTest content".to_string())
+            .await
+            .unwrap();
+
+        // Mark complete without cost data (old behavior)
+        let completed_issue = storage.mark_complete(issue.number.into()).await.unwrap();
+
+        assert!(completed_issue.completed);
+        assert!(!completed_issue.content.contains("## Cost Analysis"));
+        assert_eq!(completed_issue.content, "# Test Issue\n\nTest content");
+    }
+
+    #[tokio::test]
+    async fn test_cost_section_formatting_configuration() {
+        use crate::cost::{CostSession, CostSessionStatus, IssueId as CostIssueId, PricingModel, MaxPlanConfig, CostFormattingConfig, CostSectionFormatter, DetailLevel};
+        
+        let temp_dir = tempfile::tempdir().unwrap();
+        let storage = FileSystemIssueStorage::new(temp_dir.path().to_path_buf()).unwrap();
+
+        let _issue = storage
+            .create_issue("test_config".to_string(), "# Test Issue\n\nTest content".to_string())
+            .await
+            .unwrap();
+
+        // Create cost data
+        let cost_issue_id = CostIssueId::new("test-issue").unwrap();
+        let mut session = CostSession::new(cost_issue_id);
+        session.complete(CostSessionStatus::Completed).unwrap();
+
+        let pricing_model = PricingModel::Max(MaxPlanConfig::new(true));
+        let cost_data = CostSectionFormatter::create_issue_cost_data(
+            session,
+            pricing_model,
+            None,
+        ).unwrap();
+
+        // Test with disabled configuration
+        let disabled_config = CostFormattingConfig {
+            enabled: false,
+            ..CostFormattingConfig::default()
+        };
+        
+        let formatter = CostSectionFormatter::new(disabled_config);
+        let cost_section = formatter.format_cost_section(&cost_data);
+        assert!(cost_section.is_empty());
+
+        // Test with summary only configuration
+        let summary_config = CostFormattingConfig {
+            detail_level: DetailLevel::Summary,
+            show_breakdown_table: false,
+            ..CostFormattingConfig::default()
+        };
+        
+        let summary_formatter = CostSectionFormatter::new(summary_config);
+        let summary_section = summary_formatter.format_cost_section(&cost_data);
+        assert!(summary_section.contains("## Cost Analysis"));
+        assert!(!summary_section.contains("### API Call Breakdown"));
+        assert!(!summary_section.contains("### Cost Summary"));
     }
 }

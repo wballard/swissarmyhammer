@@ -646,9 +646,13 @@ pub enum ContentSize {
 /// Test context for consistent data generation
 #[derive(Debug, Clone)]
 pub struct TestContext {
+    /// Name of the test for identification and logging
     pub test_name: String,
+    /// Unique identifier for the operation within the test
     pub operation_id: usize,
+    /// Identifier for the workflow this test belongs to
     pub workflow_id: usize,
+    /// Additional key-value pairs for test-specific context
     pub additional_context: HashMap<String, String>,
 }
 
@@ -935,11 +939,17 @@ pub struct TestConfigFactory;
 /// Standard test configuration structure
 #[derive(Debug, Clone)]
 pub struct StandardTestConfig {
+    /// Number of workflows to run concurrently
     pub concurrent_workflows: usize,
+    /// Number of operations each workflow should perform
     pub operations_per_workflow: usize,
+    /// Maximum expected duration for the entire test
     pub expected_duration_limit: Duration,
+    /// Memory usage threshold that triggers cleanup
     pub memory_cleanup_threshold: usize,
+    /// Number of retry attempts for failed operations
     pub retry_attempts: usize,
+    /// Timeout duration for individual operations
     pub timeout_duration: Duration,
 }
 

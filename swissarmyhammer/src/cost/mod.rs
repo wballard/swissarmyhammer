@@ -5,6 +5,7 @@
 //! cost calculation capabilities throughout issue processing.
 
 pub mod calculator;
+pub mod formatting;
 pub mod token_counter;
 pub mod token_estimation;
 pub mod tracker;
@@ -20,6 +21,9 @@ pub mod test_utils;
 
 pub use calculator::{
     CostCalculation, CostCalculator, MaxPlanConfig, PaidPlanConfig, PricingModel, PricingRates,
+};
+pub use formatting::{
+    CostFormattingConfig, CostSectionFormatter, CostSummaryStats, DetailLevel, IssueCostData,
 };
 pub use token_counter::{
     ApiTokenExtractor, ConfidenceLevel, TokenCounter, TokenSource, TokenUsage, TokenValidator,

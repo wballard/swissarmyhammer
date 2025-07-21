@@ -1241,7 +1241,7 @@ base_branch: "feature/test"
         // Create a temporary directory and config file
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("swissarmyhammer.yaml");
-        
+
         let mut file = File::create(&config_path).unwrap();
         writeln!(file, "base_branch: \"develop\"").unwrap();
         drop(file);
@@ -1260,7 +1260,7 @@ base_branch: "feature/test"
         // This is equivalent to what load_or_default() returns when no config file is found
         let config = YamlConfig::default();
         assert!(config.base_branch.is_none());
-        
+
         // This test verifies the default behavior without needing file system operations
     }
 
@@ -1511,9 +1511,9 @@ base_branch: "feature/test"
 #[cfg(test)]
 mod yaml_config_tests {
     use super::*;
-    use tempfile::NamedTempFile;
     use std::io::Write;
-    
+    use tempfile::NamedTempFile;
+
     #[test]
     fn test_yaml_config_deserialize_valid() {
         let yaml_content = r#"
@@ -1522,32 +1522,32 @@ base_branch: "develop"
         let config: YamlConfig = serde_yaml::from_str(yaml_content).unwrap();
         assert_eq!(config.base_branch, Some("develop".to_string()));
     }
-    
+
     #[test]
     fn test_yaml_config_deserialize_partial() {
         let yaml_content = r#"{}"#;
         let config: YamlConfig = serde_yaml::from_str(yaml_content).unwrap();
         assert_eq!(config.base_branch, None);
     }
-    
+
     #[test]
     fn test_yaml_config_load_from_file_valid() -> Result<(), Box<dyn std::error::Error>> {
         let mut temp_file = NamedTempFile::new()?;
         writeln!(temp_file, "base_branch: \"feature\"")?;
-        
+
         let config = YamlConfig::load_from_file(temp_file.path())?;
         assert_eq!(config.base_branch, Some("feature".to_string()));
         Ok(())
     }
-    
+
     #[test]
     fn test_yaml_config_load_from_file_invalid_yaml() {
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "invalid: yaml: syntax: [").unwrap();
-        
+
         let result = YamlConfig::load_from_file(temp_file.path());
         assert!(result.is_err());
-        
+
         match result.unwrap_err() {
             ConfigError::YamlParse { path, source: _ } => {
                 assert_eq!(path, temp_file.path());
@@ -1555,12 +1555,12 @@ base_branch: "develop"
             _ => panic!("Expected YamlParse error"),
         }
     }
-    
+
     #[test]
     fn test_yaml_config_load_nonexistent_file() {
         let result = YamlConfig::load_from_file("/nonexistent/path.yaml");
         assert!(result.is_err());
-        
+
         match result.unwrap_err() {
             ConfigError::FileRead { path, source: _ } => {
                 assert_eq!(path, std::path::Path::new("/nonexistent/path.yaml"));
@@ -1568,30 +1568,28 @@ base_branch: "develop"
             _ => panic!("Expected FileRead error"),
         }
     }
-    
+
     #[test]
     fn test_yaml_config_apply_to_config() {
         let mut config = Config::default();
         let original_base_branch = config.base_branch.clone();
-        
+
         let yaml_config = YamlConfig {
             base_branch: Some("custom".to_string()),
         };
-        
+
         yaml_config.apply_to_config(&mut config);
         assert_eq!(config.base_branch, "custom");
         assert_ne!(config.base_branch, original_base_branch);
     }
-    
+
     #[test]
     fn test_yaml_config_apply_to_config_none_values() {
         let mut config = Config::default();
         let original_base_branch = config.base_branch.clone();
-        
-        let yaml_config = YamlConfig {
-            base_branch: None,
-        };
-        
+
+        let yaml_config = YamlConfig { base_branch: None };
+
         yaml_config.apply_to_config(&mut config);
         assert_eq!(config.base_branch, original_base_branch);
     }
@@ -1600,7 +1598,7 @@ base_branch: "develop"
 #[cfg(test)]
 mod config_integration_tests {
     use super::*;
-    
+
     #[test]
     #[serial_test::serial]
     fn test_config_precedence_env_overrides_yaml() {
@@ -1608,22 +1606,22 @@ mod config_integration_tests {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let yaml_path = temp_dir.path().join("swissarmyhammer.yaml");
         std::fs::write(&yaml_path, "base_branch: \"yaml-branch\"").unwrap();
-        
+
         // Set environment variable - this should take precedence
         std::env::set_var("SWISSARMYHAMMER_BASE_BRANCH", "env-branch");
-        
+
         // Change to temp directory
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
-        
+
         let config = Config::new();
         assert_eq!(config.base_branch, "env-branch"); // env should override yaml
-        
+
         // Cleanup
         std::env::set_current_dir(original_dir).expect("Could not restore original directory");
         std::env::remove_var("SWISSARMYHAMMER_BASE_BRANCH");
     }
-    
+
     #[test]
     #[serial_test::serial]
     fn test_config_precedence_yaml_overrides_default() {
@@ -1631,28 +1629,34 @@ mod config_integration_tests {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let yaml_path = temp_dir.path().join("swissarmyhammer.yaml");
         std::fs::write(&yaml_path, "base_branch: \"yaml-branch\"").unwrap();
-        
+
         // Ensure no environment variable is set
         std::env::remove_var("SWISSARMYHAMMER_BASE_BRANCH");
-        
+
         // Verify the env var is actually not set
-        assert!(std::env::var("SWISSARMYHAMMER_BASE_BRANCH").is_err(), "Env var should not be set");
-        
+        assert!(
+            std::env::var("SWISSARMYHAMMER_BASE_BRANCH").is_err(),
+            "Env var should not be set"
+        );
+
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
-        
+
         // Verify YAML file exists and is readable
         assert!(yaml_path.exists(), "YAML config file should exist");
         let yaml_content = std::fs::read_to_string(&yaml_path).unwrap();
-        assert!(yaml_content.contains("yaml-branch"), "YAML should contain yaml-branch");
-        
+        assert!(
+            yaml_content.contains("yaml-branch"),
+            "YAML should contain yaml-branch"
+        );
+
         let config = Config::new();
         assert_eq!(config.base_branch, "yaml-branch");
-        
+
         // Cleanup
         std::env::set_current_dir(original_dir).expect("Could not restore original directory");
     }
-    
+
     #[test]
     #[serial_test::serial]
     fn test_config_precedence_defaults_when_no_overrides() {
@@ -1660,12 +1664,12 @@ mod config_integration_tests {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
-        
+
         std::env::remove_var("SWISSARMYHAMMER_BASE_BRANCH");
-        
+
         let config = Config::new();
         assert_eq!(config.base_branch, "main"); // default value
-        
+
         // Cleanup
         std::env::set_current_dir(original_dir).expect("Could not restore original directory");
     }
@@ -1674,7 +1678,7 @@ mod config_integration_tests {
 #[cfg(test)]
 mod config_validation_tests {
     use super::*;
-    
+
     #[test]
     fn test_validate_base_branch_valid() {
         let config = Config {
@@ -1683,7 +1687,7 @@ mod config_validation_tests {
         };
         assert!(config.validate().is_ok());
     }
-    
+
     #[test]
     fn test_validate_base_branch_empty() {
         let config = Config {
@@ -1692,7 +1696,7 @@ mod config_validation_tests {
         };
         let result = config.validate();
         assert!(result.is_err());
-        
+
         match result.unwrap_err() {
             ConfigError::InvalidValue { field, .. } => {
                 assert_eq!(field, "base_branch");
@@ -1700,7 +1704,7 @@ mod config_validation_tests {
             _ => panic!("Expected InvalidValue error"),
         }
     }
-    
+
     #[test]
     fn test_validate_base_branch_invalid_characters() {
         let invalid_names = vec![
@@ -1713,17 +1717,21 @@ mod config_validation_tests {
             "branch[with[brackets",
             "branch\\with\\backslashes",
         ];
-        
+
         for invalid_name in invalid_names {
             let config = Config {
                 base_branch: invalid_name.to_string(),
                 ..Config::default()
             };
             let result = config.validate();
-            assert!(result.is_err(), "Should fail validation for: {}", invalid_name);
+            assert!(
+                result.is_err(),
+                "Should fail validation for: {}",
+                invalid_name
+            );
         }
     }
-    
+
     #[test]
     fn test_validate_numeric_ranges() {
         let config = Config {
@@ -1731,7 +1739,7 @@ mod config_validation_tests {
             ..Config::default()
         };
         assert!(config.validate().is_err());
-        
+
         let config = Config {
             min_issue_number: 100,
             max_issue_number: 50,
@@ -1745,7 +1753,7 @@ mod config_validation_tests {
 mod config_property_tests {
     use super::*;
     use proptest::prelude::*;
-    
+
     proptest! {
         #[test]
         fn test_valid_branch_names_pass_validation(
@@ -1761,15 +1769,15 @@ mod config_property_tests {
             prop_assume!(!branch_name.ends_with(".lock"));
             prop_assume!(!branch_name.trim().is_empty());
             prop_assume!(branch_name.len() <= 100);
-            
+
             let config = Config {
                 base_branch: branch_name,
                 ..Config::default()
             };
-            
+
             prop_assert!(config.validate().is_ok());
         }
-        
+
         #[test]
         fn test_positive_numbers_pass_validation(
             width in 1u32..10,  // Keep within valid range
@@ -1784,7 +1792,7 @@ mod config_property_tests {
                 max_issue_number: max_issue,
                 ..Config::default()
             };
-            
+
             prop_assert!(config.validate().is_ok());
         }
     }
@@ -1794,21 +1802,24 @@ mod config_property_tests {
 mod config_benchmarks {
     use super::*;
     use std::time::Instant;
-    
+
     #[test]
     fn benchmark_config_loading_performance() {
         let iterations = 1000;
         let start = Instant::now();
-        
+
         for _ in 0..iterations {
             let _config = Config::new();
         }
-        
+
         let duration = start.elapsed();
         let avg_duration = duration / iterations;
-        
+
         // Configuration loading should be fast (< 1ms on average)
-        assert!(avg_duration.as_millis() < 1, 
-                "Config loading too slow: {}ms average", avg_duration.as_millis());
+        assert!(
+            avg_duration.as_millis() < 1,
+            "Config loading too slow: {}ms average",
+            avg_duration.as_millis()
+        );
     }
 }

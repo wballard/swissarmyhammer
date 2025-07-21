@@ -232,7 +232,7 @@ pub fn get_test_swissarmyhammer_dir() -> PathBuf {
 /// is restored after the test completes, preventing test pollution.
 pub struct TestHomeGuard {
     original_home: Option<String>,
-    _guard: std::sync::MutexGuard<'static, ()>,
+    guard: Option<std::sync::MutexGuard<'static, ()>>,
 }
 
 impl TestHomeGuard {
@@ -255,7 +255,7 @@ impl TestHomeGuard {
 
         Self {
             original_home,
-            _guard: guard,
+            guard: Some(guard),
         }
     }
 }
@@ -268,10 +268,13 @@ impl Default for TestHomeGuard {
 
 impl Drop for TestHomeGuard {
     fn drop(&mut self) {
-        // Restore original HOME environment variable
-        match &self.original_home {
-            Some(home) => std::env::set_var("HOME", home),
-            None => std::env::remove_var("HOME"),
+        // Restore original HOME environment variable while the mutex is still held
+        if let Some(_guard) = self.guard.take() {
+            match &self.original_home {
+                Some(home) => std::env::set_var("HOME", home),
+                None => std::env::remove_var("HOME"),
+            }
+            // _guard is dropped here, releasing the mutex after HOME is restored
         }
     }
 }

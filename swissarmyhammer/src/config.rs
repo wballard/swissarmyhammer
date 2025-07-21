@@ -63,12 +63,13 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Create a new configuration instance with values from environment variables
-    /// or defaults if environment variables are not set
+    /// Create a new configuration instance with values from environment variables,
+    /// YAML configuration file, or defaults (in that order of precedence)
     pub fn new() -> Self {
         let loader = EnvLoader::new("SWISSARMYHAMMER");
 
-        Self {
+        // Start with environment variables or defaults
+        let mut config = Self {
             issue_branch_prefix: loader.load_string("ISSUE_BRANCH_PREFIX", "issue/"),
             issue_number_width: loader.load_parsed("ISSUE_NUMBER_WIDTH", 6),
             max_pending_issues_in_summary: loader.load_parsed("MAX_PENDING_ISSUES_IN_SUMMARY", 5),
@@ -83,7 +84,51 @@ impl Config {
             virtual_issue_number_base: loader.load_parsed("VIRTUAL_ISSUE_NUMBER_BASE", 500_000),
             virtual_issue_number_range: loader.load_parsed("VIRTUAL_ISSUE_NUMBER_RANGE", 500_000),
             base_branch: loader.load_string("BASE_BRANCH", DEFAULT_BASE_BRANCH),
+        };
+
+        // Apply YAML configuration if available (only overrides values not set by environment)
+        if let Some(yaml_path) = Self::find_yaml_config_file() {
+            match std::fs::read_to_string(&yaml_path) {
+                Ok(yaml_content) => {
+                    match serde_yaml::from_str::<YamlConfig>(&yaml_content) {
+                        Ok(yaml_config) => {
+                            // Validate the loaded configuration
+                            if let Err(validation_error) = yaml_config.validate() {
+                                tracing::warn!(
+                                    "Invalid YAML configuration in {:?}: {}. Using default values instead.",
+                                    yaml_path,
+                                    validation_error
+                                );
+                                return config; // Return without applying invalid config
+                            }
+
+                            tracing::debug!(
+                                "Loaded and validated YAML configuration from {:?}",
+                                yaml_path
+                            );
+                            // YAML config only applies to values that weren't overridden by environment
+                            Self::apply_yaml_config_selectively(&mut config, &yaml_config, &loader);
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to parse YAML configuration from {:?}: {}",
+                                yaml_path,
+                                e
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to read YAML configuration file {:?}: {}",
+                        yaml_path,
+                        e
+                    );
+                }
+            }
         }
+
+        config
     }
 
     /// Get the global configuration instance
@@ -92,22 +137,114 @@ impl Config {
         CONFIG.get_or_init(Config::new)
     }
 
-    /// Find the swissarmyhammer.yaml configuration file in the current directory
-    /// Returns Some(path) if found, None if not found
-    #[allow(dead_code)] // Will be used in future config loading implementation
-    fn find_yaml_config_file() -> Option<std::path::PathBuf> {
-        use std::path::Path;
+    /// Find the swissarmyhammer.yaml configuration file in multiple locations
+    ///
+    /// Searches for a YAML configuration file to supplement environment variable
+    /// and default configuration values. The search order is:
+    /// 1. Current working directory: `swissarmyhammer.yaml`
+    /// 2. Home directory: `~/.config/swissarmyhammer/swissarmyhammer.yaml`
+    /// 3. Home directory root: `~/swissarmyhammer.yaml`
+    ///
+    /// # Returns
+    /// * `Some(PathBuf)` - Path to the first configuration file found and readable
+    /// * `None` - No configuration file found in any location or file is not accessible
+    ///
+    /// # Examples
+    /// ```
+    /// use swissarmyhammer::config::Config;
+    ///
+    /// if let Some(config_path) = Config::find_yaml_config_file() {
+    ///     println!("Found config at: {:?}", config_path);
+    /// }
+    /// ```
+    pub fn find_yaml_config_file() -> Option<std::path::PathBuf> {
+        use std::path::PathBuf;
 
-        let config_path = Path::new("swissarmyhammer.yaml");
+        let config_filename = "swissarmyhammer.yaml";
 
-        if config_path.exists() && config_path.is_file() {
-            tracing::debug!("Found configuration file: {:?}", config_path);
-            Some(config_path.to_path_buf())
-        } else {
-            tracing::debug!(
-                "No swissarmyhammer.yaml configuration file found in current directory"
+        // Define search paths in order of priority
+        let mut search_paths = Vec::new();
+
+        // 1. Current working directory
+        search_paths.push(PathBuf::from(config_filename));
+
+        // 2. Home directory .config/swissarmyhammer/ subdirectory
+        if let Some(home_dir) = dirs::home_dir() {
+            search_paths.push(
+                home_dir
+                    .join(".config")
+                    .join("swissarmyhammer")
+                    .join(config_filename),
             );
-            None
+        }
+
+        // 3. Home directory root
+        if let Some(home_dir) = dirs::home_dir() {
+            search_paths.push(home_dir.join(config_filename));
+        }
+
+        // Search through each path
+        for config_path in search_paths {
+            match Self::check_config_file(&config_path) {
+                Some(path) => {
+                    tracing::debug!("Found configuration file: {:?}", path);
+                    return Some(path);
+                }
+                None => continue,
+            }
+        }
+
+        tracing::debug!("No swissarmyhammer.yaml configuration file found in any search location");
+        None
+    }
+
+    /// Check if a configuration file exists and is readable
+    fn check_config_file(config_path: &std::path::Path) -> Option<std::path::PathBuf> {
+        match config_path.try_exists() {
+            Ok(true) if config_path.is_file() => {
+                // Additional permission check
+                match std::fs::File::open(config_path) {
+                    Ok(_) => Some(config_path.to_path_buf()),
+                    Err(e) => {
+                        tracing::warn!(
+                            "Configuration file {:?} exists but cannot be read: {}",
+                            config_path,
+                            e
+                        );
+                        None
+                    }
+                }
+            }
+            Ok(false) => None, // File does not exist
+            Ok(true) => {
+                tracing::debug!(
+                    "Found {:?} but it is not a file (possibly a directory)",
+                    config_path
+                );
+                None
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Error checking for configuration file {:?}: {}",
+                    config_path,
+                    e
+                );
+                None
+            }
+        }
+    }
+
+    /// Apply YAML configuration selectively, only overriding values not set by environment
+    fn apply_yaml_config_selectively(
+        config: &mut Config,
+        yaml_config: &YamlConfig,
+        _loader: &EnvLoader,
+    ) {
+        // Only apply YAML base_branch if environment variable is not set
+        if std::env::var("SWISSARMYHAMMER_BASE_BRANCH").is_err() {
+            if let Some(ref base_branch) = yaml_config.base_branch {
+                config.base_branch = base_branch.clone();
+            }
         }
     }
 
@@ -135,11 +272,97 @@ impl YamlConfig {
             config.base_branch = base_branch.clone();
         }
     }
+
+    /// Validate the YAML configuration for correctness
+    ///
+    /// Performs validation checks on the loaded YAML configuration to ensure:
+    /// - Branch names are valid (no invalid characters, not empty)
+    /// - All values are within acceptable ranges
+    ///
+    /// # Returns
+    /// * `Ok(())` - Configuration is valid
+    /// * `Err(String)` - Configuration is invalid with description of the error
+    ///
+    /// # Examples
+    /// ```
+    /// use swissarmyhammer::config::YamlConfig;
+    ///
+    /// let config = YamlConfig {
+    ///     base_branch: Some("main".to_string()),
+    /// };
+    /// assert!(config.validate().is_ok());
+    ///
+    /// let invalid_config = YamlConfig {
+    ///     base_branch: Some("".to_string()),
+    /// };
+    /// assert!(invalid_config.validate().is_err());
+    /// ```
+    pub fn validate(&self) -> Result<(), String> {
+        // Validate base_branch if provided
+        if let Some(ref base_branch) = self.base_branch {
+            Self::validate_branch_name(base_branch)?;
+        }
+
+        Ok(())
+    }
+
+    /// Validate that a branch name is acceptable for git usage
+    fn validate_branch_name(branch_name: &str) -> Result<(), String> {
+        // Check for empty branch name
+        if branch_name.is_empty() {
+            return Err("Branch name cannot be empty".to_string());
+        }
+
+        // Check for whitespace-only branch name
+        if branch_name.trim().is_empty() {
+            return Err("Branch name cannot be whitespace only".to_string());
+        }
+
+        // Check branch name length (reasonable limit)
+        if branch_name.len() > 255 {
+            return Err("Branch name is too long (maximum 255 characters)".to_string());
+        }
+
+        // Check for invalid characters that git doesn't allow
+        let invalid_chars = ['\0', ' ', '~', '^', ':', '?', '*', '[', '\\'];
+        for &invalid_char in &invalid_chars {
+            if branch_name.contains(invalid_char) {
+                return Err(format!(
+                    "Branch name '{}' contains invalid character '{}'",
+                    branch_name, invalid_char
+                ));
+            }
+        }
+
+        // Check for sequences that git doesn't allow
+        if branch_name.contains("..") {
+            return Err("Branch name cannot contain consecutive dots '..'".to_string());
+        }
+
+        // Check that it doesn't start or end with certain characters
+        if branch_name.starts_with('.') || branch_name.ends_with('.') {
+            return Err("Branch name cannot start or end with '.'".to_string());
+        }
+
+        if branch_name.starts_with('/') || branch_name.ends_with('/') {
+            return Err("Branch name cannot start or end with '/'".to_string());
+        }
+
+        if branch_name.ends_with(".lock") {
+            return Err("Branch name cannot end with '.lock'".to_string());
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // Mutex to ensure thread-safe working directory modification for tests
+    static WORKING_DIR_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_default_config() {
@@ -340,6 +563,8 @@ base_branch: "feature/test"
 
     #[test]
     fn test_find_yaml_config_file_not_found() {
+        let _guard = WORKING_DIR_MUTEX.lock().expect("Failed to lock working directory mutex");
+
         // Ensure we're in a directory that doesn't have the config file
         let original_dir = std::env::current_dir().unwrap();
         let temp_dir = std::env::temp_dir();
@@ -349,8 +574,35 @@ base_branch: "feature/test"
         let config_path = temp_dir.join("swissarmyhammer.yaml");
         let _ = std::fs::remove_file(&config_path);
 
+        // Remove any existing config files in home directory locations to ensure clean test
+        let mut backup_paths = Vec::new();
+        if let Some(home_dir) = dirs::home_dir() {
+            let home_config_path = home_dir.join("swissarmyhammer.yaml");
+            let xdg_config_path = home_dir
+                .join(".config")
+                .join("swissarmyhammer")
+                .join("swissarmyhammer.yaml");
+
+            // Backup existing files if they exist
+            if home_config_path.exists() {
+                let backup_path = home_config_path.with_extension("yaml.test_backup");
+                let _ = std::fs::rename(&home_config_path, &backup_path);
+                backup_paths.push((home_config_path.clone(), backup_path));
+            }
+            if xdg_config_path.exists() {
+                let backup_path = xdg_config_path.with_extension("yaml.test_backup");
+                let _ = std::fs::rename(&xdg_config_path, &backup_path);
+                backup_paths.push((xdg_config_path.clone(), backup_path));
+            }
+        }
+
         let result = Config::find_yaml_config_file();
         assert!(result.is_none());
+
+        // Restore backed up files
+        for (original, backup) in backup_paths {
+            let _ = std::fs::rename(backup, original);
+        }
 
         // Restore original directory
         std::env::set_current_dir(original_dir).unwrap();
@@ -360,6 +612,8 @@ base_branch: "feature/test"
     fn test_find_yaml_config_file_found() {
         use std::fs::File;
         use std::io::Write;
+
+        let _guard = WORKING_DIR_MUTEX.lock().expect("Failed to lock working directory mutex");
 
         // Create a unique temporary directory
         let test_dir =
@@ -387,6 +641,8 @@ base_branch: "feature/test"
 
     #[test]
     fn test_find_yaml_config_file_directory_not_file() {
+        let _guard = WORKING_DIR_MUTEX.lock().expect("Failed to lock working directory mutex");
+
         // Create a unique temporary directory
         let test_dir =
             std::env::temp_dir().join(format!("swissarmyhammer_test_dir_{}", std::process::id()));
@@ -400,8 +656,35 @@ base_branch: "feature/test"
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(&test_dir).unwrap();
 
+        // Remove any existing config files in home directory locations to ensure clean test
+        let mut backup_paths = Vec::new();
+        if let Some(home_dir) = dirs::home_dir() {
+            let home_config_path = home_dir.join("swissarmyhammer.yaml");
+            let xdg_config_path = home_dir
+                .join(".config")
+                .join("swissarmyhammer")
+                .join("swissarmyhammer.yaml");
+
+            // Backup existing files if they exist
+            if home_config_path.exists() {
+                let backup_path = home_config_path.with_extension("yaml.test_backup");
+                let _ = std::fs::rename(&home_config_path, &backup_path);
+                backup_paths.push((home_config_path.clone(), backup_path));
+            }
+            if xdg_config_path.exists() {
+                let backup_path = xdg_config_path.with_extension("yaml.test_backup");
+                let _ = std::fs::rename(&xdg_config_path, &backup_path);
+                backup_paths.push((xdg_config_path.clone(), backup_path));
+            }
+        }
+
         let result = Config::find_yaml_config_file();
         assert!(result.is_none());
+
+        // Restore backed up files
+        for (original, backup) in backup_paths {
+            let _ = std::fs::rename(backup, original);
+        }
 
         // Clean up
         std::env::set_current_dir(original_dir).unwrap();
@@ -412,6 +695,8 @@ base_branch: "feature/test"
     fn test_find_yaml_config_file_path_handling() {
         use std::fs::File;
         use std::io::Write;
+
+        let _guard = WORKING_DIR_MUTEX.lock().expect("Failed to lock working directory mutex");
 
         // Create a unique temporary directory
         let test_dir =
@@ -439,5 +724,104 @@ base_branch: "feature/test"
         // Clean up
         std::env::set_current_dir(original_dir).unwrap();
         std::fs::remove_dir_all(&test_dir).unwrap();
+    }
+
+    #[test]
+    fn test_yaml_config_validation_valid() {
+        let yaml_config = YamlConfig {
+            base_branch: Some("main".to_string()),
+        };
+        assert!(yaml_config.validate().is_ok());
+
+        let yaml_config_none = YamlConfig { base_branch: None };
+        assert!(yaml_config_none.validate().is_ok());
+    }
+
+    #[test]
+    fn test_yaml_config_validation_invalid_branch_names() {
+        // Empty branch name
+        let yaml_config = YamlConfig {
+            base_branch: Some("".to_string()),
+        };
+        assert!(yaml_config.validate().is_err());
+
+        // Whitespace only branch name
+        let yaml_config = YamlConfig {
+            base_branch: Some("   ".to_string()),
+        };
+        assert!(yaml_config.validate().is_err());
+
+        // Branch name with invalid characters
+        let invalid_chars = vec![' ', '~', '^', ':', '?', '*', '[', '\\'];
+        for invalid_char in invalid_chars {
+            let yaml_config = YamlConfig {
+                base_branch: Some(format!("branch{}", invalid_char)),
+            };
+            assert!(yaml_config.validate().is_err());
+        }
+
+        // Branch name with consecutive dots
+        let yaml_config = YamlConfig {
+            base_branch: Some("branch..name".to_string()),
+        };
+        assert!(yaml_config.validate().is_err());
+
+        // Branch name starting/ending with dot
+        let yaml_config = YamlConfig {
+            base_branch: Some(".branch".to_string()),
+        };
+        assert!(yaml_config.validate().is_err());
+
+        let yaml_config = YamlConfig {
+            base_branch: Some("branch.".to_string()),
+        };
+        assert!(yaml_config.validate().is_err());
+
+        // Branch name starting/ending with slash
+        let yaml_config = YamlConfig {
+            base_branch: Some("/branch".to_string()),
+        };
+        assert!(yaml_config.validate().is_err());
+
+        let yaml_config = YamlConfig {
+            base_branch: Some("branch/".to_string()),
+        };
+        assert!(yaml_config.validate().is_err());
+
+        // Branch name ending with .lock
+        let yaml_config = YamlConfig {
+            base_branch: Some("branch.lock".to_string()),
+        };
+        assert!(yaml_config.validate().is_err());
+
+        // Branch name too long
+        let yaml_config = YamlConfig {
+            base_branch: Some("a".repeat(256)),
+        };
+        assert!(yaml_config.validate().is_err());
+    }
+
+    #[test]
+    fn test_yaml_config_validation_valid_branch_names() {
+        let valid_names = vec![
+            "main",
+            "develop",
+            "feature/new-feature",
+            "bugfix/issue-123",
+            "release/v1.0.0",
+            "hotfix/critical-fix",
+            "user/john/feature",
+        ];
+
+        for valid_name in valid_names {
+            let yaml_config = YamlConfig {
+                base_branch: Some(valid_name.to_string()),
+            };
+            assert!(
+                yaml_config.validate().is_ok(),
+                "Expected '{}' to be valid but validation failed",
+                valid_name
+            );
+        }
     }
 }

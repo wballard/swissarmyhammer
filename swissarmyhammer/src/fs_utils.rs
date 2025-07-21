@@ -4,8 +4,8 @@
 //! offering better error handling, testability, and security than direct
 //! `std::fs` usage.
 
-use crate::error::{Result, SwissArmyHammerError};
 use crate::common::error_context::IoResultExt;
+use crate::error::{Result, SwissArmyHammerError};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -60,7 +60,8 @@ impl FileSystem for StdFileSystem {
             path.extension().and_then(|s| s.to_str()).unwrap_or("")
         ));
 
-        std::fs::write(&temp_path, content).with_io_context(&temp_path, "Failed to write temp file")?;
+        std::fs::write(&temp_path, content)
+            .with_io_context(&temp_path, "Failed to write temp file")?;
 
         std::fs::rename(&temp_path, path).map_err(|e| {
             // Clean up temp file on rename failure

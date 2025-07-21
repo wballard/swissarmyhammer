@@ -3,8 +3,8 @@
 //! This module provides a unified file watching system that can monitor
 //! prompt directories for changes and trigger appropriate reload actions.
 
+use crate::common::{file_types::is_any_prompt_file, mcp_errors::ToSwissArmyHammerError};
 use crate::{PromptResolver, Result};
-use crate::common::{mcp_errors::ToSwissArmyHammerError, file_types::is_any_prompt_file};
 use notify::{
     event::{Event, EventKind},
     RecommendedWatcher, RecursiveMode, Watcher,
@@ -115,7 +115,8 @@ impl FileWatcher {
         };
 
         for path in &watch_paths {
-            watcher.watch(path, recursive_mode)
+            watcher
+                .watch(path, recursive_mode)
                 .to_swiss_error_with_context(&format!("Failed to watch directory {path:?}"))?;
             tracing::info!("Watching directory: {:?}", path);
         }
@@ -132,7 +133,7 @@ impl FileWatcher {
                 // Check if this is a relevant event
                 match event.kind {
                     EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
-                        // Check if it's a prompt file  
+                        // Check if it's a prompt file
                         let relevant_paths: Vec<std::path::PathBuf> = event
                             .paths
                             .iter()
@@ -264,7 +265,7 @@ mod tests {
     #[test]
     fn test_is_prompt_file() {
         use std::path::Path;
-        
+
         assert!(is_any_prompt_file(Path::new("test.md")));
         assert!(is_any_prompt_file(Path::new("test.yaml")));
         assert!(is_any_prompt_file(Path::new("test.yml")));
@@ -435,7 +436,7 @@ mod tests {
     #[test]
     fn test_is_prompt_file_edge_cases() {
         use std::path::Path;
-        
+
         // Test file without extension
         assert!(!is_any_prompt_file(Path::new("README")));
 

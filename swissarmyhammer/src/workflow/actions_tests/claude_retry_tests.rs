@@ -110,7 +110,7 @@ fn test_no_action_level_retry_logic() {
     // We don't actually call execute() in this test to avoid external dependencies
     assert_eq!(action.action_type(), "prompt");
     assert_eq!(action.prompt_name, "test");
-    
+
     // The key test is that this compiles without retry-related methods
 }
 

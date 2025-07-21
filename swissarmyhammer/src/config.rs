@@ -64,7 +64,7 @@ impl Config {
     /// or defaults if environment variables are not set
     pub fn new() -> Self {
         let loader = EnvLoader::new("SWISSARMYHAMMER");
-        
+
         Self {
             issue_branch_prefix: loader.load_string("ISSUE_BRANCH_PREFIX", "issue/"),
             issue_number_width: loader.load_parsed("ISSUE_NUMBER_WIDTH", 6),

@@ -1,7 +1,7 @@
 //! Search functionality for prompts
 
-use crate::{Prompt, Result, SwissArmyHammerError};
 use crate::common::mcp_errors::McpResultExt;
+use crate::{Prompt, Result, SwissArmyHammerError};
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 use std::path::Path;
@@ -49,9 +49,7 @@ impl SearchEngine {
         let schema = schema_builder.build();
         let index = Index::create_in_ram(schema);
 
-        let writer = index
-            .writer(50_000_000)
-            .with_tantivy_context()?;
+        let writer = index.writer(50_000_000).with_tantivy_context()?;
 
         Ok(Self {
             index,
@@ -80,15 +78,11 @@ impl SearchEngine {
 
         let schema = schema_builder.build();
 
-        let directory =
-            MmapDirectory::open(path).with_tantivy_context()?;
+        let directory = MmapDirectory::open(path).with_tantivy_context()?;
 
-        let index = Index::open_or_create(directory, schema)
-            .with_tantivy_context()?;
+        let index = Index::open_or_create(directory, schema).with_tantivy_context()?;
 
-        let writer = index
-            .writer(50_000_000)
-            .with_tantivy_context()?;
+        let writer = index.writer(50_000_000).with_tantivy_context()?;
 
         Ok(Self {
             index,

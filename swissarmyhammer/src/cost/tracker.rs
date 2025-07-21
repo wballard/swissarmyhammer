@@ -34,21 +34,21 @@ pub enum CostError {
     #[error("Cost session not found: {session_id}")]
     SessionNotFound {
         /// The session ID that was not found
-        session_id: CostSessionId
+        session_id: CostSessionId,
     },
 
     /// Session already exists
     #[error("Cost session already exists: {session_id}")]
     SessionAlreadyExists {
         /// The session ID that already exists
-        session_id: CostSessionId
+        session_id: CostSessionId,
     },
 
     /// Session already completed
     #[error("Cost session already completed: {session_id}")]
     SessionAlreadyCompleted {
         /// The session ID that was already completed
-        session_id: CostSessionId
+        session_id: CostSessionId,
     },
 
     /// Too many sessions
@@ -62,14 +62,14 @@ pub enum CostError {
     )]
     TooManyApiCalls {
         /// The session ID that exceeded the API call limit
-        session_id: CostSessionId
+        session_id: CostSessionId,
     },
 
     /// Invalid input data
     #[error("Invalid input: {message}")]
     InvalidInput {
         /// Description of the invalid input
-        message: String
+        message: String,
     },
 
     /// API call not found
@@ -85,7 +85,7 @@ pub enum CostError {
     #[error("Serialization error: {message}")]
     SerializationError {
         /// Description of the serialization error
-        message: String
+        message: String,
     },
 }
 
@@ -102,7 +102,7 @@ pub enum CostError {
 ///
 /// let session_id1 = CostSessionId::new();
 /// let session_id2 = CostSessionId::new();
-/// 
+///
 /// assert_ne!(session_id1, session_id2);
 /// println!("Session ID: {}", session_id1);
 /// ```
@@ -254,7 +254,7 @@ pub enum CostSessionStatus {
 ///
 /// // Create a new API call
 /// let mut api_call = ApiCall::new(
-///     "https://api.anthropic.com/v1/messages", 
+///     "https://api.anthropic.com/v1/messages",
 ///     "claude-3-sonnet-20241022"
 /// ).unwrap();
 ///
@@ -290,10 +290,7 @@ pub struct ApiCall {
 
 impl ApiCall {
     /// Create a new API call record
-    pub fn new(
-        endpoint: impl Into<String>,
-        model: impl Into<String>,
-    ) -> Result<Self, CostError> {
+    pub fn new(endpoint: impl Into<String>, model: impl Into<String>) -> Result<Self, CostError> {
         let endpoint = endpoint.into();
         let model = model.into();
 
@@ -388,7 +385,7 @@ impl ApiCall {
 ///
 /// // Add API calls
 /// let api_call = ApiCall::new(
-///     "https://api.anthropic.com/v1/messages", 
+///     "https://api.anthropic.com/v1/messages",
 ///     "claude-3-sonnet-20241022"
 /// ).unwrap();
 /// let call_id = session.add_api_call(api_call).unwrap();
@@ -448,8 +445,19 @@ impl CostSession {
         }
 
         // Ensure the call has a unique ID
+        let mut collision_count = 0;
         while self.api_calls.contains_key(&api_call.call_id) {
+            collision_count += 1;
             api_call.call_id = ApiCallId::new();
+        }
+
+        // Log ULID collisions for monitoring (extremely rare event)
+        if collision_count > 0 {
+            tracing::warn!(
+                collision_count = collision_count,
+                session_id = %self.session_id,
+                "ULID collision detected in API call ID generation"
+            );
         }
 
         let call_id = api_call.call_id;
@@ -548,11 +556,11 @@ impl CostSession {
 /// let call_id = tracker.add_api_call(&session_id, api_call).unwrap();
 ///
 /// tracker.complete_api_call(
-///     &session_id, 
-///     &call_id, 
-///     150, 
-///     300, 
-///     ApiCallStatus::Success, 
+///     &session_id,
+///     &call_id,
+///     150,
+///     300,
+///     ApiCallStatus::Success,
 ///     None
 /// ).unwrap();
 ///
@@ -668,12 +676,13 @@ impl CostTracker {
                 session_id: *session_id,
             })?;
 
-        let api_call = session.api_calls.get_mut(call_id).ok_or(
-            CostError::ApiCallNotFound {
+        let api_call = session
+            .api_calls
+            .get_mut(call_id)
+            .ok_or(CostError::ApiCallNotFound {
                 call_id: *call_id,
                 session_id: *session_id,
-            },
-        )?;
+            })?;
 
         api_call.complete(input_tokens, output_tokens, status, error_message);
         Ok(())
@@ -780,10 +789,10 @@ mod tests {
     fn test_cost_session_id_creation() {
         let id1 = CostSessionId::new();
         let id2 = CostSessionId::new();
-        
+
         assert_ne!(id1, id2);
         assert!(!id1.to_string().is_empty());
-        
+
         // Test ULID conversion
         let ulid = id1.as_ulid();
         let id3 = CostSessionId::from_ulid(ulid);
@@ -794,10 +803,10 @@ mod tests {
     fn test_api_call_id_creation() {
         let id1 = ApiCallId::new();
         let id2 = ApiCallId::new();
-        
+
         assert_ne!(id1, id2);
         assert!(!id1.to_string().is_empty());
-        
+
         // Test ULID conversion
         let ulid = id1.as_ulid();
         let id3 = ApiCallId::from_ulid(ulid);
@@ -810,12 +819,12 @@ mod tests {
         assert!(IssueId::new("issue-123").is_ok());
         assert!(IssueId::new("test_issue").is_ok());
         assert!(IssueId::new("123").is_ok());
-        
+
         // Invalid issue IDs
         assert!(IssueId::new("").is_err());
         assert!(IssueId::new("   ").is_err());
         assert!(IssueId::new("a".repeat(257)).is_err());
-        
+
         // Test valid issue ID access
         let issue_id = IssueId::new("test-issue").unwrap();
         assert_eq!(issue_id.as_str(), "test-issue");
@@ -825,9 +834,12 @@ mod tests {
     #[test]
     fn test_api_call_creation() {
         // Valid API call
-        let api_call = ApiCall::new("https://api.anthropic.com/v1/messages", "claude-3-sonnet-20241022");
+        let api_call = ApiCall::new(
+            "https://api.anthropic.com/v1/messages",
+            "claude-3-sonnet-20241022",
+        );
         assert!(api_call.is_ok());
-        
+
         let call = api_call.unwrap();
         assert_eq!(call.endpoint, "https://api.anthropic.com/v1/messages");
         assert_eq!(call.model, "claude-3-sonnet-20241022");
@@ -835,24 +847,36 @@ mod tests {
         assert_eq!(call.output_tokens, 0);
         assert_eq!(call.status, ApiCallStatus::InProgress);
         assert!(!call.is_completed());
-        
+
         // Invalid API calls
         assert!(ApiCall::new("", "claude-3-sonnet-20241022").is_err());
         assert!(ApiCall::new("https://api.anthropic.com/v1/messages", "").is_err());
-        assert!(ApiCall::new("a".repeat(MAX_ENDPOINT_URL_LENGTH + 1), "claude-3-sonnet-20241022").is_err());
-        assert!(ApiCall::new("https://api.anthropic.com/v1/messages", "a".repeat(MAX_MODEL_NAME_LENGTH + 1)).is_err());
+        assert!(ApiCall::new(
+            "a".repeat(MAX_ENDPOINT_URL_LENGTH + 1),
+            "claude-3-sonnet-20241022"
+        )
+        .is_err());
+        assert!(ApiCall::new(
+            "https://api.anthropic.com/v1/messages",
+            "a".repeat(MAX_MODEL_NAME_LENGTH + 1)
+        )
+        .is_err());
     }
 
     #[test]
     fn test_api_call_completion() {
-        let mut api_call = ApiCall::new("https://api.anthropic.com/v1/messages", "claude-3-sonnet-20241022").unwrap();
-        
+        let mut api_call = ApiCall::new(
+            "https://api.anthropic.com/v1/messages",
+            "claude-3-sonnet-20241022",
+        )
+        .unwrap();
+
         assert!(!api_call.is_completed());
         assert_eq!(api_call.total_tokens(), 0);
-        
+
         // Complete the call
         api_call.complete(100, 200, ApiCallStatus::Success, None);
-        
+
         assert!(api_call.is_completed());
         assert_eq!(api_call.input_tokens, 100);
         assert_eq!(api_call.output_tokens, 200);
@@ -861,20 +885,32 @@ mod tests {
         assert!(api_call.completed_at.is_some());
         assert!(api_call.duration.is_some());
         assert!(api_call.error_message.is_none());
-        
+
         // Test with error
-        let mut api_call_error = ApiCall::new("https://api.anthropic.com/v1/messages", "claude-3-sonnet-20241022").unwrap();
-        api_call_error.complete(50, 0, ApiCallStatus::Failed, Some("Rate limit exceeded".to_string()));
-        
+        let mut api_call_error = ApiCall::new(
+            "https://api.anthropic.com/v1/messages",
+            "claude-3-sonnet-20241022",
+        )
+        .unwrap();
+        api_call_error.complete(
+            50,
+            0,
+            ApiCallStatus::Failed,
+            Some("Rate limit exceeded".to_string()),
+        );
+
         assert_eq!(api_call_error.status, ApiCallStatus::Failed);
-        assert_eq!(api_call_error.error_message, Some("Rate limit exceeded".to_string()));
+        assert_eq!(
+            api_call_error.error_message,
+            Some("Rate limit exceeded".to_string())
+        );
     }
 
     #[test]
     fn test_cost_session_creation() {
         let issue_id = IssueId::new("test-issue").unwrap();
         let session = CostSession::new(issue_id.clone());
-        
+
         assert_eq!(session.issue_id, issue_id);
         assert_eq!(session.status, CostSessionStatus::Active);
         assert!(!session.is_completed());
@@ -888,33 +924,41 @@ mod tests {
     fn test_cost_session_api_call_management() {
         let issue_id = IssueId::new("test-issue").unwrap();
         let mut session = CostSession::new(issue_id);
-        
+
         // Add API call
-        let api_call = ApiCall::new("https://api.anthropic.com/v1/messages", "claude-3-sonnet-20241022").unwrap();
+        let api_call = ApiCall::new(
+            "https://api.anthropic.com/v1/messages",
+            "claude-3-sonnet-20241022",
+        )
+        .unwrap();
         let call_id = session.add_api_call(api_call).unwrap();
-        
+
         assert_eq!(session.api_call_count(), 1);
         assert!(session.get_api_call(&call_id).is_some());
-        
+
         // Complete the API call
         let api_call_mut = session.get_api_call_mut(&call_id).unwrap();
         api_call_mut.complete(100, 200, ApiCallStatus::Success, None);
-        
+
         assert_eq!(session.total_input_tokens(), 100);
         assert_eq!(session.total_output_tokens(), 200);
         assert_eq!(session.total_tokens(), 300);
-        
+
         // Add another API call
-        let api_call2 = ApiCall::new("https://api.anthropic.com/v1/messages", "claude-3-sonnet-20241022").unwrap();
+        let api_call2 = ApiCall::new(
+            "https://api.anthropic.com/v1/messages",
+            "claude-3-sonnet-20241022",
+        )
+        .unwrap();
         let call_id2 = session.add_api_call(api_call2).unwrap();
-        
+
         assert_ne!(call_id, call_id2);
         assert_eq!(session.api_call_count(), 2);
-        
+
         // Complete second call
         let api_call2_mut = session.get_api_call_mut(&call_id2).unwrap();
         api_call2_mut.complete(50, 75, ApiCallStatus::Success, None);
-        
+
         assert_eq!(session.total_input_tokens(), 150);
         assert_eq!(session.total_output_tokens(), 275);
         assert_eq!(session.total_tokens(), 425);
@@ -924,20 +968,25 @@ mod tests {
     fn test_cost_session_too_many_api_calls() {
         let issue_id = IssueId::new("test-issue").unwrap();
         let mut session = CostSession::new(issue_id);
-        
+
         // Add maximum number of API calls
         for i in 0..MAX_API_CALLS_PER_SESSION {
             let api_call = ApiCall::new(
                 format!("https://api.anthropic.com/v1/messages/{}", i),
-                "claude-3-sonnet-20241022"
-            ).unwrap();
+                "claude-3-sonnet-20241022",
+            )
+            .unwrap();
             assert!(session.add_api_call(api_call).is_ok());
         }
-        
+
         // Adding one more should fail
-        let api_call = ApiCall::new("https://api.anthropic.com/v1/messages/overflow", "claude-3-sonnet-20241022").unwrap();
+        let api_call = ApiCall::new(
+            "https://api.anthropic.com/v1/messages/overflow",
+            "claude-3-sonnet-20241022",
+        )
+        .unwrap();
         let result = session.add_api_call(api_call);
-        
+
         assert!(matches!(result, Err(CostError::TooManyApiCalls { .. })));
     }
 
@@ -945,34 +994,40 @@ mod tests {
     fn test_cost_session_completion() {
         let issue_id = IssueId::new("test-issue").unwrap();
         let mut session = CostSession::new(issue_id);
-        
+
         assert!(!session.is_completed());
         assert!(session.total_duration.is_none());
-        
+
         // Complete session
         assert!(session.complete(CostSessionStatus::Completed).is_ok());
-        
+
         assert!(session.is_completed());
         assert_eq!(session.status, CostSessionStatus::Completed);
         assert!(session.completed_at.is_some());
         assert!(session.total_duration.is_some());
-        
+
         // Cannot complete again
         let result = session.complete(CostSessionStatus::Failed);
-        assert!(matches!(result, Err(CostError::SessionAlreadyCompleted { .. })));
+        assert!(matches!(
+            result,
+            Err(CostError::SessionAlreadyCompleted { .. })
+        ));
     }
 
     #[test]
     fn test_cost_session_metadata() {
         let issue_id = IssueId::new("test-issue").unwrap();
         let mut session = CostSession::new(issue_id);
-        
+
         // Set metadata
         session.set_metadata("branch", "feature/cost-tracking");
         session.set_metadata("user", "test-user");
-        
+
         // Get metadata
-        assert_eq!(session.get_metadata("branch"), Some(&"feature/cost-tracking".to_string()));
+        assert_eq!(
+            session.get_metadata("branch"),
+            Some(&"feature/cost-tracking".to_string())
+        );
         assert_eq!(session.get_metadata("user"), Some(&"test-user".to_string()));
         assert_eq!(session.get_metadata("nonexistent"), None);
     }
@@ -980,7 +1035,7 @@ mod tests {
     #[test]
     fn test_cost_tracker_new() {
         let tracker = CostTracker::new();
-        
+
         assert_eq!(tracker.session_count(), 0);
         assert_eq!(tracker.active_session_count(), 0);
         assert_eq!(tracker.completed_session_count(), 0);
@@ -990,22 +1045,24 @@ mod tests {
     fn test_cost_tracker_session_lifecycle() {
         let mut tracker = CostTracker::new();
         let issue_id = IssueId::new("test-issue").unwrap();
-        
+
         // Start session
         let session_id = tracker.start_session(issue_id.clone()).unwrap();
-        
+
         assert_eq!(tracker.session_count(), 1);
         assert_eq!(tracker.active_session_count(), 1);
         assert_eq!(tracker.completed_session_count(), 0);
-        
+
         // Get session
         let session = tracker.get_session(&session_id);
         assert!(session.is_some());
         assert_eq!(session.unwrap().issue_id, issue_id);
-        
+
         // Complete session
-        assert!(tracker.complete_session(&session_id, CostSessionStatus::Completed).is_ok());
-        
+        assert!(tracker
+            .complete_session(&session_id, CostSessionStatus::Completed)
+            .is_ok());
+
         assert_eq!(tracker.session_count(), 1);
         assert_eq!(tracker.active_session_count(), 0);
         assert_eq!(tracker.completed_session_count(), 1);
@@ -1016,24 +1073,30 @@ mod tests {
         let mut tracker = CostTracker::new();
         let issue_id = IssueId::new("test-issue").unwrap();
         let session_id = tracker.start_session(issue_id).unwrap();
-        
+
         // Add API call
-        let api_call = ApiCall::new("https://api.anthropic.com/v1/messages", "claude-3-sonnet-20241022").unwrap();
+        let api_call = ApiCall::new(
+            "https://api.anthropic.com/v1/messages",
+            "claude-3-sonnet-20241022",
+        )
+        .unwrap();
         let call_id = tracker.add_api_call(&session_id, api_call).unwrap();
-        
+
         let session = tracker.get_session(&session_id).unwrap();
         assert_eq!(session.api_call_count(), 1);
-        
+
         // Complete API call
-        assert!(tracker.complete_api_call(
-            &session_id, 
-            &call_id, 
-            100, 
-            200, 
-            ApiCallStatus::Success, 
-            None
-        ).is_ok());
-        
+        assert!(tracker
+            .complete_api_call(
+                &session_id,
+                &call_id,
+                100,
+                200,
+                ApiCallStatus::Success,
+                None
+            )
+            .is_ok());
+
         let session = tracker.get_session(&session_id).unwrap();
         let api_call = session.get_api_call(&call_id).unwrap();
         assert!(api_call.is_completed());
@@ -1047,35 +1110,50 @@ mod tests {
         let mut tracker = CostTracker::new();
         let invalid_session_id = CostSessionId::new();
         let invalid_call_id = ApiCallId::new();
-        
+
         // Session not found
-        assert!(matches!(
-            tracker.get_session(&invalid_session_id),
-            None
-        ));
-        
+        assert!(tracker.get_session(&invalid_session_id).is_none());
+
         assert!(matches!(
             tracker.complete_session(&invalid_session_id, CostSessionStatus::Completed),
             Err(CostError::SessionNotFound { .. })
         ));
-        
-        let api_call = ApiCall::new("https://api.anthropic.com/v1/messages", "claude-3-sonnet-20241022").unwrap();
+
+        let api_call = ApiCall::new(
+            "https://api.anthropic.com/v1/messages",
+            "claude-3-sonnet-20241022",
+        )
+        .unwrap();
         assert!(matches!(
             tracker.add_api_call(&invalid_session_id, api_call),
             Err(CostError::SessionNotFound { .. })
         ));
-        
+
         assert!(matches!(
-            tracker.complete_api_call(&invalid_session_id, &invalid_call_id, 100, 200, ApiCallStatus::Success, None),
+            tracker.complete_api_call(
+                &invalid_session_id,
+                &invalid_call_id,
+                100,
+                200,
+                ApiCallStatus::Success,
+                None
+            ),
             Err(CostError::SessionNotFound { .. })
         ));
-        
+
         // API call not found (valid session, invalid call)
         let issue_id = IssueId::new("test-issue").unwrap();
         let session_id = tracker.start_session(issue_id).unwrap();
-        
+
         assert!(matches!(
-            tracker.complete_api_call(&session_id, &invalid_call_id, 100, 200, ApiCallStatus::Success, None),
+            tracker.complete_api_call(
+                &session_id,
+                &invalid_call_id,
+                100,
+                200,
+                ApiCallStatus::Success,
+                None
+            ),
             Err(CostError::ApiCallNotFound { .. })
         ));
     }
@@ -1085,14 +1163,14 @@ mod tests {
         let mut tracker = CostTracker::new();
         let issue_id = IssueId::new("test-issue").unwrap();
         let session_id = tracker.start_session(issue_id).unwrap();
-        
+
         assert_eq!(tracker.session_count(), 1);
-        
+
         // Remove session
         let removed_session = tracker.remove_session(&session_id);
         assert!(removed_session.is_some());
         assert_eq!(tracker.session_count(), 0);
-        
+
         // Removing again should return None
         let removed_session = tracker.remove_session(&session_id);
         assert!(removed_session.is_none());
@@ -1101,30 +1179,34 @@ mod tests {
     #[test]
     fn test_cost_tracker_iterators() {
         let mut tracker = CostTracker::new();
-        
+
         // Create multiple sessions in different states
         let issue_id1 = IssueId::new("issue-1").unwrap();
         let issue_id2 = IssueId::new("issue-2").unwrap();
         let issue_id3 = IssueId::new("issue-3").unwrap();
-        
+
         let session_id1 = tracker.start_session(issue_id1).unwrap();
         let session_id2 = tracker.start_session(issue_id2).unwrap();
         let session_id3 = tracker.start_session(issue_id3).unwrap();
-        
+
         // Complete some sessions
-        tracker.complete_session(&session_id1, CostSessionStatus::Completed).unwrap();
-        tracker.complete_session(&session_id2, CostSessionStatus::Failed).unwrap();
+        tracker
+            .complete_session(&session_id1, CostSessionStatus::Completed)
+            .unwrap();
+        tracker
+            .complete_session(&session_id2, CostSessionStatus::Failed)
+            .unwrap();
         // Leave session_id3 active
-        
+
         assert_eq!(tracker.session_count(), 3);
         assert_eq!(tracker.active_session_count(), 1);
         assert_eq!(tracker.completed_session_count(), 2);
-        
+
         // Test iterators
         let active_sessions: Vec<_> = tracker.get_active_sessions().collect();
         assert_eq!(active_sessions.len(), 1);
         assert_eq!(active_sessions[0].0, &session_id3);
-        
+
         let completed_sessions: Vec<_> = tracker.get_completed_sessions().collect();
         assert_eq!(completed_sessions.len(), 2);
     }
@@ -1132,44 +1214,53 @@ mod tests {
     #[test]
     fn test_serialization_deserialization() {
         // Test ApiCall serialization
-        let mut api_call = ApiCall::new("https://api.anthropic.com/v1/messages", "claude-3-sonnet-20241022").unwrap();
+        let mut api_call = ApiCall::new(
+            "https://api.anthropic.com/v1/messages",
+            "claude-3-sonnet-20241022",
+        )
+        .unwrap();
         api_call.complete(100, 200, ApiCallStatus::Success, None);
-        
+
         let serialized = serde_json::to_string(&api_call).unwrap();
         let deserialized: ApiCall = serde_json::from_str(&serialized).unwrap();
-        
+
         assert_eq!(api_call.call_id, deserialized.call_id);
         assert_eq!(api_call.endpoint, deserialized.endpoint);
         assert_eq!(api_call.model, deserialized.model);
         assert_eq!(api_call.input_tokens, deserialized.input_tokens);
         assert_eq!(api_call.output_tokens, deserialized.output_tokens);
         assert_eq!(api_call.status, deserialized.status);
-        
+
         // Test CostSession serialization
         let issue_id = IssueId::new("test-issue").unwrap();
         let mut session = CostSession::new(issue_id);
         session.add_api_call(api_call).unwrap();
         session.set_metadata("test", "value");
-        
+
         let serialized = serde_json::to_string(&session).unwrap();
         let deserialized: CostSession = serde_json::from_str(&serialized).unwrap();
-        
+
         assert_eq!(session.session_id, deserialized.session_id);
         assert_eq!(session.issue_id, deserialized.issue_id);
         assert_eq!(session.status, deserialized.status);
         assert_eq!(session.api_call_count(), deserialized.api_call_count());
-        assert_eq!(session.get_metadata("test"), deserialized.get_metadata("test"));
-        
+        assert_eq!(
+            session.get_metadata("test"),
+            deserialized.get_metadata("test")
+        );
+
         // Test error types serialization
-        let error = CostError::SessionNotFound { 
-            session_id: CostSessionId::new() 
+        let error = CostError::SessionNotFound {
+            session_id: CostSessionId::new(),
         };
         let serialized = serde_json::to_string(&error).unwrap();
         let deserialized: CostError = serde_json::from_str(&serialized).unwrap();
-        
+
         match (error, deserialized) {
-            (CostError::SessionNotFound { session_id: id1 }, 
-             CostError::SessionNotFound { session_id: id2 }) => {
+            (
+                CostError::SessionNotFound { session_id: id1 },
+                CostError::SessionNotFound { session_id: id2 },
+            ) => {
                 assert_eq!(id1, id2);
             }
             _ => panic!("Error types don't match"),
@@ -1181,7 +1272,7 @@ mod tests {
         // Test maximum sessions limit first
         {
             let mut tracker = CostTracker::new();
-            
+
             // First, fill up to the limit
             let mut session_ids = Vec::new();
             for i in 0..MAX_COST_SESSIONS {
@@ -1189,52 +1280,59 @@ mod tests {
                 let session_id = tracker.start_session(issue_id).unwrap();
                 session_ids.push(session_id);
             }
-            
+
             assert_eq!(tracker.session_count(), MAX_COST_SESSIONS);
-            
+
             // Complete some sessions to test cleanup
-            for i in 0..100 {
-                tracker.complete_session(&session_ids[i], CostSessionStatus::Completed).unwrap();
+            for session_id in session_ids.iter().take(100) {
+                tracker
+                    .complete_session(session_id, CostSessionStatus::Completed)
+                    .unwrap();
             }
-            
+
             // Adding one more session should trigger cleanup but might still fail
             // if no sessions are old enough to be cleaned up (which is expected in tests)
             let issue_id = IssueId::new("overflow-issue").unwrap();
             let result = tracker.start_session(issue_id);
-            
+
             // The cleanup only removes old sessions, so this will likely fail in tests
             // where all sessions are recent. This is correct behavior.
             match result {
                 Ok(_) => {
                     // Great, cleanup worked (unlikely in test environment)
-                },
+                }
                 Err(CostError::TooManySessions) => {
                     // Expected - no sessions are old enough to clean up
                     assert_eq!(tracker.session_count(), MAX_COST_SESSIONS);
-                },
+                }
                 Err(e) => panic!("Unexpected error: {:?}", e),
             }
         }
-        
+
         // Test maximum API calls per session limit in separate scope
         {
             let mut tracker = CostTracker::new();
             let issue_id = IssueId::new("api-test-issue").unwrap();
             let session_id = tracker.start_session(issue_id).unwrap();
-            
+
             // Fill up to the limit
             for i in 0..MAX_API_CALLS_PER_SESSION {
                 let api_call = ApiCall::new(
                     format!("https://api.anthropic.com/v1/messages/{}", i),
-                    "claude-3-sonnet-20241022"
-                ).unwrap();
+                    "claude-3-sonnet-20241022",
+                )
+                .unwrap();
                 assert!(tracker.add_api_call(&session_id, api_call).is_ok());
             }
-            
+
             // Adding one more should fail
-            let api_call = ApiCall::new("https://api.anthropic.com/v1/messages/overflow", "claude-3-sonnet-20241022").unwrap();
+            let api_call = ApiCall::new(
+                "https://api.anthropic.com/v1/messages/overflow",
+                "claude-3-sonnet-20241022",
+            )
+            .unwrap();
             let result = tracker.add_api_call(&session_id, api_call);
-            
+
             assert!(matches!(result, Err(CostError::TooManyApiCalls { .. })));
         }
     }
@@ -1242,27 +1340,30 @@ mod tests {
     #[test]
     fn test_cleanup_old_sessions() {
         let mut tracker = CostTracker::new();
-        
+
         // Create sessions and complete them
         let mut session_ids = Vec::new();
         for i in 0..10 {
             let issue_id = IssueId::new(format!("issue-{}", i)).unwrap();
             let session_id = tracker.start_session(issue_id).unwrap();
-            tracker.complete_session(&session_id, CostSessionStatus::Completed).unwrap();
+            tracker
+                .complete_session(&session_id, CostSessionStatus::Completed)
+                .unwrap();
             session_ids.push(session_id);
         }
-        
+
         assert_eq!(tracker.session_count(), 10);
         assert_eq!(tracker.completed_session_count(), 10);
-        
+
         // Test cleanup (this won't remove sessions since they're not old enough)
         tracker.cleanup_old_sessions();
         assert_eq!(tracker.session_count(), 10);
-        
+
         // Manually test the cleanup logic by creating an old session
         // (In real usage, sessions would age naturally)
-        let _old_cutoff = chrono::Utc::now() - chrono::Duration::days(MAX_COMPLETED_SESSION_AGE_DAYS + 1);
-        
+        let _old_cutoff =
+            chrono::Utc::now() - chrono::Duration::days(MAX_COMPLETED_SESSION_AGE_DAYS + 1);
+
         // We can't easily test the actual cleanup without manipulating time,
         // but we can verify the cleanup method exists and runs without errors
     }
@@ -1282,7 +1383,7 @@ mod tests {
             IssueId::new("a".repeat(257)),
             Err(CostError::InvalidInput { .. })
         ));
-        
+
         // Test ApiCall endpoint validation
         assert!(matches!(
             ApiCall::new("", "model"),
@@ -1292,14 +1393,17 @@ mod tests {
             ApiCall::new("a".repeat(MAX_ENDPOINT_URL_LENGTH + 1), "model"),
             Err(CostError::InvalidInput { .. })
         ));
-        
+
         // Test ApiCall model validation
         assert!(matches!(
             ApiCall::new("https://api.anthropic.com/v1/messages", ""),
             Err(CostError::InvalidInput { .. })
         ));
         assert!(matches!(
-            ApiCall::new("https://api.anthropic.com/v1/messages", "a".repeat(MAX_MODEL_NAME_LENGTH + 1)),
+            ApiCall::new(
+                "https://api.anthropic.com/v1/messages",
+                "a".repeat(MAX_MODEL_NAME_LENGTH + 1)
+            ),
             Err(CostError::InvalidInput { .. })
         ));
     }
@@ -1308,25 +1412,36 @@ mod tests {
     fn test_error_display() {
         let session_id = CostSessionId::new();
         let call_id = ApiCallId::new();
-        
+
         let errors = vec![
             CostError::SessionNotFound { session_id },
             CostError::SessionAlreadyExists { session_id },
             CostError::SessionAlreadyCompleted { session_id },
             CostError::TooManySessions,
             CostError::TooManyApiCalls { session_id },
-            CostError::InvalidInput { message: "Test error".to_string() },
-            CostError::ApiCallNotFound { call_id, session_id },
-            CostError::SerializationError { message: "Test serialization error".to_string() },
+            CostError::InvalidInput {
+                message: "Test error".to_string(),
+            },
+            CostError::ApiCallNotFound {
+                call_id,
+                session_id,
+            },
+            CostError::SerializationError {
+                message: "Test serialization error".to_string(),
+            },
         ];
-        
+
         for error in errors {
             let error_string = error.to_string();
             assert!(!error_string.is_empty());
             // Verify the error contains relevant information
             match error {
-                CostError::SessionNotFound { .. } => assert!(error_string.contains("session not found")),
-                CostError::TooManySessions => assert!(error_string.contains("Maximum number of sessions")),
+                CostError::SessionNotFound { .. } => {
+                    assert!(error_string.contains("session not found"))
+                }
+                CostError::TooManySessions => {
+                    assert!(error_string.contains("Maximum number of sessions"))
+                }
                 CostError::InvalidInput { message } => assert!(error_string.contains(&message)),
                 _ => {}
             }
@@ -1336,60 +1451,71 @@ mod tests {
     #[test]
     fn test_comprehensive_workflow() {
         let mut tracker = CostTracker::new();
-        
+
         // Start multiple sessions for different issues
         let issue_ids: Vec<_> = (0..5)
             .map(|i| IssueId::new(format!("issue-{}", i)).unwrap())
             .collect();
-        
+
         let mut session_ids = Vec::new();
         for issue_id in &issue_ids {
             let session_id = tracker.start_session(issue_id.clone()).unwrap();
             session_ids.push(session_id);
         }
-        
+
         // Add API calls to each session
         let mut call_ids = Vec::new();
         for (i, session_id) in session_ids.iter().enumerate() {
             for j in 0..3 {
                 let api_call = ApiCall::new(
                     format!("https://api.anthropic.com/v1/messages/{}/{}", i, j),
-                    "claude-3-sonnet-20241022"
-                ).unwrap();
+                    "claude-3-sonnet-20241022",
+                )
+                .unwrap();
                 let call_id = tracker.add_api_call(session_id, api_call).unwrap();
                 call_ids.push((*session_id, call_id));
             }
         }
-        
+
         // Complete some API calls
         for (i, (session_id, call_id)) in call_ids.iter().enumerate() {
             let input_tokens = 100 + (i as u32 * 10);
             let output_tokens = 200 + (i as u32 * 20);
-            tracker.complete_api_call(
-                session_id,
-                call_id,
-                input_tokens,
-                output_tokens,
-                if i % 4 == 0 { ApiCallStatus::Failed } else { ApiCallStatus::Success },
-                if i % 4 == 0 { Some("Test error".to_string()) } else { None }
-            ).unwrap();
+            tracker
+                .complete_api_call(
+                    session_id,
+                    call_id,
+                    input_tokens,
+                    output_tokens,
+                    if i % 4 == 0 {
+                        ApiCallStatus::Failed
+                    } else {
+                        ApiCallStatus::Success
+                    },
+                    if i % 4 == 0 {
+                        Some("Test error".to_string())
+                    } else {
+                        None
+                    },
+                )
+                .unwrap();
         }
-        
+
         // Complete sessions
         for (i, session_id) in session_ids.iter().enumerate() {
-            let status = if i % 2 == 0 { 
-                CostSessionStatus::Completed 
-            } else { 
-                CostSessionStatus::Failed 
+            let status = if i % 2 == 0 {
+                CostSessionStatus::Completed
+            } else {
+                CostSessionStatus::Failed
             };
             tracker.complete_session(session_id, status).unwrap();
         }
-        
+
         // Verify final state
         assert_eq!(tracker.session_count(), 5);
         assert_eq!(tracker.active_session_count(), 0);
         assert_eq!(tracker.completed_session_count(), 5);
-        
+
         // Verify token counts
         for session_id in &session_ids {
             let session = tracker.get_session(session_id).unwrap();

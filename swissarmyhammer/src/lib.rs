@@ -141,8 +141,8 @@ pub mod prelude {
     };
 
     pub use crate::cost::{
-        ApiCall, ApiCallId, ApiCallStatus, CostError, CostSession, CostSessionId, CostSessionStatus, CostTracker,
-        IssueId,
+        ApiCall, ApiCallId, ApiCallStatus, CostError, CostSession, CostSessionId,
+        CostSessionStatus, CostTracker, IssueId,
     };
 
     // Common utilities for easy access

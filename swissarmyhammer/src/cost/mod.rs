@@ -7,6 +7,6 @@
 pub mod tracker;
 
 pub use tracker::{
-    ApiCall, ApiCallId, ApiCallStatus, CostError, CostSession, CostSessionId, CostSessionStatus, CostTracker,
-    IssueId,
+    ApiCall, ApiCallId, ApiCallStatus, CostError, CostSession, CostSessionId, CostSessionStatus,
+    CostTracker, IssueId,
 };

@@ -3039,5 +3039,8 @@ mod tests {
         // Files without .md extension
         assert_eq!(get_issue_name_from_filename("000001_paper"), "000001_paper");
         assert_eq!(get_issue_name_from_filename("nice"), "nice");
+        
+        // Test the specific case from the request
+        assert_eq!(get_issue_name_from_filename("000007_basic_testing.md"), "000007_basic_testing");
     }
 }

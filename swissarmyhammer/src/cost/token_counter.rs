@@ -227,7 +227,8 @@ impl ApiTokenExtractor {
                 });
             }
 
-            // Extract and validate token values
+            // Extract and validate token values - try different field names
+            // Try standard Claude API format (input_tokens, output_tokens)
             match (
                 usage.get("input_tokens").and_then(|v| v.as_u64()),
                 usage.get("output_tokens").and_then(|v| v.as_u64()),
@@ -243,20 +244,39 @@ impl ApiTokenExtractor {
                     );
                     return Ok(TokenUsage::from_api(input as u32, output as u32));
                 }
-                (None, Some(_)) => {
-                    return Err(CostError::InvalidInput {
-                        message: INPUT_TOKENS_MISSING_ERROR.to_string(),
-                    });
-                }
-                (Some(_), None) => {
-                    return Err(CostError::InvalidInput {
-                        message: OUTPUT_TOKENS_MISSING_ERROR.to_string(),
-                    });
-                }
-                (None, None) => {
-                    return Err(CostError::InvalidInput {
-                        message: BOTH_TOKENS_MISSING_ERROR.to_string(),
-                    });
+                _ => {
+                    // Try alternative format (prompt_tokens, completion_tokens)
+                    match (
+                        usage.get("prompt_tokens").and_then(|v| v.as_u64()),
+                        usage.get("completion_tokens").and_then(|v| v.as_u64()),
+                    ) {
+                        (Some(input), Some(output)) => {
+                            // Validate token values are within reasonable bounds
+                            Self::validate_token_values(input, output)?;
+
+                            debug!(
+                                input_tokens = input,
+                                output_tokens = output,
+                                "Extracted token usage from prompt/completion API response"
+                            );
+                            return Ok(TokenUsage::from_api(input as u32, output as u32));
+                        }
+                        (None, Some(_)) => {
+                            return Err(CostError::InvalidInput {
+                                message: "prompt_tokens field missing in response".to_string(),
+                            });
+                        }
+                        (Some(_), None) => {
+                            return Err(CostError::InvalidInput {
+                                message: "completion_tokens field missing in response".to_string(),
+                            });
+                        }
+                        (None, None) => {
+                            return Err(CostError::InvalidInput {
+                                message: "Neither input_tokens/output_tokens nor prompt_tokens/completion_tokens found".to_string(),
+                            });
+                        }
+                    }
                 }
             }
         }

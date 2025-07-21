@@ -437,6 +437,13 @@ impl CostSession {
 
     /// Add an API call to this session
     pub fn add_api_call(&mut self, mut api_call: ApiCall) -> Result<ApiCallId, CostError> {
+        // Check if session is already completed
+        if self.completed_at.is_some() {
+            return Err(CostError::SessionAlreadyCompleted {
+                session_id: self.session_id,
+            });
+        }
+
         // Check if we're exceeding the limit
         if self.api_calls.len() >= MAX_API_CALLS_PER_SESSION {
             return Err(CostError::TooManyApiCalls {

@@ -23,6 +23,9 @@ pub mod token_integration_tests;
 #[cfg(test)]
 pub mod test_utils;
 
+#[cfg(test)]
+pub mod tests;
+
 pub use aggregation::{
     AggregatedReport, CostAggregator, CostTrend, DateRange, EfficiencyMetrics, ExportFormat,
     IssueOutlier, OutlierType, PatternType, ProjectCostSummary, ReportGenerator, SeasonalPattern,

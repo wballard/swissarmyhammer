@@ -2,9 +2,54 @@ use crate::cli::IssueCommands;
 use colored::*;
 use std::io::{self, Read};
 use swissarmyhammer::git::GitOperations;
-use swissarmyhammer::issues::{FileSystemIssueStorage, IssueStorage};
+use swissarmyhammer::issues::{FileSystemIssueStorage, IssueStorage, filesystem::parse_issue_filename};
 
 const NAMELESS_ISSUE_NAME: &str = "";
+
+// Compatibility functions to bridge number-based CLI with name-based backend
+async fn get_issue_by_number(storage: &FileSystemIssueStorage, number: u32) -> Result<swissarmyhammer::issues::Issue, Box<dyn std::error::Error>> {
+    let issues = storage.list_issues().await?;
+    
+    for issue in issues {
+        // Extract filename from path
+        if let Some(filename) = issue.file_path.file_stem() {
+            if let Some(filename_str) = filename.to_str() {
+                // Try to parse as numbered format
+                if let Ok((parsed_number, _)) = parse_issue_filename(filename_str) {
+                    if parsed_number == number {
+                        return Ok(issue);
+                    }
+                }
+            }
+        }
+    }
+    
+    Err(format!("Issue {} not found", number).into())
+}
+
+async fn mark_complete_by_number(storage: &FileSystemIssueStorage, number: u32) -> Result<swissarmyhammer::issues::Issue, Box<dyn std::error::Error>> {
+    let issue = get_issue_by_number(storage, number).await?;
+    let completed = storage.mark_complete(&issue.name).await?;
+    Ok(completed)
+}
+
+async fn update_issue_by_number(storage: &FileSystemIssueStorage, number: u32, content: String) -> Result<swissarmyhammer::issues::Issue, Box<dyn std::error::Error>> {
+    let issue = get_issue_by_number(storage, number).await?;
+    let updated = storage.update_issue(&issue.name, content).await?;
+    Ok(updated)
+}
+
+fn get_issue_number(issue: &swissarmyhammer::issues::Issue) -> Option<u32> {
+    // Extract filename from path and try to parse number
+    if let Some(filename) = issue.file_path.file_stem() {
+        if let Some(filename_str) = filename.to_str() {
+            if let Ok((parsed_number, _)) = parse_issue_filename(filename_str) {
+                return Some(parsed_number);
+            }
+        }
+    }
+    None
+}
 
 fn format_issue_status(completed: bool) -> colored::ColoredString {
     if completed {
@@ -83,7 +128,7 @@ async fn create_issue(
     println!(
         "{} Created issue #{:06} - {}",
         "✅".green(),
-        issue.number,
+        get_issue_number(&issue).unwrap_or(0),
         issue.name.as_str().bold()
     );
 
@@ -147,7 +192,7 @@ fn print_issues_table(
         println!(
             "{} #{:06} - {} {}",
             status,
-            issue.number,
+            get_issue_number(&issue).unwrap_or(0),
             issue.name.as_str().bold(),
             format!("({})", issue.created_at.format("%Y-%m-%d")).dimmed()
         );
@@ -172,7 +217,7 @@ fn print_issues_markdown(
 
     for issue in issues {
         let status = if issue.completed { "✅" } else { "🔄" };
-        println!("## {} #{:06} - {}", status, issue.number, issue.name);
+        println!("## {} #{:06} - {}", status, get_issue_number(&issue).unwrap_or(0), issue.name);
         println!();
         println!(
             "- **Status**: {}",
@@ -210,7 +255,7 @@ async fn show_issue(
     number: u32,
     raw: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let issue = storage.get_issue_by_number(number).await?;
+    let issue = get_issue_by_number(&storage, number).await?;
 
     if raw {
         println!("{}", issue.content);
@@ -220,7 +265,7 @@ async fn show_issue(
         println!(
             "{} Issue #{:06} - {}",
             status,
-            issue.number,
+            get_issue_number(&issue).unwrap_or(0),
             issue.name.as_str().bold()
         );
         println!("📁 File: {}", issue.file_path.display());
@@ -245,7 +290,7 @@ async fn update_issue(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let new_content = get_content_from_args(content, file)?;
 
-    let issue = storage.get_issue_by_number(number).await?;
+    let issue = get_issue_by_number(&storage, number).await?;
 
     let updated_content = if append {
         if issue.content.is_empty() {
@@ -257,14 +302,13 @@ async fn update_issue(
         new_content
     };
 
-    let updated_issue = storage
-        .update_issue_by_number(number, updated_content)
+    let updated_issue = update_issue_by_number(&storage, number, updated_content)
         .await?;
 
     println!(
         "{} Updated issue #{:06} - {}",
         "✅".green(),
-        updated_issue.number,
+        get_issue_number(&updated_issue).unwrap_or(0),
         updated_issue.name.as_str().bold()
     );
 
@@ -275,22 +319,22 @@ async fn complete_issue(
     storage: FileSystemIssueStorage,
     number: u32,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let issue = storage.get_issue_by_number(number).await?;
+    let issue = get_issue_by_number(&storage, number).await?;
 
     if issue.completed {
         println!(
             "ℹ️ Issue #{:06} - {} is already completed",
-            issue.number, issue.name
+            get_issue_number(&issue).unwrap_or(0), issue.name
         );
         return Ok(());
     }
 
-    let completed_issue = storage.mark_complete_by_number(number).await?;
+    let completed_issue = mark_complete_by_number(&storage, number).await?;
 
     println!(
         "{} Marked issue #{:06} - {} as complete",
         "✅".green(),
-        completed_issue.number,
+        get_issue_number(&completed_issue).unwrap_or(0),
         completed_issue.name.as_str().bold()
     );
 
@@ -303,12 +347,12 @@ async fn work_issue(
     storage: FileSystemIssueStorage,
     number: u32,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let issue = storage.get_issue_by_number(number).await?;
+    let issue = get_issue_by_number(&storage, number).await?;
 
     if issue.completed {
         println!(
             "⚠️ Issue #{:06} - {} is already completed",
-            issue.number, issue.name
+            get_issue_number(&issue).unwrap_or(0), issue.name
         );
         return Ok(());
     }
@@ -316,16 +360,16 @@ async fn work_issue(
     let git_ops = GitOperations::new()?;
     // Use a descriptive fallback for nameless issues
     let branch_identifier = if issue.name.as_str().is_empty() {
-        format!("{:06}", issue.number) // Just the number for nameless issues
+        format!("{:06}", get_issue_number(&issue).unwrap_or(0)) // Just the number for nameless issues
     } else {
-        format!("{:06}_{}", issue.number, issue.name)
+        format!("{:06}_{}", get_issue_number(&issue).unwrap_or(0), issue.name)
     };
     let branch_name = git_ops.create_work_branch(&branch_identifier)?;
 
     println!(
         "{} Started working on issue #{:06} - {}",
         "🔄".yellow(),
-        issue.number,
+        get_issue_number(&issue).unwrap_or(0),
         issue.name.as_str().bold()
     );
 
@@ -339,19 +383,19 @@ async fn merge_issue(
     number: u32,
     keep_branch: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let issue = storage.get_issue_by_number(number).await?;
+    let issue = get_issue_by_number(&storage, number).await?;
 
     if !issue.completed {
         println!(
             "⚠️ Issue #{:06} - {} is not completed",
-            issue.number, issue.name
+            get_issue_number(&issue).unwrap_or(0), issue.name
         );
         println!("Complete the issue first with: swissarmyhammer issue complete {number}");
         return Ok(());
     }
 
     let git_ops = GitOperations::new()?;
-    let branch_identifier = format!("{:06}_{}", issue.number, issue.name);
+    let branch_identifier = format!("{:06}_{}", get_issue_number(&issue).unwrap_or(0), issue.name);
 
     git_ops.merge_issue_branch(&branch_identifier)?;
 
@@ -366,7 +410,7 @@ async fn merge_issue(
     println!(
         "{} Merged issue #{:06} - {} to main",
         "✅".green(),
-        issue.number,
+        get_issue_number(&issue).unwrap_or(0),
         issue.name.as_str().bold()
     );
 
@@ -383,15 +427,15 @@ async fn show_current_issue(
         let identifier = current_branch.strip_prefix("issue/").unwrap();
 
         // Try to parse issue number from branch
-        if let Ok((number, _)) = swissarmyhammer::issues::parse_issue_filename(identifier) {
-            match storage.get_issue_by_number(number).await {
+        if let Ok((number, _)) = parse_issue_filename(identifier) {
+            match get_issue_by_number(&storage, number).await {
                 Ok(issue) => {
                     let status = format_issue_status(issue.completed);
 
                     println!(
                         "{} Current issue: #{:06} - {}",
                         status,
-                        issue.number,
+                        get_issue_number(&issue).unwrap_or(0),
                         issue.name.as_str().bold()
                     );
                     println!("🌿 Branch: {}", current_branch.bold());
@@ -442,7 +486,7 @@ async fn show_status(storage: FileSystemIssueStorage) -> Result<(), Box<dyn std:
         println!();
         println!("{}", "Active Issues:".bold());
         for issue in issues.iter().filter(|i| !i.completed) {
-            println!("  #{:06} - {}", issue.number, issue.name);
+            println!("  #{:06} - {}", get_issue_number(&issue).unwrap_or(0), issue.name);
         }
     }
 
@@ -453,7 +497,7 @@ async fn show_status(storage: FileSystemIssueStorage) -> Result<(), Box<dyn std:
         completed_issues.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
         for issue in completed_issues.iter().take(5) {
-            println!("  #{:06} - {}", issue.number, issue.name);
+            println!("  #{:06} - {}", get_issue_number(&issue).unwrap_or(0), issue.name);
         }
     }
 

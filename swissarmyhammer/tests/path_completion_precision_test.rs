@@ -63,10 +63,8 @@ async fn test_precise_completion_detection() {
 
         println!("\n=== Test: {test_name} (directory: {dir_name}) ===");
         for issue in &all_issues {
-            let issue_num: u32 = issue.number.into();
             println!(
-                "  Issue {}: name='{}', completed={}, path='{}'",
-                issue_num,
+                "  Issue: name='{}', completed={}, path='{}'",
                 issue.name,
                 issue.completed,
                 issue.file_path.display()
@@ -179,7 +177,7 @@ async fn test_ancestor_vs_parent_completion_detection() {
     let _completed_issue = issue_storage
         .write()
         .await
-        .mark_complete_by_number(completed.number)
+        .mark_complete(&completed.name)
         .await
         .unwrap();
 
@@ -188,10 +186,8 @@ async fn test_ancestor_vs_parent_completion_detection() {
 
     println!("\nAncestor vs Parent test results:");
     for issue in &all_issues {
-        let issue_num: u32 = issue.number.into();
         println!(
-            "  Issue {}: name='{}', completed={}, path='{}'",
-            issue_num,
+            "  Issue: name='{}', completed={}, path='{}'",
             issue.name,
             issue.completed,
             issue.file_path.display()

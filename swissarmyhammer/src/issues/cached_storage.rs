@@ -155,67 +155,6 @@ impl IssueStorage for CachedIssueStorage {
         Ok(completed_issues)
     }
 
-    async fn get_issue_by_number(&self, number: u32) -> Result<Issue> {
-        // For number-based lookups, we can't use the name-based cache effectively
-        // so we delegate directly to storage
-        let issue = self.storage.get_issue_by_number(number).await?;
-
-        // Cache the result using the issue name as the key
-        self.cache.put(issue.clone());
-
-        Ok(issue)
-    }
-
-    async fn update_issue_by_number(&self, number: u32, content: String) -> Result<Issue> {
-        let issue = self.storage.update_issue_by_number(number, content).await?;
-
-        // Update cache
-        self.cache.put(issue.clone());
-
-        Ok(issue)
-    }
-
-    async fn mark_complete_by_number(&self, number: u32) -> Result<Issue> {
-        let issue = self.storage.mark_complete_by_number(number).await?;
-
-        // Update cache
-        self.cache.put(issue.clone());
-
-        Ok(issue)
-    }
-
-    async fn get_issues_batch_by_numbers(&self, numbers: Vec<u32>) -> Result<Vec<Issue>> {
-        let issues = self.storage.get_issues_batch_by_numbers(numbers).await?;
-
-        // Cache individual issues
-        for issue in &issues {
-            self.cache.put(issue.clone());
-        }
-
-        Ok(issues)
-    }
-
-    async fn update_issues_batch_by_numbers(&self, updates: Vec<(u32, String)>) -> Result<Vec<Issue>> {
-        let updated_issues = self.storage.update_issues_batch_by_numbers(updates).await?;
-
-        // Update cache with new versions
-        for issue in &updated_issues {
-            self.cache.put(issue.clone());
-        }
-
-        Ok(updated_issues)
-    }
-
-    async fn mark_complete_batch_by_numbers(&self, numbers: Vec<u32>) -> Result<Vec<Issue>> {
-        let completed_issues = self.storage.mark_complete_batch_by_numbers(numbers).await?;
-
-        // Update cache with completed versions
-        for issue in &completed_issues {
-            self.cache.put(issue.clone());
-        }
-
-        Ok(completed_issues)
-    }
 
 }
 

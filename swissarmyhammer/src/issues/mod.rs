@@ -26,7 +26,7 @@
 //!     "# Login Bug\n\nUsers cannot log in with special characters.".to_string()
 //! ).await?;
 //!
-//! println!("Created issue '{}' (#{:06})", issue.name, issue.number);
+//! println!("Created issue '{}'", issue.name);
 //!
 //! // List all issues
 //! let issues = storage.list_issues().await?;
@@ -63,7 +63,7 @@
 //! let completed = storage.mark_complete(&issue.name).await?;
 //!
 //! // 6. Merge branch
-//! git_ops.merge_issue_branch(&format!("{}_{:06}", issue.name, issue.number))?;
+//! git_ops.merge_issue_branch(&format!("issue/{}", issue.name))?;
 //! # Ok(())
 //! # }
 //! ```
@@ -81,9 +81,8 @@ pub mod metrics;
 
 // Re-export main types from the filesystem module
 pub use filesystem::{
-    create_safe_filename, extract_issue_name_from_filename, format_issue_number, is_issue_file,
-    parse_issue_filename, parse_issue_number, sanitize_issue_name, validate_issue_name,
-    get_issue_name_from_filename, FileSystemIssueStorage, Issue, IssueState, IssueStorage,
+    create_safe_filename, get_issue_name_from_filename, is_issue_file, sanitize_issue_name, 
+    validate_issue_name, FileSystemIssueStorage, Issue, IssueState, IssueStorage,
 };
 
 // Export cache types

@@ -45,7 +45,7 @@ async fn test_completion_detection_fix() {
     let _completed_issue = issue_storage
         .write()
         .await
-        .mark_complete_by_number(issue1.number)
+        .mark_complete(&issue1.name)
         .await
         .unwrap();
 
@@ -67,10 +67,8 @@ async fn test_completion_detection_fix() {
 
     println!("Found {} issues:", all_issues.len());
     for issue in &all_issues {
-        let issue_num: u32 = issue.number.into();
         println!(
-            "  Issue {}: name='{}', completed={}, path='{}'",
-            issue_num,
+            "  Issue: name='{}', completed={}, path='{}'",
             issue.name,
             issue.completed,
             issue.file_path.display()
@@ -161,10 +159,8 @@ async fn test_path_ancestor_bug_fix() {
 
     println!("Path completion test - Found {} issues:", all_issues.len());
     for issue in &all_issues {
-        let issue_num: u32 = issue.number.into();
         println!(
-            "  Issue {}: name='{}', completed={}, path='{}'",
-            issue_num,
+            "  Issue: name='{}', completed={}, path='{}'",
             issue.name,
             issue.completed,
             issue.file_path.display()

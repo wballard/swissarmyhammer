@@ -734,7 +734,6 @@ impl McpServer {
             }
         }
 
-
         // Calculate statistics
         let total_issues = active_issues.len() + completed_issues.len();
         let completed_count = completed_issues.len();
@@ -756,21 +755,21 @@ impl McpServer {
                 total_issues,
                 completed_count,
                 completed_issues.iter()
-                    .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
+                    .map(|issue| format!("• {}", issue.name))
                     .collect::<Vec<_>>()
                     .join("\n")
             )
         } else {
             let active_list = active_issues
                 .iter()
-                .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
+                .map(|issue| format!("• {}", issue.name))
                 .collect::<Vec<_>>()
                 .join("\n");
 
             let completed_list = if completed_count > 0 {
                 completed_issues
                     .iter()
-                    .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
+                    .map(|issue| format!("• {}", issue.name))
                     .collect::<Vec<_>>()
                     .join("\n")
             } else {
@@ -1557,7 +1556,8 @@ impl McpServer {
 
         // Filter to only pending (non-completed) issues
         // Issues are already sorted alphabetically by name in list_issues()
-        let pending_issues: Vec<&Issue> = all_issues.iter().filter(|issue| !issue.completed).collect();
+        let pending_issues: Vec<&Issue> =
+            all_issues.iter().filter(|issue| !issue.completed).collect();
 
         if pending_issues.is_empty() {
             Ok(CallToolResult {
@@ -2487,7 +2487,7 @@ mod tests {
         // Check that the response contains expected information
         let text_content = &call_result.content[0];
         if let RawContent::Text(text) = &text_content.raw {
-            assert!(text.text.contains("Created issue #"));
+            assert!(text.text.contains("Created issue"));
             assert!(text.text.contains("test_issue"));
             assert!(text.text.contains(" at "));
         } else {
@@ -2624,43 +2624,6 @@ mod tests {
         } else {
             panic!("Expected text content, got: {:?}", text_content.raw);
         }
-    }
-
-    #[tokio::test]
-    async fn test_handle_issue_create_sequential_numbering() {
-        // Test that multiple issues get sequential numbers
-        let library = PromptLibrary::new();
-        let server = McpServer::new(library).unwrap();
-
-        // Create first issue
-        let request1 = CreateIssueRequest {
-            name: Some(IssueName::new("first_issue".to_string()).unwrap()),
-            content: "First issue content".to_string(),
-        };
-
-        let result1 = server.handle_issue_create(request1).await;
-        assert!(result1.is_ok(), "First issue creation should succeed");
-
-        let call_result1 = result1.unwrap();
-        let first_issue_number = extract_issue_number_from_response(&call_result1);
-
-        // Create second issue
-        let request2 = CreateIssueRequest {
-            name: Some(IssueName::new("second_issue".to_string()).unwrap()),
-            content: "Second issue content".to_string(),
-        };
-
-        let result2 = server.handle_issue_create(request2).await;
-        assert!(result2.is_ok(), "Second issue creation should succeed");
-
-        let call_result2 = result2.unwrap();
-        let second_issue_number = extract_issue_number_from_response(&call_result2);
-
-        // Verify the second issue has a higher number than the first
-        assert!(
-            second_issue_number > first_issue_number,
-            "Second issue number ({second_issue_number}) should be greater than first issue number ({first_issue_number})"
-        );
     }
 
     #[test]
@@ -2881,7 +2844,7 @@ mod tests {
             // Verify response content
             assert!(!response.content.is_empty());
             if let RawContent::Text(text_content) = &response.content[0].raw {
-                assert!(text_content.text.contains("Created issue #"));
+                assert!(text_content.text.contains("Created issue"));
                 assert!(text_content.text.contains("test_mcp_issue"));
             } else {
                 panic!("Expected text response");
@@ -3826,8 +3789,11 @@ mod tests {
                 assert!(text.text.contains("• Active:"));
                 assert!(text.text.contains("50%"));
 
-                // Check issue numbering format
-                assert!(text.text.contains("#000001") || text.text.contains("#000002"));
+                // Check issue names are present
+                assert!(
+                    text.text.contains("format_test_active")
+                        || text.text.contains("format_test_completed")
+                );
 
                 // Check proper emoji usage
                 assert!(text.text.contains("⏳"));
@@ -4118,18 +4084,13 @@ mod tests {
         // Check that the response contains expected information
         let text_content = &call_result.content[0];
         if let RawContent::Text(text) = &text_content.raw {
-            assert!(text.text.contains("Created issue #"));
+            assert!(text.text.contains("Created issue"));
 
-            // Extract the issue number to verify filename format
-            let start = text.text.find("Created issue #").unwrap() + "Created issue #".len();
-            let end = text.text[start..].find(' ').unwrap() + start;
-            let issue_number_str = &text.text[start..end];
-
-            // Verify the filename is in the nameless format (e.g., "000123.md")
-            // and not the named format (e.g., "000123_unnamed.md")
+            // Verify that the text contains information about file path
+            // For nameless issues, the system now creates a ULID-based name
             assert!(
-                text.text.contains(&format!("{issue_number_str}.md")),
-                "Nameless issue should create filename like 000123.md, got: {}",
+                text.text.contains(".md"),
+                "Response should contain the markdown file extension: {}",
                 text.text
             );
             assert!(

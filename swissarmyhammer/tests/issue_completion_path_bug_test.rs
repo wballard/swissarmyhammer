@@ -56,23 +56,20 @@ async fn test_nested_complete_directory_bug() {
 
     // Verify the completion status is correct
     for issue in &all_issues {
-        let issue_num: u32 = issue.number.into();
-        match issue_num {
-            1 => {
+        match issue.name.as_str() {
+            "legitimate_completed" => {
                 // The legitimate completed issue should be marked as completed
                 assert!(
                     issue.completed,
                     "Issue 000001 should be completed (in complete directory)"
                 );
-                assert_eq!(issue.name.as_str(), "legitimate_completed");
             }
-            2 => {
+            "nested_not_completed" => {
                 // The nested issue should NOT be completed despite having "complete" in its path
                 assert!(
                     !issue.completed,
-                    "Issue 000002 should NOT be completed (nested directory)"
+                    "Issue 'nested_not_completed' should NOT be completed (nested directory)"
                 );
-                assert_eq!(issue.name.as_str(), "nested_not_completed");
             }
             _ => {
                 // The regular active issue should not be completed
@@ -138,16 +135,15 @@ async fn test_path_completion_detection_precision() {
     let all_issues = issue_storage.read().await.list_issues().await.unwrap();
 
     for issue in &all_issues {
-        let issue_num: u32 = issue.number.into();
-        let expected = match issue_num {
-            1 => true,  // direct_complete should be completed
+        let expected = match issue.name.as_str() {
+            "direct_complete" => true,  // direct_complete should be completed
             _ => false, // all others should NOT be completed
         };
 
         assert_eq!(
             issue.completed, expected,
-            "Issue {} ({}) completion status should be {} but was {}",
-            issue_num, issue.name, expected, issue.completed
+            "Issue '{}' completion status should be {} but was {}",
+            issue.name, expected, issue.completed
         );
     }
 

@@ -157,7 +157,6 @@ mod tests {
 
     fn create_test_issue(name: &str) -> Issue {
         Issue {
-            number: 1, // Default test number
             name: name.to_string(),
             content: format!("Test content for issue {name}"),
             completed: false,

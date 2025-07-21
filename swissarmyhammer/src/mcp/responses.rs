@@ -42,8 +42,7 @@ pub fn create_issue_response(issue: &Issue) -> CallToolResult {
         "name": issue.name,
         "file_path": issue.file_path.to_string_lossy(),
         "message": format!(
-            "Created issue #{:06} - {} at {}",
-            issue.number,
+            "Created issue {} at {}",
             issue.name,
             issue.file_path.display()
         )

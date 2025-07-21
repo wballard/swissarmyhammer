@@ -186,21 +186,21 @@ impl ToolHandlers {
                 total_issues,
                 completed_count,
                 completed_issues.iter()
-                    .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
+                    .map(|issue| format!("• {}", issue.name))
                     .collect::<Vec<_>>()
                     .join("\n")
             )
         } else {
             let active_list = active_issues
                 .iter()
-                .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
+                .map(|issue| format!("• {}", issue.name))
                 .collect::<Vec<_>>()
                 .join("\n");
 
             let completed_list = if completed_count > 0 {
                 completed_issues
                     .iter()
-                    .map(|issue| format!("• #{:06} - {}", issue.number, issue.name))
+                    .map(|issue| format!("• {}", issue.name))
                     .collect::<Vec<_>>()
                     .join("\n")
             } else {

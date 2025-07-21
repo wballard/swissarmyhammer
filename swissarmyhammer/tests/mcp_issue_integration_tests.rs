@@ -111,7 +111,7 @@ async fn test_complete_issue_workflow() {
     // Step 3: Start working on the issue (test git operations)
     let git_ops = env.git_ops.lock().await;
     if let Some(git) = git_ops.as_ref() {
-        let branch_name = git.create_work_branch(&issue.name).unwrap();
+        let branch_name = git.create_work_branch(&issue.name.as_str()).unwrap();
 
         // Verify we're on the correct branch
         let current_branch = git.current_branch().unwrap();
@@ -121,8 +121,8 @@ async fn test_complete_issue_workflow() {
 
     // Step 4: Update the issue with progress
     let updated_issue = env.issue_storage.write().await
-        .update_issue(
-            issue_number.into(),
+        .update_issue_by_number(
+            issue_number.value(),
             format!("{}\n\nJWT authentication implementation completed. Added token generation and validation.", issue.content),
         )
         .await
@@ -137,7 +137,7 @@ async fn test_complete_issue_workflow() {
         .issue_storage
         .write()
         .await
-        .mark_complete(issue_number.into())
+        .mark_complete_by_number(issue_number.value())
         .await
         .unwrap();
 
@@ -152,10 +152,10 @@ async fn test_complete_issue_workflow() {
     let git_ops = env.git_ops.lock().await;
     if let Some(git) = git_ops.as_ref() {
         // Merge the issue branch
-        git.merge_issue_branch(&issue.name).unwrap();
+        git.merge_issue_branch(&issue.name.as_str()).unwrap();
 
         // Delete the issue branch
-        let branch_name = format!("issue/{}", issue.name);
+        let branch_name = format!("issue/{}", issue.name.as_str());
         git.delete_branch(&branch_name).unwrap();
 
         // Verify we're on main
@@ -178,7 +178,7 @@ async fn test_error_handling_scenarios() {
         .await;
     assert!(result.is_ok());
     let issue = result.unwrap();
-    assert_eq!(issue.name, "");
+    assert_eq!(issue.name.as_str(), "");
 
     // Test creating issue with dangerous characters in name (path traversal protection)
     let result = env
@@ -192,14 +192,14 @@ async fn test_error_handling_scenarios() {
         .await;
     assert!(result.is_ok());
     let issue = result.unwrap();
-    assert_eq!(issue.name, "path_traversal_attempted");
+    assert_eq!(issue.name.as_str(), "path_traversal_attempted");
 
     // Test working on non-existent issue
-    let result = env.issue_storage.read().await.get_issue(999).await;
+    let result = env.issue_storage.read().await.get_issue_by_number(999).await;
     assert!(result.is_err());
 
     // Test marking non-existent issue complete
-    let result = env.issue_storage.write().await.mark_complete(999).await;
+    let result = env.issue_storage.write().await.mark_complete_by_number(999).await;
     assert!(result.is_err());
 }
 
@@ -254,7 +254,7 @@ async fn test_git_integration_edge_cases() {
     // Work on the issue
     let git_ops = env.git_ops.lock().await;
     if let Some(git) = git_ops.as_ref() {
-        let _branch_name = git.create_work_branch(&issue.name).unwrap();
+        let _branch_name = git.create_work_branch(&issue.name.as_str()).unwrap();
     }
     drop(git_ops);
 
@@ -281,7 +281,7 @@ async fn test_git_integration_edge_cases() {
         assert!(has_changes);
 
         // The create_work_branch may succeed as it handles uncommitted changes
-        let result = git.create_work_branch(&issue2.name);
+        let result = git.create_work_branch(&issue2.name.as_str());
 
         // We accept either success or failure here as it depends on git implementation
         let _ = result;
@@ -308,7 +308,7 @@ async fn test_git_integration_edge_cases() {
         git.checkout_branch(&main_branch).unwrap();
 
         // Now working on another issue should succeed
-        let result = git.create_work_branch(&issue2.name);
+        let result = git.create_work_branch(&issue2.name.as_str());
         assert!(result.is_ok());
     }
 }
@@ -380,7 +380,7 @@ async fn test_issue_file_structure() {
         .issue_storage
         .write()
         .await
-        .mark_complete(issue.number.into())
+        .mark_complete_by_number(issue.number.value())
         .await
         .unwrap();
 

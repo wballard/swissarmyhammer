@@ -33,7 +33,7 @@
 //! println!("Found {} issues", issues.len());
 //!
 //! // Mark as complete
-//! let completed = storage.mark_complete(issue.number.into()).await?;
+//! let completed = storage.mark_complete(&issue.name).await?;
 //! println!("Issue completed and moved to: {}", completed.file_path.display());
 //! # Ok(())
 //! # }
@@ -57,10 +57,10 @@
 //!
 //! // 3. Work on the issue...
 //! // 4. Update issue with progress
-//! let updated = storage.update_issue(issue.number.into(), "# New Feature\n\nDescription\n\n## Progress\n\nCompleted basic structure".to_string()).await?;
+//! let updated = storage.update_issue(&issue.name, "# New Feature\n\nDescription\n\n## Progress\n\nCompleted basic structure".to_string()).await?;
 //!
 //! // 5. Mark complete
-//! let completed = storage.mark_complete(issue.number.into()).await?;
+//! let completed = storage.mark_complete(&issue.name).await?;
 //!
 //! // 6. Merge branch
 //! git_ops.merge_issue_branch(&format!("{:06}_{}", issue.number, issue.name))?;
@@ -81,9 +81,9 @@ pub mod metrics;
 
 // Re-export main types from the filesystem module
 pub use filesystem::{
-    create_safe_filename, format_issue_number, is_issue_file, parse_issue_filename,
-    parse_issue_number, sanitize_issue_name, validate_issue_name, FileSystemIssueStorage, Issue,
-    IssueNumber, IssueState, IssueStorage,
+    create_safe_filename, extract_issue_name_from_filename, format_issue_number, is_issue_file, 
+    parse_issue_filename, parse_issue_number, sanitize_issue_name, validate_issue_name, 
+    FileSystemIssueStorage, Issue, IssueNumber, IssueState, IssueStorage,
 };
 
 // Export cache types

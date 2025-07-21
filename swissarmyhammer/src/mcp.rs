@@ -604,7 +604,7 @@ impl McpServer {
         // Check if issue exists and get its current state
         let existing_issue = {
             let issue_storage = self.issue_storage.write().await;
-            match issue_storage.get_issue(request.number.into()).await {
+            match issue_storage.get_issue_by_number(request.number.get()).await {
                 Ok(issue) => issue,
                 Err(crate::SwissArmyHammerError::IssueNotFound(_)) => {
                     return Err(McpError::invalid_params(
@@ -640,7 +640,7 @@ impl McpServer {
         // Mark the issue as complete with a new lock
         let issue = {
             let issue_storage = self.issue_storage.write().await;
-            match issue_storage.mark_complete(request.number.into()).await {
+            match issue_storage.mark_complete_by_number(request.number.get()).await {
                 Ok(issue) => issue,
                 Err(crate::SwissArmyHammerError::IssueNotFound(_)) => {
                     return Err(McpError::invalid_params(
@@ -906,7 +906,7 @@ impl McpServer {
     ) -> std::result::Result<(Issue, String), McpError> {
         let issue_storage = self.issue_storage.write().await;
         let current_issue = issue_storage
-            .get_issue(request.number.get())
+            .get_issue_by_number(request.number.get())
             .await
             .map_err(|e| match e {
                 SwissArmyHammerError::IssueNotFound(_) => McpError::invalid_params(
@@ -929,7 +929,7 @@ impl McpServer {
     ) -> std::result::Result<Issue, McpError> {
         let issue_storage = self.issue_storage.write().await;
         issue_storage
-            .update_issue(issue_number.get(), final_content)
+            .update_issue_by_number(issue_number.get(), final_content)
             .await
             .map_err(|e| {
                 let error_msg = match &e {
@@ -1108,7 +1108,7 @@ impl McpServer {
         branch: &str,
     ) -> std::result::Result<CallToolResult, McpError> {
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue(issue_number).await {
+        let issue = match issue_storage.get_issue_by_number(issue_number).await {
             Ok(issue) => issue,
             Err(SwissArmyHammerError::IssueNotFound(_)) => {
                 // Handle orphaned issue branch
@@ -1211,7 +1211,7 @@ impl McpServer {
 
         // Validate the issue exists
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue(issue_number).await {
+        let issue = match issue_storage.get_issue_by_number(issue_number).await {
             Ok(issue) => issue,
             Err(SwissArmyHammerError::IssueNotFound(_)) => {
                 return Ok(Self::create_error_response(format!(
@@ -1416,7 +1416,7 @@ impl McpServer {
     ) -> std::result::Result<CallToolResult, McpError> {
         // First get the issue to determine its name
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue(request.number.into()).await {
+        let issue = match issue_storage.get_issue_by_number(request.number.get()).await {
             Ok(issue) => issue,
             Err(_e) => {
                 return Ok(CallToolResult {

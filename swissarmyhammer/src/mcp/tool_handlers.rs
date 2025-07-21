@@ -99,7 +99,7 @@ impl ToolHandlers {
         request: MarkCompleteRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         let issue_storage = self.issue_storage.write().await;
-        match issue_storage.mark_complete(request.number.into()).await {
+        match issue_storage.mark_complete_by_number(request.number.get()).await {
             Ok(issue) => Ok(create_mark_complete_response(&issue)),
             Err(crate::SwissArmyHammerError::IssueNotFound(num)) => Err(McpError::invalid_params(
                 format!("Issue #{num:06} not found"),
@@ -274,7 +274,7 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         let issue_storage = self.issue_storage.write().await;
         match issue_storage
-            .update_issue(request.number.into(), request.content)
+            .update_issue_by_number(request.number.get(), request.content)
             .await
         {
             Ok(issue) => Ok(create_success_response(format!(
@@ -346,7 +346,7 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         // First get the issue to determine its name
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue(request.number.into()).await {
+        let issue = match issue_storage.get_issue_by_number(request.number.get()).await {
             Ok(issue) => issue,
             Err(e) => {
                 return Ok(create_error_response(format!(
@@ -407,7 +407,7 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         // First get the issue to determine its name
         let issue_storage = self.issue_storage.read().await;
-        let issue = match issue_storage.get_issue(request.number.into()).await {
+        let issue = match issue_storage.get_issue_by_number(request.number.get()).await {
             Ok(issue) => issue,
             Err(e) => {
                 return Ok(create_error_response(format!(

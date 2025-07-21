@@ -45,7 +45,7 @@ async fn test_completion_detection_fix() {
     let _completed_issue = issue_storage
         .write()
         .await
-        .mark_complete(issue1.number.into())
+        .mark_complete_by_number(issue1.number.value())
         .await
         .unwrap();
 
@@ -92,7 +92,7 @@ async fn test_completion_detection_fix() {
     // Verify the nested issue is not marked as completed
     let nested_issue = all_issues
         .iter()
-        .find(|i| i.name == "nested_issue")
+        .find(|i| i.name.as_str() == "nested_issue")
         .expect("Should find the nested issue");
     assert!(
         !nested_issue.completed,
@@ -174,11 +174,11 @@ async fn test_path_ancestor_bug_fix() {
     // Find issues by name and verify completion status
     let legitimate = all_issues
         .iter()
-        .find(|i| i.name == "legitimate")
+        .find(|i| i.name.as_str() == "legitimate")
         .expect("Should find legitimate issue");
     let deep_nested = all_issues
         .iter()
-        .find(|i| i.name == "deep_nested")
+        .find(|i| i.name.as_str() == "deep_nested")
         .expect("Should find deep nested issue");
 
     // The issue directly in "complete" should be completed

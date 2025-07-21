@@ -94,11 +94,11 @@ async fn test_precise_completion_detection() {
         // Verify specific issues have correct completion status
         let active = all_issues
             .iter()
-            .find(|i| i.name.contains("active"))
+            .find(|i| i.name.as_str().contains("active"))
             .expect("Should find active issue");
         let completed = all_issues
             .iter()
-            .find(|i| i.name.contains("completed"))
+            .find(|i| i.name.as_str().contains("completed"))
             .expect("Should find completed issue");
 
         assert!(
@@ -179,7 +179,7 @@ async fn test_ancestor_vs_parent_completion_detection() {
     let _completed_issue = issue_storage
         .write()
         .await
-        .mark_complete(completed.number.into())
+        .mark_complete_by_number(completed.number.value())
         .await
         .unwrap();
 
@@ -207,7 +207,7 @@ async fn test_ancestor_vs_parent_completion_detection() {
 
     // Verify completion detection logic
     for issue in &all_issues {
-        if issue.name == "to_be_completed" {
+        if issue.name.as_str() == "to_be_completed" {
             assert!(
                 issue.completed,
                 "Properly completed issue should be marked completed"

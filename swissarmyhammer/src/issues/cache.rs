@@ -152,13 +152,14 @@ pub struct CacheStats {
 mod tests {
     use super::*;
     use crate::issues::IssueNumber;
+    use crate::mcp::types::IssueName;
     use chrono::Utc;
     use std::path::PathBuf;
 
     fn create_test_issue(number: u32, name: &str) -> Issue {
         Issue {
             number: IssueNumber::from(number),
-            name: name.to_string(),
+            name: IssueName::new(name.to_string()).unwrap(),
             content: format!("Test content for issue {number}"),
             completed: false,
             file_path: PathBuf::from(format!("test_{number}.md")),

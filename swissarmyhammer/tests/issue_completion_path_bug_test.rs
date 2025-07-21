@@ -64,7 +64,7 @@ async fn test_nested_complete_directory_bug() {
                     issue.completed,
                     "Issue 000001 should be completed (in complete directory)"
                 );
-                assert_eq!(issue.name, "legitimate_completed");
+                assert_eq!(issue.name.as_str(), "legitimate_completed");
             }
             2 => {
                 // The nested issue should NOT be completed despite having "complete" in its path
@@ -72,7 +72,7 @@ async fn test_nested_complete_directory_bug() {
                     !issue.completed,
                     "Issue 000002 should NOT be completed (nested directory)"
                 );
-                assert_eq!(issue.name, "nested_not_completed");
+                assert_eq!(issue.name.as_str(), "nested_not_completed");
             }
             _ => {
                 // The regular active issue should not be completed
@@ -80,7 +80,7 @@ async fn test_nested_complete_directory_bug() {
                     !issue.completed,
                     "Regular active issue should not be completed"
                 );
-                assert_eq!(issue.name, "regular_active");
+                assert_eq!(issue.name.as_str(), "regular_active");
             }
         }
     }

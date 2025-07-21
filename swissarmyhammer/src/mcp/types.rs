@@ -1,7 +1,7 @@
 //! Request and response types for MCP operations, along with constants
 
 use crate::config::Config;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // Type safety wrapper types
@@ -63,17 +63,14 @@ impl PartialEq<u32> for IssueNumber {
 }
 
 /// A wrapper type for issue names to prevent mixing up different string types
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(transparent)]
 pub struct IssueName(pub String);
 
 impl IssueName {
-    /// Create a new issue name after validation
+    /// Create a new issue name after validation for MCP interface
     pub fn new(name: String) -> Result<Self, String> {
         let trimmed = name.trim();
-        if trimmed.is_empty() {
-            return Err("Issue name cannot be empty".to_string());
-        }
         let config = Config::global();
         if trimmed.len() > config.max_issue_name_length {
             return Err(format!(
@@ -82,8 +79,27 @@ impl IssueName {
             ));
         }
 
-        // Check for invalid characters
-        if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains('\0') {
+        // Check for invalid characters - reject problematic characters for MCP interface
+        if trimmed.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|', '\0']) {
+            return Err("Issue name contains invalid characters".to_string());
+        }
+
+        Ok(IssueName(trimmed.to_string()))
+    }
+
+    /// Create a new issue name for filesystem use with relaxed validation
+    pub fn from_filesystem(name: String) -> Result<Self, String> {
+        let trimmed = name.trim();
+        
+        // For filesystem names, allow up to 200 characters and only reject null bytes
+        if trimmed.len() > 200 {
+            return Err(format!(
+                "Issue name cannot exceed 200 characters"
+            ));
+        }
+
+        // Only reject null bytes for filesystem names
+        if trimmed.contains('\0') {
             return Err("Issue name contains invalid characters".to_string());
         }
 

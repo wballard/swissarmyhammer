@@ -194,7 +194,10 @@ mod tests {
         let deserialized: ListMemosRequest = serde_json::from_str(&json).unwrap();
 
         // No fields to compare for empty struct
-        assert_eq!(std::mem::size_of_val(&request), std::mem::size_of_val(&deserialized));
+        assert_eq!(
+            std::mem::size_of_val(&request),
+            std::mem::size_of_val(&deserialized)
+        );
     }
 
     #[test]
@@ -205,6 +208,9 @@ mod tests {
         let deserialized: GetAllContextRequest = serde_json::from_str(&json).unwrap();
 
         // No fields to compare for empty struct
-        assert_eq!(std::mem::size_of_val(&request), std::mem::size_of_val(&deserialized));
+        assert_eq!(
+            std::mem::size_of_val(&request),
+            std::mem::size_of_val(&deserialized)
+        );
     }
 }

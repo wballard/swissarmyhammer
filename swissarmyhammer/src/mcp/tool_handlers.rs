@@ -17,6 +17,12 @@ use rmcp::Error as McpError;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
+/// Preview length for memo list operations (characters)
+const MEMO_LIST_PREVIEW_LENGTH: usize = 100;
+
+/// Preview length for memo search operations (characters)
+const MEMO_SEARCH_PREVIEW_LENGTH: usize = 200;
+
 /// Tool handlers for MCP server operations
 #[derive(Clone)]
 pub struct ToolHandlers {
@@ -36,6 +42,74 @@ impl ToolHandlers {
             issue_storage,
             git_ops,
             memo_storage,
+        }
+    }
+
+    /// Format a memo preview with consistent formatting
+    ///
+    /// Creates a standardized preview format showing title, ID, timestamps, and content preview.
+    ///
+    /// # Arguments
+    ///
+    /// * `memo` - The memo to format
+    /// * `preview_length` - Number of characters to include in content preview
+    ///
+    /// # Returns
+    ///
+    /// * `String` - Formatted memo preview
+    fn format_memo_preview(memo: &crate::memoranda::Memo, preview_length: usize) -> String {
+        format!(
+            "• {} ({})\n  Created: {}\n  Updated: {}\n  Preview: {}",
+            memo.title,
+            memo.id,
+            memo.created_at.format("%Y-%m-%d %H:%M"),
+            memo.updated_at.format("%Y-%m-%d %H:%M"),
+            memo.content
+                .chars()
+                .take(preview_length)
+                .collect::<String>()
+                + if memo.content.len() > preview_length {
+                    "..."
+                } else {
+                    ""
+                }
+        )
+    }
+
+    /// Handle memo operation errors consistently based on error type
+    ///
+    /// Maps specific memo errors to appropriate MCP error responses
+    /// following the pattern: user input errors -> invalid_params, system errors -> internal_error
+    ///
+    /// # Arguments
+    ///
+    /// * `error` - The SwissArmyHammerError to handle
+    /// * `operation` - Description of the operation that failed (for logging)
+    ///
+    /// # Returns
+    ///
+    /// * `McpError` - Appropriate MCP error response
+    fn handle_memo_error(error: crate::error::SwissArmyHammerError, operation: &str) -> McpError {
+        use crate::error::SwissArmyHammerError;
+        match error {
+            // User input errors
+            SwissArmyHammerError::MemoNotFound(id) => {
+                tracing::warn!("Memo not found: {}", id);
+                McpError::invalid_params(format!("Memo not found: {id}"), None)
+            }
+            SwissArmyHammerError::InvalidMemoId(id) => {
+                tracing::warn!("Invalid memo ID: {}", id);
+                McpError::invalid_params(format!("Invalid memo ID format: {id}"), None)
+            }
+            SwissArmyHammerError::MemoAlreadyExists(id) => {
+                tracing::warn!("Memo already exists: {}", id);
+                McpError::invalid_params(format!("Memo already exists: {id}"), None)
+            }
+            // System errors
+            error => {
+                tracing::error!("Failed to {}: {}", operation, error);
+                McpError::internal_error(format!("Failed to {operation}: {error}"), None)
+            }
         }
     }
 
@@ -531,13 +605,7 @@ impl ToolHandlers {
                     memo.title, memo.id, memo.title, memo.content
                 )))
             }
-            Err(e) => {
-                tracing::error!("Failed to create memo: {}", e);
-                Err(McpError::internal_error(
-                    format!("Failed to create memo: {e}"),
-                    None,
-                ))
-            }
+            Err(e) => Err(Self::handle_memo_error(e, "create memo")),
         }
     }
 
@@ -701,17 +769,7 @@ impl ToolHandlers {
                 } else {
                     let memo_list = memos
                         .iter()
-                        .map(|memo| {
-                            format!(
-                                "• {} ({})\n  Created: {}\n  Updated: {}\n  Preview: {}",
-                                memo.title,
-                                memo.id,
-                                memo.created_at.format("%Y-%m-%d %H:%M"),
-                                memo.updated_at.format("%Y-%m-%d %H:%M"),
-                                memo.content.chars().take(100).collect::<String>()
-                                    + if memo.content.len() > 100 { "..." } else { "" }
-                            )
-                        })
+                        .map(|memo| Self::format_memo_preview(memo, MEMO_LIST_PREVIEW_LENGTH))
                         .collect::<Vec<_>>()
                         .join("\n\n");
 
@@ -762,17 +820,7 @@ impl ToolHandlers {
                 } else {
                     let memo_list = memos
                         .iter()
-                        .map(|memo| {
-                            format!(
-                                "• {} ({})\n  Created: {}\n  Updated: {}\n  Preview: {}",
-                                memo.title,
-                                memo.id,
-                                memo.created_at.format("%Y-%m-%d %H:%M"),
-                                memo.updated_at.format("%Y-%m-%d %H:%M"),
-                                memo.content.chars().take(200).collect::<String>()
-                                    + if memo.content.len() > 200 { "..." } else { "" }
-                            )
-                        })
+                        .map(|memo| Self::format_memo_preview(memo, MEMO_SEARCH_PREVIEW_LENGTH))
                         .collect::<Vec<_>>()
                         .join("\n\n");
 
@@ -813,7 +861,9 @@ impl ToolHandlers {
             Ok(memos) => {
                 tracing::info!("Retrieved {} memos for context", memos.len());
                 if memos.is_empty() {
-                    Ok(create_success_response("No memos available for context.".to_string()))
+                    Ok(create_success_response(
+                        "No memos available for context.".to_string(),
+                    ))
                 } else {
                     // Sort memos by updated_at descending (most recent first)
                     let mut sorted_memos = memos;

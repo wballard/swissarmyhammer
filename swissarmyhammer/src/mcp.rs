@@ -83,7 +83,6 @@ pub struct McpServer {
     file_watcher: Arc<Mutex<FileWatcher>>,
     issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
     git_ops: Arc<Mutex<Option<GitOperations>>>,
-    memo_storage: Arc<RwLock<Box<dyn MemoStorage>>>,
     tool_handlers: ToolHandlers,
 }
 
@@ -164,15 +163,12 @@ impl McpServer {
 
         // Create Arc wrappers for shared storage
         let issue_storage = Arc::new(RwLock::new(issue_storage));
-        let memo_storage = Arc::new(RwLock::new(memo_storage));
+        let memo_storage_arc = Arc::new(RwLock::new(memo_storage));
         let git_ops_arc = Arc::new(Mutex::new(git_ops));
 
         // Initialize tool handlers with all storage instances
-        let tool_handlers = ToolHandlers::new(
-            issue_storage.clone(),
-            git_ops_arc.clone(),
-            memo_storage.clone(),
-        );
+        let tool_handlers =
+            ToolHandlers::new(issue_storage.clone(), git_ops_arc.clone(), memo_storage_arc);
 
         Ok(Self {
             library: Arc::new(RwLock::new(library)),
@@ -180,7 +176,6 @@ impl McpServer {
             file_watcher: Arc::new(Mutex::new(FileWatcher::new())),
             issue_storage,
             git_ops: git_ops_arc,
-            memo_storage,
             tool_handlers,
         })
     }

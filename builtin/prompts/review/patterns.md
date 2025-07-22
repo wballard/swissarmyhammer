@@ -1,18 +1,18 @@
 ---
 title: Pattern Code Review
 description: Perform a comprehensive review of the code to improve pattern use.
-arguments:
-  - name: context
-    description: Context about the code (e.g., "handles user authentication")
-    required: false
-    default: "general purpose code"
 ---
 
 ## Code Under Review
 
-Please review the all code in this project with a focus on: {{context}}
+Please review the all code in this project.
 
-## 1. Pattern Consistency Analysis
+{% render "principals" %}
+{% render "coding_standards" %}
+
+## Review Checklist
+
+### 1. Pattern Consistency Analysis
 
 - **Architectural Patterns**: Does the code follow established patterns in the codebase (MVC, Repository, Factory, etc.)?
 - **Naming Conventions**: Are variables, functions, classes, and files named consistently with existing code?
@@ -20,7 +20,7 @@ Please review the all code in this project with a focus on: {{context}}
 - **Error Handling**: Is error handling implemented consistently across similar functions?
 - **API Design**: Do new endpoints/interfaces follow existing API patterns?
 
-## 2. Code Duplication Detection
+### 2. Code Duplication Detection
 
 - **Exact Duplication**: Identify identical or near-identical code blocks
 - **Logic Duplication**: Find similar algorithms or business logic that could be abstracted
@@ -28,14 +28,14 @@ Please review the all code in this project with a focus on: {{context}}
 - **Test Duplication**: Identify repeated test setup or assertion patterns
 - **Suggest Refactoring**: Recommend specific abstractions (functions, classes, utilities, constants)
 
-## 3. Consistency Violations
+### 3. Consistency Violations
 
 - **Formatting & Style**: Flag deviations from project code style (indentation, spacing, etc.)
 - **Import/Dependency Patterns**: Ensure consistent module importing and dependency usage
 - **Comment Styles**: Check documentation comment consistency
 - **Technology Stack**: Verify new dependencies align with existing tech choices
 
-## 4. Quality Improvements
+### 4. Quality Improvements
 
 - **Extract Methods**: Suggest breaking down large functions
 - **Shared Utilities**: Identify opportunities to create reusable utility functions
@@ -73,4 +73,13 @@ Please review the all code in this project with a focus on: {{context}}
 
   This prompt emphasizes systematic detection of inconsistencies and duplications while providing actionable refactoring suggestions.
 
-{% render review_format %}
+## Process
+
+- list all source files in the project and create a markdown scratchpad file, this is your todo list
+- create a CODE_REVIEW.md markdown file, this is your code review output
+- for each file in the todo list
+  - perform the Review Checklist
+  - summarize your findings
+  - write your findings to the code review output
+
+{% render "review_format" %}

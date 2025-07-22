@@ -1,7 +1,7 @@
 //! Performance benchmarks for memoranda functionality
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use swissarmyhammer::memoranda::{FileSystemMemoStorage, Memo, MemoStorage};
+use swissarmyhammer::memoranda::{FileSystemMemoStorage, MemoStorage};
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
@@ -70,8 +70,8 @@ fn bench_memo_search(c: &mut Criterion) {
                 for i in 0..10 {
                     storage
                         .create_memo(
-                            format!("Test Memo {}", i),
-                            format!("Content about projects and meetings {}", i),
+                            format!("Test Memo {i}"),
+                            format!("Content about projects and meetings {i}"),
                         )
                         .await
                         .unwrap();
@@ -97,8 +97,8 @@ fn bench_memo_list(c: &mut Criterion) {
                 for i in 0..10 {
                     storage
                         .create_memo(
-                            format!("Test Memo {}", i),
-                            format!("Content for listing test {}", i),
+                            format!("Test Memo {i}"),
+                            format!("Content for listing test {i}"),
                         )
                         .await
                         .unwrap();

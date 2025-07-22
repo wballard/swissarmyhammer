@@ -168,7 +168,7 @@ mod test_utils {
         serde_json::from_str(&line).map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("JSON parse error: {}", e),
+                format!("JSON parse error: {e}"),
             )
         })
     }
@@ -617,7 +617,7 @@ async fn test_mcp_memo_search() {
     cleanup_all_memos(&mut stdin, &mut reader).unwrap();
 
     // Create test memos with different content
-    let test_memos = vec![
+    let test_memos = [
         ("Rust Programming", "Learning Rust language"),
         ("Python Guide", "Python programming tutorial"),
         ("JavaScript Basics", "Introduction to JavaScript"),
@@ -701,7 +701,7 @@ async fn test_mcp_memo_search_case_insensitive() {
     let _ = read_response(&mut reader).unwrap();
 
     // Search with different cases
-    let search_cases = vec!["camelcase", "MIXEDCASE", "MiXeDcAsE"];
+    let search_cases = ["camelcase", "MIXEDCASE", "MiXeDcAsE"];
 
     for (i, query) in search_cases.iter().enumerate() {
         let search_request = create_tool_request(
@@ -984,9 +984,7 @@ async fn test_mcp_memo_tool_list() {
     for tool_name in expected_memo_tools {
         assert!(
             tool_names.contains(&tool_name),
-            "Tool '{}' not found in tool list: {:?}",
-            tool_name,
-            tool_names
+            "Tool '{tool_name}' not found in tool list: {tool_names:?}"
         );
     }
 }
@@ -1006,7 +1004,7 @@ fn extract_memo_id_from_response(response_text: &str) -> String {
         // Take rest of string if no whitespace
         return response_text[id_start..].trim().to_string();
     }
-    panic!("Could not extract memo ID from response: {}", response_text);
+    panic!("Could not extract memo ID from response: {response_text}");
 }
 
 #[cfg(test)]
@@ -1042,8 +1040,7 @@ mod stress_tests {
             let response = read_response(&mut reader).unwrap();
             assert!(
                 response.get("error").is_none(),
-                "Failed to create memo {}",
-                i
+                "Failed to create memo {i}"
             );
 
             let memo_id = extract_memo_id_from_response(
@@ -1067,8 +1064,7 @@ mod stress_tests {
             let response = read_response(&mut reader).unwrap();
             assert!(
                 response.get("error").is_none(),
-                "Failed to update memo {}",
-                memo_id
+                "Failed to update memo {memo_id}"
             );
         }
 
@@ -1086,8 +1082,7 @@ mod stress_tests {
             let response = read_response(&mut reader).unwrap();
             assert!(
                 response.get("error").is_none(),
-                "Failed to delete memo {}",
-                memo_id
+                "Failed to delete memo {memo_id}"
             );
         }
 
@@ -1114,7 +1109,7 @@ mod stress_tests {
         let mut reader = BufReader::new(stdout);
 
         // Create memos with different patterns for searching
-        let patterns = vec![
+        let patterns = [
             "project",
             "meeting",
             "documentation",
@@ -1152,7 +1147,7 @@ mod stress_tests {
 
             assert!(response.get("error").is_none());
             let text = response["result"]["content"][0]["text"].as_str().unwrap();
-            assert!(text.contains(&format!("Found {} memos matching", num_per_pattern)));
+            assert!(text.contains(&format!("Found {num_per_pattern} memos matching")));
         }
     }
 }

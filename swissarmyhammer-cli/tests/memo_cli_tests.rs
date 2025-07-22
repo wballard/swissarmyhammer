@@ -18,8 +18,7 @@ use tempfile::{NamedTempFile, TempDir};
 
 /// Helper to create a CLI command with environment setup
 fn memo_cmd() -> Command {
-    let cmd = Command::cargo_bin("swissarmyhammer").unwrap();
-    cmd
+    Command::cargo_bin("swissarmyhammer").unwrap()
 }
 
 /// Helper to create a memo command with custom memos directory
@@ -37,7 +36,7 @@ fn extract_memo_id(output: &str) -> String {
             return output[id_start..id_start + end].trim().to_string();
         }
     }
-    panic!("Could not extract memo ID from output: {}", output);
+    panic!("Could not extract memo ID from output: {output}");
 }
 
 #[test]
@@ -145,7 +144,7 @@ fn test_cli_memo_list_with_memos() {
         memo_cmd_with_dir(&temp_dir)
             .args(["memo", "create", title])
             .arg("--content")
-            .arg(&format!("Content for {}", title))
+            .arg(format!("Content for {title}"))
             .assert()
             .success();
     }
@@ -185,7 +184,7 @@ fn test_cli_memo_get_basic() {
         .success()
         .stdout(predicate::str::contains("Get Test Memo"))
         .stdout(predicate::str::contains("Content for get test"))
-        .stdout(predicate::str::contains(&format!("🆔 ID: {}", memo_id)))
+        .stdout(predicate::str::contains(format!("🆔 ID: {memo_id}")))
         .stdout(predicate::str::contains("📅 Created:"))
         .stdout(predicate::str::contains("🔄 Updated:"));
 }
@@ -391,8 +390,7 @@ fn test_cli_memo_search_case_insensitive() {
             .assert()
             .success()
             .stdout(predicate::str::contains(format!(
-                "🔍 Found 1 memo matching '{}'",
-                term
+                "🔍 Found 1 memo matching '{term}'"
             )));
     }
 }
@@ -511,9 +509,9 @@ fn test_cli_memo_context_with_memos() {
     // Create some memos
     for i in 1..=3 {
         memo_cmd_with_dir(&temp_dir)
-            .args(["memo", "create", &format!("Context Memo {}", i)])
+            .args(["memo", "create", &format!("Context Memo {i}")])
             .arg("--content")
-            .arg(&format!("Context content for memo {}", i))
+            .arg(format!("Context content for memo {i}"))
             .assert()
             .success();
     }
@@ -536,9 +534,9 @@ fn test_cli_memo_context_ordering() {
     // Create memos with delays to ensure different timestamps
     for i in 1..=3 {
         memo_cmd_with_dir(&temp_dir)
-            .args(["memo", "create", &format!("Ordered Memo {}", i)])
+            .args(["memo", "create", &format!("Ordered Memo {i}")])
             .arg("--content")
-            .arg(&format!("Content {}", i))
+            .arg(format!("Content {i}"))
             .assert()
             .success();
 
@@ -756,9 +754,8 @@ fn test_cli_memo_special_title_characters() {
             .arg("Special content")
             .assert()
             .success()
-            .stdout(predicate::str::contains(&format!(
-                "✅ Created memo: {}",
-                title
+            .stdout(predicate::str::contains(format!(
+                "✅ Created memo: {title}"
             )));
     }
 
@@ -781,9 +778,9 @@ fn test_cli_memo_concurrent_operations() {
             std::thread::spawn(move || {
                 let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
                 cmd.env("SWISSARMYHAMMER_MEMOS_DIR", temp_dir_path.join("memos"));
-                cmd.args(["memo", "create", &format!("Concurrent Memo {}", i)])
+                cmd.args(["memo", "create", &format!("Concurrent Memo {i}")])
                     .arg("--content")
-                    .arg(&format!("Content for concurrent memo {}", i))
+                    .arg(format!("Content for concurrent memo {i}"))
                     .assert()
                     .success();
             })
@@ -869,11 +866,10 @@ mod stress_tests {
 
         for i in 1..=num_memos {
             memo_cmd_with_dir(&temp_dir)
-                .args(["memo", "create", &format!("Stress Test Memo {}", i)])
+                .args(["memo", "create", &format!("Stress Test Memo {i}")])
                 .arg("--content")
-                .arg(&format!(
-                    "Content for stress test memo {} with additional text",
-                    i
+                .arg(format!(
+                    "Content for stress test memo {i} with additional text"
                 ))
                 .assert()
                 .success();
@@ -884,9 +880,8 @@ mod stress_tests {
             .args(["memo", "list"])
             .assert()
             .success()
-            .stdout(predicate::str::contains(&format!(
-                "📝 Found {} memos",
-                num_memos
+            .stdout(predicate::str::contains(format!(
+                "📝 Found {num_memos} memos"
             )));
     }
 
@@ -909,9 +904,9 @@ mod stress_tests {
         for pattern in &patterns {
             for i in 1..=num_per_pattern {
                 memo_cmd_with_dir(&temp_dir)
-                    .args(["memo", "create", &format!("{} Task {}", pattern, i)])
+                    .args(["memo", "create", &format!("{pattern} Task {i}")])
                     .arg("--content")
-                    .arg(&format!("This memo is about {} work item {}", pattern, i))
+                    .arg(format!("This memo is about {pattern} work item {i}"))
                     .assert()
                     .success();
             }
@@ -923,9 +918,8 @@ mod stress_tests {
                 .args(["memo", "search", pattern])
                 .assert()
                 .success()
-                .stdout(predicate::str::contains(&format!(
-                    "🔍 Found {} memos matching '{}'",
-                    num_per_pattern, pattern
+                .stdout(predicate::str::contains(format!(
+                    "🔍 Found {num_per_pattern} memos matching '{pattern}'"
                 )));
         }
     }

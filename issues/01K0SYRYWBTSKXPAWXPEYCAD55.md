@@ -1,1 +1,0 @@
-eliminate the ./builtin/prompts/workflows and any references to them including in documentation. use actual workflows in ./builtin/workflows for documentation samples

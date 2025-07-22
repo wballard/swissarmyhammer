@@ -2,16 +2,14 @@
 name: code-review
 title: Code Review
 description: Review code for quality, bugs, and improvements
-arguments:
-  - name: context
-    description: Additional context about the code review focus
-    required: false
-    default: "general review"
 ---
 
 ## Code Under Review
 
-Please review the all code in this project with a focus on: {{context}}
+Please review the all code in this project.
+
+{% render "principals" %}
+{% render "coding_standards" %}
 
 ## Review Checklist
 
@@ -51,4 +49,4 @@ Please provide specific feedback for each area of concern, including line number
   - summarize your findings
   - write your findings to the code review output
 
-{% render review_format %}
+{% render "review_format" %}

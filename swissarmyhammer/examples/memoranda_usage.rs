@@ -3,9 +3,8 @@
 //! This example demonstrates how to programmatically interact with the memoranda system
 //! for structured note-taking and knowledge management.
 
-use std::collections::HashMap;
 use swissarmyhammer::memoranda::{
-    FileSystemMemoStorage, MemoStorage, Memo, CreateMemoRequest, UpdateMemoRequest, SearchMemosRequest,
+    FileSystemMemoStorage, MemoStorage,
 };
 use tempfile::TempDir;
 
@@ -198,10 +197,10 @@ fn read_file() -> Result<String, Box<dyn Error>> {
         Ok(id) => {
             match storage.get_memo(&id).await {
                 Ok(_) => println!("Found memo (unexpected)"),
-                Err(e) => println!("✅ Correctly handled: {}", e),
+                Err(e) => println!("✅ Correctly handled: {e}"),
             }
         },
-        Err(e) => println!("✅ Correctly handled: Invalid memo ID format: {}", e),
+        Err(e) => println!("✅ Correctly handled: Invalid memo ID format: {e}"),
     }
 
     // Attempt to update a non-existent memo
@@ -210,7 +209,7 @@ fn read_file() -> Result<String, Box<dyn Error>> {
         "Updated content".to_string(),
     ).await {
         Ok(_) => println!("Updated memo (unexpected)"),
-        Err(e) => println!("✅ Correctly handled error: {}", e),
+        Err(e) => println!("✅ Correctly handled error: {e}"),
     }
     println!();
 
@@ -232,7 +231,7 @@ fn read_file() -> Result<String, Box<dyn Error>> {
             content.to_string(),
         ).await?;
         created_ids.push(memo.id);
-        println!("✅ Created: {}", title);
+        println!("✅ Created: {title}");
     }
 
     println!("\n📊 Final Statistics:");
@@ -242,14 +241,14 @@ fn read_file() -> Result<String, Box<dyn Error>> {
     let total_content_length: usize = final_memos.iter()
         .map(|m| m.content.len())
         .sum();
-    println!("  📖 Total content: {} characters", total_content_length);
+    println!("  📖 Total content: {total_content_length} characters");
     
     let avg_content_length = if !final_memos.is_empty() {
         total_content_length / final_memos.len()
     } else {
         0
     };
-    println!("  📏 Average content: {} characters per memo", avg_content_length);
+    println!("  📏 Average content: {avg_content_length} characters per memo");
 
     // Example 9: Integration patterns
     println!("\n🔗 Example 9: Integration Patterns");
@@ -275,12 +274,12 @@ fn read_file() -> Result<String, Box<dyn Error>> {
 
     for id in &created_ids[..2] { // Delete first 2 demo memos
         match storage.delete_memo(id).await {
-            Ok(_) => println!("✅ Deleted memo: {}", id),
+            Ok(_) => println!("✅ Deleted memo: {id}"),
             Err(e) => {
                 if e.to_string().contains("not found") {
-                    println!("⚠️  Memo not found: {}", id);
+                    println!("⚠️  Memo not found: {id}");
                 } else {
-                    println!("❌ Error deleting memo: {}", e);
+                    println!("❌ Error deleting memo: {e}");
                 }
             }
         }
@@ -306,53 +305,7 @@ fn read_file() -> Result<String, Box<dyn Error>> {
     Ok(())
 }
 
-/// Helper function to demonstrate custom memo processing
-async fn analyze_memo_content(memo: &Memo) -> HashMap<String, usize> {
-    let mut stats = HashMap::new();
-    
-    stats.insert("lines".to_string(), memo.content.lines().count());
-    stats.insert("words".to_string(), memo.content.split_whitespace().count());
-    stats.insert("characters".to_string(), memo.content.len());
-    
-    // Count markdown headers
-    let headers = memo.content.lines()
-        .filter(|line| line.starts_with('#'))
-        .count();
-    stats.insert("headers".to_string(), headers);
-    
-    // Count action items (lines with [ ] or [x])
-    let action_items = memo.content.lines()
-        .filter(|line| line.contains("[ ]") || line.contains("[x]"))
-        .count();
-    stats.insert("action_items".to_string(), action_items);
-    
-    stats
-}
 
-/// Example integration with external systems
-async fn export_memos_to_json(memos: &[Memo]) -> Result<String, Box<dyn std::error::Error>> {
-    use serde_json::json;
-    
-    let export_data = json!({
-        "export_timestamp": chrono::Utc::now(),
-        "total_memos": memos.len(),
-        "memos": memos.iter().map(|memo| {
-            json!({
-                "id": memo.id,
-                "title": memo.title,
-                "content": memo.content,
-                "created_at": memo.created_at,
-                "updated_at": memo.updated_at,
-                "metadata": {
-                    "content_length": memo.content.len(),
-                    "line_count": memo.content.lines().count(),
-                }
-            })
-        }).collect::<Vec<_>>()
-    });
-    
-    Ok(serde_json::to_string_pretty(&export_data)?)
-}
 
 #[cfg(test)]
 mod tests {

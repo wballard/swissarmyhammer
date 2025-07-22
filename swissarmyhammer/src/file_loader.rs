@@ -140,12 +140,12 @@ impl FileEntry {
         let mut components: Vec<String> = Vec::new();
         let mut found_subdirectory = false;
 
-        // Convert path to components and find prompts/workflows directory
+        // Convert path to components and find prompts or workflows directory
         for component in path.components() {
             if let std::path::Component::Normal(os_str) = component {
                 if let Some(s) = os_str.to_str() {
                     if found_subdirectory {
-                        // Collect all components after prompts/workflows
+                        // Collect all components after prompts or workflows directory
                         components.push(s.to_string());
                     } else if s == "prompts" || s == "workflows" {
                         found_subdirectory = true;

@@ -68,10 +68,6 @@
 //! # }
 //! ```
 
-/// In-memory cache for issue data with TTL and LRU eviction
-pub mod cache;
-/// Cached storage implementation combining filesystem storage with in-memory cache
-pub mod cached_storage;
 /// Filesystem-based issue storage implementation
 pub mod filesystem;
 /// Storage wrapper that collects performance metrics for all operations
@@ -85,12 +81,6 @@ pub use filesystem::{
     is_issue_file, parse_any_issue_filename, parse_issue_filename, sanitize_issue_name,
     validate_issue_name, FileSystemIssueStorage, Issue, IssueState, IssueStorage,
 };
-
-// Export cache types
-pub use cache::{CacheEntry, CacheStats, IssueCache};
-
-// Export cached storage types
-pub use cached_storage::CachedIssueStorage;
 
 // Export metrics types
 pub use metrics::{MetricsSnapshot, Operation, PerformanceMetrics};

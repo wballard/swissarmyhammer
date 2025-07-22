@@ -1,0 +1,1 @@
+Review mcp and cli, make sure that we have not duplicated logic between then. Both mcp and cli should be clients to underlying library code, formatting results, and error handling.

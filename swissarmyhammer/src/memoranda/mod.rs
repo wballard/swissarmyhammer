@@ -1,75 +1,25 @@
-//! Memoranda management and storage system
-//!
-//! This module provides a comprehensive memoranda (memo) system for storing and managing
-//! notes and documents. It integrates with the MCP (Model Context Protocol) to provide
-//! AI assistants with persistent memory capabilities.
-//!
-//! ## Features
-//!
-//! - **ULID-based IDs**: Strong-typed memo IDs using ULIDs for sortable, unique identifiers
-//! - **JSON Serialization**: Full serde support for MCP protocol integration
-//! - **Type Safety**: Strong typing to prevent ID confusion with other system components
-//! - **Async Support**: Designed for async/await patterns throughout the system
-//! - **Filesystem Storage**: Persistent storage with atomic operations and concurrent access
-//!
-//! ## Basic Usage
-//!
-//! ```rust
-//! use swissarmyhammer::memoranda::{Memo, MemoId, CreateMemoRequest, FileSystemMemoStorage, MemoStorage};
-//! use chrono::Utc;
-//!
-//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! // Create storage
-//! let storage = FileSystemMemoStorage::new_default()?;
-//!
-//! // Create a memo
-//! let memo = storage.create_memo(
-//!     "My First Memo".to_string(),
-//!     "This is the content of my memo.".to_string()
-//! ).await?;
-//!
-//! // Retrieve memo
-//! let retrieved = storage.get_memo(&memo.id).await?;
-//!
-//! // List all memos
-//! let all_memos = storage.list_memos().await?;
-//!
-//! // Search memos
-//! let search_results = storage.search_memos("content").await?;
-//! # Ok(())
-//! # }
-//! ```
-
 use crate::error::{Result, SwissArmyHammerError};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
-/// Filesystem storage backend for memoranda
 pub mod storage;
-
-// Re-export storage types for convenience
 pub use storage::{FileSystemMemoStorage, MemoState, MemoStorage};
 
-/// Type-safe wrapper for memo IDs using ULID to prevent confusion with other IDs
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct MemoId(String);
 
 impl MemoId {
-    /// Generate a new ULID-based memo ID
     pub fn new() -> Self {
         Self(Ulid::new().to_string())
     }
 
-    /// Create a memo ID from an existing ULID string
     pub fn from_string(id: String) -> Result<Self> {
-        // Validate that this is a proper ULID
         let _ulid =
             Ulid::from_string(&id).map_err(|_| SwissArmyHammerError::invalid_memo_id(&id))?;
         Ok(Self(id))
     }
 
-    /// Get the raw string value
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -95,23 +45,22 @@ impl std::str::FromStr for MemoId {
     }
 }
 
-/// Core memo structure representing a stored memorandum
+impl AsRef<str> for MemoId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Memo {
-    /// Unique identifier for the memo
     pub id: MemoId,
-    /// Title of the memo
     pub title: String,
-    /// Content of the memo
     pub content: String,
-    /// When the memo was created
     pub created_at: DateTime<Utc>,
-    /// When the memo was last updated
     pub updated_at: DateTime<Utc>,
 }
 
 impl Memo {
-    /// Create a new memo with the current timestamp
     pub fn new(title: String, content: String) -> Self {
         let now = Utc::now();
         Self {
@@ -123,73 +72,53 @@ impl Memo {
         }
     }
 
-    /// Update the memo content and timestamp
     pub fn update_content(&mut self, content: String) {
         self.content = content;
         self.updated_at = Utc::now();
     }
 
-    /// Update the memo title and timestamp
     pub fn update_title(&mut self, title: String) {
         self.title = title;
         self.updated_at = Utc::now();
     }
 }
 
-/// Request type for creating a new memo
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateMemoRequest {
-    /// Title for the new memo
     pub title: String,
-    /// Initial content for the memo
     pub content: String,
 }
 
-/// Request type for updating an existing memo
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UpdateMemoRequest {
-    /// ID of the memo to update
     pub id: MemoId,
-    /// New content for the memo
     pub content: String,
 }
 
-/// Request type for searching memos
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchMemosRequest {
-    /// Search query string
     pub query: String,
 }
 
-/// Response type containing search results
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchMemosResponse {
-    /// List of memos matching the search query
     pub memos: Vec<Memo>,
-    /// Number of total results found
     pub total_count: usize,
 }
 
-/// Request type for getting a specific memo by ID
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GetMemoRequest {
-    /// ID of the memo to retrieve
     pub id: MemoId,
 }
 
-/// Request type for deleting a memo
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeleteMemoRequest {
-    /// ID of the memo to delete
     pub id: MemoId,
 }
 
-/// Response type for listing all memos
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListMemosResponse {
-    /// List of all memos
     pub memos: Vec<Memo>,
-    /// Total number of memos
     pub total_count: usize,
 }
 
@@ -202,11 +131,9 @@ mod tests {
         let id1 = MemoId::new();
         let id2 = MemoId::new();
 
-        // IDs should be unique
         assert_ne!(id1, id2);
 
-        // IDs should be valid ULID strings
-        assert!(id1.as_str().len() == 26); // ULID length
+        assert!(id1.as_str().len() == 26);
         assert!(id2.as_str().len() == 26);
     }
 
@@ -241,14 +168,13 @@ mod tests {
         let original_created_at = memo.created_at;
         let original_updated_at = memo.updated_at;
 
-        // Small delay to ensure timestamp difference
         std::thread::sleep(std::time::Duration::from_millis(1));
 
         memo.update_content("Updated Content".to_string());
 
         assert_eq!(memo.content, "Updated Content");
-        assert_eq!(memo.created_at, original_created_at); // Should not change
-        assert!(memo.updated_at > original_updated_at); // Should be updated
+        assert_eq!(memo.created_at, original_created_at);
+        assert!(memo.updated_at > original_updated_at);
     }
 
     #[test]
@@ -257,21 +183,19 @@ mod tests {
         let original_created_at = memo.created_at;
         let original_updated_at = memo.updated_at;
 
-        // Small delay to ensure timestamp difference
         std::thread::sleep(std::time::Duration::from_millis(1));
 
         memo.update_title("New Title".to_string());
 
         assert_eq!(memo.title, "New Title");
-        assert_eq!(memo.created_at, original_created_at); // Should not change
-        assert!(memo.updated_at > original_updated_at); // Should be updated
+        assert_eq!(memo.created_at, original_created_at);
+        assert!(memo.updated_at > original_updated_at);
     }
 
     #[test]
     fn test_memo_serialization() {
         let memo = Memo::new("Test Title".to_string(), "Test Content".to_string());
 
-        // Test JSON serialization
         let json = serde_json::to_string(&memo).unwrap();
         let deserialized: Memo = serde_json::from_str(&json).unwrap();
 

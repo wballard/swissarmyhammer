@@ -1,5 +1,5 @@
 use crate::error::{Result, SwissArmyHammerError};
-use crate::memoranda::{Memo, MemoId, SearchOptions, AdvancedMemoSearchEngine};
+use crate::memoranda::{AdvancedMemoSearchEngine, Memo, MemoId, SearchOptions};
 use async_trait::async_trait;
 use std::path::PathBuf;
 use tokio::fs::OpenOptions;
@@ -519,7 +519,7 @@ impl FileSystemMemoStorage {
         // Create index path in the memos directory
         let index_path = memos_dir.join(".search_index");
         let search_engine = AdvancedMemoSearchEngine::new_persistent(index_path).await?;
-        
+
         Ok(Self {
             state: MemoState { memos_dir },
             creation_lock: Mutex::new(()),
@@ -555,13 +555,13 @@ impl FileSystemMemoStorage {
         if self.search_engine.is_none() {
             let index_path = self.state.memos_dir.join(".search_index");
             let search_engine = AdvancedMemoSearchEngine::new_persistent(index_path).await?;
-            
+
             // Index all existing memos
             let all_memos = self.list_memos().await?;
             if !all_memos.is_empty() {
                 search_engine.index_memos(&all_memos).await?;
             }
-            
+
             self.search_engine = Some(search_engine);
         }
         Ok(())
@@ -697,10 +697,10 @@ impl MemoStorage for FileSystemMemoStorage {
 
         let memo = Memo::new(title, content);
         self.create_memo_file_atomically(&memo).await?;
-        
+
         // Index the memo in the search engine if available
         self.index_memo_if_available(&memo).await?;
-        
+
         Ok(memo)
     }
 
@@ -717,10 +717,10 @@ impl MemoStorage for FileSystemMemoStorage {
         let mut memo = self.get_memo(id).await?;
         memo.update_content(content);
         self.save_memo_to_file(&memo).await?;
-        
+
         // Update the memo in the search engine if available
         self.index_memo_if_available(&memo).await?;
-        
+
         Ok(memo)
     }
 
@@ -731,10 +731,10 @@ impl MemoStorage for FileSystemMemoStorage {
         }
 
         tokio::fs::remove_file(path).await?;
-        
+
         // Remove the memo from the search engine if available
         self.remove_memo_from_index_if_available(id).await?;
-        
+
         Ok(())
     }
 
@@ -1199,7 +1199,7 @@ mod tests {
         for i in 1..=5 {
             storage
                 .create_memo(
-                    format!("Test Memo {}", i),
+                    format!("Test Memo {i}"),
                     "Testing search functionality".to_string(),
                 )
                 .await
@@ -1355,7 +1355,7 @@ mod tests {
 
         let unicode_title = "🚀 Test with 中文 and émojis 🎉";
         let unicode_content = "Content with Unicode: ñáéíóú, 中文测试, 🌟✨🎯";
-        
+
         let memo = storage
             .create_memo(unicode_title.to_string(), unicode_content.to_string())
             .await
@@ -1425,7 +1425,10 @@ mod tests {
 
         let whitespace_content = "\n\nContent with\n  multiple\n\n  lines\n\nand   spaces\t\t\n";
         let memo = storage
-            .create_memo("Whitespace Test".to_string(), whitespace_content.to_string())
+            .create_memo(
+                "Whitespace Test".to_string(),
+                whitespace_content.to_string(),
+            )
             .await
             .unwrap();
 
@@ -1457,7 +1460,10 @@ mod tests {
         let (storage, _temp_dir) = create_test_storage();
 
         storage
-            .create_memo("CamelCase Title".to_string(), "MixedCase content".to_string())
+            .create_memo(
+                "CamelCase Title".to_string(),
+                "MixedCase content".to_string(),
+            )
             .await
             .unwrap();
 
@@ -1497,7 +1503,10 @@ mod tests {
         let (storage, _temp_dir) = create_test_storage();
 
         storage
-            .create_memo("Regex Test".to_string(), "Pattern with .* and [brackets]".to_string())
+            .create_memo(
+                "Regex Test".to_string(),
+                "Pattern with .* and [brackets]".to_string(),
+            )
             .await
             .unwrap();
 
@@ -1514,45 +1523,57 @@ mod tests {
         let (storage, _temp_dir) = create_test_storage();
 
         // Create memos concurrently
-        let create_tasks: Vec<_> = (0..20).map(|i| {
-            let storage_ref = &storage;
-            async move {
-                storage_ref
-                    .create_memo(format!("Concurrent {}", i), format!("Content {}", i))
-                    .await
-            }
-        }).collect();
+        let create_tasks: Vec<_> = (0..20)
+            .map(|i| {
+                let storage_ref = &storage;
+                async move {
+                    storage_ref
+                        .create_memo(format!("Concurrent {i}"), format!("Content {i}"))
+                        .await
+                }
+            })
+            .collect();
 
         let created_memos = futures::future::try_join_all(create_tasks).await.unwrap();
         assert_eq!(created_memos.len(), 20);
 
         // Verify all memos can be retrieved concurrently
-        let get_tasks: Vec<_> = created_memos.iter().map(|memo| {
-            let storage_ref = &storage;
-            async move { storage_ref.get_memo(&memo.id).await }
-        }).collect();
+        let get_tasks: Vec<_> = created_memos
+            .iter()
+            .map(|memo| {
+                let storage_ref = &storage;
+                async move { storage_ref.get_memo(&memo.id).await }
+            })
+            .collect();
 
         let retrieved_memos = futures::future::try_join_all(get_tasks).await.unwrap();
         assert_eq!(retrieved_memos.len(), 20);
 
         // Update memos concurrently
-        let update_tasks: Vec<_> = created_memos.iter().enumerate().map(|(i, memo)| {
-            let storage_ref = &storage;
-            async move {
-                storage_ref
-                    .update_memo(&memo.id, format!("Updated content {}", i))
-                    .await
-            }
-        }).collect();
+        let update_tasks: Vec<_> = created_memos
+            .iter()
+            .enumerate()
+            .map(|(i, memo)| {
+                let storage_ref = &storage;
+                async move {
+                    storage_ref
+                        .update_memo(&memo.id, format!("Updated content {i}"))
+                        .await
+                }
+            })
+            .collect();
 
         let updated_memos = futures::future::try_join_all(update_tasks).await.unwrap();
         assert_eq!(updated_memos.len(), 20);
 
         // Delete memos concurrently
-        let delete_tasks: Vec<_> = created_memos.iter().map(|memo| {
-            let storage_ref = &storage;
-            async move { storage_ref.delete_memo(&memo.id).await }
-        }).collect();
+        let delete_tasks: Vec<_> = created_memos
+            .iter()
+            .map(|memo| {
+                let storage_ref = &storage;
+                async move { storage_ref.delete_memo(&memo.id).await }
+            })
+            .collect();
 
         futures::future::try_join_all(delete_tasks).await.unwrap();
 
@@ -1566,7 +1587,9 @@ mod tests {
         let (storage, _temp_dir) = create_test_storage();
 
         let fake_id = MemoId::new();
-        let result = storage.update_memo(&fake_id, "New content".to_string()).await;
+        let result = storage
+            .update_memo(&fake_id, "New content".to_string())
+            .await;
 
         assert!(result.is_err());
         match result {
@@ -1593,13 +1616,18 @@ mod tests {
     #[tokio::test]
     async fn test_directory_creation() {
         let temp_dir = TempDir::new().unwrap();
-        let nested_path = temp_dir.path().join("deeply").join("nested").join("path").join("memos");
-        
+        let nested_path = temp_dir
+            .path()
+            .join("deeply")
+            .join("nested")
+            .join("path")
+            .join("memos");
+
         // Directory doesn't exist yet
         assert!(!nested_path.exists());
 
         let storage = FileSystemMemoStorage::new(nested_path.clone());
-        
+
         // Creating a memo should create the directory
         let memo = storage
             .create_memo("Dir Creation Test".to_string(), "Test content".to_string())
@@ -1639,7 +1667,9 @@ mod tests {
 
         // Manually corrupt the memo file
         let memo_path = storage.get_memo_path(&memo.id);
-        tokio::fs::write(&memo_path, "invalid json content").await.unwrap();
+        tokio::fs::write(&memo_path, "invalid json content")
+            .await
+            .unwrap();
 
         // Attempting to get the corrupted memo should fail
         let result = storage.get_memo(&memo.id).await;
@@ -1701,7 +1731,7 @@ mod tests {
         for i in 1..=10 {
             let content = "word ".repeat(100); // ~500 characters each
             storage
-                .create_memo(format!("Memo {}", i), content)
+                .create_memo(format!("Memo {i}"), content)
                 .await
                 .unwrap();
         }
@@ -1713,10 +1743,10 @@ mod tests {
         };
 
         let context = storage.get_all_context(&options).await.unwrap();
-        
+
         // Context should be truncated due to token limit
         assert!(context.len() < 5000); // Much smaller than total content
-        
+
         // Should contain at least one memo
         assert!(context.contains("Memo"));
     }
@@ -1732,7 +1762,7 @@ mod tests {
 
         let original_created = memo.created_at;
         let original_updated = memo.updated_at;
-        
+
         // Initially, created_at and updated_at should be the same
         assert_eq!(original_created, original_updated);
 
@@ -1754,11 +1784,11 @@ mod tests {
         let (storage, _temp_dir) = create_test_storage();
 
         let mut memo_ids = Vec::new();
-        
+
         // Create memos in sequence
         for i in 0..10 {
             let memo = storage
-                .create_memo(format!("Memo {}", i), format!("Content {}", i))
+                .create_memo(format!("Memo {i}"), format!("Content {i}"))
                 .await
                 .unwrap();
             memo_ids.push(memo.id.clone());
@@ -1768,7 +1798,7 @@ mod tests {
         // is not guaranteed when generated in rapid succession due to timestamp precision)
         let mut sorted_ids = memo_ids.clone();
         sorted_ids.sort();
-        
+
         // Verify that all IDs are unique and lexicographically sortable
         assert_eq!(sorted_ids.len(), memo_ids.len());
 
@@ -1776,7 +1806,7 @@ mod tests {
         for id in &memo_ids {
             assert_eq!(id.as_str().len(), 26);
         }
-        
+
         let mut unique_ids = memo_ids.clone();
         unique_ids.dedup();
         assert_eq!(unique_ids.len(), memo_ids.len());
@@ -1802,12 +1832,12 @@ mod tests {
             fs::set_permissions(&memos_dir, perms).unwrap();
 
             let storage = FileSystemMemoStorage::new(memos_dir.clone());
-            
+
             // Creating a memo should fail due to read-only directory
             let result = storage
                 .create_memo("Test".to_string(), "Content".to_string())
                 .await;
-            
+
             assert!(result.is_err());
 
             // Restore permissions for cleanup
@@ -1828,8 +1858,8 @@ mod tests {
         for i in 0..num_memos {
             let memo = storage
                 .create_memo(
-                    format!("Large Collection Memo {}", i),
-                    format!("Content for memo {} in large collection test", i)
+                    format!("Large Collection Memo {i}"),
+                    format!("Content for memo {i} in large collection test"),
                 )
                 .await
                 .unwrap();
@@ -1851,7 +1881,7 @@ mod tests {
         };
         let context = storage.get_all_context(&options).await.unwrap();
         assert!(!context.is_empty());
-        
+
         // Cleanup by deleting all memos
         for memo_id in created_ids {
             storage.delete_memo(&memo_id).await.unwrap();
@@ -1881,25 +1911,30 @@ mod tests {
 
         // Create a memo first
         let memo = storage
-            .create_memo("Race Condition Test".to_string(), "Original content".to_string())
+            .create_memo(
+                "Race Condition Test".to_string(),
+                "Original content".to_string(),
+            )
             .await
             .unwrap();
 
         let memo_id = memo.id.clone();
 
         // Perform concurrent updates to the same memo to test race conditions
-        let update_tasks: Vec<_> = (0..10).map(|i| {
-            let storage_ref = &storage;
-            let id = memo_id.clone();
-            async move {
-                storage_ref
-                    .update_memo(&id, format!("Updated content {}", i))
-                    .await
-            }
-        }).collect();
+        let update_tasks: Vec<_> = (0..10)
+            .map(|i| {
+                let storage_ref = &storage;
+                let id = memo_id.clone();
+                async move {
+                    storage_ref
+                        .update_memo(&id, format!("Updated content {i}"))
+                        .await
+                }
+            })
+            .collect();
 
         let results = futures::future::join_all(update_tasks).await;
-        
+
         // At least some updates should succeed (exact count depends on timing)
         let successful_updates = results.iter().filter(|r| r.is_ok()).count();
         assert!(successful_updates > 0);
@@ -1949,7 +1984,7 @@ mod tests {
     async fn test_empty_directory_edge_cases() {
         let temp_dir = TempDir::new().unwrap();
         let empty_memos_dir = temp_dir.path().join("empty_memos");
-        
+
         // Don't create the directory yet
         let storage = FileSystemMemoStorage::new(empty_memos_dir.clone());
 
@@ -1962,7 +1997,10 @@ mod tests {
         assert_eq!(search_results.len(), 0);
 
         // Context on non-existent directory should return empty
-        let context = storage.get_all_context(&crate::memoranda::ContextOptions::default()).await.unwrap();
+        let context = storage
+            .get_all_context(&crate::memoranda::ContextOptions::default())
+            .await
+            .unwrap();
         assert!(context.is_empty());
     }
 
@@ -1973,7 +2011,10 @@ mod tests {
         // Test with content that might break JSON serialization
         let tricky_content = r#"Content with "nested quotes", 'apostrophes', and \special\chars\"#;
         let memo = storage
-            .create_memo("Serialization Edge Case".to_string(), tricky_content.to_string())
+            .create_memo(
+                "Serialization Edge Case".to_string(),
+                tricky_content.to_string(),
+            )
             .await
             .unwrap();
 
@@ -1993,9 +2034,18 @@ mod tests {
         let (storage, _temp_dir) = create_test_storage();
 
         // Create memos with varying content sizes
-        storage.create_memo("Small".to_string(), "Short".to_string()).await.unwrap();
-        storage.create_memo("Medium".to_string(), "Medium length content ".repeat(10)).await.unwrap();
-        storage.create_memo("Large".to_string(), "Very long content ".repeat(1000)).await.unwrap();
+        storage
+            .create_memo("Small".to_string(), "Short".to_string())
+            .await
+            .unwrap();
+        storage
+            .create_memo("Medium".to_string(), "Medium length content ".repeat(10))
+            .await
+            .unwrap();
+        storage
+            .create_memo("Large".to_string(), "Very long content ".repeat(1000))
+            .await
+            .unwrap();
 
         let options = crate::memoranda::ContextOptions {
             max_tokens: Some(500), // Should truncate appropriately
@@ -2004,7 +2054,9 @@ mod tests {
 
         let context = storage.get_all_context(&options).await.unwrap();
         assert!(!context.is_empty());
-        assert!(context.contains("Small") || context.contains("Medium") || context.contains("Large"));
+        assert!(
+            context.contains("Small") || context.contains("Medium") || context.contains("Large")
+        );
     }
 
     #[tokio::test]
@@ -2012,7 +2064,10 @@ mod tests {
         let (storage, _temp_dir) = create_test_storage();
 
         storage
-            .create_memo("Edge Case Test".to_string(), "Testing edge case scenarios".to_string())
+            .create_memo(
+                "Edge Case Test".to_string(),
+                "Testing edge case scenarios".to_string(),
+            )
             .await
             .unwrap();
 

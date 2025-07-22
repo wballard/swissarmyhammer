@@ -1,7 +1,7 @@
 //! Performance benchmarks for memoranda functionality
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use swissarmyhammer::memoranda::{FileSystemMemoStorage, MemoStorage, Memo};
+use swissarmyhammer::memoranda::{FileSystemMemoStorage, Memo, MemoStorage};
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
@@ -20,10 +20,13 @@ fn bench_memo_creation(c: &mut Criterion) {
         b.iter(|| {
             rt.block_on(async {
                 let (storage, _temp_dir) = create_test_storage();
-                let result = storage.create_memo(
-                    "Benchmark Test".to_string(),
-                    "This is test content for benchmarking".to_string(),
-                ).await.unwrap();
+                let result = storage
+                    .create_memo(
+                        "Benchmark Test".to_string(),
+                        "This is test content for benchmarking".to_string(),
+                    )
+                    .await
+                    .unwrap();
                 black_box(result);
             })
         })
@@ -39,11 +42,14 @@ fn bench_memo_retrieval(c: &mut Criterion) {
             rt.block_on(async {
                 let (storage, _temp_dir) = create_test_storage();
                 // Create a memo first
-                let memo = storage.create_memo(
-                    "Test Memo".to_string(),
-                    "Content for retrieval test".to_string(),
-                ).await.unwrap();
-                
+                let memo = storage
+                    .create_memo(
+                        "Test Memo".to_string(),
+                        "Content for retrieval test".to_string(),
+                    )
+                    .await
+                    .unwrap();
+
                 // Now retrieve it
                 let result = storage.get_memo(&memo.id).await.unwrap();
                 black_box(result);
@@ -62,12 +68,15 @@ fn bench_memo_search(c: &mut Criterion) {
                 let (storage, _temp_dir) = create_test_storage();
                 // Create some test memos
                 for i in 0..10 {
-                    storage.create_memo(
-                        format!("Test Memo {}", i),
-                        format!("Content about projects and meetings {}", i),
-                    ).await.unwrap();
+                    storage
+                        .create_memo(
+                            format!("Test Memo {}", i),
+                            format!("Content about projects and meetings {}", i),
+                        )
+                        .await
+                        .unwrap();
                 }
-                
+
                 // Search for them
                 let results = storage.search_memos("projects").await.unwrap();
                 black_box(results);
@@ -86,12 +95,15 @@ fn bench_memo_list(c: &mut Criterion) {
                 let (storage, _temp_dir) = create_test_storage();
                 // Create some test memos
                 for i in 0..10 {
-                    storage.create_memo(
-                        format!("Test Memo {}", i),
-                        format!("Content for listing test {}", i),
-                    ).await.unwrap();
+                    storage
+                        .create_memo(
+                            format!("Test Memo {}", i),
+                            format!("Content for listing test {}", i),
+                        )
+                        .await
+                        .unwrap();
                 }
-                
+
                 // List them
                 let results = storage.list_memos().await.unwrap();
                 black_box(results);

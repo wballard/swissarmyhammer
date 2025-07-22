@@ -1,5 +1,5 @@
 //! Comprehensive MCP integration tests for memoranda functionality
-//! 
+//!
 //! Tests all MCP tool handlers for memo operations including:
 //! - Creating, reading, updating, deleting memos
 //! - Searching and listing memos  
@@ -34,7 +34,7 @@ mod test_utils {
         // Create unique temporary directory for memo storage to ensure test isolation
         let temp_dir = tempfile::tempdir()?;
         let memos_dir = temp_dir.path().join("memos");
-        
+
         let child = Command::new("cargo")
             .args(["run", "--bin", "swissarmyhammer", "--", "serve"])
             .current_dir("..") // Run from project root
@@ -50,7 +50,10 @@ mod test_utils {
     }
 
     /// Initialize MCP connection with handshake
-    pub fn initialize_mcp_connection(stdin: &mut std::process::ChildStdin, reader: &mut BufReader<std::process::ChildStdout>) -> std::io::Result<()> {
+    pub fn initialize_mcp_connection(
+        stdin: &mut std::process::ChildStdin,
+        reader: &mut BufReader<std::process::ChildStdout>,
+    ) -> std::io::Result<()> {
         let init_request = json!({
             "jsonrpc": "2.0",
             "id": 0,
@@ -67,12 +70,12 @@ mod test_utils {
 
         send_request(stdin, init_request)?;
         let response = read_response(reader)?;
-        
+
         // Verify successful initialization
         if response.get("error").is_some() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("MCP initialization failed: {:?}", response["error"])
+                format!("MCP initialization failed: {:?}", response["error"]),
             ));
         }
 
@@ -82,23 +85,28 @@ mod test_utils {
             "method": "notifications/initialized"
         });
         send_request(stdin, initialized_notification)?;
-        
+
         Ok(())
     }
 
     /// Clean up all existing memos to ensure clean test state
-    pub fn cleanup_all_memos(stdin: &mut std::process::ChildStdin, reader: &mut BufReader<std::process::ChildStdout>) -> std::io::Result<()> {
+    pub fn cleanup_all_memos(
+        stdin: &mut std::process::ChildStdin,
+        reader: &mut BufReader<std::process::ChildStdout>,
+    ) -> std::io::Result<()> {
         // First list all memos
         let list_request = create_tool_request(999, "memo_list", json!({}));
         send_request(stdin, list_request)?;
         let list_response = read_response(reader)?;
-        
+
         if list_response.get("error").is_some() {
-            return Ok(()) // If list fails, assume no memos to clean
+            return Ok(()); // If list fails, assume no memos to clean
         }
-        
-        let response_text = list_response["result"]["content"][0]["text"].as_str().unwrap_or("");
-        
+
+        let response_text = list_response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or("");
+
         // Extract memo IDs from the response text and delete them
         let mut request_id = 1000;
         for line in response_text.lines() {
@@ -106,10 +114,15 @@ mod test_utils {
                 if let Some(end) = line.find(')') {
                     if start < end {
                         let memo_id = &line[start + 1..end];
-                        if memo_id.len() == 26 { // ULID length check
-                            let delete_request = create_tool_request(request_id, "memo_delete", json!({
-                                "id": memo_id
-                            }));
+                        if memo_id.len() == 26 {
+                            // ULID length check
+                            let delete_request = create_tool_request(
+                                request_id,
+                                "memo_delete",
+                                json!({
+                                    "id": memo_id
+                                }),
+                            );
                             send_request(stdin, delete_request)?;
                             let _ = read_response(reader)?; // Consume response
                             request_id += 1;
@@ -118,7 +131,7 @@ mod test_utils {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -128,30 +141,44 @@ mod test_utils {
     }
 
     /// Send JSON-RPC request to MCP server
-    pub fn send_request(stdin: &mut std::process::ChildStdin, request: serde_json::Value) -> std::io::Result<()> {
-        let request_str = serde_json::to_string(&request).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-        })?;
+    pub fn send_request(
+        stdin: &mut std::process::ChildStdin,
+        request: serde_json::Value,
+    ) -> std::io::Result<()> {
+        let request_str = serde_json::to_string(&request)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         writeln!(stdin, "{request_str}")?;
         stdin.flush()
     }
 
     /// Read JSON-RPC response from MCP server
-    pub fn read_response(reader: &mut BufReader<std::process::ChildStdout>) -> std::io::Result<serde_json::Value> {
+    pub fn read_response(
+        reader: &mut BufReader<std::process::ChildStdout>,
+    ) -> std::io::Result<serde_json::Value> {
         let mut line = String::new();
         reader.read_line(&mut line)?;
-        
+
         if line.trim().is_empty() {
-            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Empty response"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "Empty response",
+            ));
         }
 
         serde_json::from_str(&line).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, format!("JSON parse error: {}", e))
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("JSON parse error: {}", e),
+            )
         })
     }
 
     /// Create a standard MCP tool call request
-    pub fn create_tool_request(id: i64, tool_name: &str, arguments: serde_json::Value) -> serde_json::Value {
+    pub fn create_tool_request(
+        id: i64,
+        tool_name: &str,
+        arguments: serde_json::Value,
+    ) -> serde_json::Value {
         json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -180,10 +207,14 @@ async fn test_mcp_memo_create() {
     initialize_mcp_connection(&mut stdin, &mut reader).unwrap();
 
     // Test successful memo creation
-    let create_request = create_tool_request(1, "memo_create", json!({
-        "title": "Test Memo via MCP",
-        "content": "This is test content created via MCP"
-    }));
+    let create_request = create_tool_request(
+        1,
+        "memo_create",
+        json!({
+            "title": "Test Memo via MCP",
+            "content": "This is test content created via MCP"
+        }),
+    );
 
     send_request(&mut stdin, create_request).unwrap();
     let response = read_response(&mut reader).unwrap();
@@ -192,10 +223,16 @@ async fn test_mcp_memo_create() {
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
     assert!(response.get("error").is_none());
-    
+
     let result = &response["result"];
-    assert!(result["content"][0]["text"].as_str().unwrap().contains("Successfully created memo"));
-    assert!(result["content"][0]["text"].as_str().unwrap().contains("Test Memo via MCP"));
+    assert!(result["content"][0]["text"]
+        .as_str()
+        .unwrap()
+        .contains("Successfully created memo"));
+    assert!(result["content"][0]["text"]
+        .as_str()
+        .unwrap()
+        .contains("Test Memo via MCP"));
 }
 
 /// Test memo creation with empty title and content
@@ -211,10 +248,14 @@ async fn test_mcp_memo_create_empty_content() {
     // Initialize MCP connection
     initialize_mcp_connection(&mut stdin, &mut reader).unwrap();
 
-    let create_request = create_tool_request(1, "memo_create", json!({
-        "title": "",
-        "content": ""
-    }));
+    let create_request = create_tool_request(
+        1,
+        "memo_create",
+        json!({
+            "title": "",
+            "content": ""
+        }),
+    );
 
     send_request(&mut stdin, create_request).unwrap();
     let response = read_response(&mut reader).unwrap();
@@ -222,7 +263,10 @@ async fn test_mcp_memo_create_empty_content() {
     // Should succeed even with empty content
     assert!(response.get("error").is_none());
     let result = &response["result"];
-    assert!(result["content"][0]["text"].as_str().unwrap().contains("Successfully created memo"));
+    assert!(result["content"][0]["text"]
+        .as_str()
+        .unwrap()
+        .contains("Successfully created memo"));
 }
 
 /// Test memo creation with unicode content
@@ -238,10 +282,14 @@ async fn test_mcp_memo_create_unicode() {
     // Initialize MCP connection
     initialize_mcp_connection(&mut stdin, &mut reader).unwrap();
 
-    let create_request = create_tool_request(1, "memo_create", json!({
-        "title": "🚀 Unicode Test with 中文",
-        "content": "Content with émojis 🎉 and unicode chars: ñáéíóú, 中文测试"
-    }));
+    let create_request = create_tool_request(
+        1,
+        "memo_create",
+        json!({
+            "title": "🚀 Unicode Test with 中文",
+            "content": "Content with émojis 🎉 and unicode chars: ñáéíóú, 中文测试"
+        }),
+    );
 
     send_request(&mut stdin, create_request).unwrap();
     let response = read_response(&mut reader).unwrap();
@@ -270,22 +318,32 @@ async fn test_mcp_memo_get() {
     cleanup_all_memos(&mut stdin, &mut reader).unwrap();
 
     // First create a memo
-    let create_request = create_tool_request(1, "memo_create", json!({
-        "title": "Test Get Memo",
-        "content": "Content for get test"
-    }));
+    let create_request = create_tool_request(
+        1,
+        "memo_create",
+        json!({
+            "title": "Test Get Memo",
+            "content": "Content for get test"
+        }),
+    );
 
     send_request(&mut stdin, create_request).unwrap();
     let create_response = read_response(&mut reader).unwrap();
-    
+
     // Extract memo ID from creation response
-    let create_text = create_response["result"]["content"][0]["text"].as_str().unwrap();
+    let create_text = create_response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap();
     let memo_id = extract_memo_id_from_response(create_text);
 
     // Now get the memo
-    let get_request = create_tool_request(2, "memo_get", json!({
-        "id": memo_id
-    }));
+    let get_request = create_tool_request(
+        2,
+        "memo_get",
+        json!({
+            "id": memo_id
+        }),
+    );
 
     send_request(&mut stdin, get_request).unwrap();
     let get_response = read_response(&mut reader).unwrap();
@@ -311,9 +369,13 @@ async fn test_mcp_memo_get_invalid_id() {
     // Initialize MCP connection
     initialize_mcp_connection(&mut stdin, &mut reader).unwrap();
 
-    let get_request = create_tool_request(1, "memo_get", json!({
-        "id": "invalid-memo-id"
-    }));
+    let get_request = create_tool_request(
+        1,
+        "memo_get",
+        json!({
+            "id": "invalid-memo-id"
+        }),
+    );
 
     send_request(&mut stdin, get_request).unwrap();
     let response = read_response(&mut reader).unwrap();
@@ -322,7 +384,10 @@ async fn test_mcp_memo_get_invalid_id() {
     assert!(response.get("error").is_some());
     let error = &response["error"];
     assert_eq!(error["code"], -32602); // Invalid params
-    assert!(error["message"].as_str().unwrap().contains("Invalid memo ID format"));
+    assert!(error["message"]
+        .as_str()
+        .unwrap()
+        .contains("Invalid memo ID format"));
 }
 
 /// Test memo get with non-existent valid ID
@@ -338,9 +403,13 @@ async fn test_mcp_memo_get_nonexistent() {
     // Initialize MCP connection
     initialize_mcp_connection(&mut stdin, &mut reader).unwrap();
 
-    let get_request = create_tool_request(1, "memo_get", json!({
-        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV" // Valid ULID format but doesn't exist
-    }));
+    let get_request = create_tool_request(
+        1,
+        "memo_get",
+        json!({
+            "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV" // Valid ULID format but doesn't exist
+        }),
+    );
 
     send_request(&mut stdin, get_request).unwrap();
     let response = read_response(&mut reader).unwrap();
@@ -369,22 +438,32 @@ async fn test_mcp_memo_update() {
     cleanup_all_memos(&mut stdin, &mut reader).unwrap();
 
     // Create a memo first
-    let create_request = create_tool_request(1, "memo_create", json!({
-        "title": "Update Test Memo",
-        "content": "Original content"
-    }));
+    let create_request = create_tool_request(
+        1,
+        "memo_create",
+        json!({
+            "title": "Update Test Memo",
+            "content": "Original content"
+        }),
+    );
 
     send_request(&mut stdin, create_request).unwrap();
     let create_response = read_response(&mut reader).unwrap();
     let memo_id = extract_memo_id_from_response(
-        create_response["result"]["content"][0]["text"].as_str().unwrap()
+        create_response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
     );
 
     // Update the memo
-    let update_request = create_tool_request(2, "memo_update", json!({
-        "id": memo_id,
-        "content": "Updated content via MCP"
-    }));
+    let update_request = create_tool_request(
+        2,
+        "memo_update",
+        json!({
+            "id": memo_id,
+            "content": "Updated content via MCP"
+        }),
+    );
 
     send_request(&mut stdin, update_request).unwrap();
     let update_response = read_response(&mut reader).unwrap();
@@ -414,33 +493,50 @@ async fn test_mcp_memo_delete() {
     cleanup_all_memos(&mut stdin, &mut reader).unwrap();
 
     // Create a memo first
-    let create_request = create_tool_request(1, "memo_create", json!({
-        "title": "Delete Test Memo",
-        "content": "To be deleted"
-    }));
+    let create_request = create_tool_request(
+        1,
+        "memo_create",
+        json!({
+            "title": "Delete Test Memo",
+            "content": "To be deleted"
+        }),
+    );
 
     send_request(&mut stdin, create_request).unwrap();
     let create_response = read_response(&mut reader).unwrap();
     let memo_id = extract_memo_id_from_response(
-        create_response["result"]["content"][0]["text"].as_str().unwrap()
+        create_response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
     );
 
     // Delete the memo
-    let delete_request = create_tool_request(2, "memo_delete", json!({
-        "id": memo_id
-    }));
+    let delete_request = create_tool_request(
+        2,
+        "memo_delete",
+        json!({
+            "id": memo_id
+        }),
+    );
 
     send_request(&mut stdin, delete_request).unwrap();
     let delete_response = read_response(&mut reader).unwrap();
 
     assert!(delete_response.get("error").is_none());
     let result = &delete_response["result"];
-    assert!(result["content"][0]["text"].as_str().unwrap().contains("Successfully deleted memo"));
+    assert!(result["content"][0]["text"]
+        .as_str()
+        .unwrap()
+        .contains("Successfully deleted memo"));
 
     // Verify memo is actually deleted by trying to get it
-    let get_request = create_tool_request(3, "memo_get", json!({
-        "id": memo_id
-    }));
+    let get_request = create_tool_request(
+        3,
+        "memo_get",
+        json!({
+            "id": memo_id
+        }),
+    );
 
     send_request(&mut stdin, get_request).unwrap();
     let get_response = read_response(&mut reader).unwrap();
@@ -469,17 +565,23 @@ async fn test_mcp_memo_list() {
     let list_request = create_tool_request(1, "memo_list", json!({}));
     send_request(&mut stdin, list_request).unwrap();
     let empty_response = read_response(&mut reader).unwrap();
-    
+
     assert!(empty_response.get("error").is_none());
-    let actual_text = empty_response["result"]["content"][0]["text"].as_str().unwrap();
+    let actual_text = empty_response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap();
     assert!(actual_text.contains("No memos found") || actual_text.contains("Found 0 memos"));
 
     // Create some memos
     for i in 1..=3 {
-        let create_request = create_tool_request(i + 1, "memo_create", json!({
-            "title": format!("List Test Memo {}", i),
-            "content": format!("Content for memo {}", i)
-        }));
+        let create_request = create_tool_request(
+            i + 1,
+            "memo_create",
+            json!({
+                "title": format!("List Test Memo {}", i),
+                "content": format!("Content for memo {}", i)
+            }),
+        );
         send_request(&mut stdin, create_request).unwrap();
         let _ = read_response(&mut reader).unwrap(); // Consume response
     }
@@ -523,18 +625,26 @@ async fn test_mcp_memo_search() {
     ];
 
     for (i, (title, content)) in test_memos.iter().enumerate() {
-        let create_request = create_tool_request(i as i64 + 1, "memo_create", json!({
-            "title": title,
-            "content": content
-        }));
+        let create_request = create_tool_request(
+            i as i64 + 1,
+            "memo_create",
+            json!({
+                "title": title,
+                "content": content
+            }),
+        );
         send_request(&mut stdin, create_request).unwrap();
         let _ = read_response(&mut reader).unwrap();
     }
 
     // Search for "Rust" - should find 2 memos
-    let search_request = create_tool_request(10, "memo_search", json!({
-        "query": "Rust"
-    }));
+    let search_request = create_tool_request(
+        10,
+        "memo_search",
+        json!({
+            "query": "Rust"
+        }),
+    );
     send_request(&mut stdin, search_request).unwrap();
     let search_response = read_response(&mut reader).unwrap();
 
@@ -546,13 +656,19 @@ async fn test_mcp_memo_search() {
     assert!(text.contains("Rust Advanced"));
 
     // Search for non-existent content
-    let empty_search = create_tool_request(11, "memo_search", json!({
-        "query": "nonexistent"
-    }));
+    let empty_search = create_tool_request(
+        11,
+        "memo_search",
+        json!({
+            "query": "nonexistent"
+        }),
+    );
     send_request(&mut stdin, empty_search).unwrap();
     let empty_response = read_response(&mut reader).unwrap();
 
-    let empty_text = empty_response["result"]["content"][0]["text"].as_str().unwrap();
+    let empty_text = empty_response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap();
     assert!(empty_text.contains("No memos found matching query"));
 }
 
@@ -573,20 +689,28 @@ async fn test_mcp_memo_search_case_insensitive() {
     cleanup_all_memos(&mut stdin, &mut reader).unwrap();
 
     // Create a memo with mixed case
-    let create_request = create_tool_request(1, "memo_create", json!({
-        "title": "CamelCase Title",
-        "content": "Content with MixedCase words"
-    }));
+    let create_request = create_tool_request(
+        1,
+        "memo_create",
+        json!({
+            "title": "CamelCase Title",
+            "content": "Content with MixedCase words"
+        }),
+    );
     send_request(&mut stdin, create_request).unwrap();
     let _ = read_response(&mut reader).unwrap();
 
     // Search with different cases
     let search_cases = vec!["camelcase", "MIXEDCASE", "MiXeDcAsE"];
-    
+
     for (i, query) in search_cases.iter().enumerate() {
-        let search_request = create_tool_request(i as i64 + 2, "memo_search", json!({
-            "query": query
-        }));
+        let search_request = create_tool_request(
+            i as i64 + 2,
+            "memo_search",
+            json!({
+                "query": query
+            }),
+        );
         send_request(&mut stdin, search_request).unwrap();
         let response = read_response(&mut reader).unwrap();
 
@@ -616,20 +740,26 @@ async fn test_mcp_memo_get_all_context() {
     let context_request = create_tool_request(1, "memo_get_all_context", json!({}));
     send_request(&mut stdin, context_request).unwrap();
     let empty_response = read_response(&mut reader).unwrap();
-    
+
     assert!(empty_response.get("error").is_none());
-    let context_text = empty_response["result"]["content"][0]["text"].as_str().unwrap();
+    let context_text = empty_response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap();
     assert!(context_text.contains("No memos available") || context_text.contains("Found 0 memos"));
 
     // Create some memos with delays to test ordering
     for i in 1..=3 {
-        let create_request = create_tool_request(i + 1, "memo_create", json!({
-            "title": format!("Context Memo {}", i),
-            "content": format!("Context content for memo {}", i)
-        }));
+        let create_request = create_tool_request(
+            i + 1,
+            "memo_create",
+            json!({
+                "title": format!("Context Memo {}", i),
+                "content": format!("Context content for memo {}", i)
+            }),
+        );
         send_request(&mut stdin, create_request).unwrap();
         let _ = read_response(&mut reader).unwrap();
-        
+
         // Small delay to ensure different timestamps
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
@@ -642,7 +772,7 @@ async fn test_mcp_memo_get_all_context() {
     assert!(context_response.get("error").is_none());
     let result = &context_response["result"];
     let text = result["content"][0]["text"].as_str().unwrap();
-    
+
     assert!(text.contains("All memo context (3 memos)"));
     assert!(text.contains("Context Memo 1"));
     assert!(text.contains("Context Memo 2"));
@@ -668,32 +798,48 @@ async fn test_mcp_memo_large_content() {
 
     // Create a large memo (100KB content)
     let large_content = "x".repeat(100_000);
-    let create_request = create_tool_request(1, "memo_create", json!({
-        "title": "Large Content Memo",
-        "content": large_content
-    }));
+    let create_request = create_tool_request(
+        1,
+        "memo_create",
+        json!({
+            "title": "Large Content Memo",
+            "content": large_content
+        }),
+    );
 
     send_request(&mut stdin, create_request).unwrap();
     let create_response = read_response(&mut reader).unwrap();
 
     assert!(create_response.get("error").is_none());
-    assert!(create_response["result"]["content"][0]["text"].as_str().unwrap().contains("Successfully created memo"));
-    
+    assert!(create_response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap()
+        .contains("Successfully created memo"));
+
     // Extract ID and verify we can retrieve it
     let memo_id = extract_memo_id_from_response(
-        create_response["result"]["content"][0]["text"].as_str().unwrap()
+        create_response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
     );
 
-    let get_request = create_tool_request(2, "memo_get", json!({
-        "id": memo_id
-    }));
+    let get_request = create_tool_request(
+        2,
+        "memo_get",
+        json!({
+            "id": memo_id
+        }),
+    );
 
     send_request(&mut stdin, get_request).unwrap();
     let get_response = read_response(&mut reader).unwrap();
 
     assert!(get_response.get("error").is_none());
     // The get response should contain the large content (truncated in preview)
-    assert!(get_response["result"]["content"][0]["text"].as_str().unwrap().contains("Large Content Memo"));
+    assert!(get_response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap()
+        .contains("Large Content Memo"));
 }
 
 /// Test concurrent MCP requests
@@ -714,10 +860,14 @@ async fn test_mcp_memo_concurrent_requests() {
 
     // Send multiple create requests concurrently (in rapid succession)
     for i in 1..=5 {
-        let create_request = create_tool_request(i, "memo_create", json!({
-            "title": format!("Concurrent Memo {}", i),
-            "content": format!("Content for concurrent memo {}", i)
-        }));
+        let create_request = create_tool_request(
+            i,
+            "memo_create",
+            json!({
+                "title": format!("Concurrent Memo {}", i),
+                "content": format!("Content for concurrent memo {}", i)
+            }),
+        );
         send_request(&mut stdin, create_request).unwrap();
     }
 
@@ -738,7 +888,9 @@ async fn test_mcp_memo_concurrent_requests() {
     send_request(&mut stdin, list_request).unwrap();
     let list_response = read_response(&mut reader).unwrap();
 
-    let text = list_response["result"]["content"][0]["text"].as_str().unwrap();
+    let text = list_response["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap();
     assert!(text.contains("Found 5 memos"));
 }
 
@@ -756,19 +908,27 @@ async fn test_mcp_memo_malformed_requests() {
     initialize_mcp_connection(&mut stdin, &mut reader).unwrap();
 
     // Test missing required fields
-    let bad_create = create_tool_request(1, "memo_create", json!({
-        "title": "Test"
-        // Missing content field
-    }));
+    let bad_create = create_tool_request(
+        1,
+        "memo_create",
+        json!({
+            "title": "Test"
+            // Missing content field
+        }),
+    );
 
     send_request(&mut stdin, bad_create).unwrap();
     let response = read_response(&mut reader).unwrap();
     assert!(response.get("error").is_some());
 
     // Test invalid tool name
-    let invalid_tool_request = create_tool_request(2, "nonexistent_tool", json!({
-        "some": "argument"
-    }));
+    let invalid_tool_request = create_tool_request(
+        2,
+        "nonexistent_tool",
+        json!({
+            "some": "argument"
+        }),
+    );
 
     send_request(&mut stdin, invalid_tool_request).unwrap();
     let invalid_response = read_response(&mut reader).unwrap();
@@ -803,7 +963,9 @@ async fn test_mcp_memo_tool_list() {
     assert!(tools.is_array());
 
     // Convert tools to list of names for easy checking
-    let tool_names: Vec<&str> = tools.as_array().unwrap()
+    let tool_names: Vec<&str> = tools
+        .as_array()
+        .unwrap()
         .iter()
         .map(|tool| tool["name"].as_str().unwrap())
         .collect();
@@ -811,7 +973,7 @@ async fn test_mcp_memo_tool_list() {
     // Verify all memo tools are present
     let expected_memo_tools = vec![
         "memo_create",
-        "memo_get", 
+        "memo_get",
         "memo_update",
         "memo_delete",
         "memo_list",
@@ -867,42 +1029,66 @@ mod stress_tests {
 
         // Create many memos
         for i in 1..=num_memos {
-            let create_request = create_tool_request(i, "memo_create", json!({
-                "title": format!("Stress Test Memo {}", i),
-                "content": format!("Content for stress test memo {} with some additional text to make it longer", i)
-            }));
+            let create_request = create_tool_request(
+                i,
+                "memo_create",
+                json!({
+                    "title": format!("Stress Test Memo {}", i),
+                    "content": format!("Content for stress test memo {} with some additional text to make it longer", i)
+                }),
+            );
             send_request(&mut stdin, create_request).unwrap();
-            
+
             let response = read_response(&mut reader).unwrap();
-            assert!(response.get("error").is_none(), "Failed to create memo {}", i);
-            
+            assert!(
+                response.get("error").is_none(),
+                "Failed to create memo {}",
+                i
+            );
+
             let memo_id = extract_memo_id_from_response(
-                response["result"]["content"][0]["text"].as_str().unwrap()
+                response["result"]["content"][0]["text"].as_str().unwrap(),
             );
             memo_ids.push(memo_id);
         }
 
         // Update all memos
         for (i, memo_id) in memo_ids.iter().enumerate() {
-            let update_request = create_tool_request(i as i64 + num_memos + 1, "memo_update", json!({
-                "id": memo_id,
-                "content": format!("Updated content for memo {}", i + 1)
-            }));
+            let update_request = create_tool_request(
+                i as i64 + num_memos + 1,
+                "memo_update",
+                json!({
+                    "id": memo_id,
+                    "content": format!("Updated content for memo {}", i + 1)
+                }),
+            );
             send_request(&mut stdin, update_request).unwrap();
-            
+
             let response = read_response(&mut reader).unwrap();
-            assert!(response.get("error").is_none(), "Failed to update memo {}", memo_id);
+            assert!(
+                response.get("error").is_none(),
+                "Failed to update memo {}",
+                memo_id
+            );
         }
 
         // Delete all memos
         for (i, memo_id) in memo_ids.iter().enumerate() {
-            let delete_request = create_tool_request(i as i64 + (num_memos * 2) + 1, "memo_delete", json!({
-                "id": memo_id
-            }));
+            let delete_request = create_tool_request(
+                i as i64 + (num_memos * 2) + 1,
+                "memo_delete",
+                json!({
+                    "id": memo_id
+                }),
+            );
             send_request(&mut stdin, delete_request).unwrap();
-            
+
             let response = read_response(&mut reader).unwrap();
-            assert!(response.get("error").is_none(), "Failed to delete memo {}", memo_id);
+            assert!(
+                response.get("error").is_none(),
+                "Failed to delete memo {}",
+                memo_id
+            );
         }
 
         // Verify all memos are deleted
@@ -910,7 +1096,9 @@ mod stress_tests {
         send_request(&mut stdin, list_request).unwrap();
         let list_response = read_response(&mut reader).unwrap();
 
-        let text = list_response["result"]["content"][0]["text"].as_str().unwrap();
+        let text = list_response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap();
         assert!(text.contains("No memos found"));
     }
 
@@ -926,18 +1114,24 @@ mod stress_tests {
         let mut reader = BufReader::new(stdout);
 
         // Create memos with different patterns for searching
-        let patterns = vec!["project", "meeting", "documentation", "development", "testing"];
+        let patterns = vec![
+            "project",
+            "meeting",
+            "documentation",
+            "development",
+            "testing",
+        ];
         let num_per_pattern = 20;
 
         for (pattern_idx, pattern) in patterns.iter().enumerate() {
             for i in 1..=num_per_pattern {
                 let create_request = create_tool_request(
                     pattern_idx as i64 * num_per_pattern + i,
-                    "memo_create", 
+                    "memo_create",
                     json!({
                         "title": format!("{} Task {}", pattern, i),
                         "content": format!("This memo is about {} work item number {} with additional context", pattern, i)
-                    })
+                    }),
                 );
                 send_request(&mut stdin, create_request).unwrap();
                 let _ = read_response(&mut reader).unwrap();
@@ -948,10 +1142,10 @@ mod stress_tests {
         for (pattern_idx, pattern) in patterns.iter().enumerate() {
             let search_request = create_tool_request(
                 1000 + pattern_idx as i64,
-                "memo_search", 
+                "memo_search",
                 json!({
                     "query": pattern
-                })
+                }),
             );
             send_request(&mut stdin, search_request).unwrap();
             let response = read_response(&mut reader).unwrap();

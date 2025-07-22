@@ -860,9 +860,7 @@ impl ToolHandlers {
             Ok(memos) => {
                 tracing::info!("Retrieved {} memos for context", memos.len());
                 if memos.is_empty() {
-                    Ok(create_success_response(
-                        "No memos available".to_string(),
-                    ))
+                    Ok(create_success_response("No memos available".to_string()))
                 } else {
                     // Sort memos by updated_at descending (most recent first)
                     let mut sorted_memos = memos;

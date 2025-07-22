@@ -793,7 +793,7 @@ mod tests {
     #[test]
     fn test_memo_id_display() {
         let id = MemoId::new();
-        let display_str = format!("{}", id);
+        let display_str = format!("{id}");
         assert_eq!(display_str, id.as_str());
     }
 
@@ -848,7 +848,7 @@ mod tests {
     fn test_memo_id_clone() {
         let id = MemoId::new();
         let cloned_id = id.clone();
-        
+
         assert_eq!(id, cloned_id);
         assert_eq!(id.as_str(), cloned_id.as_str());
     }
@@ -871,17 +871,17 @@ mod tests {
     #[test]
     fn test_memo_id_invalid_formats() {
         let invalid_ulids = vec![
-            "",                          // Empty string
-            "short",                     // Too short
+            "",                            // Empty string
+            "short",                       // Too short
             "TOOLONGTOBEAVALIDULIDSTRING", // Too long
-            "01ARZ3NDEKTSV4RRFFQ69G5FA=", // Invalid characters
-            "01ARZ3NDEKTSV4RRFFQ69G5FA!", // Invalid characters
-            "invalid-ulid-format",       // Completely wrong format
+            "01ARZ3NDEKTSV4RRFFQ69G5FA=",  // Invalid characters
+            "01ARZ3NDEKTSV4RRFFQ69G5FA!",  // Invalid characters
+            "invalid-ulid-format",         // Completely wrong format
         ];
 
         for invalid_ulid in invalid_ulids {
             let result = MemoId::from_string(invalid_ulid.to_string());
-            assert!(result.is_err(), "Should fail for: {}", invalid_ulid);
+            assert!(result.is_err(), "Should fail for: {invalid_ulid}");
         }
     }
 
@@ -934,7 +934,7 @@ mod tests {
         // Test with special characters
         let special_memo = Memo::new(
             r#"Title with "quotes""#.to_string(),
-            r#"Content with newlines\nand\ttabs"#.to_string()
+            r#"Content with newlines\nand\ttabs"#.to_string(),
         );
         let json = serde_json::to_string(&special_memo).unwrap();
         let deserialized: Memo = serde_json::from_str(&json).unwrap();
@@ -1000,7 +1000,7 @@ mod tests {
         // Test with extreme values
         let options = ContextOptions {
             include_metadata: false,
-            max_tokens: Some(0), // Edge case: zero tokens
+            max_tokens: Some(0),       // Edge case: zero tokens
             delimiter: "".to_string(), // Empty delimiter
         };
         let json = serde_json::to_string(&options).unwrap();
@@ -1021,13 +1021,13 @@ mod tests {
     #[test]
     fn test_search_result_validation() {
         let memo = Memo::new("Test Title".to_string(), "Test Content".to_string());
-        
+
         // Test with edge case values
         let result = SearchResult {
             memo: memo.clone(),
             relevance_score: 0.0, // Minimum score
-            highlights: vec![],    // Empty highlights
-            match_count: 0,        // Zero matches
+            highlights: vec![],   // Empty highlights
+            match_count: 0,       // Zero matches
         };
         let json = serde_json::to_string(&result).unwrap();
         let deserialized: SearchResult = serde_json::from_str(&json).unwrap();
@@ -1047,9 +1047,9 @@ mod tests {
 
     #[test]
     fn test_response_types_with_large_data() {
-        let memos: Vec<Memo> = (0..1000).map(|i| {
-            Memo::new(format!("Title {}", i), format!("Content {}", i))
-        }).collect();
+        let memos: Vec<Memo> = (0..1000)
+            .map(|i| Memo::new(format!("Title {i}"), format!("Content {i}")))
+            .collect();
 
         // Test ListMemosResponse with many memos
         let list_response = ListMemosResponse {
@@ -1074,14 +1074,14 @@ mod tests {
     #[test]
     fn test_timestamp_precision() {
         let memo = Memo::new("Timestamp Test".to_string(), "Content".to_string());
-        
+
         // Test that timestamps are stored and retrieved precisely
         let json = serde_json::to_string(&memo).unwrap();
         let deserialized: Memo = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(memo.created_at, deserialized.created_at);
         assert_eq!(memo.updated_at, deserialized.updated_at);
-        
+
         // Test timestamp formatting
         let created_str = memo.created_at.to_rfc3339();
         assert!(created_str.len() >= 20); // ISO 8601 format should be at least 20 chars
@@ -1094,7 +1094,7 @@ mod tests {
 mod property_tests {
     use super::*;
     use proptest::prelude::*;
-    
+
     proptest! {
         #[test]
         fn test_memo_id_generation_uniqueness(_seed in 0u64..1000) {
@@ -1103,11 +1103,11 @@ mod property_tests {
             for _ in 0..100 {
                 ids.push(MemoId::new());
             }
-            
+
             // Convert to set to check uniqueness
             let unique_ids: std::collections::HashSet<_> = ids.iter().cloned().collect();
             prop_assert_eq!(unique_ids.len(), ids.len());
-            
+
             // Check all IDs are 26 characters
             for id in &ids {
                 prop_assert_eq!(id.as_str().len(), 26);
@@ -1126,7 +1126,7 @@ mod property_tests {
             sorted_ids.sort();
             sorted_ids.dedup();
             prop_assert_eq!(sorted_ids.len(), count, "All IDs should be unique");
-            
+
             // Check that IDs are valid ULIDs (26 characters)
             for id in &ids {
                 prop_assert_eq!(id.as_str().len(), 26, "Each ULID should be 26 characters");
@@ -1139,11 +1139,11 @@ mod property_tests {
             content in ".*"
         ) {
             let memo = Memo::new(title, content);
-            
+
             // Test JSON serialization roundtrip
             let json = serde_json::to_string(&memo)?;
             let deserialized: Memo = serde_json::from_str(&json)?;
-            
+
             prop_assert_eq!(memo, deserialized);
         }
 
@@ -1183,10 +1183,10 @@ mod property_tests {
                 include_highlights,
                 excerpt_length,
             };
-            
+
             let json = serde_json::to_string(&options)?;
             let deserialized: SearchOptions = serde_json::from_str(&json)?;
-            
+
             prop_assert_eq!(options, deserialized);
         }
 
@@ -1201,10 +1201,10 @@ mod property_tests {
                 max_tokens,
                 delimiter,
             };
-            
+
             let json = serde_json::to_string(&options)?;
             let deserialized: ContextOptions = serde_json::from_str(&json)?;
-            
+
             prop_assert_eq!(options, deserialized);
         }
 
@@ -1256,11 +1256,11 @@ mod property_tests {
                 highlights: highlights.clone(),
                 match_count,
             };
-            
+
             // Test serialization roundtrip
             let json = serde_json::to_string(&result)?;
             let deserialized: SearchResult = serde_json::from_str(&json)?;
-            
+
             prop_assert_eq!(result.memo.id, deserialized.memo.id);
             prop_assert_eq!(result.relevance_score, deserialized.relevance_score);
             prop_assert_eq!(result.highlights, deserialized.highlights);
@@ -1271,7 +1271,7 @@ mod property_tests {
         fn test_ulid_string_parsing_invariant(valid_ulid_str in "[0-9A-Z]{26}") {
             // Test that any 26-character alphanumeric string can be parsed as ULID
             let result = MemoId::from_string(valid_ulid_str.clone());
-            
+
             // Note: This might fail for some edge cases due to ULID encoding rules
             // but it tests the parsing robustness
             if let Ok(id) = result {
@@ -1286,20 +1286,20 @@ mod property_tests {
         ) {
             let title = "T".repeat(title_size);
             let content = "C".repeat(content_size);
-            
+
             let memo = Memo::new(title.clone(), content.clone());
-            
+
             prop_assert_eq!(memo.title.len(), title_size);
             prop_assert_eq!(memo.content.len(), content_size);
-            
+
             // Test that serialization works even with large content
             let json_result = serde_json::to_string(&memo);
             prop_assert!(json_result.is_ok());
-            
+
             if let Ok(json) = json_result {
                 let deserialization_result = serde_json::from_str::<Memo>(&json);
                 prop_assert!(deserialization_result.is_ok());
-                
+
                 if let Ok(deserialized) = deserialization_result {
                     prop_assert_eq!(deserialized.title.len(), title_size);
                     prop_assert_eq!(deserialized.content.len(), content_size);

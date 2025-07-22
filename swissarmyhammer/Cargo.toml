@@ -93,3 +93,8 @@ path = "../benches/benchmarks.rs"
 name = "issue_performance"
 harness = false
 path = "../benches/issue_performance.rs"
+
+[[bench]]
+name = "memo_benchmarks"
+harness = false
+path = "../benches/memo_benchmarks.rs"

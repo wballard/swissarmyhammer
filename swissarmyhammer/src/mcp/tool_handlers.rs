@@ -765,7 +765,7 @@ impl ToolHandlers {
             Ok(memos) => {
                 tracing::info!("Retrieved {} memos", memos.len());
                 if memos.is_empty() {
-                    Ok(create_success_response("No memos found.".to_string()))
+                    Ok(create_success_response("No memos found".to_string()))
                 } else {
                     let memo_list = memos
                         .iter()
@@ -774,9 +774,8 @@ impl ToolHandlers {
                         .join("\n\n");
 
                     Ok(create_success_response(format!(
-                        "Found {} memo{}:\n\n{}",
+                        "Found {} memos:\n\n{}",
                         memos.len(),
-                        if memos.len() == 1 { "" } else { "s" },
                         memo_list
                     )))
                 }
@@ -861,9 +860,7 @@ impl ToolHandlers {
             Ok(memos) => {
                 tracing::info!("Retrieved {} memos for context", memos.len());
                 if memos.is_empty() {
-                    Ok(create_success_response(
-                        "No memos available for context.".to_string(),
-                    ))
+                    Ok(create_success_response("No memos available".to_string()))
                 } else {
                     // Sort memos by updated_at descending (most recent first)
                     let mut sorted_memos = memos;

@@ -34,3 +34,6 @@ swissarmyhammer/issues/
 
 # Runtime directories
 .swissarmyhammer/
+
+# PropTest regression files
+proptest-regressions/

@@ -178,6 +178,10 @@ async fn update_memo(
             .dimmed()
     );
 
+    println!();
+    println!("Content:");
+    println!("{}", updated_memo.content);
+
     Ok(())
 }
 
@@ -217,6 +221,46 @@ async fn try_advanced_search(
     storage: &FileSystemMemoStorage,
     query: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // Handle empty query by returning all memos
+    if query.trim().is_empty() {
+        let all_memos = storage.list_memos().await?;
+        if all_memos.is_empty() {
+            println!(
+                "{} No memos found matching '{}'",
+                "ℹ️".blue(),
+                query.yellow()
+            );
+            return Ok(());
+        }
+
+        println!(
+            "{} Found {} memo{} matching '{}'",
+            "🔍".green(),
+            all_memos.len().to_string().bold(),
+            if all_memos.len() == 1 { "" } else { "s" },
+            query.yellow()
+        );
+        println!();
+
+        for memo in all_memos {
+            println!("{} {}", "🆔".dimmed(), memo.id.as_str().blue());
+            println!("{} {}", "📄".dimmed(), memo.title.bold());
+            println!(
+                "{} {}",
+                "📅".dimmed(),
+                memo.created_at
+                    .format("%Y-%m-%d %H:%M:%S UTC")
+                    .to_string()
+                    .dimmed()
+            );
+
+            let preview = format_content_preview(&memo.content, DEFAULT_SEARCH_PREVIEW_LENGTH);
+            println!("{} {}", "💬".dimmed(), preview.dimmed());
+            println!();
+        }
+
+        return Ok(());
+    }
     // Create advanced search engine
     let search_engine = AdvancedMemoSearchEngine::new_in_memory().await?;
 
@@ -242,15 +286,15 @@ async fn try_advanced_search(
 
     if search_results.is_empty() {
         println!(
-            "{} No memos found matching \"{}\"",
-            "🔍".blue(),
+            "{} No memos found matching '{}'",
+            "ℹ️".blue(),
             query.yellow()
         );
         return Ok(());
     }
 
     println!(
-        "{} Found {} memo{} matching \"{}\"",
+        "{} Found {} memo{} matching '{}'",
         "🔍".green(),
         search_results.len().to_string().bold(),
         if search_results.len() == 1 { "" } else { "s" },
@@ -308,19 +352,59 @@ async fn fallback_basic_search(
     storage: &FileSystemMemoStorage,
     query: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // Handle empty query by returning all memos
+    if query.trim().is_empty() {
+        let all_memos = storage.list_memos().await?;
+        if all_memos.is_empty() {
+            println!(
+                "{} No memos found matching '{}'",
+                "ℹ️".blue(),
+                query.yellow()
+            );
+            return Ok(());
+        }
+
+        println!(
+            "{} Found {} memo{} matching '{}'",
+            "🔍".green(),
+            all_memos.len().to_string().bold(),
+            if all_memos.len() == 1 { "" } else { "s" },
+            query.yellow()
+        );
+        println!();
+
+        for memo in all_memos {
+            println!("{} {}", "🆔".dimmed(), memo.id.as_str().blue());
+            println!("{} {}", "📄".dimmed(), memo.title.bold());
+            println!(
+                "{} {}",
+                "📅".dimmed(),
+                memo.created_at
+                    .format("%Y-%m-%d %H:%M:%S UTC")
+                    .to_string()
+                    .dimmed()
+            );
+
+            let preview = format_content_preview(&memo.content, DEFAULT_SEARCH_PREVIEW_LENGTH);
+            println!("{} {}", "💬".dimmed(), preview.dimmed());
+            println!();
+        }
+
+        return Ok(());
+    }
     let results = storage.search_memos(query).await?;
 
     if results.is_empty() {
         println!(
-            "{} No memos found matching \"{}\"",
-            "🔍".blue(),
+            "{} No memos found matching '{}'",
+            "ℹ️".blue(),
             query.yellow()
         );
         return Ok(());
     }
 
     println!(
-        "{} Found {} memo{} matching \"{}\" (basic search)",
+        "{} Found {} memo{} matching '{}' (basic search)",
         "🔍".yellow(),
         results.len().to_string().bold(),
         if results.len() == 1 { "" } else { "s" },
@@ -385,11 +469,11 @@ async fn get_context(storage: FileSystemMemoStorage) -> Result<(), Box<dyn std::
     let memos = storage.list_memos().await?;
 
     if memos.is_empty() {
-        println!("No memos available for context.");
+        println!("ℹ️ No memos available for context");
         return Ok(());
     }
 
-    println!("# Memoranda Context");
+    println!("📄 All memo context ({} memos)", memos.len());
     println!();
 
     // Sort by creation time, newest first
@@ -410,7 +494,7 @@ async fn get_context(storage: FileSystemMemoStorage) -> Result<(), Box<dyn std::
         println!();
         println!("{}", memo.content);
         println!();
-        println!("---");
+        println!("===");
         println!();
     }
 

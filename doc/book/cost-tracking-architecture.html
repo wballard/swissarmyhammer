@@ -1,0 +1,800 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Cost Tracking Architecture - SwissArmyHammer Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Complete guide to using SwissArmyHammer - the MCP server for managing prompts">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">SwissArmyHammer Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/cost-tracking-architecture.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="cost-tracking-architecture-guide"><a class="header" href="#cost-tracking-architecture-guide">Cost Tracking Architecture Guide</a></h1>
+<p>This guide provides a comprehensive overview of SwissArmyHammer’s cost tracking system architecture, designed for developers who need to understand, maintain, or extend the implementation.</p>
+<h2 id="system-overview"><a class="header" href="#system-overview">System Overview</a></h2>
+<p>The cost tracking system follows a modular, layered architecture with clear separation of concerns:</p>
+<pre><code>┌─────────────────────────────────────────┐
+│              User Interface             │
+│    (CLI, Issue Reports, Configuration)  │
+└─────────────────────────────────────────┘
+                     │
+┌─────────────────────────────────────────┐
+│           Integration Layer             │
+│      (MCP Handler, Workflow Actions)    │
+└─────────────────────────────────────────┘
+                     │
+┌─────────────────────────────────────────┐
+│             Core Services               │
+│  (CostTracker, Calculator, Formatter)   │
+└─────────────────────────────────────────┘
+                     │
+┌─────────────────────────────────────────┐
+│            Data Layer                   │
+│    (TokenCounter, Database, Storage)    │
+└─────────────────────────────────────────┘
+</code></pre>
+<h3 id="design-principles"><a class="header" href="#design-principles">Design Principles</a></h3>
+<ul>
+<li><strong>Separation of Concerns</strong>: Each component has a single, well-defined responsibility</li>
+<li><strong>Type Safety</strong>: Extensive use of Rust’s type system with custom wrapper types</li>
+<li><strong>Optional Integration</strong>: Cost tracking can be completely disabled without affecting core functionality</li>
+<li><strong>Performance First</strong>: Memory pooling, async operations, and efficient data structures</li>
+<li><strong>Fault Tolerance</strong>: Graceful degradation when API responses don’t contain expected data</li>
+</ul>
+<h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
+<h3 id="1-cost-tracker-swissarmyhammersrccosttrackerrs"><a class="header" href="#1-cost-tracker-swissarmyhammersrccosttrackerrs">1. Cost Tracker (<code>swissarmyhammer/src/cost/tracker.rs</code>)</a></h3>
+<p>The central orchestrator managing cost tracking sessions and API call recording.</p>
+<h4 id="key-types"><a class="header" href="#key-types">Key Types</a></h4>
+<pre><code class="language-rust">pub struct CostTracker {
+    sessions: Arc&lt;RwLock&lt;HashMap&lt;CostSessionId, CostSession&gt;&gt;&gt;,
+    calculator: Arc&lt;CostCalculator&gt;,
+    config: CostTrackingConfig,
+    cleanup_handle: Option&lt;JoinHandle&lt;()&gt;&gt;,
+}
+
+pub struct CostSession {
+    pub id: CostSessionId,
+    pub issue_id: IssueId,
+    pub started_at: DateTime&lt;Utc&gt;,
+    pub completed_at: Option&lt;DateTime&lt;Utc&gt;&gt;,
+    pub status: SessionStatus,
+    pub api_calls: Vec&lt;ApiCall&gt;,
+    pub total_input_tokens: u32,
+    pub total_output_tokens: u32,
+}
+
+pub struct ApiCall {
+    pub id: ApiCallId,
+    pub started_at: DateTime&lt;Utc&gt;,
+    pub completed_at: Option&lt;DateTime&lt;Utc&gt;&gt;,
+    pub endpoint: String,
+    pub model: String,
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+    pub status: ApiCallStatus,
+    pub error_message: Option&lt;String&gt;,
+}</code></pre>
+<h4 id="responsibilities"><a class="header" href="#responsibilities">Responsibilities</a></h4>
+<ul>
+<li><strong>Session Management</strong>: Create, track, and cleanup cost tracking sessions</li>
+<li><strong>API Call Recording</strong>: Record all Claude API interactions with timing and token data</li>
+<li><strong>Memory Management</strong>: Automatic cleanup of old sessions to prevent memory leaks</li>
+<li><strong>Concurrency</strong>: Thread-safe operations with multiple simultaneous tracking sessions</li>
+</ul>
+<h4 id="key-methods"><a class="header" href="#key-methods">Key Methods</a></h4>
+<pre><code class="language-rust">impl CostTracker {
+    // Session lifecycle
+    pub async fn start_session(&amp;self, issue_id: IssueId) -&gt; Result&lt;CostSessionId&gt;;
+    pub async fn end_session(&amp;self, session_id: CostSessionId) -&gt; Result&lt;CostSession&gt;;
+    
+    // API call recording
+    pub async fn record_api_call(&amp;self, session_id: CostSessionId, call: ApiCallRecord) -&gt; Result&lt;ApiCallId&gt;;
+    pub async fn update_api_call_completion(&amp;self, session_id: CostSessionId, call_id: ApiCallId, tokens: TokenUsage) -&gt; Result&lt;()&gt;;
+    
+    // Querying and analytics
+    pub async fn get_session(&amp;self, session_id: CostSessionId) -&gt; Result&lt;Option&lt;CostSession&gt;&gt;;
+    pub async fn get_active_sessions(&amp;self) -&gt; Vec&lt;CostSessionId&gt;;
+}</code></pre>
+<h3 id="2-cost-calculator-swissarmyhammersrccostcalculatorrs"><a class="header" href="#2-cost-calculator-swissarmyhammersrccostcalculatorrs">2. Cost Calculator (<code>swissarmyhammer/src/cost/calculator.rs</code>)</a></h3>
+<p>Handles all cost calculations with support for different pricing models and precise decimal arithmetic.</p>
+<h4 id="key-types-1"><a class="header" href="#key-types-1">Key Types</a></h4>
+<pre><code class="language-rust">pub struct CostCalculator {
+    pricing_model: PricingModel,
+    rates: Option&lt;PricingRates&gt;,
+}
+
+pub enum PricingModel {
+    Paid,    // Per-token billing for paid plans
+    Max,     // Unlimited plans with cost estimation
+}
+
+pub struct PricingRates {
+    pub input_token_cost: Decimal,   // Cost per input token in USD
+    pub output_token_cost: Decimal,  // Cost per output token in USD
+}
+
+pub struct CostCalculation {
+    pub input_cost: Decimal,
+    pub output_cost: Decimal,
+    pub total_cost: Decimal,
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+}</code></pre>
+<h4 id="responsibilities-1"><a class="header" href="#responsibilities-1">Responsibilities</a></h4>
+<ul>
+<li><strong>Token Cost Calculation</strong>: Convert token counts to monetary costs</li>
+<li><strong>Model-Specific Pricing</strong>: Support different Claude models with appropriate pricing</li>
+<li><strong>Precision Arithmetic</strong>: Use <code>Decimal</code> type for accurate financial calculations</li>
+<li><strong>Validation</strong>: Ensure cost calculations are within reasonable bounds</li>
+</ul>
+<h4 id="pricing-models"><a class="header" href="#pricing-models">Pricing Models</a></h4>
+<p><strong>Paid Model</strong>: Actual per-token costs</p>
+<pre><code class="language-rust">let calculation = calculator.calculate_tokens_cost(1000, 1500, "claude-3-sonnet")?;
+// Returns actual USD cost: $0.1275 for this example</code></pre>
+<p><strong>Max Model</strong>: Cost estimation for planning</p>
+<pre><code class="language-rust">let calculation = calculator.calculate_tokens_cost(1000, 1500, "claude-3-sonnet")?;
+// Returns estimated cost for budgeting purposes</code></pre>
+<h3 id="3-token-counter-swissarmyhammersrccosttoken_counterrs"><a class="header" href="#3-token-counter-swissarmyhammersrccosttoken_counterrs">3. Token Counter (<code>swissarmyhammer/src/cost/token_counter.rs</code>)</a></h3>
+<p>Extracts token usage information from Claude API responses with fallback mechanisms and validation.</p>
+<h4 id="key-types-2"><a class="header" href="#key-types-2">Key Types</a></h4>
+<pre><code class="language-rust">pub struct TokenCounter {
+    validator: TokenValidator,
+}
+
+pub struct TokenUsage {
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+    pub source: TokenSource,
+    pub confidence: TokenConfidence,
+}
+
+pub enum TokenSource {
+    ApiResponse,      // From API response JSON
+    ResponseHeaders,  // From HTTP headers
+    Estimated,       // Fallback estimation
+}
+
+pub enum TokenConfidence {
+    Exact,    // 100% accurate from API
+    High,     // Close validation match
+    Medium,   // Reasonable estimation
+    Low,      // Fallback estimation
+}</code></pre>
+<h4 id="response-parsing-strategy"><a class="header" href="#response-parsing-strategy">Response Parsing Strategy</a></h4>
+<p>The token counter uses multiple extraction strategies with fallbacks:</p>
+<ol>
+<li><strong>Primary JSON Fields</strong>: <code>usage.input_tokens</code>, <code>usage.output_tokens</code></li>
+<li><strong>Alternative Fields</strong>: <code>input_token_count</code>, <code>output_token_count</code></li>
+<li><strong>HTTP Headers</strong>: <code>anthropic-input-tokens</code>, <code>anthropic-output-tokens</code></li>
+<li><strong>Estimation Fallback</strong>: Simple character-based estimation</li>
+</ol>
+<h4 id="validation-process"><a class="header" href="#validation-process">Validation Process</a></h4>
+<pre><code class="language-rust">pub fn count_from_response(
+    &amp;self,
+    response_body: &amp;str,
+    estimated_usage: Option&lt;TokenUsage&gt;,
+    model: &amp;str,
+) -&gt; Result&lt;TokenUsage&gt; {
+    // 1. Try extracting from JSON response
+    if let Some(tokens) = self.extract_from_json(response_body)? {
+        return Ok(self.validate_against_estimate(tokens, estimated_usage));
+    }
+    
+    // 2. Try extracting from headers
+    if let Some(tokens) = self.extract_from_headers(response_headers)? {
+        return Ok(self.validate_against_estimate(tokens, estimated_usage));
+    }
+    
+    // 3. Fall back to estimation
+    Ok(estimated_usage.unwrap_or_else(|| self.estimate_tokens(input_text, output_text)))
+}</code></pre>
+<h3 id="4-database-layer-swissarmyhammersrccostdatabase"><a class="header" href="#4-database-layer-swissarmyhammersrccostdatabase">4. Database Layer (<code>swissarmyhammer/src/cost/database/</code>)</a></h3>
+<p>Optional SQLite backend providing persistent storage and advanced analytics capabilities.</p>
+<h4 id="schema-design"><a class="header" href="#schema-design">Schema Design</a></h4>
+<pre><code class="language-sql">-- Core session tracking
+CREATE TABLE cost_sessions (
+    session_id TEXT PRIMARY KEY,
+    issue_id TEXT NOT NULL,
+    started_at DATETIME NOT NULL,
+    completed_at DATETIME,
+    status TEXT NOT NULL,
+    total_input_tokens INTEGER DEFAULT 0,
+    total_output_tokens INTEGER DEFAULT 0,
+    total_cost DECIMAL(10,6),
+    metadata TEXT -- JSON for extensibility
+);
+
+-- Individual API call records
+CREATE TABLE api_calls (
+    call_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    started_at DATETIME NOT NULL,
+    completed_at DATETIME,
+    endpoint TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER DEFAULT 0,
+    output_tokens INTEGER DEFAULT 0,
+    cost DECIMAL(8,6),
+    status TEXT NOT NULL,
+    error_message TEXT,
+    FOREIGN KEY (session_id) REFERENCES cost_sessions(session_id)
+);
+
+-- Aggregated analytics (optional)
+CREATE TABLE cost_analytics (
+    analysis_date DATE PRIMARY KEY,
+    total_sessions INTEGER,
+    total_api_calls INTEGER,
+    total_input_tokens INTEGER,
+    total_output_tokens INTEGER,
+    total_cost DECIMAL(12,6),
+    average_session_cost DECIMAL(8,6),
+    metrics_json TEXT -- Extended metrics
+);
+</code></pre>
+<h4 id="migration-system"><a class="header" href="#migration-system">Migration System</a></h4>
+<pre><code class="language-rust">pub struct MigrationManager {
+    connection: Arc&lt;SqlitePool&gt;,
+}
+
+impl MigrationManager {
+    pub async fn run_migrations(&amp;self) -&gt; Result&lt;()&gt; {
+        let current_version = self.get_schema_version().await?;
+        let target_version = LATEST_SCHEMA_VERSION;
+        
+        for version in (current_version + 1)..=target_version {
+            self.apply_migration(version).await?;
+        }
+        
+        Ok(())
+    }
+    
+    pub async fn rollback_migration(&amp;self, target_version: u32) -&gt; Result&lt;()&gt; {
+        // Rollback implementation
+    }
+}</code></pre>
+<h3 id="5-integration-layer"><a class="header" href="#5-integration-layer">5. Integration Layer</a></h3>
+<h4 id="mcp-protocol-integration-swissarmyhammersrcmcpcost_trackingrs"><a class="header" href="#mcp-protocol-integration-swissarmyhammersrcmcpcost_trackingrs">MCP Protocol Integration (<code>swissarmyhammer/src/mcp/cost_tracking.rs</code>)</a></h4>
+<p>Wraps existing MCP handlers with cost tracking using the decorator pattern:</p>
+<pre><code class="language-rust">pub struct CostTrackingMcpHandler&lt;T&gt; {
+    inner: T,
+    cost_tracker: Arc&lt;CostTracker&gt;,
+    enabled: bool,
+}
+
+impl&lt;T: ToolHandlers&gt; ToolHandlers for CostTrackingMcpHandler&lt;T&gt; {
+    async fn handle_issue_work(&amp;self, request: IssueWorkRequest) -&gt; Result&lt;IssueWorkResponse&gt; {
+        let session_id = if self.enabled {
+            Some(self.cost_tracker.start_session(request.issue_id.clone()).await?)
+        } else {
+            None
+        };
+        
+        // Record simulated API call for MCP operation
+        if let Some(session_id) = session_id {
+            let call_record = ApiCallRecord {
+                endpoint: "mcp://issue_work".to_string(),
+                model: "mcp-internal".to_string(),
+                // Default MCP operation token estimates
+                input_tokens: DEFAULT_MCP_INPUT_TOKENS,
+                output_tokens: DEFAULT_MCP_OUTPUT_TOKENS,
+            };
+            
+            self.cost_tracker.record_api_call(session_id, call_record).await?;
+        }
+        
+        // Delegate to actual handler
+        let response = self.inner.handle_issue_work(request).await?;
+        
+        // Complete session on successful issue completion
+        if let Some(session_id) = session_id {
+            if response.completed {
+                let session = self.cost_tracker.end_session(session_id).await?;
+                // Add cost report to issue if configured
+                self.add_cost_report_to_issue(&amp;response.issue_id, &amp;session).await?;
+            }
+        }
+        
+        Ok(response)
+    }
+}</code></pre>
+<h4 id="workflow-integration"><a class="header" href="#workflow-integration">Workflow Integration</a></h4>
+<p>Cost tracking integrates seamlessly with the existing workflow system:</p>
+<pre><code class="language-rust">// In workflow execution
+pub async fn execute_workflow_with_cost_tracking(
+    workflow: &amp;Workflow,
+    cost_tracker: &amp;CostTracker,
+) -&gt; Result&lt;WorkflowResult&gt; {
+    let session_id = cost_tracker.start_session(workflow.issue_id.clone()).await?;
+    
+    let result = execute_workflow_steps(workflow).await;
+    
+    match result {
+        Ok(result) =&gt; {
+            let session = cost_tracker.end_session(session_id).await?;
+            Ok(WorkflowResult::with_cost_analysis(result, session))
+        }
+        Err(error) =&gt; {
+            // Mark session as failed but don't lose cost data
+            cost_tracker.mark_session_failed(session_id, &amp;error).await?;
+            Err(error)
+        }
+    }
+}</code></pre>
+<h2 id="data-flow-architecture"><a class="header" href="#data-flow-architecture">Data Flow Architecture</a></h2>
+<h3 id="session-lifecycle"><a class="header" href="#session-lifecycle">Session Lifecycle</a></h3>
+<pre><code>Issue Start
+     │
+     ▼
+Create Cost Session ──────────┐
+     │                        │
+     ▼                        │
+Record API Calls ─────────────┤
+     │                        │
+     ▼                        │
+Extract Token Counts ─────────┤
+     │                        │
+     ▼                        │
+Calculate Costs ──────────────┤
+     │                        │
+     ▼                        │
+Issue Complete                │
+     │                        │
+     ▼                        │
+End Session ──────────────────┘
+     │
+     ▼
+Generate Cost Report
+     │
+     ▼
+Add to Issue Markdown
+</code></pre>
+<h3 id="token-counting-flow"><a class="header" href="#token-counting-flow">Token Counting Flow</a></h3>
+<pre><code>API Response
+     │
+     ▼
+JSON Extraction ──→ Success? ──→ Validate ──→ Return TokenUsage
+     │                 │
+     ▼                 ▼
+Header Extraction    Failure
+     │                 │
+     ▼                 ▼
+Success? ──→ Validate  Estimate Tokens
+     │          │           │
+     ▼          ▼           ▼
+Failure    Return      Return TokenUsage
+     │     TokenUsage    (Low Confidence)
+     ▼
+Estimate Tokens
+     │
+     ▼
+Return TokenUsage
+(Low Confidence)
+</code></pre>
+<h3 id="cost-calculation-pipeline"><a class="header" href="#cost-calculation-pipeline">Cost Calculation Pipeline</a></h3>
+<pre><code>Token Usage + Pricing Model
+           │
+           ▼
+Model Recognition ──→ Claude Sonnet/Opus/Haiku
+           │              │
+           ▼              ▼
+Apply Pricing Rules ──→ Input: $X per token
+           │              Output: $Y per token
+           ▼              │
+Decimal Arithmetic ◄──────┘
+           │
+           ▼
+Cost Validation ──→ Reasonable bounds check
+           │
+           ▼
+Return CostCalculation
+</code></pre>
+<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<h3 id="memory-management"><a class="header" href="#memory-management">Memory Management</a></h3>
+<ul>
+<li><strong>Session Cleanup</strong>: Automatic cleanup of completed sessions after configurable retention period</li>
+<li><strong>Token Counting Cache</strong>: LRU cache for token estimation results</li>
+<li><strong>Database Connection Pooling</strong>: Efficient SQLite connection management</li>
+<li><strong>Bounded Collections</strong>: Limits on API calls per session and total concurrent sessions</li>
+</ul>
+<h3 id="async-operations"><a class="header" href="#async-operations">Async Operations</a></h3>
+<p>All I/O operations are async to prevent blocking:</p>
+<pre><code class="language-rust">// Non-blocking session operations
+pub async fn record_api_call(&amp;self, session_id: CostSessionId, call: ApiCallRecord) -&gt; Result&lt;ApiCallId&gt;;
+
+// Non-blocking database operations  
+pub async fn store_session(&amp;self, session: &amp;CostSession) -&gt; Result&lt;()&gt;;
+
+// Non-blocking cleanup operations
+async fn cleanup_old_sessions(&amp;self) -&gt; Result&lt;u32&gt;;</code></pre>
+<h3 id="database-optimization"><a class="header" href="#database-optimization">Database Optimization</a></h3>
+<ul>
+<li><strong>Indexes</strong>: Strategic indexes on frequently queried columns</li>
+<li><strong>Batch Operations</strong>: Bulk inserts for better performance</li>
+<li><strong>Connection Pooling</strong>: Reuse connections to reduce overhead</li>
+<li><strong>Prepared Statements</strong>: Compiled queries for repeated operations</li>
+</ul>
+<pre><code class="language-sql">-- Performance indexes
+CREATE INDEX idx_sessions_issue_id ON cost_sessions(issue_id);
+CREATE INDEX idx_sessions_started_at ON cost_sessions(started_at);
+CREATE INDEX idx_api_calls_session_id ON api_calls(session_id);
+CREATE INDEX idx_api_calls_started_at ON api_calls(started_at);
+</code></pre>
+<h2 id="error-handling-strategy"><a class="header" href="#error-handling-strategy">Error Handling Strategy</a></h2>
+<h3 id="graceful-degradation"><a class="header" href="#graceful-degradation">Graceful Degradation</a></h3>
+<p>Cost tracking is designed to never interfere with core SwissArmyHammer functionality:</p>
+<pre><code class="language-rust">pub async fn record_api_call_safe(
+    &amp;self, 
+    session_id: CostSessionId, 
+    call: ApiCallRecord
+) -&gt; ApiCallId {
+    match self.record_api_call(session_id, call).await {
+        Ok(call_id) =&gt; call_id,
+        Err(error) =&gt; {
+            // Log error but don't fail the operation
+            tracing::warn!("Failed to record API call: {}", error);
+            ApiCallId::placeholder()
+        }
+    }
+}</code></pre>
+<h3 id="error-categories"><a class="header" href="#error-categories">Error Categories</a></h3>
+<ol>
+<li><strong>Configuration Errors</strong>: Invalid YAML, missing required fields</li>
+<li><strong>Runtime Errors</strong>: Database connection failures, memory limits</li>
+<li><strong>Data Errors</strong>: Malformed API responses, invalid token counts</li>
+<li><strong>Integration Errors</strong>: MCP protocol issues, workflow integration failures</li>
+</ol>
+<p>Each category has appropriate handling strategies:</p>
+<pre><code class="language-rust">match error {
+    CostTrackingError::Configuration(config_error) =&gt; {
+        // Fail fast - configuration must be valid
+        return Err(config_error.into());
+    }
+    CostTrackingError::Runtime(runtime_error) =&gt; {
+        // Log and continue with degraded functionality
+        tracing::error!("Cost tracking runtime error: {}", runtime_error);
+        disable_cost_tracking();
+    }
+    CostTrackingError::Data(data_error) =&gt; {
+        // Use fallback data and continue
+        tracing::warn!("Using estimated data: {}", data_error);
+        use_estimated_tokens();
+    }
+}</code></pre>
+<h2 id="extension-points"><a class="header" href="#extension-points">Extension Points</a></h2>
+<h3 id="custom-storage-backends"><a class="header" href="#custom-storage-backends">Custom Storage Backends</a></h3>
+<p>Implement the <code>CostStorage</code> trait to add new storage options:</p>
+<pre><code class="language-rust">#[async_trait]
+pub trait CostStorage: Send + Sync {
+    async fn store_session(&amp;self, session: &amp;CostSession) -&gt; Result&lt;()&gt;;
+    async fn load_session(&amp;self, session_id: &amp;CostSessionId) -&gt; Result&lt;Option&lt;CostSession&gt;&gt;;
+    async fn list_sessions(&amp;self, issue_id: Option&lt;&amp;IssueId&gt;) -&gt; Result&lt;Vec&lt;CostSessionId&gt;&gt;;
+    async fn cleanup_old_sessions(&amp;self, older_than: DateTime&lt;Utc&gt;) -&gt; Result&lt;u32&gt;;
+}
+
+// Example custom implementation
+pub struct RemoteStorage {
+    client: reqwest::Client,
+    endpoint: Url,
+}
+
+#[async_trait] 
+impl CostStorage for RemoteStorage {
+    async fn store_session(&amp;self, session: &amp;CostSession) -&gt; Result&lt;()&gt; {
+        let response = self.client
+            .post(&amp;format!("{}/sessions", self.endpoint))
+            .json(session)
+            .send()
+            .await?;
+            
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            Err(CostTrackingError::Storage("Failed to store session".into()))
+        }
+    }
+}</code></pre>
+<h3 id="custom-cost-models"><a class="header" href="#custom-cost-models">Custom Cost Models</a></h3>
+<p>Extend pricing calculations:</p>
+<pre><code class="language-rust">pub trait CostModel: Send + Sync {
+    fn calculate_cost(&amp;self, tokens: &amp;TokenUsage, model: &amp;str) -&gt; Result&lt;CostCalculation&gt;;
+    fn supports_model(&amp;self, model: &amp;str) -&gt; bool;
+}
+
+pub struct CustomEnterpriseModel {
+    base_cost: Decimal,
+    volume_discounts: HashMap&lt;u32, Decimal&gt;,
+}
+
+impl CostModel for CustomEnterpriseModel {
+    fn calculate_cost(&amp;self, tokens: &amp;TokenUsage, model: &amp;str) -&gt; Result&lt;CostCalculation&gt; {
+        let base_cost = self.base_cost * Decimal::from(tokens.input_tokens + tokens.output_tokens);
+        let discount = self.volume_discounts
+            .iter()
+            .find(|(threshold, _)| tokens.input_tokens + tokens.output_tokens &gt;= **threshold)
+            .map(|(_, discount)| *discount)
+            .unwrap_or(Decimal::ZERO);
+            
+        Ok(CostCalculation {
+            total_cost: base_cost * (Decimal::ONE - discount),
+            // ... other fields
+        })
+    }
+}</code></pre>
+<h3 id="custom-formatters"><a class="header" href="#custom-formatters">Custom Formatters</a></h3>
+<p>Add new output formats:</p>
+<pre><code class="language-rust">pub trait CostFormatter: Send + Sync {
+    fn format_session(&amp;self, session: &amp;CostSession) -&gt; Result&lt;String&gt;;
+    fn format_summary(&amp;self, sessions: &amp;[CostSession]) -&gt; Result&lt;String&gt;;
+}
+
+pub struct JsonFormatter;
+
+impl CostFormatter for JsonFormatter {
+    fn format_session(&amp;self, session: &amp;CostSession) -&gt; Result&lt;String&gt; {
+        let json_data = json!({
+            "session_id": session.id,
+            "total_cost": session.calculate_total_cost()?,
+            "api_calls": session.api_calls.len(),
+            "duration": session.duration(),
+        });
+        
+        Ok(serde_json::to_string_pretty(&amp;json_data)?)
+    }
+}</code></pre>
+<h2 id="testing-architecture"><a class="header" href="#testing-architecture">Testing Architecture</a></h2>
+<h3 id="test-structure"><a class="header" href="#test-structure">Test Structure</a></h3>
+<pre><code>swissarmyhammer/src/cost/
+├── tests/
+│   ├── unit_tests/           # Individual component tests
+│   ├── integration_tests/    # Full system tests
+│   ├── property_tests/       # Randomized testing
+│   ├── performance_tests/    # Benchmarks and load tests
+│   └── chaos_tests/          # Failure injection tests
+</code></pre>
+<h3 id="testing-utilities"><a class="header" href="#testing-utilities">Testing Utilities</a></h3>
+<pre><code class="language-rust">pub struct CostTrackingTestHarness {
+    tracker: CostTracker,
+    mock_calculator: MockCostCalculator,
+    temp_db: TempDatabase,
+}
+
+impl CostTrackingTestHarness {
+    pub fn new() -&gt; Self {
+        // Set up isolated test environment
+    }
+    
+    pub async fn create_test_session(&amp;self, issue_id: IssueId) -&gt; CostSessionId {
+        // Helper for test session creation
+    }
+    
+    pub fn generate_api_calls(&amp;self, count: usize) -&gt; Vec&lt;ApiCallRecord&gt; {
+        // Generate realistic test data
+    }
+}</code></pre>
+<p>This architecture ensures the cost tracking system is robust, performant, and maintainable while providing clear extension points for future enhancements.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="testing.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="release-process.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="testing.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="release-process.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

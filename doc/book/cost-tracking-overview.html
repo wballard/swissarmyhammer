@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Configuration Schema Reference - SwissArmyHammer Documentation</title>
+        <title>Cost Tracking - SwissArmyHammer Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -147,7 +147,7 @@
                         <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/configuration-schema.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/cost-tracking-overview.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -181,93 +181,107 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="configuration-schema-reference"><a class="header" href="#configuration-schema-reference">Configuration Schema Reference</a></h1>
-<p>This page provides a complete reference for the <code>swissarmyhammer.yaml</code> configuration file schema.</p>
-<p>For configuration basics and examples, see the <a href="configuration.html">Configuration Guide</a>. For CLI configuration commands, see the <a href="cli-reference.html#configuration-commands">CLI Reference</a>.</p>
-<h2 id="schema-definition"><a class="header" href="#schema-definition">Schema Definition</a></h2>
-<pre><code class="language-yaml"># SwissArmyHammer configuration schema
-type: object
-properties:
-  base_branch:
-    type: string
-    description: Base branch that pull requests will merge into
-    default: "main"
-    pattern: "^[a-zA-Z0-9._/-]+$"
-    minLength: 1
-    maxLength: 200
-  issue_branch_prefix:
-    type: string
-    description: Prefix for issue branches
-    default: "issue/"
-    minLength: 1
-    maxLength: 50
-  issue_number_width:
-    type: integer
-    description: Width for issue numbers in display
-    default: 6
-    minimum: 1
-    maximum: 10
-</code></pre>
-<h2 id="validation-rules"><a class="header" href="#validation-rules">Validation Rules</a></h2>
-<h3 id="base_branch"><a class="header" href="#base_branch"><code>base_branch</code></a></h3>
+                        <h1 id="cost-tracking-overview"><a class="header" href="#cost-tracking-overview">Cost Tracking Overview</a></h1>
+<p>SwissArmyHammer’s cost tracking system provides comprehensive monitoring and analysis of Claude API usage costs during issue workflow execution. This feature helps you understand, optimize, and budget for AI assistance costs in your development workflow.</p>
+<h2 id="what-is-cost-tracking"><a class="header" href="#what-is-cost-tracking">What is Cost Tracking?</a></h2>
+<p>Cost tracking automatically monitors every interaction with Claude’s API during issue processing, recording:</p>
 <ul>
-<li>Must be a valid git branch name</li>
-<li>Cannot be empty</li>
-<li>Cannot contain spaces or special characters: <code>~ ^ : ? * [ \</code></li>
-<li>Maximum length: 200 characters</li>
-<li>Examples of valid values: <code>main</code>, <code>develop</code>, <code>feature/v2</code>, <code>release-1.0</code></li>
-<li>Examples of invalid values: <code>""</code>, <code>branch with spaces</code>, <code>branch~invalid</code></li>
+<li><strong>Token Usage</strong>: Input and output token consumption for each API call</li>
+<li><strong>API Costs</strong>: Real-time cost calculation based on current Claude pricing</li>
+<li><strong>Session Analytics</strong>: Complete cost breakdown per issue workflow</li>
+<li><strong>Performance Metrics</strong>: API response times and success rates</li>
+<li><strong>Aggregated Reports</strong>: Cross-issue cost analysis and trends</li>
 </ul>
-<h3 id="issue_branch_prefix"><a class="header" href="#issue_branch_prefix"><code>issue_branch_prefix</code></a></h3>
-<ul>
-<li>Must be a non-empty string</li>
-<li>Cannot exceed 50 characters</li>
-<li>Used as the prefix for all issue branches</li>
-<li>Examples of valid values: <code>issue/</code>, <code>feature/</code>, <code>bug/</code>, <code>task-</code></li>
-<li>Examples of invalid values: <code>""</code> (empty string), <code>very-long-prefix-that-exceeds-the-maximum-length</code></li>
-</ul>
-<h3 id="issue_number_width"><a class="header" href="#issue_number_width"><code>issue_number_width</code></a></h3>
-<ul>
-<li>Must be a positive integer</li>
-<li>Minimum value: 1</li>
-<li>Maximum value: 10</li>
-<li>Determines the padding width for issue numbers in display</li>
-<li>Examples of valid values: <code>6</code>, <code>4</code>, <code>8</code></li>
-<li>Examples of invalid values: <code>0</code>, <code>11</code>, <code>-1</code></li>
-</ul>
-<h2 id="configuration-file-discovery"><a class="header" href="#configuration-file-discovery">Configuration File Discovery</a></h2>
-<p>SwissArmyHammer looks for configuration files in this order:</p>
+<h2 id="key-benefits"><a class="header" href="#key-benefits">Key Benefits</a></h2>
+<h3 id="-visibility"><a class="header" href="#-visibility"><strong>🔍 Visibility</strong></a></h3>
+<p>Get detailed insights into your AI usage patterns with comprehensive reporting that shows exactly where your Claude API costs are coming from.</p>
+<h3 id="-optimization"><a class="header" href="#-optimization"><strong>📊 Optimization</strong></a></h3>
+<p>Identify high-cost operations and optimize your prompts and workflows to reduce unnecessary API usage while maintaining effectiveness.</p>
+<h3 id="-budget-planning"><a class="header" href="#-budget-planning"><strong>💰 Budget Planning</strong></a></h3>
+<p>Accurate cost tracking enables informed budgeting decisions and helps predict monthly API costs based on actual usage patterns.</p>
+<h3 id="-performance-analytics"><a class="header" href="#-performance-analytics"><strong>📈 Performance Analytics</strong></a></h3>
+<p>Track not just costs but also performance metrics like token efficiency ratios and API response times to optimize your overall workflow.</p>
+<h3 id="-flexible-configuration"><a class="header" href="#-flexible-configuration"><strong>🔧 Flexible Configuration</strong></a></h3>
+<p>Support for both paid plans (per-token billing) and unlimited plans (cost estimation for planning) with customizable pricing models.</p>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
 <ol>
-<li><code>./swissarmyhammer.yaml</code> in the current working directory</li>
+<li><strong>Automatic Session Creation</strong>: When you start working on an issue, a cost tracking session begins automatically</li>
+<li><strong>API Call Recording</strong>: Every Claude API interaction is captured with detailed token usage and timing</li>
+<li><strong>Real-time Calculation</strong>: Costs are calculated immediately using the latest pricing information</li>
+<li><strong>Session Completion</strong>: When issue work completes, a comprehensive cost report is generated</li>
+<li><strong>Issue Integration</strong>: Cost analysis is automatically added to completed issue documentation</li>
 </ol>
-<p>If no configuration file is found, SwissArmyHammer will use environment variables and built-in defaults.</p>
-<h2 id="environment-variable-mapping"><a class="header" href="#environment-variable-mapping">Environment Variable Mapping</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>Configuration Key</th><th>Environment Variable</th><th>Default Value</th></tr></thead><tbody>
-<tr><td><code>base_branch</code></td><td><code>SWISSARMYHAMMER_BASE_BRANCH</code></td><td><code>"main"</code></td></tr>
-<tr><td><code>issue_branch_prefix</code></td><td><code>SWISSARMYHAMMER_ISSUE_BRANCH_PREFIX</code></td><td><code>"issue/"</code></td></tr>
-<tr><td><code>issue_number_width</code></td><td><code>SWISSARMYHAMMER_ISSUE_NUMBER_WIDTH</code></td><td><code>6</code></td></tr>
-</tbody></table>
-</div>
-<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
-<p>Configuration errors are handled gracefully:</p>
+<h2 id="pricing-models-supported"><a class="header" href="#pricing-models-supported">Pricing Models Supported</a></h2>
+<h3 id="paid-plans"><a class="header" href="#paid-plans">Paid Plans</a></h3>
+<p>For users on Claude’s paid tiers, cost tracking provides accurate per-token billing calculations:</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+  rates:
+    input_token_cost: 0.000015   # $0.000015 per input token
+    output_token_cost: 0.000075  # $0.000075 per output token
+</code></pre>
+<h3 id="unlimited-plans"><a class="header" href="#unlimited-plans">Unlimited Plans</a></h3>
+<p>For users with unlimited access, cost tracking estimates hypothetical costs for budgeting and optimization:</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "max"  # Unlimited plan with cost estimation
+</code></pre>
+<h2 id="sample-cost-report"><a class="header" href="#sample-cost-report">Sample Cost Report</a></h2>
+<p>When an issue is completed, you’ll see detailed cost analysis like this:</p>
+<pre><code class="language-markdown">## Cost Analysis
+
+**Total Cost**: $0.34
+**Total API Calls**: 4  
+**Total Input Tokens**: 2,100
+**Total Output Tokens**: 3,250
+**Session Duration**: 3m 45s
+**Completed**: 2024-01-15 14:30:25 UTC
+
+### Cost Breakdown
+- **API Call #1**: $0.08 (500 input, 750 output tokens) - `/v1/messages`
+- **API Call #2**: $0.15 (800 input, 1,200 output tokens) - `/v1/messages`  
+- **API Call #3**: $0.07 (450 input, 680 output tokens) - `/v1/messages`
+- **API Call #4**: $0.04 (350 input, 620 output tokens) - `/v1/messages`
+
+### Performance Metrics
+- **Average cost per call**: $0.085
+- **Token efficiency**: 1.55 (output/input ratio)
+- **Success rate**: 100% (4/4 successful)
+- **Average response time**: 1.2s
+</code></pre>
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
+<p>Cost tracking is disabled by default to ensure it doesn’t interfere with existing workflows. To enable it:</p>
+<ol>
+<li><strong>Enable in Configuration</strong>: Add cost tracking configuration to your <code>swissarmyhammer.yaml</code></li>
+<li><strong>Choose Pricing Model</strong>: Select “paid” for actual billing or “max” for cost estimation</li>
+<li><strong>Configure Rates</strong>: Set appropriate token costs for your Claude plan</li>
+<li><strong>Start Tracking</strong>: Begin working on issues - tracking happens automatically</li>
+</ol>
+<h2 id="data-privacy-and-storage"><a class="header" href="#data-privacy-and-storage">Data Privacy and Storage</a></h2>
 <ul>
-<li><strong>File not found</strong>: Uses environment variables and defaults</li>
-<li><strong>Invalid YAML syntax</strong>: Shows detailed parsing error with line numbers</li>
-<li><strong>Invalid values</strong>: Shows validation error with helpful hints</li>
-<li><strong>Permission errors</strong>: Falls back to environment variables and defaults</li>
+<li><strong>In-Memory by Default</strong>: Cost data is stored in memory during execution with automatic cleanup</li>
+<li><strong>Optional Database</strong>: Enable SQLite backend for persistent storage and advanced analytics</li>
+<li><strong>No External Transmission</strong>: All cost tracking data stays local to your system</li>
+<li><strong>Configurable Retention</strong>: Control how long cost data is retained (default 7 days for in-memory)</li>
 </ul>
-<p>All configuration errors include helpful error messages and suggestions for resolution.</p>
-<p>For more configuration troubleshooting help, see the <a href="troubleshooting.html#configuration-issues">Troubleshooting Guide</a>.</p>
+<h2 id="whats-next"><a class="header" href="#whats-next">What’s Next?</a></h2>
+<ul>
+<li><a href="./cost-tracking-getting-started.html">Getting Started Guide</a> - Set up cost tracking in 5 minutes</li>
+<li><a href="./cost-tracking-configuration.html">Configuration Reference</a> - Complete configuration options</li>
+<li><a href="./cost-tracking-troubleshooting.html">Troubleshooting</a> - Common issues and solutions</li>
+<li><a href="./cost-tracking-examples.html">Advanced Examples</a> - Production configurations and custom reporting</li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="configuration.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="configuration-schema.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="cost-tracking-overview.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="cost-tracking-getting-started.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -277,11 +291,11 @@ properties:
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="configuration.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="configuration-schema.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="cost-tracking-overview.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="cost-tracking-getting-started.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

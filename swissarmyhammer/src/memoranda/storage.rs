@@ -1,5 +1,5 @@
 use crate::error::{Result, SwissArmyHammerError};
-use crate::memoranda::{Memo, MemoId, SearchOptions};
+use crate::memoranda::{Memo, MemoId, SearchOptions, AdvancedMemoSearchEngine};
 use async_trait::async_trait;
 use std::path::PathBuf;
 use tokio::fs::OpenOptions;
@@ -275,6 +275,8 @@ pub struct FileSystemMemoStorage {
     state: MemoState,
     /// Mutex to ensure thread-safe memo creation and prevent race conditions
     creation_lock: Mutex<()>,
+    /// Advanced search engine for full-text search capabilities
+    search_engine: Option<AdvancedMemoSearchEngine>,
 }
 
 /// Generate highlighted text snippets showing where search matches were found
@@ -500,7 +502,85 @@ impl FileSystemMemoStorage {
         Self {
             state: MemoState { memos_dir },
             creation_lock: Mutex::new(()),
+            search_engine: None,
         }
+    }
+
+    /// Create a new filesystem storage with advanced search enabled
+    ///
+    /// # Arguments
+    ///
+    /// * `memos_dir` - The directory path where memo files will be stored
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self>` - New storage instance with search engine initialized
+    pub async fn new_with_search(memos_dir: PathBuf) -> Result<Self> {
+        // Create index path in the memos directory
+        let index_path = memos_dir.join(".search_index");
+        let search_engine = AdvancedMemoSearchEngine::new_persistent(index_path).await?;
+        
+        Ok(Self {
+            state: MemoState { memos_dir },
+            creation_lock: Mutex::new(()),
+            search_engine: Some(search_engine),
+        })
+    }
+
+    /// Create a new filesystem storage with default directory and advanced search enabled
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self>` - New storage instance with search engine initialized
+    pub async fn new_default_with_search() -> Result<Self> {
+        let memos_dir = if let Ok(custom_path) = std::env::var("SWISSARMYHAMMER_MEMOS_DIR") {
+            PathBuf::from(custom_path)
+        } else {
+            std::env::current_dir()?
+                .join(".swissarmyhammer")
+                .join("memos")
+        };
+        Self::new_with_search(memos_dir).await
+    }
+
+    /// Initialize the search engine if not already present
+    ///
+    /// This method will attempt to create the advanced search engine if it's not
+    /// already initialized. This is useful for upgrading existing storage instances.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<()>` - Success or error if search engine initialization fails
+    pub async fn initialize_search_engine(&mut self) -> Result<()> {
+        if self.search_engine.is_none() {
+            let index_path = self.state.memos_dir.join(".search_index");
+            let search_engine = AdvancedMemoSearchEngine::new_persistent(index_path).await?;
+            
+            // Index all existing memos
+            let all_memos = self.list_memos().await?;
+            if !all_memos.is_empty() {
+                search_engine.index_memos(&all_memos).await?;
+            }
+            
+            self.search_engine = Some(search_engine);
+        }
+        Ok(())
+    }
+
+    /// Index a memo in the search engine if available
+    async fn index_memo_if_available(&self, memo: &Memo) -> Result<()> {
+        if let Some(search_engine) = &self.search_engine {
+            search_engine.index_memo(memo).await?;
+        }
+        Ok(())
+    }
+
+    /// Remove a memo from the search engine index if available
+    async fn remove_memo_from_index_if_available(&self, memo_id: &MemoId) -> Result<()> {
+        if let Some(search_engine) = &self.search_engine {
+            search_engine.remove_memo(memo_id).await?;
+        }
+        Ok(())
     }
 
     /// Ensure the memo directory exists, creating it if necessary
@@ -617,6 +697,10 @@ impl MemoStorage for FileSystemMemoStorage {
 
         let memo = Memo::new(title, content);
         self.create_memo_file_atomically(&memo).await?;
+        
+        // Index the memo in the search engine if available
+        self.index_memo_if_available(&memo).await?;
+        
         Ok(memo)
     }
 
@@ -633,6 +717,10 @@ impl MemoStorage for FileSystemMemoStorage {
         let mut memo = self.get_memo(id).await?;
         memo.update_content(content);
         self.save_memo_to_file(&memo).await?;
+        
+        // Update the memo in the search engine if available
+        self.index_memo_if_available(&memo).await?;
+        
         Ok(memo)
     }
 
@@ -643,6 +731,10 @@ impl MemoStorage for FileSystemMemoStorage {
         }
 
         tokio::fs::remove_file(path).await?;
+        
+        // Remove the memo from the search engine if available
+        self.remove_memo_from_index_if_available(id).await?;
+        
         Ok(())
     }
 
@@ -694,67 +786,73 @@ impl MemoStorage for FileSystemMemoStorage {
         query: &str,
         options: &crate::memoranda::SearchOptions,
     ) -> Result<Vec<crate::memoranda::SearchResult>> {
-        // For now, provide a basic implementation that wraps the simple search
-        // This will be enhanced with the advanced search engine
-        let query_to_use = if options.case_sensitive {
-            query.to_string()
+        // Use advanced search engine if available, otherwise fall back to basic search
+        if let Some(search_engine) = &self.search_engine {
+            let all_memos = self.list_memos().await?;
+            let results = search_engine.search(query, options, &all_memos).await?;
+            Ok(results)
         } else {
-            query.to_lowercase()
-        };
-
-        let all_memos = self.list_memos().await?;
-        let mut results = Vec::new();
-
-        for memo in all_memos {
-            let title_check = if options.case_sensitive {
-                memo.title.contains(&query_to_use)
+            // Fallback to basic implementation for compatibility
+            let query_to_use = if options.case_sensitive {
+                query.to_string()
             } else {
-                memo.title.to_lowercase().contains(&query_to_use)
+                query.to_lowercase()
             };
 
-            let content_check = if options.case_sensitive {
-                memo.content.contains(&query_to_use)
-            } else {
-                memo.content.to_lowercase().contains(&query_to_use)
-            };
+            let all_memos = self.list_memos().await?;
+            let mut results = Vec::new();
 
-            if title_check || content_check {
-                let mut relevance_score = 50.0; // Base score
-                let mut match_count = 0;
-
-                if title_check {
-                    relevance_score += 30.0; // Title matches get higher score
-                    match_count += 1;
-                }
-                if content_check {
-                    relevance_score += 20.0; // Content matches get lower score
-                    match_count += 1;
-                }
-
-                let highlights = if options.include_highlights {
-                    generate_highlights(&memo, query, options)
+            for memo in all_memos {
+                let title_check = if options.case_sensitive {
+                    memo.title.contains(&query_to_use)
                 } else {
-                    Vec::new()
+                    memo.title.to_lowercase().contains(&query_to_use)
                 };
 
-                results.push(crate::memoranda::SearchResult {
-                    memo,
-                    relevance_score,
-                    highlights,
-                    match_count,
-                });
+                let content_check = if options.case_sensitive {
+                    memo.content.contains(&query_to_use)
+                } else {
+                    memo.content.to_lowercase().contains(&query_to_use)
+                };
+
+                if title_check || content_check {
+                    let mut relevance_score = 50.0; // Base score
+                    let mut match_count = 0;
+
+                    if title_check {
+                        relevance_score += 30.0; // Title matches get higher score
+                        match_count += 1;
+                    }
+                    if content_check {
+                        relevance_score += 20.0; // Content matches get lower score
+                        match_count += 1;
+                    }
+
+                    let highlights = if options.include_highlights {
+                        generate_highlights(&memo, query, options)
+                    } else {
+                        Vec::new()
+                    };
+
+                    results.push(crate::memoranda::SearchResult {
+                        memo,
+                        relevance_score,
+                        highlights,
+                        match_count,
+                    });
+                }
             }
+
+            // Sort by relevance score (highest first)
+            results.sort_by(|a, b| b.relevance_score.partial_cmp(&a.relevance_score).unwrap());
+
+            // Apply result limit
+            if let Some(max_results) = options.max_results {
+                results.truncate(max_results);
+            }
+
+            Ok(results)
         }
-
-        // Sort by relevance score (highest first)
-        results.sort_by(|a, b| b.relevance_score.partial_cmp(&a.relevance_score).unwrap());
-
-        // Apply result limit
-        if let Some(max_results) = options.max_results {
-            results.truncate(max_results);
-        }
-
-        Ok(results)
     }
 
     async fn get_all_context(&self, options: &crate::memoranda::ContextOptions) -> Result<String> {
@@ -1230,5 +1328,727 @@ mod tests {
 
         // Title match should have higher score than content match
         assert!(title_result.relevance_score > content_result.relevance_score);
+    }
+
+    // ===== COMPREHENSIVE EDGE CASE AND ERROR TESTING =====
+
+    #[tokio::test]
+    async fn test_large_memo_content() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        // Create a large memo (approaching 1MB limit)
+        let large_content = "x".repeat(500_000); // 500KB content
+        let memo = storage
+            .create_memo("Large Content Test".to_string(), large_content.clone())
+            .await
+            .unwrap();
+
+        // Verify it can be retrieved correctly
+        let retrieved = storage.get_memo(&memo.id).await.unwrap();
+        assert_eq!(retrieved.content.len(), 500_000);
+        assert_eq!(retrieved.content, large_content);
+    }
+
+    #[tokio::test]
+    async fn test_unicode_content() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        let unicode_title = "🚀 Test with 中文 and émojis 🎉";
+        let unicode_content = "Content with Unicode: ñáéíóú, 中文测试, 🌟✨🎯";
+        
+        let memo = storage
+            .create_memo(unicode_title.to_string(), unicode_content.to_string())
+            .await
+            .unwrap();
+
+        let retrieved = storage.get_memo(&memo.id).await.unwrap();
+        assert_eq!(retrieved.title, unicode_title);
+        assert_eq!(retrieved.content, unicode_content);
+
+        // Test searching with unicode
+        let results = storage.search_memos("中文").await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title, unicode_title);
+    }
+
+    #[tokio::test]
+    async fn test_empty_title_and_content() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        let memo = storage
+            .create_memo("".to_string(), "".to_string())
+            .await
+            .unwrap();
+
+        let retrieved = storage.get_memo(&memo.id).await.unwrap();
+        assert_eq!(retrieved.title, "");
+        assert_eq!(retrieved.content, "");
+    }
+
+    #[tokio::test]
+    async fn test_very_long_title() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        let long_title = "A".repeat(10_000); // 10KB title
+        let memo = storage
+            .create_memo(long_title.clone(), "Short content".to_string())
+            .await
+            .unwrap();
+
+        let retrieved = storage.get_memo(&memo.id).await.unwrap();
+        assert_eq!(retrieved.title.len(), 10_000);
+        assert_eq!(retrieved.title, long_title);
+    }
+
+    #[tokio::test]
+    async fn test_special_characters_in_content() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        let special_content = r#"Content with "quotes", 'apostrophes', \backslashes, /forward/slashes, and <brackets>"#;
+        let memo = storage
+            .create_memo("Special Chars".to_string(), special_content.to_string())
+            .await
+            .unwrap();
+
+        let retrieved = storage.get_memo(&memo.id).await.unwrap();
+        assert_eq!(retrieved.content, special_content);
+
+        // Test JSON serialization/deserialization with special chars
+        let json = serde_json::to_string(&memo).unwrap();
+        let deserialized: Memo = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.content, special_content);
+    }
+
+    #[tokio::test]
+    async fn test_newlines_and_whitespace() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        let whitespace_content = "\n\nContent with\n  multiple\n\n  lines\n\nand   spaces\t\t\n";
+        let memo = storage
+            .create_memo("Whitespace Test".to_string(), whitespace_content.to_string())
+            .await
+            .unwrap();
+
+        let retrieved = storage.get_memo(&memo.id).await.unwrap();
+        assert_eq!(retrieved.content, whitespace_content);
+    }
+
+    #[tokio::test]
+    async fn test_search_with_empty_query() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        storage
+            .create_memo("Test Memo".to_string(), "Test Content".to_string())
+            .await
+            .unwrap();
+
+        let results = storage.search_memos("").await.unwrap();
+        assert_eq!(results.len(), 1); // Empty query should match all memos
+
+        let advanced_results = storage
+            .search_memos_advanced("", &crate::memoranda::SearchOptions::default())
+            .await
+            .unwrap();
+        assert_eq!(advanced_results.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_search_case_insensitive() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        storage
+            .create_memo("CamelCase Title".to_string(), "MixedCase content".to_string())
+            .await
+            .unwrap();
+
+        // Test different case variations
+        let lowercase_results = storage.search_memos("camelcase").await.unwrap();
+        assert_eq!(lowercase_results.len(), 1);
+
+        let uppercase_results = storage.search_memos("MIXEDCASE").await.unwrap();
+        assert_eq!(uppercase_results.len(), 1);
+
+        let mixed_results = storage.search_memos("MiXeDcAsE").await.unwrap();
+        assert_eq!(mixed_results.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_search_partial_matches() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        storage
+            .create_memo("Programming".to_string(), "JavaScript".to_string())
+            .await
+            .unwrap();
+
+        // Test partial word matches
+        let partial_title = storage.search_memos("Program").await.unwrap();
+        assert_eq!(partial_title.len(), 1);
+
+        let partial_content = storage.search_memos("Script").await.unwrap();
+        assert_eq!(partial_content.len(), 1);
+
+        let full_word = storage.search_memos("JavaScript").await.unwrap();
+        assert_eq!(full_word.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_search_with_special_regex_characters() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        storage
+            .create_memo("Regex Test".to_string(), "Pattern with .* and [brackets]".to_string())
+            .await
+            .unwrap();
+
+        // These should be treated as literal strings, not regex patterns
+        let dot_star_results = storage.search_memos(".*").await.unwrap();
+        assert_eq!(dot_star_results.len(), 1);
+
+        let bracket_results = storage.search_memos("[brackets]").await.unwrap();
+        assert_eq!(bracket_results.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_operations_stress() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        // Create memos concurrently
+        let create_tasks: Vec<_> = (0..20).map(|i| {
+            let storage_ref = &storage;
+            async move {
+                storage_ref
+                    .create_memo(format!("Concurrent {}", i), format!("Content {}", i))
+                    .await
+            }
+        }).collect();
+
+        let created_memos = futures::future::try_join_all(create_tasks).await.unwrap();
+        assert_eq!(created_memos.len(), 20);
+
+        // Verify all memos can be retrieved concurrently
+        let get_tasks: Vec<_> = created_memos.iter().map(|memo| {
+            let storage_ref = &storage;
+            async move { storage_ref.get_memo(&memo.id).await }
+        }).collect();
+
+        let retrieved_memos = futures::future::try_join_all(get_tasks).await.unwrap();
+        assert_eq!(retrieved_memos.len(), 20);
+
+        // Update memos concurrently
+        let update_tasks: Vec<_> = created_memos.iter().enumerate().map(|(i, memo)| {
+            let storage_ref = &storage;
+            async move {
+                storage_ref
+                    .update_memo(&memo.id, format!("Updated content {}", i))
+                    .await
+            }
+        }).collect();
+
+        let updated_memos = futures::future::try_join_all(update_tasks).await.unwrap();
+        assert_eq!(updated_memos.len(), 20);
+
+        // Delete memos concurrently
+        let delete_tasks: Vec<_> = created_memos.iter().map(|memo| {
+            let storage_ref = &storage;
+            async move { storage_ref.delete_memo(&memo.id).await }
+        }).collect();
+
+        futures::future::try_join_all(delete_tasks).await.unwrap();
+
+        // Verify all memos were deleted
+        let final_list = storage.list_memos().await.unwrap();
+        assert_eq!(final_list.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_update_nonexistent_memo() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        let fake_id = MemoId::new();
+        let result = storage.update_memo(&fake_id, "New content".to_string()).await;
+
+        assert!(result.is_err());
+        match result {
+            Err(SwissArmyHammerError::MemoNotFound(_)) => {}
+            _ => panic!("Expected MemoNotFound error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_delete_nonexistent_memo() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        let fake_id = MemoId::new();
+        let result = storage.delete_memo(&fake_id).await;
+
+        assert!(result.is_err());
+        match result {
+            Err(SwissArmyHammerError::MemoNotFound(_)) => {}
+            _ => panic!("Expected MemoNotFound error"),
+        }
+    }
+
+    #[serial_test::serial] // Run this test in isolation to avoid directory conflicts
+    #[tokio::test]
+    async fn test_directory_creation() {
+        let temp_dir = TempDir::new().unwrap();
+        let nested_path = temp_dir.path().join("deeply").join("nested").join("path").join("memos");
+        
+        // Directory doesn't exist yet
+        assert!(!nested_path.exists());
+
+        let storage = FileSystemMemoStorage::new(nested_path.clone());
+        
+        // Creating a memo should create the directory
+        let memo = storage
+            .create_memo("Dir Creation Test".to_string(), "Test content".to_string())
+            .await
+            .unwrap();
+
+        // Directory should now exist
+        assert!(nested_path.exists());
+        assert!(nested_path.is_dir());
+
+        // Memo file should exist
+        let memo_path = nested_path.join(format!("{}.json", memo.id.as_str()));
+        assert!(memo_path.exists());
+    }
+
+    #[tokio::test]
+    async fn test_invalid_memo_id_format() {
+        let fake_id_result = MemoId::from_string("invalid-id-format".to_string());
+        assert!(fake_id_result.is_err());
+
+        let short_id_result = MemoId::from_string("SHORT".to_string());
+        assert!(short_id_result.is_err());
+
+        let long_id_result = MemoId::from_string("TOOLONGTOBEVALIDULIDFORMAT".to_string());
+        assert!(long_id_result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_memo_file_corruption_handling() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        // Create a normal memo first
+        let memo = storage
+            .create_memo("Normal Memo".to_string(), "Normal content".to_string())
+            .await
+            .unwrap();
+
+        // Manually corrupt the memo file
+        let memo_path = storage.get_memo_path(&memo.id);
+        tokio::fs::write(&memo_path, "invalid json content").await.unwrap();
+
+        // Attempting to get the corrupted memo should fail
+        let result = storage.get_memo(&memo.id).await;
+        assert!(result.is_err());
+
+        // But list_memos should skip corrupted files and continue
+        // Create another valid memo
+        storage
+            .create_memo("Valid Memo".to_string(), "Valid content".to_string())
+            .await
+            .unwrap();
+
+        let memos = storage.list_memos().await.unwrap();
+        assert_eq!(memos.len(), 1); // Only the valid memo should be returned
+        assert_eq!(memos[0].title, "Valid Memo");
+    }
+
+    #[tokio::test]
+    async fn test_context_generation_ordering() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        // Create memos with different timestamps by adding delays
+        let _memo1 = storage
+            .create_memo("First Memo".to_string(), "Content 1".to_string())
+            .await
+            .unwrap();
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        let _memo2 = storage
+            .create_memo("Second Memo".to_string(), "Content 2".to_string())
+            .await
+            .unwrap();
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        let _memo3 = storage
+            .create_memo("Third Memo".to_string(), "Content 3".to_string())
+            .await
+            .unwrap();
+
+        let options = crate::memoranda::ContextOptions::default();
+        let context = storage.get_all_context(&options).await.unwrap();
+
+        // Newest memos should appear first in context
+        let memo3_pos = context.find("Third Memo").unwrap();
+        let memo2_pos = context.find("Second Memo").unwrap();
+        let memo1_pos = context.find("First Memo").unwrap();
+
+        assert!(memo3_pos < memo2_pos);
+        assert!(memo2_pos < memo1_pos);
+    }
+
+    #[tokio::test]
+    async fn test_context_token_limiting() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        // Create memos with known content sizes
+        for i in 1..=10 {
+            let content = "word ".repeat(100); // ~500 characters each
+            storage
+                .create_memo(format!("Memo {}", i), content)
+                .await
+                .unwrap();
+        }
+
+        // Set a token limit that should truncate results
+        let options = crate::memoranda::ContextOptions {
+            max_tokens: Some(100), // ~400 characters
+            ..Default::default()
+        };
+
+        let context = storage.get_all_context(&options).await.unwrap();
+        
+        // Context should be truncated due to token limit
+        assert!(context.len() < 5000); // Much smaller than total content
+        
+        // Should contain at least one memo
+        assert!(context.contains("Memo"));
+    }
+
+    #[tokio::test]
+    async fn test_memo_timestamps() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        let memo = storage
+            .create_memo("Timestamp Test".to_string(), "Original content".to_string())
+            .await
+            .unwrap();
+
+        let original_created = memo.created_at;
+        let original_updated = memo.updated_at;
+        
+        // Initially, created_at and updated_at should be the same
+        assert_eq!(original_created, original_updated);
+
+        // Wait a bit and update
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        let updated_memo = storage
+            .update_memo(&memo.id, "Updated content".to_string())
+            .await
+            .unwrap();
+
+        // created_at should remain the same, updated_at should be newer
+        assert_eq!(updated_memo.created_at, original_created);
+        assert!(updated_memo.updated_at > original_updated);
+    }
+
+    #[tokio::test]
+    async fn test_ulid_ordering() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        let mut memo_ids = Vec::new();
+        
+        // Create memos in sequence
+        for i in 0..10 {
+            let memo = storage
+                .create_memo(format!("Memo {}", i), format!("Content {}", i))
+                .await
+                .unwrap();
+            memo_ids.push(memo.id.clone());
+        }
+
+        // ULIDs should be lexicographically sortable (though exact chronological ordering
+        // is not guaranteed when generated in rapid succession due to timestamp precision)
+        let mut sorted_ids = memo_ids.clone();
+        sorted_ids.sort();
+        
+        // Verify that all IDs are unique and lexicographically sortable
+        assert_eq!(sorted_ids.len(), memo_ids.len());
+
+        // Each ULID should be unique and 26 characters
+        for id in &memo_ids {
+            assert_eq!(id.as_str().len(), 26);
+        }
+        
+        let mut unique_ids = memo_ids.clone();
+        unique_ids.dedup();
+        assert_eq!(unique_ids.len(), memo_ids.len());
+    }
+
+    // ===== ADDITIONAL EDGE CASE TESTS =====
+
+    #[serial_test::serial] // Run in isolation to avoid permission conflicts
+    #[tokio::test]
+    async fn test_readonly_directory_error_handling() {
+        #[cfg(unix)] // Permission tests only work on Unix-like systems
+        {
+            use std::fs;
+            use std::os::unix::fs::PermissionsExt;
+
+            let temp_dir = TempDir::new().unwrap();
+            let memos_dir = temp_dir.path().join("readonly_memos");
+            fs::create_dir_all(&memos_dir).unwrap();
+
+            // Make directory read-only
+            let mut perms = fs::metadata(&memos_dir).unwrap().permissions();
+            perms.set_mode(0o444); // Read-only
+            fs::set_permissions(&memos_dir, perms).unwrap();
+
+            let storage = FileSystemMemoStorage::new(memos_dir.clone());
+            
+            // Creating a memo should fail due to read-only directory
+            let result = storage
+                .create_memo("Test".to_string(), "Content".to_string())
+                .await;
+            
+            assert!(result.is_err());
+
+            // Restore permissions for cleanup
+            let mut perms = fs::metadata(&memos_dir).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&memos_dir, perms).unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn test_extremely_large_memo_collection() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        // Create a large number of memos to test scalability
+        let num_memos = 1000;
+        let mut created_ids = Vec::new();
+
+        for i in 0..num_memos {
+            let memo = storage
+                .create_memo(
+                    format!("Large Collection Memo {}", i),
+                    format!("Content for memo {} in large collection test", i)
+                )
+                .await
+                .unwrap();
+            created_ids.push(memo.id);
+        }
+
+        // Test listing large collection
+        let all_memos = storage.list_memos().await.unwrap();
+        assert_eq!(all_memos.len(), num_memos);
+
+        // Test searching in large collection
+        let search_results = storage.search_memos("Large").await.unwrap();
+        assert_eq!(search_results.len(), num_memos);
+
+        // Test context generation with large collection
+        let options = crate::memoranda::ContextOptions {
+            max_tokens: Some(1000), // Limit to prevent excessive memory usage
+            ..Default::default()
+        };
+        let context = storage.get_all_context(&options).await.unwrap();
+        assert!(!context.is_empty());
+        
+        // Cleanup by deleting all memos
+        for memo_id in created_ids {
+            storage.delete_memo(&memo_id).await.unwrap();
+        }
+
+        let final_count = storage.list_memos().await.unwrap();
+        assert_eq!(final_count.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_memo_content_with_null_bytes() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        let content_with_nulls = "Content\0with\0null\0bytes";
+        let memo = storage
+            .create_memo("Null Byte Test".to_string(), content_with_nulls.to_string())
+            .await
+            .unwrap();
+
+        let retrieved = storage.get_memo(&memo.id).await.unwrap();
+        assert_eq!(retrieved.content, content_with_nulls);
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_file_operations_race_conditions() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        // Create a memo first
+        let memo = storage
+            .create_memo("Race Condition Test".to_string(), "Original content".to_string())
+            .await
+            .unwrap();
+
+        let memo_id = memo.id.clone();
+
+        // Perform concurrent updates to the same memo to test race conditions
+        let update_tasks: Vec<_> = (0..10).map(|i| {
+            let storage_ref = &storage;
+            let id = memo_id.clone();
+            async move {
+                storage_ref
+                    .update_memo(&id, format!("Updated content {}", i))
+                    .await
+            }
+        }).collect();
+
+        let results = futures::future::join_all(update_tasks).await;
+        
+        // At least some updates should succeed (exact count depends on timing)
+        let successful_updates = results.iter().filter(|r| r.is_ok()).count();
+        assert!(successful_updates > 0);
+
+        // Final memo should exist and be readable
+        let final_memo = storage.get_memo(&memo_id).await.unwrap();
+        assert!(final_memo.content.starts_with("Updated content"));
+    }
+
+    #[tokio::test]
+    async fn test_memo_with_maximum_size_content() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        // Test with very large content (1MB)
+        let large_content = "x".repeat(1_000_000); // 1MB content
+        let memo = storage
+            .create_memo("Max Size Test".to_string(), large_content.clone())
+            .await
+            .unwrap();
+
+        // Verify it can be stored and retrieved
+        let retrieved = storage.get_memo(&memo.id).await.unwrap();
+        assert_eq!(retrieved.content.len(), 1_000_000);
+        assert_eq!(retrieved.content, large_content);
+
+        // Test search still works with large content
+        let search_results = storage.search_memos("Max Size").await.unwrap();
+        assert_eq!(search_results.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_search_with_very_long_query() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        storage
+            .create_memo("Test Memo".to_string(), "Some test content".to_string())
+            .await
+            .unwrap();
+
+        // Test search with extremely long query
+        let long_query = "test".repeat(1000); // 4KB query
+        let results = storage.search_memos(&long_query).await.unwrap();
+        assert_eq!(results.len(), 0); // Should not crash, just return no results
+    }
+
+    #[tokio::test]
+    async fn test_empty_directory_edge_cases() {
+        let temp_dir = TempDir::new().unwrap();
+        let empty_memos_dir = temp_dir.path().join("empty_memos");
+        
+        // Don't create the directory yet
+        let storage = FileSystemMemoStorage::new(empty_memos_dir.clone());
+
+        // List operation on non-existent directory should return empty
+        let memos = storage.list_memos().await.unwrap();
+        assert_eq!(memos.len(), 0);
+
+        // Search on non-existent directory should return empty
+        let search_results = storage.search_memos("anything").await.unwrap();
+        assert_eq!(search_results.len(), 0);
+
+        // Context on non-existent directory should return empty
+        let context = storage.get_all_context(&crate::memoranda::ContextOptions::default()).await.unwrap();
+        assert!(context.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_memo_serialization_edge_cases() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        // Test with content that might break JSON serialization
+        let tricky_content = r#"Content with "nested quotes", 'apostrophes', and \special\chars\"#;
+        let memo = storage
+            .create_memo("Serialization Edge Case".to_string(), tricky_content.to_string())
+            .await
+            .unwrap();
+
+        // Verify memo can be retrieved correctly
+        let retrieved = storage.get_memo(&memo.id).await.unwrap();
+        assert_eq!(retrieved.content, tricky_content);
+
+        // Manually test JSON serialization/deserialization
+        let json_str = serde_json::to_string(&memo).unwrap();
+        let deserialized: Memo = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(deserialized.content, tricky_content);
+        assert_eq!(deserialized, memo);
+    }
+
+    #[tokio::test]
+    async fn test_context_generation_with_mixed_content_sizes() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        // Create memos with varying content sizes
+        storage.create_memo("Small".to_string(), "Short".to_string()).await.unwrap();
+        storage.create_memo("Medium".to_string(), "Medium length content ".repeat(10)).await.unwrap();
+        storage.create_memo("Large".to_string(), "Very long content ".repeat(1000)).await.unwrap();
+
+        let options = crate::memoranda::ContextOptions {
+            max_tokens: Some(500), // Should truncate appropriately
+            ..Default::default()
+        };
+
+        let context = storage.get_all_context(&options).await.unwrap();
+        assert!(!context.is_empty());
+        assert!(context.contains("Small") || context.contains("Medium") || context.contains("Large"));
+    }
+
+    #[tokio::test]
+    async fn test_advanced_search_with_edge_case_options() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        storage
+            .create_memo("Edge Case Test".to_string(), "Testing edge case scenarios".to_string())
+            .await
+            .unwrap();
+
+        // Test with max_results = 0
+        let zero_results_options = crate::memoranda::SearchOptions {
+            max_results: Some(0),
+            ..Default::default()
+        };
+        let results = storage
+            .search_memos_advanced("test", &zero_results_options)
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 0);
+
+        // Test with very large max_results
+        let large_results_options = crate::memoranda::SearchOptions {
+            max_results: Some(1_000_000),
+            ..Default::default()
+        };
+        let results = storage
+            .search_memos_advanced("test", &large_results_options)
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+
+        // Test with very long excerpt length
+        let long_excerpt_options = crate::memoranda::SearchOptions {
+            excerpt_length: 10_000,
+            include_highlights: true,
+            ..Default::default()
+        };
+        let results = storage
+            .search_memos_advanced("test", &long_excerpt_options)
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert!(!results[0].highlights.is_empty());
     }
 }

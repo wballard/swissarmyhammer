@@ -424,9 +424,16 @@ impl AdvancedMemoSearchEngine {
             return self.parse_boolean_query(query, options);
         }
 
-        // Handle wildcard queries
-        if query.contains('*') {
+        // Handle wildcard queries - but only if they're intended as wildcards
+        // Check if this is an intentional wildcard (ends with * but doesn't contain other special chars)
+        if query.ends_with('*') && !Self::contains_query_special_chars(&query[..query.len()-1]) {
             return self.parse_wildcard_query(query);
+        }
+
+        // If query contains special characters that might be tokenized oddly,
+        // treat it as a phrase query for better literal matching
+        if Self::contains_query_special_chars(query) {
+            return self.parse_phrase_query(&format!("\"{}\"", query));
         }
 
         // Default: simple term query using QueryParser
@@ -572,6 +579,12 @@ impl AdvancedMemoSearchEngine {
 
         count
     }
+
+    /// Check if a string contains special query syntax characters that need escaping
+    fn contains_query_special_chars(text: &str) -> bool {
+        text.chars().any(|c| matches!(c, '+' | '-' | '!' | '(' | ')' | '{' | '}' | '[' | ']' | '^' | '"' | '~' | '*' | '?' | ':' | '\\' | '/' | '.' | '&' | '|'))
+    }
+
 }
 
 #[cfg(test)]
@@ -915,6 +928,53 @@ mod tests {
             }
         }
     }
+
+    #[tokio::test]
+    async fn test_special_characters_in_search() {
+        let engine = AdvancedMemoSearchEngine::new_in_memory().await.unwrap();
+        
+        // Create memos with different types of special content
+        let special_memos = vec![
+            Memo::new(
+                "Email Content".to_string(),
+                "Contact support at help@example.com".to_string(),
+            ),
+            Memo::new(
+                "Programming Notes".to_string(),
+                "Use C++ for performance-critical code".to_string(),
+            ),
+            Memo::new(
+                "File Path".to_string(),
+                "Config file located at /usr/local/bin/config".to_string(),
+            ),
+        ];
+        
+        engine.index_memos(&special_memos).await.unwrap();
+        
+        let options = SearchOptions::default();
+        
+        // Test search for email address
+        let results = engine
+            .search("help@example.com", &options, &special_memos)
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1, "Should find memo containing email address");
+        
+        // Test search for C++ (with special characters)
+        let results = engine
+            .search("C++", &options, &special_memos)
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1, "Should find memo containing C++");
+        
+        // Test search for file path with forward slashes
+        let results = engine
+            .search("/usr/local", &options, &special_memos)
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1, "Should find memo containing file path");
+    }
+
 
     #[tokio::test]
     async fn test_index_update_on_memo_changes() {

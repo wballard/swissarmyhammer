@@ -1,5 +1,11 @@
 # Installation
 
+SwissArmyHammer can be installed in several ways depending on your needs and platform.
+
+## Pre-built Binaries
+
+Currently, SwissArmyHammer does not provide pre-built binaries for download. This is a planned feature for future releases. For now, please use the Cargo installation method below.
+
 ## Quick Install (Recommended)
 
 To update SwissArmyHammer to the latest version:
@@ -62,17 +68,54 @@ The `doctor` command will check your installation and provide helpful diagnostic
 
 Generate and install shell completions for better CLI experience:
 
+### Bash
+
 ```bash
-# Bash
+# Linux/macOS (user-specific)
 swissarmyhammer completion bash > ~/.local/share/bash-completion/completions/swissarmyhammer
 
-# Zsh (add to fpath)
+# macOS with Homebrew bash-completion
+swissarmyhammer completion bash > $(brew --prefix)/etc/bash_completion.d/swissarmyhammer
+
+# Alternative location (ensure directory exists)
+mkdir -p ~/.bash_completion.d
+swissarmyhammer completion bash > ~/.bash_completion.d/swissarmyhammer
+```
+
+### Zsh
+
+```bash
+# User-specific (ensure ~/.zfunc is in your fpath)
+mkdir -p ~/.zfunc
 swissarmyhammer completion zsh > ~/.zfunc/_swissarmyhammer
 
-# Fish
+# Add to ~/.zshrc if not already present:
+# fpath=(~/.zfunc $fpath)
+# autoload -U compinit && compinit
+
+# System-wide (with appropriate permissions)
+swissarmyhammer completion zsh > /usr/local/share/zsh/site-functions/_swissarmyhammer
+```
+
+### Fish
+
+```bash
+# User-specific
 swissarmyhammer completion fish > ~/.config/fish/completions/swissarmyhammer.fish
 
-# PowerShell
+# Ensure the directory exists
+mkdir -p ~/.config/fish/completions
+swissarmyhammer completion fish > ~/.config/fish/completions/swissarmyhammer.fish
+```
+
+### PowerShell
+
+```powershell
+# Add to PowerShell profile
+swissarmyhammer completion powershell >> $PROFILE
+
+# Or create profile directory if it doesn't exist
+New-Item -ItemType Directory -Path (Split-Path $PROFILE) -Force
 swissarmyhammer completion powershell >> $PROFILE
 ```
 

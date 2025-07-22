@@ -22,10 +22,12 @@
   - [test](./cli-test.md)
   - [doctor](./cli-doctor.md)
   - [completion](./cli-completion.md)
+  - [memoranda](./cli-memoranda.md)
 
 # Library Usage
 
 - [Rust Library Guide](./library-usage.md)
+- [API Guide](./api-guide.md)
 - [Library API Reference](./library-api.md)
 - [Integration Examples](./library-examples.md)
 - [🔗 Rustdoc API Documentation](./api/swissarmyhammer/index.html)
@@ -34,6 +36,7 @@
 # Advanced Usage
 
 - [Advanced Prompt Techniques](./advanced-prompts.md)
+- [Issue Management](./issue-management.md)
 - [Workflows](./workflows.md)
   - [Workflow Examples](./workflow-examples.md)
   - [Workflow Patterns](./workflow-patterns.md)

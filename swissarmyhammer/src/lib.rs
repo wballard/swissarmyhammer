@@ -13,21 +13,23 @@
 //! ## Quick Start
 //!
 //! ```rust,no_run
-//! use swissarmyhammer::{PromptLibrary, PromptStorage};
+//! use swissarmyhammer::PromptLibrary;
+//! use std::collections::HashMap;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create a new prompt library
 //! let mut library = PromptLibrary::new();
 //!
 //! // Add prompts from a directory
-//! library.add_directory("./.swissarmyhammer/prompts")?;
+//! if std::path::Path::new("./.swissarmyhammer/prompts").exists() {
+//!     library.add_directory("./.swissarmyhammer/prompts")?;
+//! }
 //!
 //! // Get a prompt and render it
 //! let prompt = library.get("code-review")?;
-//! let args = vec![("language", "rust"), ("file", "main.rs")]
-//!     .into_iter()
-//!     .map(|(k, v)| (k.to_string(), v.to_string()))
-//!     .collect();
+//! let mut args = HashMap::new();
+//! args.insert("language".to_string(), "rust".to_string());
+//! args.insert("file".to_string(), "main.rs".to_string());
 //! let rendered = prompt.render(&args)?;
 //!
 //! println!("{}", rendered);
@@ -95,22 +97,41 @@ pub mod fs_utils;
 pub mod validation;
 
 // Re-export core types
+
+/// File source for loading prompts from various sources
 pub use file_loader::FileSource;
+
+/// File system utilities and abstractions
 pub use fs_utils::{FileSystem, FileSystemUtils};
+
+/// Plugin system types for extending functionality
 pub use plugins::{CustomLiquidFilter, PluginRegistry, SwissArmyHammerPlugin};
+
+/// Prompt filtering and search functionality
 pub use prompt_filter::PromptFilter;
+
+/// Advanced prompt loading and resolution
 pub use prompt_resolver::PromptResolver;
-// Re-export FileSource as PromptSource for backward compatibility
+
+/// Backward compatibility alias for FileSource
 pub use file_loader::FileSource as PromptSource;
+
+/// Core prompt management types and functionality
 pub use prompts::{ArgumentSpec, Prompt, PromptLibrary, PromptLoader};
+
+/// Storage backends and abstractions
 pub use storage::{PromptStorage, StorageBackend};
+
+/// Template engine and rendering functionality
 pub use template::{Template, TemplateEngine};
+
+/// Workflow system for state-based execution
 pub use workflow::{
     State, StateId, Transition, Workflow, WorkflowName, WorkflowRun, WorkflowRunId,
     WorkflowRunStatus,
 };
 
-// Re-export memoranda types
+/// Memoranda (memo/note) management types
 pub use memoranda::{
     CreateMemoRequest, DeleteMemoRequest, GetMemoRequest, ListMemosResponse, Memo, MemoId,
     SearchMemosRequest, SearchMemosResponse, UpdateMemoRequest,

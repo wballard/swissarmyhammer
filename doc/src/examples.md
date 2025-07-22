@@ -144,7 +144,105 @@ Create `~/.swissarmyhammer/prompts/api-client.md`:
 {{#include ../examples/configs/vscode-tasks.json}}
 ```
 
+## Real-World Scenarios
+
+### Onboarding New Team Members
+
+Create an interactive onboarding workflow:
+
+```bash
+# Create onboarding checklist
+swissarmyhammer test onboarding/checklist \
+  --team_name "Backend Team" \
+  --role "Senior Engineer" \
+  --project_stack "Rust, PostgreSQL, Docker"
+
+# Generate personalized learning path
+swissarmyhammer test onboarding/learning-path \
+  --experience_level "senior" \
+  --background "Go, MongoDB" \
+  --target_skills "Rust, async programming"
+```
+
+### Code Migration Project
+
+Systematic approach to migrating codebases:
+
+```bash
+# Analyze legacy code
+swissarmyhammer test migration/analyze \
+  --source_language "Python 2.7" \
+  --target_language "Python 3.11" \
+  --codebase_size "50k LOC"
+
+# Generate migration plan
+swissarmyhammer test migration/plan \
+  --analysis_results "$(cat analysis.md)" \
+  --timeline "3 months" \
+  --team_size "4 developers"
+
+# Create migration checklist per module
+for module in $(find src -name "*.py"); do
+  swissarmyhammer test migration/module-checklist \
+    --module_path "$module" \
+    --complexity "$(wc -l < $module)" \
+    >> migration-plan.md
+done
+```
+
+### Technical Debt Assessment
+
+Comprehensive debt analysis workflow:
+
+```bash
+# Assess technical debt across codebase
+swissarmyhammer test debt/assessment \
+  --project_age "2 years" \
+  --team_turnover "high" \
+  --test_coverage "$(pytest --cov=. --cov-report=term | grep TOTAL | awk '{print $4}')"
+
+# Prioritize debt items
+swissarmyhammer test debt/prioritize \
+  --business_impact "high" \
+  --development_velocity "slowing" \
+  --upcoming_features "user dashboard, payments"
+```
+
+### Performance Optimization Campaign
+
+Systematic performance improvement:
+
+```bash
+# Identify bottlenecks
+swissarmyhammer test performance/analyze \
+  --profile_data "$(cat profile.json)" \
+  --target_improvement "50% faster" \
+  --budget "2 weeks"
+
+# Generate optimization roadmap
+swissarmyhammer test performance/roadmap \
+  --current_metrics "$(cat metrics.json)" \
+  --constraints "no breaking changes" \
+  --priority "database queries, API latency"
+```
+
 ## Advanced Patterns
+
+### Team Collaboration Workflows
+
+```bash
+# Daily standup preparation
+swissarmyhammer test standup/prepare \
+  --yesterday_commits "$(git log --oneline --since='1 day ago' --author="$(git config user.email)")" \
+  --current_branch "$(git branch --show-current)" \
+  --blockers "waiting for API keys"
+
+# Sprint retrospective insights
+swissarmyhammer test retro/insights \
+  --sprint_goals "$(cat sprint-goals.md)" \
+  --completed_stories "8/12" \
+  --team_feedback "$(cat feedback.json)"
+```
 
 ### Dynamic Prompt Selection
 
@@ -158,12 +256,65 @@ Create `~/.swissarmyhammer/prompts/api-client.md`:
 {{#include ../examples/scripts/batch_analyze.py}}
 ```
 
+### Enterprise Integration Patterns
+
+```bash
+# Compliance audit preparation
+swissarmyhammer test compliance/audit \
+  --standards "SOC2, GDPR, HIPAA" \
+  --audit_date "2024-03-15" \
+  --evidence_path "./compliance-docs"
+
+# Risk assessment for new features
+swissarmyhammer test risk/assessment \
+  --feature_description "$(cat feature-spec.md)" \
+  --security_requirements "PII handling, payment processing" \
+  --timeline "Q2 2024"
+```
+
+### Multi-Repository Management
+
+```bash
+# Synchronize standards across repos
+for repo in frontend backend mobile; do
+  cd "../$repo"
+  swissarmyhammer test standards/sync \
+    --repo_type "$repo" \
+    --base_standards "$(cat ../standards/base.md)" \
+    --output_file "CODING_STANDARDS.md"
+done
+
+# Generate cross-repo dependency analysis
+swissarmyhammer test deps/analyze \
+  --repositories "frontend,backend,mobile" \
+  --focus "security,performance,maintainability"
+```
+
 ### Custom Filter Integration
 
 Create a prompt that uses custom filters:
 
 ```markdown
 {{#include ../examples/prompts/data-transformer.md}}
+```
+
+### Workflow Automation with Issue Management
+
+```bash
+# Create issues for code quality improvements
+swissarmyhammer test quality/issues \
+  --analysis_report "$(cat code-analysis.json)" \
+  --severity_threshold "medium" | \
+while read issue_title; do
+  swissarmyhammer issue create quality \
+    --content "# Code Quality Issue\n\n$issue_title\n\n## Analysis\n$(cat details.md)"
+done
+
+# Generate release notes from completed issues
+swissarmyhammer test release/notes \
+  --version "v2.1.0" \
+  --completed_issues "$(ls issues/complete/*.md)" \
+  --target_audience "technical users"
 ```
 
 ## Tips and Best Practices

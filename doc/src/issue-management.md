@@ -727,6 +727,40 @@ Update the password validation regex to allow all printable ASCII characters.
 | `SWISSARMYHAMMER_AUTO_DELETE_BRANCHES` | Auto-delete branches | `true` |
 | `SWISSARMYHAMMER_EDITOR` | Default editor | `$EDITOR` |
 
+### Rust API Types
+
+For programmatic access to issue management functionality, the following types are available:
+
+#### Core Types
+
+- [`Issue`](./api/swissarmyhammer/issues/struct.Issue.html) - Represents a single issue with metadata
+- [`IssueState`](./api/swissarmyhammer/issues/enum.IssueState.html) - Issue lifecycle state (Active, Complete, etc.)
+- [`IssueStorage`](./api/swissarmyhammer/issues/trait.IssueStorage.html) - Storage abstraction for issues
+
+#### Storage Implementations
+
+- [`FileSystemIssueStorage`](./api/swissarmyhammer/issues/struct.FileSystemIssueStorage.html) - File-based storage backend
+- [`InstrumentedIssueStorage`](./api/swissarmyhammer/issues/struct.InstrumentedIssueStorage.html) - Instrumented wrapper with metrics
+
+#### Utility Types
+
+- [`ProjectStatus`](./api/swissarmyhammer/issues/struct.ProjectStatus.html) - Project-wide issue status information
+- [`IssueBranchResult`](./api/swissarmyhammer/issues/struct.IssueBranchResult.html) - Result of branch operations
+- [`IssueMergeResult`](./api/swissarmyhammer/issues/struct.IssueMergeResult.html) - Result of merge operations
+- [`PerformanceMetrics`](./api/swissarmyhammer/issues/struct.PerformanceMetrics.html) - Performance monitoring data
+
+#### Utility Functions
+
+- [`get_current_issue_from_branch`](./api/swissarmyhammer/issues/fn.get_current_issue_from_branch.html) - Extract issue from branch name
+- [`work_on_issue`](./api/swissarmyhammer/issues/fn.work_on_issue.html) - Switch to issue work branch
+- [`merge_issue_branch`](./api/swissarmyhammer/issues/fn.merge_issue_branch.html) - Merge issue work back to main
+- [`get_next_issue`](./api/swissarmyhammer/issues/fn.get_next_issue.html) - Find next issue to work on
+
+**See Also:**
+- [API Guide](./api-guide.md) - Comprehensive API usage guide
+- [Library Examples](./library-examples.md) - Practical code examples
+- [Rustdoc API Documentation](./api/swissarmyhammer/index.html) - Complete API reference
+
 ## Performance Optimization
 
 ### Large Projects

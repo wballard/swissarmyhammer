@@ -5,26 +5,26 @@
 
 use std::collections::HashMap;
 use swissarmyhammer::memoranda::{
-    storage::MemoryStorage,
-    operations::{create_memo, get_memo, update_memo, delete_memo, list_memos, search_memos},
-    models::{Memo, CreateMemoRequest, UpdateMemoRequest, SearchRequest},
+    FileSystemMemoStorage, MemoStorage, Memo, CreateMemoRequest, UpdateMemoRequest, SearchMemosRequest,
 };
+use tempfile::TempDir;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🚀 SwissArmyHammer Memoranda API Examples");
     println!("==========================================\n");
 
-    // Initialize storage (in production, use FileStorage instead)
-    let storage = MemoryStorage::new();
+    // Initialize temporary storage for this example
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let storage = FileSystemMemoStorage::new(temp_dir.path().join("memos"));
 
     // Example 1: Creating memos
     println!("📝 Example 1: Creating Memos");
     println!("-----------------------------");
     
-    let memo1 = create_memo(&storage, CreateMemoRequest {
-        title: "API Design Meeting".to_string(),
-        content: r#"# API Design Meeting - January 15, 2024
+    let memo1 = storage.create_memo(
+        "API Design Meeting".to_string(),
+        r#"# API Design Meeting - January 15, 2024
 
 ## Attendees
 - Alice (Backend Engineer)
@@ -44,15 +44,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ## Next Meeting
 - Date: January 22, 2024
 - Focus: Review implementation progress"#.to_string(),
-    }).await?;
+    ).await?;
 
     println!("✅ Created memo: {}", memo1.title);
     println!("🆔 ID: {}", memo1.id);
     println!("📅 Created: {}\n", memo1.created_at);
 
-    let memo2 = create_memo(&storage, CreateMemoRequest {
-        title: "Rust Learning Notes".to_string(),
-        content: r#"# Rust Learning Progress
+    let memo2 = storage.create_memo(
+        "Rust Learning Notes".to_string(),
+        r#"# Rust Learning Progress
 
 ## Completed Topics
 - ✅ Ownership and borrowing
@@ -82,7 +82,7 @@ fn read_file() -> Result<String, Box<dyn Error>> {
 - Learn about lifetimes in depth
 - Practice with smart pointers
 - Build a CLI tool project"#.to_string(),
-    }).await?;
+    ).await?;
 
     println!("✅ Created memo: {}", memo2.title);
     println!("🆔 ID: {}\n", memo2.id);
@@ -91,7 +91,7 @@ fn read_file() -> Result<String, Box<dyn Error>> {
     println!("📋 Example 2: Listing All Memos");
     println!("--------------------------------");
     
-    let memos = list_memos(&storage).await?;
+    let memos = storage.list_memos().await?;
     println!("📝 Found {} memos:", memos.len());
     
     for memo in &memos {
@@ -110,32 +110,24 @@ fn read_file() -> Result<String, Box<dyn Error>> {
     println!("🔍 Example 3: Retrieving Specific Memos");
     println!("---------------------------------------");
     
-    if let Some(retrieved_memo) = get_memo(&storage, &memo1.id).await? {
-        println!("📝 Retrieved memo: {}", retrieved_memo.title);
-        println!("🆔 ID: {}", retrieved_memo.id);
-        println!("📅 Created: {}", retrieved_memo.created_at);
-        println!("🔄 Updated: {}", retrieved_memo.updated_at);
-        println!("📖 Content length: {} characters\n", retrieved_memo.content.len());
+    let retrieved_memo = storage.get_memo(&memo1.id).await?;
+    {
+    println!("📝 Retrieved memo: {}", retrieved_memo.title);
+    println!("🆔 ID: {}", retrieved_memo.id);
+    println!("📅 Created: {}", retrieved_memo.created_at);
+    println!("🔄 Updated: {}", retrieved_memo.updated_at);
+    println!("📖 Content length: {} characters\n", retrieved_memo.content.len());
     }
 
     // Example 4: Searching memos
     println!("🔎 Example 4: Searching Memos");
     println!("-----------------------------");
     
-    let search_results = search_memos(&storage, SearchRequest {
-        query: "API authentication".to_string(),
-        limit: Some(10),
-    }).await?;
+    let search_results = storage.search_memos("API authentication").await?;
 
     println!("🔍 Search results for 'API authentication':");
-    for result in search_results {
-        println!("  📄 {} (ID: {})", result.memo.title, result.memo.id);
-        if let Some(score) = result.relevance_score {
-            println!("  📊 Relevance: {:.2}", score);
-        }
-        if !result.highlights.is_empty() {
-            println!("  🎯 Highlights: {:?}", result.highlights);
-        }
+    for memo in search_results {
+        println!("  📄 {} (ID: {})", memo.title, memo.id);
         println!();
     }
 
@@ -144,26 +136,20 @@ fn read_file() -> Result<String, Box<dyn Error>> {
     println!("--------------------------------------");
 
     // Search for Rust-related content
-    let rust_results = search_memos(&storage, SearchRequest {
-        query: "Rust".to_string(),
-        limit: Some(5),
-    }).await?;
+    let rust_results = storage.search_memos("Rust").await?;
 
     println!("🦀 Rust-related memos ({} found):", rust_results.len());
-    for result in rust_results {
-        println!("  📄 {}", result.memo.title);
+    for memo in rust_results {
+        println!("  📄 {}", memo.title);
     }
     println!();
 
     // Search for action items
-    let action_results = search_memos(&storage, SearchRequest {
-        query: "action items".to_string(),
-        limit: Some(10),
-    }).await?;
+    let action_results = storage.search_memos("action items").await?;
 
     println!("✅ Memos with action items ({} found):", action_results.len());
-    for result in action_results {
-        println!("  📄 {}", result.memo.title);
+    for memo in action_results {
+        println!("  📄 {}", memo.title);
     }
     println!();
 
@@ -171,9 +157,9 @@ fn read_file() -> Result<String, Box<dyn Error>> {
     println!("📝 Example 6: Updating Memos");
     println!("-----------------------------");
     
-    let updated_memo = update_memo(&storage, UpdateMemoRequest {
-        id: memo1.id.clone(),
-        content: r#"# API Design Meeting - January 15, 2024
+    let updated_memo = storage.update_memo(
+        &memo1.id,
+        r#"# API Design Meeting - January 15, 2024
 
 ## Attendees
 - Alice (Backend Engineer)
@@ -198,7 +184,7 @@ fn read_file() -> Result<String, Box<dyn Error>> {
 ## Next Meeting
 - Date: January 22, 2024
 - Focus: Review Bob's implementation and plan next sprint"#.to_string(),
-    }).await?;
+    ).await?;
 
     println!("✅ Updated memo: {}", updated_memo.title);
     println!("🔄 New updated_at: {}\n", updated_memo.updated_at);
@@ -208,17 +194,21 @@ fn read_file() -> Result<String, Box<dyn Error>> {
     println!("-------------------------------------");
 
     // Attempt to get a non-existent memo
-    match get_memo(&storage, "01INVALID_MEMO_ID_HERE").await {
-        Ok(Some(_)) => println!("Found memo (unexpected)"),
-        Ok(None) => println!("✅ Correctly handled: Memo not found"),
-        Err(e) => println!("❌ Error occurred: {}", e),
+    match swissarmyhammer::memoranda::MemoId::from_string("01INVALID_MEMO_ID_HERE".to_string()) {
+        Ok(id) => {
+            match storage.get_memo(&id).await {
+                Ok(_) => println!("Found memo (unexpected)"),
+                Err(e) => println!("✅ Correctly handled: {}", e),
+            }
+        },
+        Err(e) => println!("✅ Correctly handled: Invalid memo ID format: {}", e),
     }
 
     // Attempt to update a non-existent memo
-    match update_memo(&storage, UpdateMemoRequest {
-        id: "01NONEXISTENT_MEMO_ID_123".to_string(),
-        content: "Updated content".to_string(),
-    }).await {
+    match storage.update_memo(
+        &swissarmyhammer::memoranda::MemoId::from_string("01NONEXISTENT_MEMO_ID_123".to_string()).unwrap_or_else(|_| swissarmyhammer::memoranda::MemoId::new()),
+        "Updated content".to_string(),
+    ).await {
         Ok(_) => println!("Updated memo (unexpected)"),
         Err(e) => println!("✅ Correctly handled error: {}", e),
     }
@@ -237,16 +227,16 @@ fn read_file() -> Result<String, Box<dyn Error>> {
 
     let mut created_ids = Vec::new();
     for (title, content) in project_memos {
-        let memo = create_memo(&storage, CreateMemoRequest {
-            title: title.to_string(),
-            content: content.to_string(),
-        }).await?;
+        let memo = storage.create_memo(
+            title.to_string(),
+            content.to_string(),
+        ).await?;
         created_ids.push(memo.id);
         println!("✅ Created: {}", title);
     }
 
     println!("\n📊 Final Statistics:");
-    let final_memos = list_memos(&storage).await?;
+    let final_memos = storage.list_memos().await?;
     println!("  📝 Total memos: {}", final_memos.len());
     
     let total_content_length: usize = final_memos.iter()
@@ -266,7 +256,7 @@ fn read_file() -> Result<String, Box<dyn Error>> {
     println!("-----------------------------------");
 
     // Export all memos for external processing
-    let all_memos = list_memos(&storage).await?;
+    let all_memos = storage.list_memos().await?;
     let mut context_export = String::new();
     
     for memo in &all_memos {
@@ -284,14 +274,19 @@ fn read_file() -> Result<String, Box<dyn Error>> {
     println!("---------------------------------");
 
     for id in &created_ids[..2] { // Delete first 2 demo memos
-        match delete_memo(&storage, id).await {
-            Ok(true) => println!("✅ Deleted memo: {}", id),
-            Ok(false) => println!("⚠️  Memo not found: {}", id),
-            Err(e) => println!("❌ Error deleting memo: {}", e),
+        match storage.delete_memo(id).await {
+            Ok(_) => println!("✅ Deleted memo: {}", id),
+            Err(e) => {
+                if e.to_string().contains("not found") {
+                    println!("⚠️  Memo not found: {}", id);
+                } else {
+                    println!("❌ Error deleting memo: {}", e);
+                }
+            }
         }
     }
 
-    let remaining_memos = list_memos(&storage).await?;
+    let remaining_memos = storage.list_memos().await?;
     println!("📊 Remaining memos: {}\n", remaining_memos.len());
 
     // Final summary
@@ -365,38 +360,35 @@ mod tests {
 
     #[tokio::test]
     async fn test_memo_operations() {
-        let storage = MemoryStorage::new();
+        use tempfile::TempDir;
+        let temp_dir = TempDir::new().unwrap();
+        let storage = FileSystemMemoStorage::new(temp_dir.path().join("memos"));
         
         // Test creating a memo
-        let memo = create_memo(&storage, CreateMemoRequest {
-            title: "Test Memo".to_string(),
-            content: "Test content".to_string(),
-        }).await.unwrap();
+        let memo = storage.create_memo(
+            "Test Memo".to_string(),
+            "Test content".to_string(),
+        ).await.unwrap();
         
         assert_eq!(memo.title, "Test Memo");
         assert_eq!(memo.content, "Test content");
         
         // Test retrieving the memo
-        let retrieved = get_memo(&storage, &memo.id).await.unwrap();
-        assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().title, "Test Memo");
+        let retrieved = storage.get_memo(&memo.id).await.unwrap();
+        assert_eq!(retrieved.title, "Test Memo");
         
         // Test listing memos
-        let memos = list_memos(&storage).await.unwrap();
+        let memos = storage.list_memos().await.unwrap();
         assert_eq!(memos.len(), 1);
         
         // Test searching
-        let results = search_memos(&storage, SearchRequest {
-            query: "Test".to_string(),
-            limit: Some(10),
-        }).await.unwrap();
+        let results = storage.search_memos("Test").await.unwrap();
         assert_eq!(results.len(), 1);
         
         // Test deleting
-        let deleted = delete_memo(&storage, &memo.id).await.unwrap();
-        assert!(deleted);
+        storage.delete_memo(&memo.id).await.unwrap();
         
-        let remaining = list_memos(&storage).await.unwrap();
+        let remaining = storage.list_memos().await.unwrap();
         assert_eq!(remaining.len(), 0);
     }
 

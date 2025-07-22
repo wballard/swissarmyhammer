@@ -3,6 +3,7 @@ use std::sync::Arc;
 use swissarmyhammer::issues::{FileSystemIssueStorage, IssueStorage};
 use swissarmyhammer::mcp::tool_handlers::ToolHandlers;
 use swissarmyhammer::mcp::types::AllCompleteRequest;
+use swissarmyhammer::memoranda::{FileSystemMemoStorage, MemoStorage};
 use tempfile::TempDir;
 use tokio::sync::RwLock;
 
@@ -17,8 +18,13 @@ async fn test_nested_complete_directory_bug() {
     );
     let issue_storage = Arc::new(RwLock::new(issue_storage as Box<dyn IssueStorage>));
 
-    let git_ops = Arc::new(tokio::sync::Mutex::new(None));
-    let tool_handlers = ToolHandlers::new(issue_storage.clone(), git_ops);
+    let git_ops = Arc::new(tokio::sync::Mutex::new(
+        None::<swissarmyhammer::git::GitOperations>,
+    ));
+    let memo_storage =
+        Box::new(FileSystemMemoStorage::new_default().expect("Failed to create memo storage"));
+    let memo_storage = Arc::new(RwLock::new(memo_storage as Box<dyn MemoStorage>));
+    let tool_handlers = ToolHandlers::new(issue_storage.clone(), git_ops, memo_storage);
 
     // Create the standard directory structure
     let complete_dir = issues_dir.join("complete");
@@ -115,6 +121,13 @@ async fn test_path_completion_detection_precision() {
         FileSystemIssueStorage::new(issues_dir.clone()).expect("Failed to create issue storage"),
     );
     let issue_storage = Arc::new(RwLock::new(issue_storage as Box<dyn IssueStorage>));
+
+    let _git_ops = Arc::new(tokio::sync::Mutex::new(
+        None::<swissarmyhammer::git::GitOperations>,
+    ));
+    let memo_storage =
+        Box::new(FileSystemMemoStorage::new_default().expect("Failed to create memo storage"));
+    let _memo_storage = Arc::new(RwLock::new(memo_storage as Box<dyn MemoStorage>));
 
     // Create various directory structures to test edge cases
     let scenarios = vec![

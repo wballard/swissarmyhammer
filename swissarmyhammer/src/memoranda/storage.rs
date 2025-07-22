@@ -6,31 +6,226 @@ use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 
+/// State configuration for memo storage
+///
+/// Contains the directory path where memo files are stored.
+/// This struct encapsulates the filesystem location for memo persistence.
+///
+/// # Examples
+///
+/// ```rust
+/// use std::path::PathBuf;
+/// use swissarmyhammer::memoranda::MemoState;
+///
+/// let state = MemoState {
+///     memos_dir: PathBuf::from("/path/to/memos"),
+/// };
+/// ```
 pub struct MemoState {
+    /// The directory where memo files are stored as JSON
     pub memos_dir: PathBuf,
 }
 
+/// Trait for memo storage operations
+///
+/// Defines the interface for memo storage backends, allowing different
+/// storage implementations (filesystem, database, etc.) while maintaining
+/// a consistent API for memo operations.
+///
+/// All operations are asynchronous to support high-performance storage backends
+/// and concurrent access patterns.
+///
+/// # Examples
+///
+/// ```rust
+/// use swissarmyhammer::memoranda::{MemoStorage, FileSystemMemoStorage, MemoId};
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let storage = FileSystemMemoStorage::new_default()?;
+///
+/// // Create a memo
+/// let memo = storage.create_memo(
+///     "Meeting Notes".to_string(),
+///     "Discussed project roadmap".to_string()
+/// ).await?;
+///
+/// // Retrieve it
+/// let retrieved = storage.get_memo(&memo.id).await?;
+/// assert_eq!(memo.id, retrieved.id);
+/// # Ok(())
+/// # }
+/// ```
 #[async_trait]
 pub trait MemoStorage: Send + Sync {
+    /// Create a new memo with the given title and content
+    ///
+    /// Generates a unique ULID identifier and timestamps automatically.
+    /// The memo is persisted to storage before returning.
+    ///
+    /// # Arguments
+    ///
+    /// * `title` - The title for the new memo
+    /// * `content` - The content for the new memo
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Memo>` - The created memo with generated ID and timestamps
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the memo cannot be persisted to storage.
     async fn create_memo(&self, title: String, content: String) -> Result<Memo>;
 
+    /// Retrieve a memo by its unique identifier
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique ULID identifier of the memo to retrieve
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Memo>` - The memo if found
+    ///
+    /// # Errors
+    ///
+    /// Returns `MemoNotFound` error if no memo exists with the given ID.
     async fn get_memo(&self, id: &MemoId) -> Result<Memo>;
 
+    /// Update the content of an existing memo
+    ///
+    /// Updates the memo's content and refreshes the `updated_at` timestamp.
+    /// The title and ID remain unchanged.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier of the memo to update
+    /// * `content` - The new content to replace the existing content
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Memo>` - The updated memo with new content and timestamp
+    ///
+    /// # Errors
+    ///
+    /// Returns `MemoNotFound` error if no memo exists with the given ID.
     async fn update_memo(&self, id: &MemoId, content: String) -> Result<Memo>;
 
+    /// Delete a memo by its unique identifier
+    ///
+    /// Permanently removes the memo from storage. This operation cannot be undone.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier of the memo to delete
+    ///
+    /// # Returns
+    ///
+    /// * `Result<()>` - Success if the memo was deleted
+    ///
+    /// # Errors
+    ///
+    /// Returns `MemoNotFound` error if no memo exists with the given ID.
     async fn delete_memo(&self, id: &MemoId) -> Result<()>;
 
+    /// List all memos in storage
+    ///
+    /// Returns all memos currently stored, regardless of creation time or content.
+    /// The order of returned memos is implementation-specific.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Vec<Memo>>` - All memos in storage, or empty vec if none exist
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend cannot be accessed.
     async fn list_memos(&self) -> Result<Vec<Memo>>;
 
+    /// Search memos by title and content
+    ///
+    /// Performs case-insensitive full-text search across memo titles and content.
+    /// Returns all memos that contain the query string in either field.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - The search term to match against memo titles and content
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Vec<Memo>>` - Memos matching the search query, or empty vec if none match
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # async fn search_example(storage: &impl swissarmyhammer::memoranda::MemoStorage) -> swissarmyhammer::error::Result<()> {
+    /// // Search for memos containing "project"
+    /// let results = storage.search_memos("project").await?;
+    /// println!("Found {} memos containing 'project'", results.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     async fn search_memos(&self, query: &str) -> Result<Vec<Memo>>;
 }
 
+/// Filesystem-based implementation of memo storage
+///
+/// Stores memos as JSON files in a directory structure, with each memo
+/// saved as a separate file named by its ULID. Provides atomic operations
+/// and concurrent access safety through internal locking.
+///
+/// # Storage Format
+///
+/// - Each memo is stored as `{ulid}.json` in the memos directory
+/// - JSON files contain the complete memo structure with metadata
+/// - Directory is created automatically if it doesn't exist
+///
+/// # Thread Safety
+///
+/// Uses internal mutex for creation operations to prevent race conditions
+/// when multiple concurrent operations attempt to create memos.
+///
+/// # Examples
+///
+/// ```rust
+/// use swissarmyhammer::memoranda::FileSystemMemoStorage;
+/// use std::path::PathBuf;
+///
+/// // Use default location (~/.swissarmyhammer/memos)
+/// let storage = FileSystemMemoStorage::new_default()?;
+///
+/// // Use custom location
+/// let custom_storage = FileSystemMemoStorage::new(PathBuf::from("/tmp/memos"));
+/// # Ok::<(), swissarmyhammer::error::SwissArmyHammerError>(())
+/// ```
 pub struct FileSystemMemoStorage {
+    /// Configuration state including storage directory path
     state: MemoState,
+    /// Mutex to ensure thread-safe memo creation and prevent race conditions
     creation_lock: Mutex<()>,
 }
 
 impl FileSystemMemoStorage {
+    /// Create a new filesystem storage with the default memo directory
+    ///
+    /// Uses the `SWISSARMYHAMMER_MEMOS_DIR` environment variable if set,
+    /// otherwise defaults to `.swissarmyhammer/memos` in the current directory.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self>` - New storage instance or error if directory access fails
+    ///
+    /// # Environment Variables
+    ///
+    /// * `SWISSARMYHAMMER_MEMOS_DIR` - Custom directory for memo storage
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use swissarmyhammer::memoranda::FileSystemMemoStorage;
+    ///
+    /// let storage = FileSystemMemoStorage::new_default()?;
+    /// # Ok::<(), swissarmyhammer::error::SwissArmyHammerError>(())
+    /// ```
     pub fn new_default() -> Result<Self> {
         let memos_dir = if let Ok(custom_path) = std::env::var("SWISSARMYHAMMER_MEMOS_DIR") {
             PathBuf::from(custom_path)
@@ -42,6 +237,24 @@ impl FileSystemMemoStorage {
         Ok(Self::new(memos_dir))
     }
 
+    /// Create a new filesystem storage with a specific memo directory
+    ///
+    /// # Arguments
+    ///
+    /// * `memos_dir` - The directory path where memo files will be stored
+    ///
+    /// # Returns
+    ///
+    /// * `Self` - New storage instance
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use swissarmyhammer::memoranda::FileSystemMemoStorage;
+    /// use std::path::PathBuf;
+    ///
+    /// let storage = FileSystemMemoStorage::new(PathBuf::from("/tmp/my-memos"));
+    /// ```
     pub fn new(memos_dir: PathBuf) -> Self {
         Self {
             state: MemoState { memos_dir },
@@ -49,6 +262,14 @@ impl FileSystemMemoStorage {
         }
     }
 
+    /// Ensure the memo directory exists, creating it if necessary
+    ///
+    /// Creates the full directory path including any parent directories
+    /// that don't exist. This is called automatically before file operations.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<()>` - Success or filesystem error
     async fn ensure_directory_exists(&self) -> Result<()> {
         if !self.state.memos_dir.exists() {
             tokio::fs::create_dir_all(&self.state.memos_dir).await?;
@@ -56,16 +277,46 @@ impl FileSystemMemoStorage {
         Ok(())
     }
 
+    /// Get the filesystem path for a memo with the given ID
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The memo ID to generate a path for
+    ///
+    /// # Returns
+    ///
+    /// * `PathBuf` - The full path where the memo file should be stored
     fn get_memo_path(&self, id: &MemoId) -> PathBuf {
         self.state.memos_dir.join(format!("{}.json", id.as_str()))
     }
 
+    /// Load and deserialize a memo from a JSON file
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The filesystem path to the memo JSON file
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Memo>` - The deserialized memo or error if file cannot be read/parsed
     async fn load_memo_from_file(&self, path: &PathBuf) -> Result<Memo> {
         let content = tokio::fs::read_to_string(path).await?;
         let memo: Memo = serde_json::from_str(&content)?;
         Ok(memo)
     }
 
+    /// Serialize and save a memo to a JSON file
+    ///
+    /// Creates the directory if it doesn't exist, then writes the memo
+    /// as pretty-printed JSON to the appropriate file.
+    ///
+    /// # Arguments
+    ///
+    /// * `memo` - The memo to serialize and save
+    ///
+    /// # Returns
+    ///
+    /// * `Result<()>` - Success or error if file cannot be written
     async fn save_memo_to_file(&self, memo: &Memo) -> Result<()> {
         self.ensure_directory_exists().await?;
 
@@ -75,6 +326,24 @@ impl FileSystemMemoStorage {
         Ok(())
     }
 
+    /// Create a new memo file atomically to prevent race conditions
+    ///
+    /// Uses `create_new(true)` to ensure the file doesn't already exist,
+    /// preventing accidental overwrites of existing memos. This is important
+    /// for concurrent operations where multiple threads might attempt to
+    /// create memos with the same ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `memo` - The memo to create and save
+    ///
+    /// # Returns
+    ///
+    /// * `Result<()>` - Success or error if file already exists or cannot be created
+    ///
+    /// # Errors
+    ///
+    /// Returns `MemoAlreadyExists` if a memo with the same ID already exists.
     async fn create_memo_file_atomically(&self, memo: &Memo) -> Result<()> {
         self.ensure_directory_exists().await?;
 
@@ -294,7 +563,8 @@ mod tests {
 
         // Check that all created memos are present, regardless of order
         let memo_ids: std::collections::HashSet<&MemoId> = memos.iter().map(|m| &m.id).collect();
-        let expected_ids: std::collections::HashSet<&MemoId> = [&memo1.id, &memo2.id, &memo3.id].into_iter().collect();
+        let expected_ids: std::collections::HashSet<&MemoId> =
+            [&memo1.id, &memo2.id, &memo3.id].into_iter().collect();
         assert_eq!(memo_ids, expected_ids);
     }
 

@@ -61,6 +61,343 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! ## Advanced Search and Query Operations
+//!
+//! ```rust
+//! use swissarmyhammer::memoranda::{
+//!     FileSystemMemoStorage, MemoStorage, AdvancedMemoSearchEngine, SearchOptions
+//! };
+//!
+//! # async fn search_example() -> Result<(), Box<dyn std::error::Error>> {
+//! let storage = FileSystemMemoStorage::new_default()?;
+//! let search_engine = AdvancedMemoSearchEngine::new_in_memory().await?;
+//!
+//! // Create some example memos
+//! let memo1 = storage.create_memo(
+//!     "API Documentation".to_string(),
+//!     "# REST API Guide\n\nAuthentication using JWT tokens...".to_string()
+//! ).await?;
+//!
+//! let memo2 = storage.create_memo(
+//!     "Meeting Notes".to_string(), 
+//!     "Discussed API authentication and security measures...".to_string()
+//! ).await?;
+//!
+//! // Index all memos for advanced search
+//! let all_memos = storage.list_memos().await?;
+//! search_engine.index_memos(&all_memos).await?;
+//!
+//! // Configure search options
+//! let search_options = SearchOptions {
+//!     case_sensitive: false,
+//!     exact_phrase: false,
+//!     max_results: Some(10),
+//!     include_highlights: true,
+//!     excerpt_length: 80,
+//! };
+//!
+//! // Perform advanced search with relevance scoring
+//! let search_results = search_engine
+//!     .search("API authentication", &search_options, &all_memos)
+//!     .await?;
+//!
+//! // Display results with relevance scores
+//! for result in search_results {
+//!     println!("Found: {} ({}% relevance)", 
+//!         result.memo.title, result.relevance_score);
+//!     
+//!     if !result.highlights.is_empty() {
+//!         println!("Highlights: {}", result.highlights.join(" ... "));
+//!     }
+//! }
+//!
+//! // Basic search for simpler use cases
+//! let basic_results = storage.search_memos("meeting").await?;
+//! println!("Basic search found {} memos", basic_results.len());
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Storage Configuration and Custom Paths
+//!
+//! ```rust
+//! use swissarmyhammer::memoranda::{FileSystemMemoStorage, MemoStorage};
+//! use std::path::PathBuf;
+//!
+//! # async fn storage_config_example() -> Result<(), Box<dyn std::error::Error>> {
+//! // Use default storage location (./.swissarmyhammer/memos)
+//! let default_storage = FileSystemMemoStorage::new_default()?;
+//!
+//! // Use custom storage directory
+//! let custom_path = PathBuf::from("/custom/memo/storage");
+//! let custom_storage = FileSystemMemoStorage::new(custom_path)?;
+//!
+//! // Create memo in custom storage
+//! let memo = custom_storage.create_memo(
+//!     "Configuration Example".to_string(),
+//!     "This memo is stored in a custom directory.".to_string()
+//! ).await?;
+//!
+//! println!("Created memo with ID: {}", memo.id);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Working with Memo Identifiers
+//!
+//! ```rust
+//! use swissarmyhammer::memoranda::{MemoId, MemoStorage, FileSystemMemoStorage};
+//!
+//! # async fn id_example() -> Result<(), Box<dyn std::error::Error>> {
+//! // Generate new ULID
+//! let new_id = MemoId::new();
+//! println!("Generated ID: {}", new_id);
+//!
+//! // Parse ULID from string (validation included)
+//! let id_string = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+//! let parsed_id = MemoId::from_string(id_string.to_string())?;
+//! 
+//! // IDs are naturally ordered chronologically
+//! let id1 = MemoId::new();
+//! std::thread::sleep(std::time::Duration::from_millis(1));
+//! let id2 = MemoId::new();
+//! assert!(id1 < id2); // Earlier ID is "less than" later ID
+//!
+//! // Use in storage operations
+//! let storage = FileSystemMemoStorage::new_default()?;
+//! let memo = storage.create_memo(
+//!     "ID Example".to_string(),
+//!     "Demonstrating ULID usage".to_string()
+//! ).await?;
+//!
+//! // Retrieve using the generated ID
+//! let retrieved = storage.get_memo(&memo.id).await?;
+//! println!("Retrieved: {}", retrieved.title);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Error Handling and Validation
+//!
+//! ```rust
+//! use swissarmyhammer::memoranda::{MemoId, MemoStorage, FileSystemMemoStorage};
+//! use swissarmyhammer::error::SwissArmyHammerError;
+//!
+//! # async fn error_handling_example() -> Result<(), Box<dyn std::error::Error>> {
+//! let storage = FileSystemMemoStorage::new_default()?;
+//!
+//! // Handle invalid ULID formats
+//! match MemoId::from_string("invalid-id".to_string()) {
+//!     Ok(id) => println!("Valid ID: {}", id),
+//!     Err(SwissArmyHammerError::Other(msg)) => {
+//!         println!("Invalid ID format: {}", msg);
+//!     }
+//!     Err(e) => return Err(e.into()),
+//! }
+//!
+//! // Handle memo not found
+//! let non_existent_id = MemoId::new();
+//! match storage.get_memo(&non_existent_id).await {
+//!     Ok(memo) => println!("Found memo: {}", memo.title),
+//!     Err(SwissArmyHammerError::MemoNotFound(id)) => {
+//!         println!("Memo not found with ID: {}", id);
+//!     }
+//!     Err(e) => return Err(e.into()),
+//! }
+//!
+//! // Handle storage errors gracefully
+//! match storage.create_memo("".to_string(), "content".to_string()).await {
+//!     Ok(memo) => println!("Created: {}", memo.title),
+//!     Err(e) => {
+//!         eprintln!("Failed to create memo: {}", e);
+//!         // Could implement retry logic, user notification, etc.
+//!     }
+//! }
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Troubleshooting Common Issues
+//!
+//! ### Storage and File System Issues
+//!
+//! **Permission Denied Errors**
+//! ```text
+//! Error: Permission denied (os error 13)
+//! ```
+//! - **Cause**: Insufficient permissions to read/write memo storage directory
+//! - **Solution**: Check directory permissions and ownership
+//! ```bash
+//! chmod 755 .swissarmyhammer/
+//! chmod 644 .swissarmyhammer/memos/*
+//! ```
+//!
+//! **Storage Directory Missing**
+//! ```text
+//! Error: No such file or directory
+//! ```
+//! - **Cause**: Parent directory doesn't exist or is inaccessible
+//! - **Solution**: Verify parent directory exists and is writable
+//! ```rust
+//! use std::fs;
+//! fs::create_dir_all(".swissarmyhammer/memos")?;
+//! ```
+//!
+//! **Disk Space Issues**
+//! ```text
+//! Error: No space left on device
+//! ```
+//! - **Cause**: Insufficient disk space for memo storage
+//! - **Solution**: Free up disk space or use custom storage path with more space
+//!
+//! ### Memo ID and Validation Issues
+//!
+//! **Invalid ULID Format**
+//! ```text
+//! Error: Invalid memo ID format: 'short-id'. Expected a valid ULID...
+//! ```
+//! - **Cause**: Malformed or incomplete ULID string
+//! - **Solution**: Ensure ULID is exactly 26 characters, base32 encoded
+//! ```rust
+//! // ✅ Correct format
+//! let id = MemoId::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV".to_string())?;
+//! // ❌ Incorrect formats
+//! let bad_id1 = MemoId::from_string("short".to_string()); // Too short
+//! let bad_id2 = MemoId::from_string("01ARZ3NDEKTSV4RRFFQ69G5FA=".to_string()); // Invalid chars
+//! ```
+//!
+//! **Memo Not Found**
+//! ```text
+//! Error: Memo not found: 01ARZ3NDEKTSV4RRFFQ69G5FAV
+//! ```
+//! - **Cause**: Memo ID doesn't correspond to any stored memo
+//! - **Solution**: Verify ID exists using list operation, check for typos
+//! ```rust
+//! // Verify memo exists before operations
+//! let all_memos = storage.list_memos().await?;
+//! let memo_exists = all_memos.iter().any(|m| m.id.as_str() == target_id);
+//! if !memo_exists {
+//!     eprintln!("Memo not found, available IDs:");
+//!     for memo in all_memos.iter().take(5) {
+//!         eprintln!("  {}: {}", memo.id, memo.title);
+//!     }
+//! }
+//! ```
+//!
+//! ### Search and Performance Issues
+//!
+//! **Slow Search Performance**
+//! - **Cause**: Large memo collection or very long memo content
+//! - **Solution**: Use specific search terms, implement pagination, or archive old memos
+//! ```rust
+//! // Use more specific search terms
+//! let results = storage.search_memos("specific keyword").await?;
+//! 
+//! // For advanced search, limit results
+//! let search_options = SearchOptions {
+//!     max_results: Some(20),
+//!     excerpt_length: 60, // Shorter excerpts
+//!     ..Default::default()
+//! };
+//! ```
+//!
+//! **Memory Usage Issues**
+//! - **Cause**: Loading too many large memos into memory simultaneously
+//! - **Solution**: Process memos in batches, use streaming for large operations
+//! ```rust
+//! // Process memos in smaller batches
+//! let all_memos = storage.list_memos().await?;
+//! for chunk in all_memos.chunks(50) {
+//!     // Process each batch of 50 memos
+//!     for memo in chunk {
+//!         // Process individual memo
+//!     }
+//! }
+//! ```
+//!
+//! ### Concurrent Access Issues
+//!
+//! **File Lock Conflicts**
+//! ```text
+//! Error: Resource temporarily unavailable
+//! ```
+//! - **Cause**: Multiple processes trying to access the same memo file
+//! - **Solution**: Implement retry logic with backoff, use atomic operations
+//! ```rust
+//! use std::time::Duration;
+//! use tokio::time::sleep;
+//! 
+//! let mut retries = 3;
+//! while retries > 0 {
+//!     match storage.create_memo(title.clone(), content.clone()).await {
+//!         Ok(memo) => break,
+//!         Err(e) if retries > 1 => {
+//!             eprintln!("Retry attempt {} failed: {}", 4 - retries, e);
+//!             sleep(Duration::from_millis(100)).await;
+//!             retries -= 1;
+//!         }
+//!         Err(e) => return Err(e),
+//!     }
+//! }
+//! ```
+//!
+//! ### Data Corruption and Recovery
+//!
+//! **Corrupted JSON Files**
+//! ```text
+//! Error: Failed to parse memo file: expected `,` or `}`
+//! ```
+//! - **Cause**: Incomplete writes, system crashes, or manual file editing
+//! - **Solution**: Restore from backup, manually repair JSON, or recreate memo
+//! ```rust
+//! // Check for and handle corrupted files
+//! match storage.get_memo(&memo_id).await {
+//!     Err(SwissArmyHammerError::Other(msg)) if msg.contains("parse") => {
+//!         eprintln!("Corrupted memo file detected: {}", msg);
+//!         // Implement recovery logic or manual intervention
+//!     }
+//!     result => result?,
+//! }
+//! ```
+//!
+//! ### Performance Optimization Tips
+//!
+//! - **Batch Operations**: Group multiple memo operations together
+//! - **Selective Loading**: Only load memo metadata when full content isn't needed
+//! - **Index Management**: Rebuild advanced search indexes periodically
+//! - **Storage Cleanup**: Archive or delete old memos to maintain performance
+//! - **SSD Usage**: Use SSD storage for better I/O performance with large collections
+//!
+//! ### Debug and Diagnostics
+//!
+//! Enable debug logging to troubleshoot issues:
+//! ```bash
+//! RUST_LOG=swissarmyhammer::memoranda=debug your_application
+//! ```
+//!
+//! Check storage directory status:
+//! ```rust
+//! use std::fs;
+//! 
+//! // Verify storage directory exists and is accessible
+//! let memo_dir = std::path::Path::new(".swissarmyhammer/memos");
+//! if !memo_dir.exists() {
+//!     eprintln!("Memo directory does not exist: {}", memo_dir.display());
+//! } else {
+//!     let metadata = fs::metadata(memo_dir)?;
+//!     println!("Directory permissions: {:o}", metadata.permissions());
+//! }
+//! 
+//! // Count memo files
+//! let entries = fs::read_dir(memo_dir)?;
+//! let memo_count = entries.filter(|e| {
+//!     e.as_ref().map(|entry| {
+//!         entry.path().extension().map_or(false, |ext| ext == "json")
+//!     }).unwrap_or(false)
+//! }).count();
+//! println!("Found {} memo files", memo_count);
+//! ```
 
 use crate::error::{Result, SwissArmyHammerError};
 use chrono::{DateTime, Utc};

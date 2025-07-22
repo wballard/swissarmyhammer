@@ -1582,12 +1582,8 @@ mod tests {
 
     #[test]
     fn test_memo_create_basic() {
-        let result = Cli::try_parse_from_args([
-            "swissarmyhammer",
-            "memo",
-            "create",
-            "Meeting Notes",
-        ]);
+        let result =
+            Cli::try_parse_from_args(["swissarmyhammer", "memo", "create", "Meeting Notes"]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
@@ -1630,11 +1626,7 @@ mod tests {
 
     #[test]
     fn test_memo_list() {
-        let result = Cli::try_parse_from_args([
-            "swissarmyhammer",
-            "memo",
-            "list",
-        ]);
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "memo", "list"]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
@@ -1720,12 +1712,8 @@ mod tests {
 
     #[test]
     fn test_memo_search() {
-        let result = Cli::try_parse_from_args([
-            "swissarmyhammer",
-            "memo",
-            "search",
-            "meeting notes",
-        ]);
+        let result =
+            Cli::try_parse_from_args(["swissarmyhammer", "memo", "search", "meeting notes"]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
@@ -1742,11 +1730,7 @@ mod tests {
 
     #[test]
     fn test_memo_context() {
-        let result = Cli::try_parse_from_args([
-            "swissarmyhammer",
-            "memo",
-            "context",
-        ]);
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "memo", "context"]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();

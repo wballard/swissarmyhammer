@@ -1538,49 +1538,41 @@ impl McpServer {
     ) -> std::result::Result<CallToolResult, McpError> {
         let issue_storage = self.issue_storage.read().await;
 
-        // Get all issues
-        let all_issues = match issue_storage.list_issues().await {
-            Ok(issues) => issues,
-            Err(e) => {
-                return Ok(CallToolResult {
+        // Use the new get_next_issue method from storage
+        match issue_storage.get_next_issue().await {
+            Ok(Some(next_issue)) => {
+                Ok(CallToolResult {
                     content: vec![Annotated::new(
                         RawContent::Text(RawTextContent {
-                            text: format!("Failed to list issues: {e}"),
+                            text: format!("Next issue: {}", next_issue.name.as_str()),
+                        }),
+                        None,
+                    )],
+                    is_error: Some(false),
+                })
+            }
+            Ok(None) => {
+                Ok(CallToolResult {
+                    content: vec![Annotated::new(
+                        RawContent::Text(RawTextContent {
+                            text: "No pending issues found. All issues are completed!".to_string(),
+                        }),
+                        None,
+                    )],
+                    is_error: Some(false),
+                })
+            }
+            Err(e) => {
+                Ok(CallToolResult {
+                    content: vec![Annotated::new(
+                        RawContent::Text(RawTextContent {
+                            text: format!("Failed to get next issue: {e}"),
                         }),
                         None,
                     )],
                     is_error: Some(true),
-                });
+                })
             }
-        };
-
-        // Filter to only pending (non-completed) issues
-        // Issues are already sorted alphabetically by name in list_issues()
-        let pending_issues: Vec<&Issue> =
-            all_issues.iter().filter(|issue| !issue.completed).collect();
-
-        if pending_issues.is_empty() {
-            Ok(CallToolResult {
-                content: vec![Annotated::new(
-                    RawContent::Text(RawTextContent {
-                        text: "No pending issues found. All issues are completed!".to_string(),
-                    }),
-                    None,
-                )],
-                is_error: Some(false),
-            })
-        } else {
-            // Return the first pending issue (alphabetically first)
-            let next_issue = pending_issues[0];
-            Ok(CallToolResult {
-                content: vec![Annotated::new(
-                    RawContent::Text(RawTextContent {
-                        text: format!("Next issue: {}", next_issue.name.as_str()),
-                    }),
-                    None,
-                )],
-                is_error: Some(false),
-            })
         }
     }
 

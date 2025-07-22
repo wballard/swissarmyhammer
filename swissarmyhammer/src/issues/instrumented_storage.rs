@@ -157,6 +157,17 @@ impl IssueStorage for InstrumentedIssueStorage {
 
         result
     }
+    
+    async fn get_next_issue(&self) -> Result<Option<Issue>> {
+        let start = Instant::now();
+        let result = self.storage.get_next_issue().await;
+        let duration = start.elapsed();
+
+        // Record as a read operation
+        self.metrics.record_operation(Operation::Read, duration);
+
+        result
+    }
 }
 
 #[cfg(test)]

@@ -60,6 +60,9 @@ pub async fn handle_issue_command(
         IssueCommands::Status => {
             show_status(storage).await?;
         }
+        IssueCommands::Next => {
+            show_next_issue(storage).await?;
+        }
     }
 
     Ok(())
@@ -443,4 +446,28 @@ fn get_content_from_args(
             Ok(String::new())
         }
     }
+}
+
+async fn show_next_issue(
+    storage: FileSystemIssueStorage,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match storage.get_next_issue().await? {
+        Some(issue) => {
+            let status = format_issue_status(issue.completed);
+            
+            println!("{} Next issue: {}", status, issue.name.as_str().bold());
+            println!("📁 File: {}", issue.file_path.display());
+            println!(
+                "📅 Created: {}",
+                issue.created_at.format("%Y-%m-%d %H:%M:%S")
+            );
+            println!();
+            println!("{}", issue.content);
+        }
+        None => {
+            println!("🎉 No pending issues found. All issues are completed!");
+        }
+    }
+
+    Ok(())
 }

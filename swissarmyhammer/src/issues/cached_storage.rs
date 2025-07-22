@@ -151,6 +151,13 @@ impl IssueStorage for CachedIssueStorage {
 
         Ok(completed_issues)
     }
+    
+    async fn get_next_issue(&self) -> Result<Option<Issue>> {
+        // For get_next_issue, we delegate to the underlying storage
+        // since determining the "next" issue requires the full sorted list
+        // and caching individual issues doesn't help with this operation
+        self.storage.get_next_issue().await
+    }
 }
 
 #[cfg(test)]

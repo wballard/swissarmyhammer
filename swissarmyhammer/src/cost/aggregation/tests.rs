@@ -1,7 +1,7 @@
 //! Tests for cost aggregation functionality
 
 #[cfg(test)]
-mod tests {
+mod aggregation_tests {
     use super::super::*;
     use crate::config::AggregationConfig;
     use crate::cost::aggregation::{
@@ -116,12 +116,10 @@ mod tests {
 
     /// Create test workflow metrics with sample cost data
     fn create_test_workflow_metrics() -> WorkflowMetrics {
-        let metrics = WorkflowMetrics::new();
-
         // Note: In a real implementation, we would populate the metrics with actual cost data
         // For testing purposes, we'll create a minimal metrics instance
 
-        metrics
+        WorkflowMetrics::new()
     }
 
     fn create_test_aggregator() -> CostAggregator {
@@ -254,7 +252,7 @@ mod tests {
 
         let report = result.unwrap();
         assert_eq!(report.metadata.format, ExportFormat::Json);
-        assert!(report.sections.len() > 0);
+        assert!(!report.sections.is_empty());
     }
 
     #[test]
@@ -312,7 +310,7 @@ mod tests {
         assert!(result.is_ok());
 
         let outliers = result.unwrap();
-        assert!(outliers.len() > 0);
+        assert!(!outliers.is_empty());
 
         let outlier = &outliers[0];
         assert_eq!(outlier.issue_id, "outlier");

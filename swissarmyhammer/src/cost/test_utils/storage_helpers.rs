@@ -246,12 +246,12 @@ impl StorageTestHarness<MockStorageForTesting> {
         // Complete the session
         self.tracker.complete_session(session_id, status)?;
 
-        let session =
-            self.tracker
-                .get_session(session_id)
-                .ok_or_else(|| CostError::SessionNotFound {
-                    session_id: *session_id,
-                })?;
+        let session = self
+            .tracker
+            .get_session(session_id)
+            .ok_or(CostError::SessionNotFound {
+                session_id: *session_id,
+            })?;
 
         let mut results = StorageResults::new();
 
@@ -345,7 +345,7 @@ impl StorageTestHarness<MockStorageForTesting> {
             },
             total_duration: session
                 .total_duration
-                .map(|d| crate::cost::formatting::SessionDuration::new(d)),
+                .map(crate::cost::formatting::SessionDuration::new),
             successful_calls: crate::cost::formatting::ApiCallCount::new(
                 session
                     .api_calls
@@ -470,6 +470,12 @@ pub struct ExpectedCostData {
     pub output_tokens: u32,
 }
 
+impl Default for MultiBackendValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MultiBackendValidator {
     /// Create a new multi-backend validator
     pub fn new() -> Self {
@@ -546,6 +552,12 @@ pub struct MockStorageForTesting {
 struct MockIssueData {
     content: String,
     cost_data: Option<IssueCostData>,
+}
+
+impl Default for MockStorageForTesting {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MockStorageForTesting {
@@ -707,6 +719,12 @@ impl IssueStorage for MockStorageForTesting {
 pub struct PerformanceValidator {
     start_times: HashMap<String, std::time::Instant>,
     benchmarks: HashMap<String, std::time::Duration>,
+}
+
+impl Default for PerformanceValidator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PerformanceValidator {

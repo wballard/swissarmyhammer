@@ -57,17 +57,26 @@ impl Default for PerformanceBenchmarks {
 /// Performance test results for regression detection
 #[derive(Debug, Clone)]
 pub struct PerformanceTestResult {
+    /// Name of the performance test
     pub test_name: String,
+    /// Total number of operations performed during the test
     pub operation_count: u64,
+    /// Total time taken to complete all operations
     pub total_duration: Duration,
+    /// Average time per operation
     pub average_operation_time: Duration,
+    /// Peak memory usage during the test in bytes
     pub peak_memory_usage: usize,
+    /// Number of operations completed per second
     pub operations_per_second: f64,
+    /// Percentage of operations that completed successfully (0.0 to 1.0)
     pub success_rate: f64,
-    pub percentiles: HashMap<String, Duration>, // P50, P95, P99
+    /// Performance percentiles (P50, P95, P99) mapping percentile names to duration values
+    pub percentiles: HashMap<String, Duration>,
 }
 
 impl PerformanceTestResult {
+    /// Calculates operations per second from operation count and total duration
     pub fn operations_per_second(operation_count: u64, duration: Duration) -> f64 {
         if duration.as_secs_f64() > 0.0 {
             operation_count as f64 / duration.as_secs_f64()
@@ -76,6 +85,7 @@ impl PerformanceTestResult {
         }
     }
 
+    /// Checks if the test results meet the specified performance criteria
     pub fn meets_performance_criteria(&self, benchmarks: &PerformanceBenchmarks) -> bool {
         self.operations_per_second >= benchmarks.min_ops_per_second
             && self.peak_memory_usage

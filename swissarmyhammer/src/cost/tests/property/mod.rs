@@ -152,19 +152,7 @@ async fn property_token_count_consistency() {
             actual_usage.total_tokens
         );
 
-        // Property: Token values should be non-negative
-        assert!(
-            actual_usage.input_tokens >= 0,
-            "Input tokens should be non-negative"
-        );
-        assert!(
-            actual_usage.output_tokens >= 0,
-            "Output tokens should be non-negative"
-        );
-        assert!(
-            actual_usage.total_tokens >= 0,
-            "Total tokens should be non-negative"
-        );
+        // Note: Token values are u32 (unsigned), so they are inherently non-negative
     }
 }
 
@@ -174,7 +162,7 @@ async fn property_session_state_transitions() {
     let harness = CostTrackingTestHarness::new();
 
     // Test various session lifecycle patterns
-    let test_scenarios = vec![
+    let test_scenarios = [
         vec![CostSessionStatus::Completed],
         vec![CostSessionStatus::Failed],
         vec![CostSessionStatus::Cancelled],
@@ -326,13 +314,13 @@ async fn property_data_consistency_across_operations() {
         // Property: Token counts should sum correctly
         let actual_input: u32 = session
             .api_calls
-            .iter()
-            .map(|(_, call)| call.input_tokens)
+            .values()
+            .map(|call| call.input_tokens)
             .sum();
         let actual_output: u32 = session
             .api_calls
-            .iter()
-            .map(|(_, call)| call.output_tokens)
+            .values()
+            .map(|call| call.output_tokens)
             .sum();
 
         assert_eq!(
@@ -573,8 +561,8 @@ async fn property_concurrent_data_integrity() {
 
         let actual_tokens: u32 = session
             .api_calls
-            .iter()
-            .map(|(_, call)| call.input_tokens + call.output_tokens)
+            .values()
+            .map(|call| call.input_tokens + call.output_tokens)
             .sum();
 
         assert_eq!(

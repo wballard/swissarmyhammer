@@ -4,7 +4,6 @@
 //! and edge cases that could cause system failures. These tests ensure robustness
 //! under extreme conditions and validate proper error handling throughout the system.
 
-
 use crate::cost::{
     calculator::CostCalculator,
     tests::CostTrackingTestHarness,
@@ -320,7 +319,8 @@ async fn test_malformed_api_calls() {
 
         // Test with extremely long URLs
         let config = EdgeCaseTestConfig::default();
-        let long_url = "https://api.anthropic.com/".to_string() + &"x".repeat(config.max_url_length);
+        let long_url =
+            "https://api.anthropic.com/".to_string() + &"x".repeat(config.max_url_length);
         let api_call_result = ApiCall::new(long_url, "claude-3-sonnet-20241022");
 
         match api_call_result {

@@ -142,7 +142,11 @@ impl PerformanceOptimizer {
         // Use optimized token counter
         let token_usage = {
             let count_start = Instant::now();
-            let usage = self.token_counter.count_from_response(response_body, None, "claude-3-sonnet-20241022")?;
+            let usage = self.token_counter.count_from_response(
+                response_body,
+                None,
+                "claude-3-sonnet-20241022",
+            )?;
             let count_duration = count_start.elapsed();
 
             // Record token counting performance

@@ -59,7 +59,14 @@ pub struct FailureInjector {
     success_count: AtomicU32,
 }
 
+impl Default for FailureInjector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FailureInjector {
+    /// Creates a new failure injector with all failure types disabled
     pub fn new() -> Self {
         Self {
             network_failures: AtomicBool::new(false),
@@ -71,22 +78,27 @@ impl FailureInjector {
         }
     }
 
+    /// Enables network failure injection for subsequent operations
     pub fn enable_network_failures(&self) {
         self.network_failures.store(true, Ordering::Relaxed);
     }
 
+    /// Enables storage failure injection for subsequent operations
     pub fn enable_storage_failures(&self) {
         self.storage_failures.store(true, Ordering::Relaxed);
     }
 
+    /// Enables memory pressure simulation for subsequent operations
     pub fn enable_memory_pressure(&self) {
         self.memory_pressure.store(true, Ordering::Relaxed);
     }
 
+    /// Enables random delays for subsequent operations
     pub fn enable_random_delays(&self) {
         self.random_delays.store(true, Ordering::Relaxed);
     }
 
+    /// Disables all failure injection types
     pub fn disable_all_failures(&self) {
         self.network_failures.store(false, Ordering::Relaxed);
         self.storage_failures.store(false, Ordering::Relaxed);
@@ -94,6 +106,7 @@ impl FailureInjector {
         self.random_delays.store(false, Ordering::Relaxed);
     }
 
+    /// Attempts to inject a failure based on enabled failure types and operation ID
     pub async fn maybe_inject_failure(&self, operation_id: u32) -> Result<(), ChaosError> {
         // Inject random delays if enabled
         if self.random_delays.load(Ordering::Relaxed) {
@@ -129,6 +142,7 @@ impl FailureInjector {
         Ok(())
     }
 
+    /// Returns statistics about failure injection (successes, failures, success_rate)
     pub fn get_stats(&self) -> (u32, u32, f64) {
         let failures = self.failure_count.load(Ordering::Relaxed);
         let successes = self.success_count.load(Ordering::Relaxed);
@@ -142,21 +156,26 @@ impl FailureInjector {
     }
 }
 
+/// Errors that can be injected during chaos testing
 #[derive(Debug, thiserror::Error)]
 pub enum ChaosError {
+    /// Network-related failure simulation
     #[error("Network failure: {0}")]
     NetworkFailure(String),
+    /// Storage-related failure simulation
     #[error("Storage failure: {0}")]
     StorageFailure(String),
+    /// Resource exhaustion simulation (memory, CPU, etc.)
     #[error("Resource exhaustion: {0}")]
     ResourceExhaustion(String),
+    /// Random failure for unpredictable chaos testing
     #[error("Random chaos: {0}")]
     RandomFailure(String),
 }
 
 #[tokio::test]
 async fn test_random_api_call_failures() {
-    let mut harness = CostTrackingTestHarness::with_config()
+    let harness = CostTrackingTestHarness::with_config()
         .with_failure_injection()
         .build();
 
@@ -207,18 +226,18 @@ async fn test_random_api_call_failures() {
                         Ok(session_id) => {
                             // Try to add API calls with potential failures
                             let mut call_successes = 0;
-                            let mut call_failures = 0;
+                            let mut _call_failures = 0;
 
                             for call_id in 0..3 {
                                 // Inject more chaos for API calls
                                 if let Err(_) =
                                     injector.maybe_inject_failure(operation_id + call_id).await
                                 {
-                                    call_failures += 1;
+                                    _call_failures += 1;
                                     continue;
                                 }
 
-                                let mut api_call = ApiCall::new(
+                                let api_call = ApiCall::new(
                                     format!(
                                         "https://api.anthropic.com/chaos/{}/{}",
                                         operation_id, call_id
@@ -256,10 +275,10 @@ async fn test_random_api_call_failures() {
 
                                         match add_result {
                                             Ok(_) => call_successes += 1,
-                                            Err(_) => call_failures += 1,
+                                            Err(_) => _call_failures += 1,
                                         }
                                     }
-                                    Err(_) => call_failures += 1,
+                                    Err(_) => _call_failures += 1,
                                 }
                             }
 
@@ -683,7 +702,7 @@ async fn test_concurrent_failures_under_load() {
 
 #[tokio::test]
 async fn test_recovery_after_failures() {
-    let mut harness = CostTrackingTestHarness::new();
+    let harness = CostTrackingTestHarness::new();
     let config = ChaosTestConfig::default();
     let failure_injector = Arc::new(FailureInjector::new());
 
@@ -702,7 +721,7 @@ async fn test_recovery_after_failures() {
         info!("Starting failure injection phase");
         let failure_start = Instant::now();
         let mut operations_during_failure = 0;
-        let mut failures_during_failure = 0;
+        let mut _failures_during_failure = 0;
 
         // Run operations under heavy failure conditions
         while failure_start.elapsed() < Duration::from_secs(15) {
@@ -710,7 +729,7 @@ async fn test_recovery_after_failures() {
                 .maybe_inject_failure(operations_during_failure)
                 .await
             {
-                failures_during_failure += 1;
+                _failures_during_failure += 1;
                 operations_during_failure += 1;
                 continue;
             }
@@ -727,10 +746,10 @@ async fn test_recovery_after_failures() {
                     if session_result.is_ok() {
                         // Minimal success during failure phase
                     } else {
-                        failures_during_failure += 1;
+                        _failures_during_failure += 1;
                     }
                 }
-                Err(_) => failures_during_failure += 1,
+                Err(_) => _failures_during_failure += 1,
             }
 
             operations_during_failure += 1;

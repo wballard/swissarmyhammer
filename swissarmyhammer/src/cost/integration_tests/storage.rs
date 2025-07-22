@@ -171,7 +171,7 @@ async fn test_issue_markdown_cost_integration() {
     let session_id = harness.start_cost_session(issue_id.clone()).unwrap();
 
     // Add realistic API calls with varied token usage
-    let realistic_calls = vec![
+    let realistic_calls = [
         ("claude-3-sonnet-20241022", 800, 1200),
         ("claude-3-haiku-20240307", 500, 300),
         ("claude-3-sonnet-20241022", 1200, 1800),
@@ -584,7 +584,7 @@ async fn test_backward_compatibility() {
     let mut harness = StorageTestHarness::new().await.unwrap();
 
     // Test with various issue formats that should be backward compatible
-    let issue_formats = vec![
+    let issue_formats = [
         "legacy-issue-001",
         "new-format-2024",
         "issue-with-special-chars-!@#",

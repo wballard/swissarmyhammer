@@ -10,14 +10,12 @@
 // pub mod graceful_degradation;
 
 use crate::cost::{
-    test_utils::{ApiCallGenerator, MemoryUsageTracker},
+    test_utils::MemoryUsageTracker,
     tests::CostTrackingTestHarness,
     tracker::{ApiCall, ApiCallStatus, CostError, CostSessionStatus, IssueId, MAX_COST_SESSIONS},
 };
 use rust_decimal::Decimal;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
 use tokio::time::{interval, sleep, timeout};
 
 /// Configuration for reliability testing scenarios
@@ -741,77 +739,4 @@ async fn test_sustained_operation_stability() {
         "Sustained stability test: {} sessions created and completed",
         created
     );
-}
-
-/// Helper function to simulate realistic API call patterns
-async fn simulate_realistic_workflow(
-    tracker: Arc<Mutex<crate::cost::CostTracker>>,
-    calculator: &crate::cost::calculator::CostCalculator,
-    _api_generator: &ApiCallGenerator,
-    workflow_id: usize,
-) -> Result<(crate::cost::CostSessionId, Decimal), Box<dyn std::error::Error + Send + Sync>> {
-    let issue_id = IssueId::new(format!("realistic-workflow-{}", workflow_id))?;
-    let session_id = {
-        let mut tracker_guard = tracker.lock().await;
-        tracker_guard.start_session(issue_id)?
-    };
-
-    // Simulate realistic workflow phases
-    let phases = vec![
-        ("analysis", 2),
-        ("implementation", 4),
-        ("testing", 1),
-        ("documentation", 1),
-    ];
-
-    for (phase_name, num_calls) in phases {
-        for call_id in 0..num_calls {
-            let mut api_call = ApiCall::new(
-                format!("https://api.anthropic.com/v1/{}/{}", phase_name, call_id),
-                "claude-3-sonnet-20241022",
-            )?;
-
-            // Phase-specific token patterns
-            let (input_tokens, output_tokens) = match phase_name {
-                "analysis" => (800, 400),
-                "implementation" => (500, 1200),
-                "testing" => (300, 200),
-                "documentation" => (400, 800),
-                _ => (500, 500),
-            };
-
-            api_call.complete(input_tokens, output_tokens, ApiCallStatus::Success, None);
-
-            {
-                let mut tracker_guard = tracker.lock().await;
-                tracker_guard.add_api_call(&session_id, api_call)?;
-            }
-
-            // Small delay between calls in same phase
-            sleep(Duration::from_millis(50)).await;
-        }
-
-        // Delay between phases
-        sleep(Duration::from_millis(100)).await;
-    }
-
-    // Calculate cost
-    let session = {
-        let tracker_guard = tracker.lock().await;
-        tracker_guard.get_session(&session_id).cloned()
-    };
-
-    let total_cost = if let Some(session) = session {
-        calculator.calculate_session_cost(&session)?.total_cost
-    } else {
-        Decimal::ZERO
-    };
-
-    // Complete workflow
-    {
-        let mut tracker_guard = tracker.lock().await;
-        tracker_guard.complete_session(&session_id, CostSessionStatus::Completed)?;
-    }
-
-    Ok((session_id, total_cost))
 }

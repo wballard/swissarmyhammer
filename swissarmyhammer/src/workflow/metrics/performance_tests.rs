@@ -8,7 +8,7 @@ use rust_decimal::Decimal;
 use std::time::{Duration, Instant};
 
 #[cfg(test)]
-mod performance_tests {
+mod tests {
     use super::*;
 
     /// Helper function to create test cost metrics

@@ -4,7 +4,6 @@
 //! cost tracking system, validating end-to-end workflows and multi-component
 //! interactions under realistic conditions.
 
-
 use crate::cost::{
     calculator::PricingModel,
     tests::CostTrackingTestHarness,

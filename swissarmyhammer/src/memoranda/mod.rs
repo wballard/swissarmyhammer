@@ -10,31 +10,32 @@
 //! - **JSON Serialization**: Full serde support for MCP protocol integration
 //! - **Type Safety**: Strong typing to prevent ID confusion with other system components
 //! - **Async Support**: Designed for async/await patterns throughout the system
+//! - **Filesystem Storage**: Persistent storage with atomic operations and concurrent access
 //!
 //! ## Basic Usage
 //!
 //! ```rust
-//! use swissarmyhammer::memoranda::{Memo, MemoId, CreateMemoRequest};
+//! use swissarmyhammer::memoranda::{Memo, MemoId, CreateMemoRequest, FileSystemMemoStorage, MemoStorage};
 //! use chrono::Utc;
 //!
-//! # fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! // Create a new memo ID
-//! let memo_id = MemoId::new();
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! // Create storage
+//! let storage = FileSystemMemoStorage::new_default()?;
 //!
 //! // Create a memo
-//! let memo = Memo {
-//!     id: memo_id,
-//!     title: "My First Memo".to_string(),
-//!     content: "This is the content of my memo.".to_string(),
-//!     created_at: Utc::now(),
-//!     updated_at: Utc::now(),
-//! };
+//! let memo = storage.create_memo(
+//!     "My First Memo".to_string(),
+//!     "This is the content of my memo.".to_string()
+//! ).await?;
 //!
-//! // Create a request for MCP integration
-//! let request = CreateMemoRequest {
-//!     title: "New Memo".to_string(),
-//!     content: "Content here".to_string(),
-//! };
+//! // Retrieve memo
+//! let retrieved = storage.get_memo(&memo.id).await?;
+//!
+//! // List all memos
+//! let all_memos = storage.list_memos().await?;
+//!
+//! // Search memos
+//! let search_results = storage.search_memos("content").await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -43,6 +44,12 @@ use crate::error::{Result, SwissArmyHammerError};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
+
+/// Filesystem storage backend for memoranda
+pub mod storage;
+
+// Re-export storage types for convenience
+pub use storage::{FileSystemMemoStorage, MemoState, MemoStorage};
 
 /// Type-safe wrapper for memo IDs using ULID to prevent confusion with other IDs
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

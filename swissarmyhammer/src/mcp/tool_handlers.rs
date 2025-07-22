@@ -1,5 +1,6 @@
 //! Tool handlers for MCP operations
 
+use super::memo_types::*;
 use super::responses::{
     create_error_response, create_issue_response, create_mark_complete_response,
     create_success_response,
@@ -9,6 +10,7 @@ use super::utils::validate_issue_name;
 use crate::config::Config;
 use crate::git::GitOperations;
 use crate::issues::{Issue, IssueStorage};
+use crate::memoranda::{MemoId, MemoStorage};
 use crate::Result;
 use rmcp::model::*;
 use rmcp::Error as McpError;
@@ -16,20 +18,24 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
 /// Tool handlers for MCP server operations
+#[derive(Clone)]
 pub struct ToolHandlers {
     issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
     git_ops: Arc<Mutex<Option<GitOperations>>>,
+    memo_storage: Arc<RwLock<Box<dyn MemoStorage>>>,
 }
 
 impl ToolHandlers {
-    /// Create a new tool handlers instance with the given issue storage and git operations
+    /// Create a new tool handlers instance with the given issue storage, git operations, and memo storage
     pub fn new(
         issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
         git_ops: Arc<Mutex<Option<GitOperations>>>,
+        memo_storage: Arc<RwLock<Box<dyn MemoStorage>>>,
     ) -> Self {
         Self {
             issue_storage,
             git_ops,
+            memo_storage,
         }
     }
 
@@ -494,6 +500,356 @@ impl ToolHandlers {
         }
 
         Ok(())
+    }
+
+    /// Handle the memo_create tool operation.
+    ///
+    /// Creates a new memo with the given title and content.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The create memo request containing title and content
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    pub async fn handle_memo_create(
+        &self,
+        request: CreateMemoRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        tracing::debug!("Creating memo with title: {}", request.title);
+
+        let memo_storage = self.memo_storage.write().await;
+        match memo_storage
+            .create_memo(request.title, request.content)
+            .await
+        {
+            Ok(memo) => {
+                tracing::info!("Created memo {}", memo.id);
+                Ok(create_success_response(format!(
+                    "Successfully created memo '{}' with ID: {}\n\nTitle: {}\nContent: {}",
+                    memo.title, memo.id, memo.title, memo.content
+                )))
+            }
+            Err(e) => {
+                tracing::error!("Failed to create memo: {}", e);
+                Err(McpError::internal_error(
+                    format!("Failed to create memo: {e}"),
+                    None,
+                ))
+            }
+        }
+    }
+
+    /// Handle the memo_get tool operation.
+    ///
+    /// Retrieves a memo by its ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The get memo request containing the memo ID
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    pub async fn handle_memo_get(
+        &self,
+        request: GetMemoRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        tracing::debug!("Getting memo with ID: {}", request.id);
+
+        let memo_id = match MemoId::from_string(request.id.clone()) {
+            Ok(id) => id,
+            Err(_) => {
+                return Err(McpError::invalid_params(
+                    format!("Invalid memo ID format: {}", request.id),
+                    None,
+                ))
+            }
+        };
+
+        let memo_storage = self.memo_storage.read().await;
+        match memo_storage.get_memo(&memo_id).await {
+            Ok(memo) => {
+                tracing::info!("Retrieved memo {}", memo.id);
+                Ok(create_success_response(format!(
+                    "Memo found:\n\nID: {}\nTitle: {}\nCreated: {}\nUpdated: {}\n\nContent:\n{}",
+                    memo.id, memo.title, memo.created_at, memo.updated_at, memo.content
+                )))
+            }
+            Err(e) => {
+                tracing::warn!("Memo not found: {}", e);
+                Err(McpError::invalid_params(
+                    format!("Memo not found: {e}"),
+                    None,
+                ))
+            }
+        }
+    }
+
+    /// Handle the memo_update tool operation.
+    ///
+    /// Updates a memo's content by its ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The update memo request containing memo ID and new content
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    pub async fn handle_memo_update(
+        &self,
+        request: UpdateMemoRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        tracing::debug!("Updating memo with ID: {}", request.id);
+
+        let memo_id = match MemoId::from_string(request.id.clone()) {
+            Ok(id) => id,
+            Err(_) => {
+                return Err(McpError::invalid_params(
+                    format!("Invalid memo ID format: {}", request.id),
+                    None,
+                ))
+            }
+        };
+
+        let memo_storage = self.memo_storage.write().await;
+        match memo_storage.update_memo(&memo_id, request.content).await {
+            Ok(memo) => {
+                tracing::info!("Updated memo {}", memo.id);
+                Ok(create_success_response(format!(
+                    "Successfully updated memo:\n\nID: {}\nTitle: {}\nUpdated: {}\n\nContent:\n{}",
+                    memo.id, memo.title, memo.updated_at, memo.content
+                )))
+            }
+            Err(e) => {
+                tracing::error!("Failed to update memo: {}", e);
+                Err(McpError::internal_error(
+                    format!("Failed to update memo: {e}"),
+                    None,
+                ))
+            }
+        }
+    }
+
+    /// Handle the memo_delete tool operation.
+    ///
+    /// Deletes a memo by its ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The delete memo request containing the memo ID
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    pub async fn handle_memo_delete(
+        &self,
+        request: DeleteMemoRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        tracing::debug!("Deleting memo with ID: {}", request.id);
+
+        let memo_id = match MemoId::from_string(request.id.clone()) {
+            Ok(id) => id,
+            Err(_) => {
+                return Err(McpError::invalid_params(
+                    format!("Invalid memo ID format: {}", request.id),
+                    None,
+                ))
+            }
+        };
+
+        let memo_storage = self.memo_storage.write().await;
+        match memo_storage.delete_memo(&memo_id).await {
+            Ok(()) => {
+                tracing::info!("Deleted memo {}", request.id);
+                Ok(create_success_response(format!(
+                    "Successfully deleted memo with ID: {}",
+                    request.id
+                )))
+            }
+            Err(e) => {
+                tracing::error!("Failed to delete memo: {}", e);
+                Err(McpError::internal_error(
+                    format!("Failed to delete memo: {e}"),
+                    None,
+                ))
+            }
+        }
+    }
+
+    /// Handle the memo_list tool operation.
+    ///
+    /// Lists all available memos.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    pub async fn handle_memo_list(
+        &self,
+        _request: ListMemosRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        tracing::debug!("Listing all memos");
+
+        let memo_storage = self.memo_storage.read().await;
+        match memo_storage.list_memos().await {
+            Ok(memos) => {
+                tracing::info!("Retrieved {} memos", memos.len());
+                if memos.is_empty() {
+                    Ok(create_success_response("No memos found.".to_string()))
+                } else {
+                    let memo_list = memos
+                        .iter()
+                        .map(|memo| {
+                            format!(
+                                "• {} ({})\n  Created: {}\n  Updated: {}\n  Preview: {}",
+                                memo.title,
+                                memo.id,
+                                memo.created_at.format("%Y-%m-%d %H:%M"),
+                                memo.updated_at.format("%Y-%m-%d %H:%M"),
+                                memo.content.chars().take(100).collect::<String>()
+                                    + if memo.content.len() > 100 { "..." } else { "" }
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n\n");
+
+                    Ok(create_success_response(format!(
+                        "Found {} memo{}:\n\n{}",
+                        memos.len(),
+                        if memos.len() == 1 { "" } else { "s" },
+                        memo_list
+                    )))
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to list memos: {}", e);
+                Err(McpError::internal_error(
+                    format!("Failed to list memos: {e}"),
+                    None,
+                ))
+            }
+        }
+    }
+
+    /// Handle the memo_search tool operation.
+    ///
+    /// Searches memos by query string.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The search memo request containing the search query
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    pub async fn handle_memo_search(
+        &self,
+        request: SearchMemosRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        tracing::debug!("Searching memos with query: {}", request.query);
+
+        let memo_storage = self.memo_storage.read().await;
+        match memo_storage.search_memos(&request.query).await {
+            Ok(memos) => {
+                tracing::info!("Search returned {} memos", memos.len());
+                if memos.is_empty() {
+                    Ok(create_success_response(format!(
+                        "No memos found matching query: '{}'",
+                        request.query
+                    )))
+                } else {
+                    let memo_list = memos
+                        .iter()
+                        .map(|memo| {
+                            format!(
+                                "• {} ({})\n  Created: {}\n  Updated: {}\n  Preview: {}",
+                                memo.title,
+                                memo.id,
+                                memo.created_at.format("%Y-%m-%d %H:%M"),
+                                memo.updated_at.format("%Y-%m-%d %H:%M"),
+                                memo.content.chars().take(200).collect::<String>()
+                                    + if memo.content.len() > 200 { "..." } else { "" }
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n\n");
+
+                    Ok(create_success_response(format!(
+                        "Found {} memo{} matching '{}':\n\n{}",
+                        memos.len(),
+                        if memos.len() == 1 { "" } else { "s" },
+                        request.query,
+                        memo_list
+                    )))
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to search memos: {}", e);
+                Err(McpError::internal_error(
+                    format!("Failed to search memos: {e}"),
+                    None,
+                ))
+            }
+        }
+    }
+
+    /// Handle the memo_get_all_context tool operation.
+    ///
+    /// Gets all memo content formatted for AI context consumption.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<CallToolResult, McpError>` - The tool call result
+    pub async fn handle_memo_get_all_context(
+        &self,
+        _request: GetAllContextRequest,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        tracing::debug!("Getting all memo context");
+
+        let memo_storage = self.memo_storage.read().await;
+        match memo_storage.list_memos().await {
+            Ok(memos) => {
+                tracing::info!("Retrieved {} memos for context", memos.len());
+                if memos.is_empty() {
+                    Ok(create_success_response("No memos available for context.".to_string()))
+                } else {
+                    // Sort memos by updated_at descending (most recent first)
+                    let mut sorted_memos = memos;
+                    sorted_memos.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+
+                    let context = sorted_memos
+                        .iter()
+                        .map(|memo| {
+                            format!(
+                                "=== {} (ID: {}) ===\nCreated: {}\nUpdated: {}\n\n{}",
+                                memo.title,
+                                memo.id,
+                                memo.created_at.format("%Y-%m-%d %H:%M"),
+                                memo.updated_at.format("%Y-%m-%d %H:%M"),
+                                memo.content
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(&format!("\n\n{}\n\n", "=".repeat(80)));
+
+                    Ok(create_success_response(format!(
+                        "All memo context ({} memo{}):\n\n{}",
+                        sorted_memos.len(),
+                        if sorted_memos.len() == 1 { "" } else { "s" },
+                        context
+                    )))
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to get memo context: {}", e);
+                Err(McpError::internal_error(
+                    format!("Failed to get memo context: {e}"),
+                    None,
+                ))
+            }
+        }
     }
 
     /// Helper method to get an issue and handle errors consistently

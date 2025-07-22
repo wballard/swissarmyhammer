@@ -5,6 +5,7 @@ use std::sync::Arc;
 use swissarmyhammer::issues::{FileSystemIssueStorage, IssueStorage};
 use swissarmyhammer::mcp::tool_handlers::ToolHandlers;
 use swissarmyhammer::mcp::types::AllCompleteRequest;
+use swissarmyhammer::memoranda::{FileSystemMemoStorage, MemoStorage};
 use tempfile::TempDir;
 use tokio::sync::RwLock;
 
@@ -25,8 +26,10 @@ impl EdgeCaseTestEnvironment {
         );
         let issue_storage = Arc::new(RwLock::new(issue_storage as Box<dyn IssueStorage>));
 
-        let git_ops = Arc::new(tokio::sync::Mutex::new(None));
-        let tool_handlers = ToolHandlers::new(issue_storage.clone(), git_ops);
+        let git_ops = Arc::new(tokio::sync::Mutex::new(None::<swissarmyhammer::git::GitOperations>));
+        let memo_storage = Box::new(FileSystemMemoStorage::new_default().expect("Failed to create memo storage"));
+        let memo_storage = Arc::new(RwLock::new(memo_storage as Box<dyn MemoStorage>));
+        let tool_handlers = ToolHandlers::new(issue_storage.clone(), git_ops, memo_storage);
 
         Self {
             temp_dir,

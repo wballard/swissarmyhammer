@@ -3,6 +3,7 @@
 use crate::file_watcher::{FileWatcher, FileWatcherCallback};
 use crate::git::GitOperations;
 use crate::issues::{FileSystemIssueStorage, Issue, IssueStorage};
+use crate::memoranda::{FileSystemMemoStorage, MemoStorage};
 use crate::workflow::{
     FileSystemWorkflowRunStorage, FileSystemWorkflowStorage, WorkflowRunStorageBackend,
     WorkflowStorage, WorkflowStorageBackend,
@@ -21,13 +22,19 @@ use tokio::sync::{Mutex, RwLock};
 /// MCP module structure
 pub mod error_handling;
 pub mod file_watcher;
+pub mod memo_types;
 pub mod responses;
 pub mod tool_handlers;
 pub mod types;
 pub mod utils;
 
 // Re-export commonly used items from submodules
+use memo_types::{
+    CreateMemoRequest, DeleteMemoRequest, GetAllContextRequest, GetMemoRequest, ListMemosRequest,
+    SearchMemosRequest, UpdateMemoRequest,
+};
 use responses::create_issue_response;
+use tool_handlers::ToolHandlers;
 use types::{
     AllCompleteRequest, CreateIssueRequest, CurrentIssueRequest, IssueName, MarkCompleteRequest,
     MergeIssueRequest, NextIssueRequest, UpdateIssueRequest, WorkIssueRequest,
@@ -76,6 +83,8 @@ pub struct McpServer {
     file_watcher: Arc<Mutex<FileWatcher>>,
     issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
     git_ops: Arc<Mutex<Option<GitOperations>>>,
+    memo_storage: Arc<RwLock<Box<dyn MemoStorage>>>,
+    tool_handlers: ToolHandlers,
 }
 
 impl McpServer {
@@ -138,6 +147,12 @@ impl McpServer {
             SwissArmyHammerError::Other(format!("Failed to create issue storage: {e}"))
         })?) as Box<dyn IssueStorage>;
 
+        // Initialize memo storage with default location
+        let memo_storage = Box::new(FileSystemMemoStorage::new_default().map_err(|e| {
+            tracing::error!("Failed to create memo storage: {}", e);
+            SwissArmyHammerError::Other(format!("Failed to create memo storage: {e}"))
+        })?) as Box<dyn MemoStorage>;
+
         // Initialize git operations with work_dir - make it optional for tests
         let git_ops = match GitOperations::with_work_dir(work_dir.clone()) {
             Ok(ops) => Some(ops),
@@ -147,12 +162,26 @@ impl McpServer {
             }
         };
 
+        // Create Arc wrappers for shared storage
+        let issue_storage = Arc::new(RwLock::new(issue_storage));
+        let memo_storage = Arc::new(RwLock::new(memo_storage));
+        let git_ops_arc = Arc::new(Mutex::new(git_ops));
+
+        // Initialize tool handlers with all storage instances
+        let tool_handlers = ToolHandlers::new(
+            issue_storage.clone(),
+            git_ops_arc.clone(),
+            memo_storage.clone(),
+        );
+
         Ok(Self {
             library: Arc::new(RwLock::new(library)),
             workflow_storage: Arc::new(RwLock::new(workflow_storage)),
             file_watcher: Arc::new(Mutex::new(FileWatcher::new())),
-            issue_storage: Arc::new(RwLock::new(issue_storage)),
-            git_ops: Arc::new(Mutex::new(git_ops)),
+            issue_storage,
+            git_ops: git_ops_arc,
+            memo_storage,
+            tool_handlers,
         })
     }
 
@@ -1958,6 +1987,48 @@ impl ServerHandler for McpServer {
                 input_schema: Self::generate_tool_schema::<NextIssueRequest>(),
                 annotations: None,
             },
+            Tool {
+                name: "memo_create".into(),
+                description: Some("Create a new memo with the given title and content. Returns the created memo with its unique ID.".into()),
+                input_schema: Self::generate_tool_schema::<CreateMemoRequest>(),
+                annotations: None,
+            },
+            Tool {
+                name: "memo_get".into(),
+                description: Some("Retrieve a memo by its unique ID. Returns the memo content with metadata.".into()),
+                input_schema: Self::generate_tool_schema::<GetMemoRequest>(),
+                annotations: None,
+            },
+            Tool {
+                name: "memo_update".into(),
+                description: Some("Update a memo's content by its ID. The title remains unchanged.".into()),
+                input_schema: Self::generate_tool_schema::<UpdateMemoRequest>(),
+                annotations: None,
+            },
+            Tool {
+                name: "memo_delete".into(),
+                description: Some("Delete a memo by its unique ID. This action cannot be undone.".into()),
+                input_schema: Self::generate_tool_schema::<DeleteMemoRequest>(),
+                annotations: None,
+            },
+            Tool {
+                name: "memo_list".into(),
+                description: Some("List all available memos with their titles, IDs, and content previews.".into()),
+                input_schema: Self::generate_tool_schema::<ListMemosRequest>(),
+                annotations: None,
+            },
+            Tool {
+                name: "memo_search".into(),
+                description: Some("Search memos by query string. Searches both title and content for matches.".into()),
+                input_schema: Self::generate_tool_schema::<SearchMemosRequest>(),
+                annotations: None,
+            },
+            Tool {
+                name: "memo_get_all_context".into(),
+                description: Some("Get all memo content formatted for AI context consumption. Returns all memos sorted by most recent first.".into()),
+                input_schema: Self::generate_tool_schema::<GetAllContextRequest>(),
+                annotations: None,
+            },
         ];
 
         Ok(ListToolsResult {
@@ -2034,6 +2105,62 @@ impl ServerHandler for McpServer {
                 ))
                 .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
                 self.handle_issue_next(req).await
+            }
+
+            "memo_create" => {
+                let req: CreateMemoRequest = serde_json::from_value(serde_json::Value::Object(
+                    request.arguments.clone().unwrap_or_default(),
+                ))
+                .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
+                self.tool_handlers.handle_memo_create(req).await
+            }
+
+            "memo_get" => {
+                let req: GetMemoRequest = serde_json::from_value(serde_json::Value::Object(
+                    request.arguments.clone().unwrap_or_default(),
+                ))
+                .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
+                self.tool_handlers.handle_memo_get(req).await
+            }
+
+            "memo_update" => {
+                let req: UpdateMemoRequest = serde_json::from_value(serde_json::Value::Object(
+                    request.arguments.clone().unwrap_or_default(),
+                ))
+                .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
+                self.tool_handlers.handle_memo_update(req).await
+            }
+
+            "memo_delete" => {
+                let req: DeleteMemoRequest = serde_json::from_value(serde_json::Value::Object(
+                    request.arguments.clone().unwrap_or_default(),
+                ))
+                .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
+                self.tool_handlers.handle_memo_delete(req).await
+            }
+
+            "memo_list" => {
+                let req: ListMemosRequest = serde_json::from_value(serde_json::Value::Object(
+                    request.arguments.clone().unwrap_or_default(),
+                ))
+                .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
+                self.tool_handlers.handle_memo_list(req).await
+            }
+
+            "memo_search" => {
+                let req: SearchMemosRequest = serde_json::from_value(serde_json::Value::Object(
+                    request.arguments.clone().unwrap_or_default(),
+                ))
+                .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
+                self.tool_handlers.handle_memo_search(req).await
+            }
+
+            "memo_get_all_context" => {
+                let req: GetAllContextRequest = serde_json::from_value(serde_json::Value::Object(
+                    request.arguments.clone().unwrap_or_default(),
+                ))
+                .map_err(|e| McpError::invalid_request(format!("Invalid arguments: {e}"), None))?;
+                self.tool_handlers.handle_memo_get_all_context(req).await
             }
 
             _ => Err(McpError::invalid_request(

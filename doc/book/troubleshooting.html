@@ -36,6 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc.js"></script>
@@ -92,10 +93,13 @@
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
@@ -143,7 +147,7 @@
                         <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/docs/src/src/troubleshooting.md" title="Suggest an edit" aria-label="Suggest an edit">
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/troubleshooting.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -152,7 +156,12 @@
 
                 <div id="search-wrapper" class="hidden">
                     <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
                     </form>
                     <div id="searchresults-outer" class="searchresults-outer hidden">
                         <div id="searchresults-header" class="searchresults-header"></div>
@@ -248,7 +257,7 @@ swissarmyhammer serve --port 8081
 </li>
 <li>
 <p><strong>Debug mode</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer serve --debug
+<pre><code class="language-bash">swissarmyhammer --debug serve
 </code></pre>
 </li>
 <li>
@@ -304,12 +313,12 @@ curl -sSL https://install.sh | bash
 <li>
 <p><strong>Check logs</strong>:</p>
 <pre><code class="language-bash"># Enable debug logging
-swissarmyhammer serve --debug &gt; debug.log 2&gt;&amp;1
+swissarmyhammer --debug serve &gt; debug.log 2&gt;&amp;1
 </code></pre>
 </li>
 <li>
 <p><strong>Validate prompt syntax</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer doctor --check prompts
+<pre><code class="language-bash">swissarmyhammer validate
 </code></pre>
 </li>
 </ol>
@@ -327,8 +336,8 @@ ls -la ./.swissarmyhammer/prompts
 </li>
 <li>
 <p><strong>Validate prompts</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer test &lt;prompt-name&gt;
-swissarmyhammer doctor --check prompts --verbose
+<pre><code class="language-bash">swissarmyhammer prompt test &lt;prompt-name&gt;
+swissarmyhammer validate --verbose
 </code></pre>
 </li>
 <li>
@@ -414,7 +423,7 @@ description: What this prompt does
 <ol>
 <li>
 <p><strong>Check override hierarchy</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer list --verbose | grep "prompt-name"
+<pre><code class="language-bash">swissarmyhammer prompt list --verbose | grep "prompt-name"
 </code></pre>
 </li>
 <li>
@@ -523,23 +532,23 @@ sudo sysctl -p
 </ol>
 <h2 id="cli-command-issues"><a class="header" href="#cli-command-issues">CLI Command Issues</a></h2>
 <h3 id="test-command-fails"><a class="header" href="#test-command-fails">Test Command Fails</a></h3>
-<p><strong>Problem</strong>: <code>swissarmyhammer test</code> errors</p>
+<p><strong>Problem</strong>: <code>swissarmyhammer prompt test</code> errors</p>
 <p><strong>Solutions</strong>:</p>
 <ol>
 <li>
 <p><strong>Check prompt exists</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer list | grep "prompt-name"
+<pre><code class="language-bash">swissarmyhammer prompt list | grep "prompt-name"
 </code></pre>
 </li>
 <li>
 <p><strong>Validate arguments</strong>:</p>
 <pre><code class="language-bash"># Show required arguments
-swissarmyhammer test prompt-name --help
+swissarmyhammer prompt test prompt-name --help
 </code></pre>
 </li>
 <li>
 <p><strong>Debug mode</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer test prompt-name --debug
+<pre><code class="language-bash">swissarmyhammer prompt test prompt-name --debug
 </code></pre>
 </li>
 </ol>
@@ -614,32 +623,86 @@ ldd $(which swissarmyhammer)
 <h2 id="debug-techniques"><a class="header" href="#debug-techniques">Debug Techniques</a></h2>
 <h3 id="enable-verbose-logging"><a class="header" href="#enable-verbose-logging">Enable Verbose Logging</a></h3>
 <pre><code class="language-bash"># Server debug mode
-swissarmyhammer serve --debug
+swissarmyhammer --debug serve
 
 # Redirect to file
-swissarmyhammer serve --debug &gt; debug.log 2&gt;&amp;1
+swissarmyhammer --debug serve &gt; debug.log 2&gt;&amp;1
 
 # CLI debug
-RUST_LOG=debug swissarmyhammer test prompt-name
+RUST_LOG=debug swissarmyhammer prompt test prompt-name
 </code></pre>
 <h3 id="check-configuration"><a class="header" href="#check-configuration">Check Configuration</a></h3>
 <pre><code class="language-bash"># Run comprehensive checks
 swissarmyhammer doctor --verbose
 
 # Check specific areas
-swissarmyhammer doctor --check prompts --check mcp
+swissarmyhammer validate --check mcp
 
 # Auto-fix issues
 swissarmyhammer doctor --fix
 </code></pre>
 <h3 id="trace-mcp-communication"><a class="header" href="#trace-mcp-communication">Trace MCP Communication</a></h3>
 <pre><code class="language-bash"># Save MCP messages
-swissarmyhammer serve --debug | grep MCP &gt; mcp-trace.log
+swissarmyhammer --debug serve | grep MCP &gt; mcp-trace.log
 
 # Monitor in real-time
-swissarmyhammer serve --debug | grep -E "(request|response)"
+swissarmyhammer --debug serve | grep -E "(request|response)"
 </code></pre>
+<h2 id="configuration-issues"><a class="header" href="#configuration-issues">Configuration Issues</a></h2>
+<h3 id="configuration-file-not-loading"><a class="header" href="#configuration-file-not-loading">Configuration File Not Loading</a></h3>
+<p><strong>Problem</strong>: SwissArmyHammer isn’t using my configuration file.</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>Ensure the file is named exactly <code>swissarmyhammer.yaml</code></li>
+<li>Place the file in your repository root (same directory where you run SwissArmyHammer)</li>
+<li>Check file permissions: <code>ls -la swissarmyhammer.yaml</code></li>
+<li>Validate file syntax: <code>swissarmyhammer config validate</code></li>
+</ol>
+<h3 id="invalid-yaml-syntax"><a class="header" href="#invalid-yaml-syntax">Invalid YAML Syntax</a></h3>
+<p><strong>Problem</strong>: Getting YAML parsing errors.</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>Check indentation (use spaces, not tabs)</li>
+<li>Ensure proper YAML syntax with online validators</li>
+<li>Quote string values that contain special characters</li>
+<li>Check for trailing spaces or special characters</li>
+</ol>
+<p>Example of common YAML mistakes:</p>
+<pre><code class="language-yaml"># ❌ Wrong - uses tabs for indentation
+base_branch:	"main"
+
+# ❌ Wrong - inconsistent quotes  
+base_branch: 'main"
+
+# ✅ Correct
+base_branch: "main"
+</code></pre>
+<h3 id="branch-name-validation-errors"><a class="header" href="#branch-name-validation-errors">Branch Name Validation Errors</a></h3>
+<p><strong>Problem</strong>: Getting “Invalid configuration value for base_branch”.</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>Remove spaces from branch names: <code>feature branch</code> → <code>feature-branch</code></li>
+<li>Avoid special characters: <code>~ ^ : ? * [ \</code></li>
+<li>Use standard git branch naming conventions</li>
+<li>Check if branch actually exists in your repository</li>
+</ol>
+<h3 id="environment-variables-not-working"><a class="header" href="#environment-variables-not-working">Environment Variables Not Working</a></h3>
+<p><strong>Problem</strong>: Environment variables aren’t being used.</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>Use the correct prefix: <code>SWISSARMYHAMMER_BASE_BRANCH</code></li>
+<li>Export variables in your shell: <code>export SWISSARMYHAMMER_BASE_BRANCH=develop</code></li>
+<li>Check variable is set: <code>echo $SWISSARMYHAMMER_BASE_BRANCH</code></li>
+<li>Remember YAML config overrides environment variables</li>
+</ol>
 <h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
+<p>For configuration issues:</p>
+<pre><code class="language-bash">swissarmyhammer config help      # Configuration documentation
+swissarmyhammer config validate  # Check current config  
+swissarmyhammer config show      # Show active configuration
+swissarmyhammer doctor          # Overall system health check
+</code></pre>
+<h2 id="general-help"><a class="header" href="#general-help">General Help</a></h2>
 <h3 id="documentation"><a class="header" href="#documentation">Documentation</a></h3>
 <ul>
 <li>Check this troubleshooting guide first</li>
@@ -718,7 +781,7 @@ ps aux | grep swissarmyhammer | grep -v grep
 <h3 id="prompt-not-found"><a class="header" href="#prompt-not-found">“Prompt not found”</a></h3>
 <ul>
 <li>Prompt name doesn’t exist</li>
-<li>Check: <code>swissarmyhammer list</code></li>
+<li>Check: <code>swissarmyhammer prompt list</code></li>
 </ul>
 <h3 id="connection-refused"><a class="header" href="#connection-refused">“Connection refused”</a></h3>
 <ul>
@@ -745,14 +808,14 @@ swissarmyhammer export ~/.swissarmyhammer/backups/prompts-$(date +%Y%m%d).tar.gz
 <li>
 <p><strong>Test changes</strong>:</p>
 <pre><code class="language-bash"># Before committing
-swissarmyhammer test new-prompt
-swissarmyhammer doctor --check prompts
+swissarmyhammer prompt test new-prompt
+swissarmyhammer validate
 </code></pre>
 </li>
 <li>
 <p><strong>Monitor logs</strong>:</p>
 <pre><code class="language-bash"># Keep logs for debugging
-swissarmyhammer serve --debug &gt; server.log 2&gt;&amp;1 &amp;
+swissarmyhammer --debug serve &gt; server.log 2&gt;&amp;1 &amp;
 </code></pre>
 </li>
 </ol>
@@ -803,6 +866,7 @@ swissarmyhammer serve --debug &gt; server.log 2&gt;&amp;1 &amp;
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+
 
 
     </div>

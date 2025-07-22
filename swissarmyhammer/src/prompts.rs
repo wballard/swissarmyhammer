@@ -272,7 +272,7 @@ impl Prompt {
     /// The rendered template as a string.
     ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if:
     /// - Template parsing fails due to invalid Liquid syntax
     /// - Required arguments are missing from the provided arguments map
@@ -407,7 +407,7 @@ impl Prompt {
     /// ```
     ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if:
     /// - Template parsing fails due to invalid Liquid syntax or partial resolution
     /// - Required arguments are missing from the provided arguments map
@@ -476,7 +476,7 @@ impl Prompt {
     /// ```
     ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if:
     /// - Template parsing fails due to invalid Liquid syntax or partial resolution
     /// - Required arguments are missing from the provided arguments map
@@ -716,7 +716,7 @@ impl PromptLibrary {
     /// The number of prompts successfully loaded.
     ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if:
     /// - The directory does not exist
     /// - I/O errors occur while reading the directory or files
@@ -754,7 +754,7 @@ impl PromptLibrary {
     /// The prompt if found.
     ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if:
     /// - The prompt with the specified name is not found
     /// - Storage backend fails to retrieve the prompt
@@ -785,7 +785,7 @@ impl PromptLibrary {
     /// A vector of all prompts currently stored in the library.
     ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if:
     /// - Storage backend fails to list prompts
     ///
@@ -857,7 +857,7 @@ impl PromptLibrary {
     /// The rendered template string.
     ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if:
     /// - Template parsing fails due to invalid Liquid syntax
     /// - Required arguments are missing from the provided arguments map
@@ -1093,16 +1093,25 @@ impl PromptLoader {
 
         // Parse metadata
         if let Some(ref metadata_value) = metadata {
-            if let Some(title) = metadata_value.get("title").and_then(serde_json::Value::as_str) {
+            if let Some(title) = metadata_value
+                .get("title")
+                .and_then(serde_json::Value::as_str)
+            {
                 prompt.metadata.insert(
                     "title".to_string(),
                     serde_json::Value::String(title.to_string()),
                 );
             }
-            if let Some(desc) = metadata_value.get("description").and_then(serde_json::Value::as_str) {
+            if let Some(desc) = metadata_value
+                .get("description")
+                .and_then(serde_json::Value::as_str)
+            {
                 prompt.description = Some(desc.to_string());
             }
-            if let Some(cat) = metadata_value.get("category").and_then(serde_json::Value::as_str) {
+            if let Some(cat) = metadata_value
+                .get("category")
+                .and_then(serde_json::Value::as_str)
+            {
                 prompt.category = Some(cat.to_string());
             }
             if let Some(tags) = metadata_value.get("tags").and_then(|v| v.as_array()) {
@@ -1209,16 +1218,25 @@ impl PromptLoader {
 
         // Parse metadata
         if let Some(ref metadata_value) = metadata {
-            if let Some(title) = metadata_value.get("title").and_then(serde_json::Value::as_str) {
+            if let Some(title) = metadata_value
+                .get("title")
+                .and_then(serde_json::Value::as_str)
+            {
                 prompt.metadata.insert(
                     "title".to_string(),
                     serde_json::Value::String(title.to_string()),
                 );
             }
-            if let Some(desc) = metadata_value.get("description").and_then(serde_json::Value::as_str) {
+            if let Some(desc) = metadata_value
+                .get("description")
+                .and_then(serde_json::Value::as_str)
+            {
                 prompt.description = Some(desc.to_string());
             }
-            if let Some(cat) = metadata_value.get("category").and_then(serde_json::Value::as_str) {
+            if let Some(cat) = metadata_value
+                .get("category")
+                .and_then(serde_json::Value::as_str)
+            {
                 prompt.category = Some(cat.to_string());
             }
             if let Some(tags) = metadata_value.get("tags").and_then(|v| v.as_array()) {

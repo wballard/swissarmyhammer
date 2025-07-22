@@ -94,6 +94,8 @@ impl Doctor {
     /// Run configuration checks
     fn run_configuration_checks(&mut self) -> Result<()> {
         checks::check_claude_config(&mut self.checks)?;
+        checks::check_swissarmyhammer_config_validation(&mut self.checks)?;
+        checks::check_swissarmyhammer_config_file(&mut self.checks)?;
         Ok(())
     }
 

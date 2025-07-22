@@ -505,7 +505,71 @@ swissarmyhammer --debug serve | grep MCP > mcp-trace.log
 swissarmyhammer --debug serve | grep -E "(request|response)"
 ```
 
+## Configuration Issues
+
+### Configuration File Not Loading
+
+**Problem**: SwissArmyHammer isn't using my configuration file.
+
+**Solutions**:
+1. Ensure the file is named exactly `swissarmyhammer.yaml`
+2. Place the file in your repository root (same directory where you run SwissArmyHammer)
+3. Check file permissions: `ls -la swissarmyhammer.yaml`
+4. Validate file syntax: `swissarmyhammer config validate`
+
+### Invalid YAML Syntax
+
+**Problem**: Getting YAML parsing errors.
+
+**Solutions**:
+1. Check indentation (use spaces, not tabs)
+2. Ensure proper YAML syntax with online validators
+3. Quote string values that contain special characters
+4. Check for trailing spaces or special characters
+
+Example of common YAML mistakes:
+```yaml
+# ❌ Wrong - uses tabs for indentation
+base_branch:	"main"
+
+# ❌ Wrong - inconsistent quotes  
+base_branch: 'main"
+
+# ✅ Correct
+base_branch: "main"
+```
+
+### Branch Name Validation Errors
+
+**Problem**: Getting "Invalid configuration value for base_branch".
+
+**Solutions**:
+1. Remove spaces from branch names: `feature branch` → `feature-branch`
+2. Avoid special characters: `~ ^ : ? * [ \`
+3. Use standard git branch naming conventions
+4. Check if branch actually exists in your repository
+
+### Environment Variables Not Working
+
+**Problem**: Environment variables aren't being used.
+
+**Solutions**:
+1. Use the correct prefix: `SWISSARMYHAMMER_BASE_BRANCH`
+2. Export variables in your shell: `export SWISSARMYHAMMER_BASE_BRANCH=develop`
+3. Check variable is set: `echo $SWISSARMYHAMMER_BASE_BRANCH`
+4. Remember YAML config overrides environment variables
+
 ## Getting Help
+
+For configuration issues:
+```bash
+swissarmyhammer config help      # Configuration documentation
+swissarmyhammer config validate  # Check current config  
+swissarmyhammer config show      # Show active configuration
+swissarmyhammer doctor          # Overall system health check
+```
+
+## General Help
 
 ### Documentation
 

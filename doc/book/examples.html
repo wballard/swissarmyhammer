@@ -36,6 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc.js"></script>
@@ -92,10 +93,13 @@
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
@@ -143,7 +147,7 @@
                         <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/docs/src/src/examples.md" title="Suggest an edit" aria-label="Suggest an edit">
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/examples.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -152,7 +156,12 @@
 
                 <div id="search-wrapper" class="hidden">
                     <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
                     </form>
                     <div id="searchresults-outer" class="searchresults-outer hidden">
                         <div id="searchresults-header" class="searchresults-header"></div>
@@ -173,7 +182,344 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="examples"><a class="header" href="#examples">Examples</a></h1>
-<p>This page provides real-world examples of using SwissArmyHammer for various development tasks.</p>
+<p>This page provides real-world examples of using SwissArmyHammer for various development tasks. Each example demonstrates practical usage patterns and best practices for prompt engineering.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>SwissArmyHammer excels at organizing and managing prompts for:</p>
+<ul>
+<li><strong>Development workflows</strong> - Code review, testing, debugging</li>
+<li><strong>Documentation tasks</strong> - API docs, user guides, technical writing</li>
+<li><strong>Security analysis</strong> - Code audits, vulnerability assessment</li>
+<li><strong>Content creation</strong> - Blog posts, marketing copy, educational materials</li>
+<li><strong>Data processing</strong> - Analysis, transformation, reporting</li>
+</ul>
+<h2 id="new-advanced-prompts"><a class="header" href="#new-advanced-prompts">New Advanced Prompts</a></h2>
+<h3 id="ai-code-assistant"><a class="header" href="#ai-code-assistant">AI Code Assistant</a></h3>
+<p>Intelligent code assistance with context awareness:</p>
+<pre><code class="language-markdown">---
+title: AI Code Assistant
+description: Intelligent code assistance with context awareness
+category: development
+tags: ["coding", "assistance", "refactoring", "optimization"]
+arguments:
+  - name: code
+    description: The code to analyze and improve
+    required: true
+  - name: language
+    description: Programming language
+    required: true
+  - name: task
+    description: Specific task to perform
+    required: true
+    default: "improve"
+  - name: context
+    description: Additional context about the code
+    required: false
+---
+
+# AI Code Assistant
+
+You are an expert {{ language }} developer. Please help me with the following task: **{{ task }}**
+
+## Code to analyze:
+
+```{{ language }}
+{{ code }}
+</code></pre>
+<p>{% if context %}</p>
+<h2 id="additional-context"><a class="header" href="#additional-context">Additional context:</a></h2>
+<p>{{ context }}
+{% endif %}</p>
+<h2 id="instructions"><a class="header" href="#instructions">Instructions:</a></h2>
+<p>{% if task == “improve” %}
+Please improve this code by:</p>
+<ol>
+<li>Identifying potential issues or inefficiencies</li>
+<li>Suggesting optimizations</li>
+<li>Ensuring best practices are followed</li>
+<li>Improving readability and maintainability
+{% elsif task == “refactor” %}
+Please refactor this code to:</li>
+<li>Improve structure and organization</li>
+<li>Extract reusable components</li>
+<li>Reduce complexity</li>
+<li>Follow {{ language }} conventions
+{% elsif task == “optimize” %}
+Please optimize this code for:</li>
+<li>Performance improvements</li>
+<li>Memory efficiency</li>
+<li>Algorithmic complexity</li>
+<li>Resource usage
+{% elsif task == “debug” %}
+Please help debug this code by:</li>
+<li>Identifying potential bugs</li>
+<li>Analyzing logic errors</li>
+<li>Suggesting fixes</li>
+<li>Explaining the root cause
+{% elsif task == “document” %}
+Please document this code by:</li>
+<li>Adding clear docstrings/comments</li>
+<li>Explaining complex logic</li>
+<li>Providing usage examples</li>
+<li>Describing parameters and return values
+{% else %}
+Please analyze this code and provide assistance with: {{ task }}
+{% endif %}</li>
+</ol>
+<h2 id="response-format"><a class="header" href="#response-format">Response format:</a></h2>
+<ul>
+<li><strong>Analysis</strong>: What you found in the code</li>
+<li><strong>Recommendations</strong>: Specific improvements to make</li>
+<li><strong>Updated Code</strong>: The improved version</li>
+<li><strong>Explanation</strong>: Why these changes improve the code</li>
+</ul>
+<pre><code>
+### Security Audit
+Comprehensive security analysis following OWASP guidelines:
+```markdown
+---
+title: Security Audit
+description: Comprehensive security analysis and recommendations
+category: security
+tags: ["security", "audit", "vulnerability", "analysis"]
+arguments:
+  - name: code
+    description: Code to audit for security issues
+    required: true
+  - name: language
+    description: Programming language
+    required: true
+  - name: context
+    description: Application context and environment
+    required: false
+  - name: compliance
+    description: Compliance standards to check against
+    required: false
+    default: "OWASP"
+  - name: severity_level
+    description: Minimum severity level to report
+    required: false
+    default: "medium"
+---
+
+# Security Audit
+
+You are a cybersecurity expert conducting a comprehensive security audit of {{ language }} code.
+
+## Code to Audit
+
+```{{ language }}
+{{ code }}
+</code></pre>
+<p>{% if context %}</p>
+<h2 id="application-context"><a class="header" href="#application-context">Application Context</a></h2>
+<p>{{ context }}
+{% endif %}</p>
+<h2 id="audit-scope"><a class="header" href="#audit-scope">Audit Scope</a></h2>
+<h3 id="security-standards"><a class="header" href="#security-standards">Security Standards</a></h3>
+<p>{% if compliance == “OWASP” %}
+Evaluate against OWASP Top 10 security risks:</p>
+<ol>
+<li><strong>A01:2021 - Broken Access Control</strong></li>
+<li><strong>A02:2021 - Cryptographic Failures</strong></li>
+<li><strong>A03:2021 - Injection</strong></li>
+<li><strong>A04:2021 - Insecure Design</strong></li>
+<li><strong>A05:2021 - Security Misconfiguration</strong></li>
+<li><strong>A06:2021 - Vulnerable and Outdated Components</strong></li>
+<li><strong>A07:2021 - Identification and Authentication Failures</strong></li>
+<li><strong>A08:2021 - Software and Data Integrity Failures</strong></li>
+<li><strong>A09:2021 - Security Logging and Monitoring Failures</strong></li>
+<li><strong>A10:2021 - Server-Side Request Forgery (SSRF)</strong>
+{% else %}
+Evaluate against {{ compliance }} security standards and requirements.
+{% endif %}</li>
+</ol>
+<h3 id="-language--capitalize--specific-security-concerns"><a class="header" href="#-language--capitalize--specific-security-concerns">{{ language | capitalize }}-Specific Security Concerns</a></h3>
+<p>{% if language == “javascript” or language == “typescript” %}</p>
+<ul>
+<li><strong>XSS Prevention</strong>: Input sanitization and output encoding</li>
+<li><strong>CSRF Protection</strong>: Token validation and SameSite cookies</li>
+<li><strong>Prototype Pollution</strong>: Object property manipulation</li>
+<li><strong>Dependency Vulnerabilities</strong>: Third-party package security</li>
+<li><strong>Client-Side Security</strong>: Browser-specific vulnerabilities
+{% elsif language == “python” %}</li>
+<li><strong>SQL Injection</strong>: Query parameterization and ORM usage</li>
+<li><strong>Code Injection</strong>: eval() and exec() usage</li>
+<li><strong>Pickle Vulnerabilities</strong>: Insecure deserialization</li>
+<li><strong>Path Traversal</strong>: File system access controls</li>
+<li><strong>Dependency Management</strong>: Package security
+{% elsif language == “java” %}</li>
+<li><strong>Deserialization Vulnerabilities</strong>: Object deserialization</li>
+<li><strong>XML External Entity (XXE)</strong>: XML parser configuration</li>
+<li><strong>Path Traversal</strong>: File system access</li>
+<li><strong>SQL Injection</strong>: PreparedStatement usage</li>
+<li><strong>Reflection Attacks</strong>: Dynamic code execution
+{% elsif language == “rust” %}</li>
+<li><strong>Memory Safety</strong>: While Rust prevents many issues, check for unsafe blocks</li>
+<li><strong>Integer Overflow</strong>: Arithmetic operations</li>
+<li><strong>Dependency Security</strong>: Cargo.toml vulnerabilities</li>
+<li><strong>Error Handling</strong>: Information disclosure
+{% elsif language == “go” %}</li>
+<li><strong>SQL Injection</strong>: Query parameterization</li>
+<li><strong>Command Injection</strong>: exec.Command usage</li>
+<li><strong>Path Traversal</strong>: Filepath handling</li>
+<li><strong>Goroutine Security</strong>: Concurrent access patterns
+{% else %}</li>
+<li><strong>Input Validation</strong>: Data sanitization and validation</li>
+<li><strong>Authentication</strong>: Access control mechanisms</li>
+<li><strong>Cryptography</strong>: Secure implementations</li>
+<li><strong>Error Handling</strong>: Information disclosure
+{% endif %}</li>
+</ul>
+<h2 id="audit-report-format"><a class="header" href="#audit-report-format">Audit Report Format</a></h2>
+<h3 id="executive-summary"><a class="header" href="#executive-summary">Executive Summary</a></h3>
+<ul>
+<li>Overall security posture</li>
+<li>Critical findings count</li>
+<li>Risk level assessment</li>
+</ul>
+<h3 id="detailed-findings"><a class="header" href="#detailed-findings">Detailed Findings</a></h3>
+<p>For each vulnerability found:</p>
+<h4 id="finding-n-vulnerability-name"><a class="header" href="#finding-n-vulnerability-name">Finding #N: [Vulnerability Name]</a></h4>
+<ul>
+<li><strong>Severity</strong>: {% if severity_level == “critical” %}CRITICAL{% elsif severity_level == “high” %}HIGH{% elsif severity_level == “medium” %}MEDIUM{% else %}LOW{% endif %} | HIGH | MEDIUM | LOW</li>
+<li><strong>Category</strong>: [OWASP Category or Security Domain]</li>
+<li><strong>Location</strong>: [File/Function/Line number]</li>
+<li><strong>Description</strong>: Detailed explanation of the vulnerability</li>
+<li><strong>Impact</strong>: Potential consequences if exploited</li>
+<li><strong>Evidence</strong>: Code snippets demonstrating the issue</li>
+<li><strong>Remediation</strong>: Specific steps to fix the vulnerability</li>
+<li><strong>Resources</strong>: Links to relevant security guidelines</li>
+</ul>
+<h3 id="recommendations"><a class="header" href="#recommendations">Recommendations</a></h3>
+<ol>
+<li><strong>Immediate Actions</strong>: Critical issues requiring immediate attention</li>
+<li><strong>Short-term Improvements</strong>: High-priority security enhancements</li>
+<li><strong>Long-term Strategy</strong>: Ongoing security practices and policies</li>
+<li><strong>Security Tools</strong>: Recommended tools for ongoing monitoring</li>
+</ol>
+<h3 id="secure-code-examples"><a class="header" href="#secure-code-examples">Secure Code Examples</a></h3>
+<p>Provide corrected code examples that demonstrate:</p>
+<ul>
+<li>Proper input validation</li>
+<li>Secure authentication/authorization</li>
+<li>Safe data handling</li>
+<li>Error handling best practices</li>
+</ul>
+<h2 id="compliance-check"><a class="header" href="#compliance-check">Compliance Check</a></h2>
+<p>{% if compliance %}
+Verify compliance with {{ compliance }} requirements and note any gaps.
+{% endif %}</p>
+<h2 id="security-best-practices"><a class="header" href="#security-best-practices">Security Best Practices</a></h2>
+<p>Include relevant security best practices for {{ language }} development:</p>
+<ul>
+<li>Secure coding guidelines</li>
+<li>Regular security testing</li>
+<li>Dependency management</li>
+<li>Security monitoring</li>
+</ul>
+<p>Report only findings at {{ severity_level }} severity level and above.</p>
+<pre><code>
+### Technical Writer
+Professional technical documentation generation:
+```markdown
+---
+title: Technical Writer
+description: Generate technical documentation with proper structure
+category: documentation
+tags: ["documentation", "technical-writing", "api", "guides"]
+arguments:
+  - name: topic
+    description: What to document
+    required: true
+  - name: audience
+    description: Target audience level
+    required: true
+    default: "developers"
+  - name: format
+    description: Documentation format
+    required: false
+    default: "markdown"
+  - name: sections
+    description: Specific sections to include
+    required: false
+  - name: examples
+    description: Include code examples
+    required: false
+    default: "true"
+---
+
+# Technical Writer
+
+You are a skilled technical writer specializing in {{ format }} documentation for {{ audience }}.
+
+## Task
+Create comprehensive documentation for: **{{ topic }}**
+
+## Target Audience
+{{ audience | capitalize }} - adjust complexity and terminology accordingly.
+
+## Documentation Requirements
+
+### Structure
+{% if format == "markdown" %}
+Use clear Markdown formatting with:
+- Proper heading hierarchy (# ## ###)
+- Code blocks with syntax highlighting
+- Tables for structured data
+- Lists for step-by-step instructions
+{% elsif format == "rst" %}
+Use reStructuredText formatting with:
+- Proper heading hierarchy (===, ---, ...)
+- Code blocks with language specification
+- Tables and lists for organization
+- Cross-references where appropriate
+{% else %}
+Use {{ format }} best practices for formatting and structure.
+{% endif %}
+
+### Content Guidelines
+1. **Clear and Concise**: Use simple, direct language
+2. **Logical Flow**: Organize information in a logical sequence
+3. **Actionable**: Provide specific, actionable instructions
+4. **Complete**: Cover all necessary information
+5. **Accessible**: Make content accessible to {{ audience }}
+
+{% if sections %}
+### Required Sections
+Include these specific sections:
+{{ sections }}
+{% else %}
+### Standard Sections
+Include these standard sections:
+- **Overview**: Brief introduction and purpose
+- **Prerequisites**: What users need before starting
+- **Getting Started**: Basic setup and first steps
+- **Usage**: Detailed usage instructions
+- **Examples**: Practical examples and use cases
+- **Troubleshooting**: Common issues and solutions
+- **Reference**: Detailed API or configuration reference
+{% endif %}
+
+{% if examples == "true" %}
+### Code Examples
+Include practical code examples that:
+- Demonstrate real-world usage
+- Are complete and runnable
+- Include expected outputs
+- Cover common use cases
+- Follow best practices
+{% endif %}
+
+## Quality Standards
+- **Accuracy**: Ensure all information is correct and up-to-date
+- **Completeness**: Cover all aspects users need to know
+- **Clarity**: Use clear, unambiguous language
+- **Consistency**: Maintain consistent style and terminology
+- **Usability**: Make documentation easy to navigate and use
+
+## Output Format
+Provide well-structured {{ format }} documentation that {{ audience }} can immediately use and understand.
+</code></pre>
 <h2 id="basic-prompt-usage"><a class="header" href="#basic-prompt-usage">Basic Prompt Usage</a></h2>
 <h3 id="simple-code-review"><a class="header" href="#simple-code-review">Simple Code Review</a></h3>
 <pre><code class="language-bash"># Review a Python file
@@ -836,6 +1182,7 @@ swissarmyhammer test docs/readme \
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+
 
 
     </div>

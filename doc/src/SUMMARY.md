@@ -42,6 +42,7 @@
 - [Sharing and Collaboration](./sharing-guide.md)
 - [MCP Protocol](./mcp-protocol.md)
 - [Configuration](./configuration.md)
+  - [Configuration Schema Reference](./configuration-schema.md)
 - [File Watching](./file-watching.md)
 - [Prompt Overrides](./prompt-overrides.md)
 

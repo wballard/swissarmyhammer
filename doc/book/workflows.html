@@ -36,6 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc.js"></script>
@@ -92,10 +93,13 @@
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
@@ -143,7 +147,7 @@
                         <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/docs/src/src/workflows.md" title="Suggest an edit" aria-label="Suggest an edit">
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/workflows.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -152,7 +156,12 @@
 
                 <div id="search-wrapper" class="hidden">
                     <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
                     </form>
                     <div id="searchresults-outer" class="searchresults-outer hidden">
                         <div id="searchresults-header" class="searchresults-header"></div>
@@ -205,31 +214,19 @@ tags:
 
 This workflow processes data through multiple stages.
 
-```mermaid
-stateDiagram-v2
-    [*] --&gt; Start
-    Start --&gt; Process
-    Process --&gt; Success: OnSuccess
-    Process --&gt; Failure: OnFailure
-    Success --&gt; [*]
-    Failure --&gt; [*]
+For a complete example, see: [Simple Workflow](../examples/workflows/simple-workflow.md)
+
+## Actions
+
+- Start: Execute prompt "setup" with input="${data}"
+- Process: Execute prompt "main-task"
+- Success: Log "Task completed successfully"
+- Failure: Log error "Task failed: ${error}"
 </code></pre>
-<h2 id="actions"><a class="header" href="#actions">Actions</a></h2>
-<ul>
-<li>Start: Execute prompt “setup” with input=“${data}”</li>
-<li>Process: Execute prompt “main-task”</li>
-<li>Success: Log “Task completed successfully”</li>
-<li>Failure: Log error “Task failed: ${error}”</li>
-</ul>
-<pre><code>
-## Workflow Components
-
-### Front Matter
-
-The YAML front matter contains workflow metadata:
-
-```yaml
----
+<h2 id="workflow-components"><a class="header" href="#workflow-components">Workflow Components</a></h2>
+<h3 id="front-matter"><a class="header" href="#front-matter">Front Matter</a></h3>
+<p>The YAML front matter contains workflow metadata:</p>
+<pre><code class="language-yaml">---
 name: workflow-id           # Unique identifier for the workflow
 title: Workflow Title       # Human-readable title
 description: Description    # What the workflow does
@@ -303,21 +300,7 @@ tags:                      # Tags for organization
 </ul>
 <p>This automatic detection ensures that branching logic works correctly without requiring explicit choice state declarations in the Mermaid diagram.</p>
 <h3 id="parallel-execution"><a class="header" href="#parallel-execution">Parallel Execution</a></h3>
-<pre><code class="language-mermaid">stateDiagram-v2
-    [*] --&gt; Setup
-    Setup --&gt; fork1: Always
-    
-    state fork1 &lt;&lt;fork&gt;&gt;
-    fork1 --&gt; TaskA
-    fork1 --&gt; TaskB
-    
-    TaskA --&gt; join1: Always
-    TaskB --&gt; join1: Always
-    
-    state join1 &lt;&lt;join&gt;&gt;
-    join1 --&gt; Finish
-    Finish --&gt; [*]
-</code></pre>
+<p>See: <a href="../examples/workflows/parallel-workflow.html">Parallel Workflow</a></p>
 <h2 id="action-reference"><a class="header" href="#action-reference">Action Reference</a></h2>
 <h3 id="execute-prompt"><a class="header" href="#execute-prompt">Execute Prompt</a></h3>
 <p>Execute a SwissArmyHammer prompt:</p>
@@ -420,6 +403,8 @@ swissarmyhammer flow run data-processor --set user.name=Alice --set user.role=ad
 </ul>
 <h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
 <p>Workflows provide robust error handling:</p>
+<h3 id="retry-logic"><a class="header" href="#retry-logic">Retry Logic</a></h3>
+<p><strong>Note</strong>: Retry logic is handled automatically by Claude’s infrastructure. SwissArmyHammer workflows do not need to implement application-level retry mechanisms as Claude will automatically retry failed requests according to its built-in retry policies. This eliminates the need for manual retry implementation in your workflow logic.</p>
 <h3 id="try-catch-pattern"><a class="header" href="#try-catch-pattern">Try-Catch Pattern</a></h3>
 <pre><code class="language-mermaid">stateDiagram-v2
     [*] --&gt; Try
@@ -436,20 +421,36 @@ swissarmyhammer flow run data-processor --set user.name=Alice --set user.role=ad
 - Recovery: Execute prompt "cleanup"
 - Success: Log "Operation completed successfully"
 </code></pre>
-<h3 id="retry-pattern"><a class="header" href="#retry-pattern">Retry Pattern</a></h3>
-<pre><code class="language-mermaid">stateDiagram-v2
-    [*] --&gt; Attempt
-    Attempt --&gt; Success: OnSuccess
-    Attempt --&gt; Wait: OnFailure
-    Wait --&gt; Attempt
-    Success --&gt; [*]
-</code></pre>
+<h3 id="abort-error-handling"><a class="header" href="#abort-error-handling">Abort Error Handling</a></h3>
+<p>Workflows support immediate termination through abort errors. When a prompt action’s result begins with <code>ABORT ERROR:</code>, the workflow immediately exits all the way back to the root workflow with an error.</p>
+<h4 id="how-abort-errors-work"><a class="header" href="#how-abort-errors-work">How Abort Errors Work</a></h4>
+<ol>
+<li><strong>Detection</strong>: When a prompt returns a response starting with <code>ABORT ERROR:</code>, it triggers immediate termination</li>
+<li><strong>Propagation</strong>: The error bypasses all normal error handling (retries, compensation, transitions)</li>
+<li><strong>Root Exit</strong>: In nested workflows, the abort error propagates through all parent workflows to the root</li>
+</ol>
+<h4 id="example-usage"><a class="header" href="#example-usage">Example Usage</a></h4>
+<p>See: <a href="../examples/workflows/user-confirmation-workflow.html">User Confirmation Workflow</a></p>
 <pre><code class="language-markdown">## Actions
 
-- Attempt: Execute prompt "network-call"
-- Wait: Wait 5 seconds
-- Success: Log "Network call succeeded"
+- UserConfirmation: Execute prompt "confirm-destructive-action"
+- ProcessData: Execute prompt "process-user-data"
+- Complete: Log "Processing completed"
 </code></pre>
+<p>If the <code>confirm-destructive-action</code> prompt returns <code>ABORT ERROR: User cancelled the operation</code>, the workflow immediately terminates without executing ProcessData or Complete states.</p>
+<h4 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h4>
+<ul>
+<li><strong>User Cancellation</strong>: Allow users to cancel long-running operations</li>
+<li><strong>Critical Failures</strong>: Immediately stop on unrecoverable errors</li>
+<li><strong>Safety Checks</strong>: Abort when safety conditions are not met</li>
+</ul>
+<h4 id="important-notes"><a class="header" href="#important-notes">Important Notes</a></h4>
+<ul>
+<li>Abort errors only trigger when the response <strong>starts with</strong> <code>ABORT ERROR:</code> (case-sensitive)</li>
+<li>The error message after <code>ABORT ERROR:</code> is propagated in the error</li>
+<li>Abort errors cannot be caught or handled within the workflow</li>
+<li>In sub-workflows, abort errors bubble up to terminate the parent workflow</li>
+</ul>
 <h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
 <h3 id="1-keep-states-focused"><a class="header" href="#1-keep-states-focused">1. Keep States Focused</a></h3>
 <p>Each state should perform one clear action:</p>
@@ -522,7 +523,7 @@ stateDiagram-v2
     NotifyComplete --&gt; [*]
     NotifyError --&gt; [*]
 </code></pre>
-<h2 id="actions-1"><a class="header" href="#actions-1">Actions</a></h2>
+<h2 id="actions"><a class="header" href="#actions">Actions</a></h2>
 <ul>
 <li>Initialize: Log “Starting {{ environment | default: ‘development’ }} data processing for file: ${input_file}”</li>
 <li>ValidateFormat: Execute prompt “validate-json-schema” with file=“${input_file}” schema=“{{ schema | default: ‘default-schema.json’ }}”</li>
@@ -735,6 +736,7 @@ swissarmyhammer flow visualize workflow-name --run &lt;run_id&gt;
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+
 
 
     </div>

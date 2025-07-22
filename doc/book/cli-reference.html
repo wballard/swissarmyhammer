@@ -36,6 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc.js"></script>
@@ -92,10 +93,13 @@
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
@@ -143,7 +147,7 @@
                         <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/docs/src/src/cli-reference.md" title="Suggest an edit" aria-label="Suggest an edit">
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/cli-reference.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -152,7 +156,12 @@
 
                 <div id="search-wrapper" class="hidden">
                     <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
                     </form>
                     <div id="searchresults-outer" class="searchresults-outer hidden">
                         <div id="searchresults-header" class="searchresults-header"></div>
@@ -194,6 +203,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 <tr><td><a href="./cli-serve.html"><code>serve</code></a></td><td>Run as MCP server for Claude Code integration</td></tr>
 <tr><td><a href="./cli-search.html"><code>search</code></a></td><td>Search and discover prompts with powerful filtering</td></tr>
 <tr><td><a href="./cli-test.html"><code>test</code></a></td><td>Interactively test prompts with arguments</td></tr>
+<tr><td><a href="#configuration-commands"><code>config</code></a></td><td>Manage SwissArmyHammer configuration</td></tr>
 <tr><td><a href="./cli-doctor.html"><code>doctor</code></a></td><td>Diagnose configuration and setup issues</td></tr>
 <tr><td><a href="./cli-completion.html"><code>completion</code></a></td><td>Generate shell completion scripts</td></tr>
 </tbody></table>
@@ -228,6 +238,19 @@ swissarmyhammer completion bash &gt; ~/.bash_completion.d/swissarmyhammer
 # Generate Zsh completions
 swissarmyhammer completion zsh &gt; ~/.zfunc/_swissarmyhammer
 </code></pre>
+<h3 id="manage-configuration"><a class="header" href="#manage-configuration">Manage Configuration</a></h3>
+<pre><code class="language-bash"># View current configuration
+swissarmyhammer config show
+
+# Validate configuration
+swissarmyhammer config validate
+
+# Generate example configuration
+swissarmyhammer config init
+
+# Get configuration help
+swissarmyhammer config help
+</code></pre>
 <h2 id="exit-codes"><a class="header" href="#exit-codes">Exit Codes</a></h2>
 <ul>
 <li><code>0</code> - Success</li>
@@ -244,6 +267,35 @@ swissarmyhammer completion zsh &gt; ~/.zfunc/_swissarmyhammer
 <li>User prompts: <code>~/.swissarmyhammer/prompts/</code></li>
 <li>Local prompts: <code>./.swissarmyhammer/prompts/</code> (current directory)</li>
 </ol>
+<h2 id="configuration-commands"><a class="header" href="#configuration-commands">Configuration Commands</a></h2>
+<h3 id="swissarmyhammer-config"><a class="header" href="#swissarmyhammer-config"><code>swissarmyhammer config</code></a></h3>
+<p>Manage SwissArmyHammer configuration.</p>
+<p>For detailed configuration guide and examples, see <a href="configuration.html">Configuration</a>. For complete schema reference, see <a href="configuration-schema.html">Configuration Schema</a>.</p>
+<h4 id="subcommands"><a class="header" href="#subcommands">Subcommands</a></h4>
+<h5 id="config-show"><a class="header" href="#config-show"><code>config show</code></a></h5>
+<p>Display current configuration values and their sources.</p>
+<pre><code class="language-bash">swissarmyhammer config show
+</code></pre>
+<p>Example output:</p>
+<pre><code>📋 Current Configuration:
+base_branch: main
+issue_branch_prefix: issue/
+issue_number_width: 6
+</code></pre>
+<h5 id="config-validate"><a class="header" href="#config-validate"><code>config validate</code></a></h5>
+<p>Validate the current configuration for errors.</p>
+<pre><code class="language-bash">swissarmyhammer config validate
+</code></pre>
+<p>Returns exit code 0 if valid, 1 if invalid.</p>
+<h5 id="config-init"><a class="header" href="#config-init"><code>config init</code></a></h5>
+<p>Generate an example configuration file in the current directory.</p>
+<pre><code class="language-bash">swissarmyhammer config init
+</code></pre>
+<p>Creates <code>swissarmyhammer.yaml</code> with example configuration.</p>
+<h5 id="config-help"><a class="header" href="#config-help"><code>config help</code></a></h5>
+<p>Show detailed configuration help and documentation.</p>
+<pre><code class="language-bash">swissarmyhammer config help
+</code></pre>
 <p>For detailed command documentation, see the individual command pages linked in the table above.</p>
 
                     </main>
@@ -292,6 +344,7 @@ swissarmyhammer completion zsh &gt; ~/.zfunc/_swissarmyhammer
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+
 
 
     </div>

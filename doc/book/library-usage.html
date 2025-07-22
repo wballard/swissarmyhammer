@@ -36,6 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc.js"></script>
@@ -92,10 +93,13 @@
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
@@ -143,7 +147,7 @@
                         <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/docs/src/src/library-usage.md" title="Suggest an edit" aria-label="Suggest an edit">
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/library-usage.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -152,7 +156,12 @@
 
                 <div id="search-wrapper" class="hidden">
                     <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
                     </form>
                     <div id="searchresults-outer" class="searchresults-outer hidden">
                         <div id="searchresults-header" class="searchresults-header"></div>
@@ -201,23 +210,25 @@ swissarmyhammer = {
 <pre><code class="language-rust">use swissarmyhammer::{PromptLibrary, ArgumentSpec};
 use std::collections::HashMap;
 
-#[tokio::main]
-async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     // Create a new prompt library
     let mut library = PromptLibrary::new();
     
     // Add prompts from a directory
-    library.add_directory("./.swissarmyhammer/prompts").await?;
+    let count = library.add_directory("./.swissarmyhammer/prompts")?;
+    println!("Loaded {} prompts from directory", count);
     
     // List available prompts
-    for prompt_id in library.list_prompts() {
+    for prompt_id in library.list() {
         println!("Available prompt: {}", prompt_id);
     }
     
     // Get a specific prompt
     let prompt = library.get("code-review")?;
-    println!("Title: {}", prompt.title());
-    println!("Description: {}", prompt.description());
+    println!("Name: {}", prompt.name);
+    if let Some(description) = &amp;prompt.description {
+        println!("Description: {}", description);
+    }
     
     // Prepare arguments
     let mut args = HashMap::new();
@@ -231,28 +242,9 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     Ok(())
 }</code></pre>
 <h3 id="custom-prompt-creation"><a class="header" href="#custom-prompt-creation">Custom Prompt Creation</a></h3>
-<pre><code class="language-rust">use swissarmyhammer::{Prompt, ArgumentSpec, PromptMetadata};
+<pre><code class="language-rust">use swissarmyhammer::{Prompt, ArgumentSpec};
 
 fn create_custom_prompt() -&gt; Result&lt;Prompt, Box&lt;dyn std::error::Error&gt;&gt; {
-    let metadata = PromptMetadata {
-        title: "Custom Code Review".to_string(),
-        description: "A custom code review prompt".to_string(),
-        arguments: vec![
-            ArgumentSpec {
-                name: "code".to_string(),
-                description: "Code to review".to_string(),
-                required: true,
-                default: None,
-            },
-            ArgumentSpec {
-                name: "focus".to_string(),
-                description: "Review focus area".to_string(),
-                required: false,
-                default: Some("general".to_string()),
-            },
-        ],
-    };
-    
     let template = r#"
 <span class="boring">Code Review: {{ focus | capitalize }}
 </span>
@@ -269,7 +261,25 @@ Perform a general code review covering style, bugs, and maintainability.
 {% endif %}
 "#;
     
-    Prompt::from_parts(metadata, template)
+    let prompt = Prompt::new("custom-code-review", template)
+        .with_description("A custom code review prompt")
+        .with_category("development")
+        .add_argument(ArgumentSpec {
+            name: "code".to_string(),
+            description: Some("Code to review".to_string()),
+            required: true,
+            default: None,
+            type_hint: Some("string".to_string()),
+        })
+        .add_argument(ArgumentSpec {
+            name: "focus".to_string(),
+            description: Some("Review focus area".to_string()),
+            required: false,
+            default: Some("general".to_string()),
+            type_hint: Some("string".to_string()),
+        });
+    
+    Ok(prompt)
 }
 </code></pre>
 <h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
@@ -280,28 +290,31 @@ Perform a general code review covering style, bugs, and maintainability.
 let mut library = PromptLibrary::new();
 
 // Add prompts from various sources
-library.add_directory("./.swissarmyhammer/prompts").await?;
-library.add_file("./special-prompt.md").await?;
-library.add_builtin_prompts();
+library.add_directory("./.swissarmyhammer/prompts")?;
+library.add_from_file("./special-prompt.md")?;
 
 // Query prompts
-let prompts = library.list_prompts();
+let prompts = library.list();
 let prompt = library.get("prompt-id")?;
 let filtered = library.filter_by_category("review");
 
-// Search prompts
-let results = library.search("code review")?;</code></pre>
+// Search prompts (if search feature is enabled)
+let results = library.search("code review")?</code></pre>
 <h3 id="prompt"><a class="header" href="#prompt">Prompt</a></h3>
 <p>Individual prompt with metadata and template.</p>
 <pre><code class="language-rust">use swissarmyhammer::Prompt;
+use std::collections::HashMap;
 
-// Load from file
-let prompt = Prompt::from_file("./.swissarmyhammer/prompts/review.md").await?;
+// Load from file using PromptLoader
+let loader = swissarmyhammer::PromptLoader::new();
+let prompt = loader.load_file("./.swissarmyhammer/prompts/review.md")?;
 
 // Access metadata
-println!("Title: {}", prompt.title());
-println!("Description: {}", prompt.description());
-for arg in prompt.arguments() {
+println!("Name: {}", prompt.name);
+if let Some(description) = &amp;prompt.description {
+    println!("Description: {}", description);
+}
+for arg in &amp;prompt.arguments {
     println!("Argument: {} (required: {})", arg.name, arg.required);
 }
 
@@ -469,7 +482,8 @@ async fn get_prompt(
 #[tokio::main]
 async fn main() {
     let mut library = PromptLibrary::new();
-    library.add_directory("./.swissarmyhammer/prompts").await.unwrap();
+    library.add_directory("./.swissarmyhammer/prompts").await
+        .expect("Failed to load prompts directory");
     let shared_library = Arc::new(RwLock::new(library));
 
     let app = Router::new()
@@ -482,10 +496,12 @@ async fn main() {
             move |path| get_prompt(path, lib)
         }));
 
-    axum::Server::bind(&amp;"0.0.0.0:3000".parse().unwrap())
+    let addr = "0.0.0.0:3000".parse()
+        .expect("Failed to parse server address");
+    axum::Server::bind(&amp;addr)
         .serve(app.into_make_service())
         .await
-        .unwrap();
+        .expect("Failed to start server");
 }</code></pre>
 <h3 id="cli-tool-integration"><a class="header" href="#cli-tool-integration">CLI Tool Integration</a></h3>
 <pre><code class="language-rust">use clap::{Arg, Command};
@@ -508,7 +524,8 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     let mut library = PromptLibrary::new();
     library.add_directory("./.swissarmyhammer/prompts").await?;
 
-    let prompt_id = matches.value_of("prompt").unwrap();
+    let prompt_id = matches.value_of("prompt")
+        .expect("Prompt ID is required");
     let prompt = library.get(prompt_id)?;
 
     let mut args = std::collections::HashMap::new();
@@ -595,11 +612,13 @@ async fn test_prompt_rendering() {
     
     library.add_test_prompt(test_case);
     
-    let prompt = library.get("test-prompt").unwrap();
+    let prompt = library.get("test-prompt")
+        .expect("Test prompt should exist");
     let mut args = std::collections::HashMap::new();
     args.insert("name".to_string(), "World".to_string());
     
-    let result = prompt.render(&amp;args).unwrap();
+    let result = prompt.render(&amp;args)
+        .expect("Template rendering should succeed");
     assert_eq!(result, "Hello World!");
 }</code></pre>
 <h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
@@ -689,6 +708,7 @@ library.export_all("output.tar.gz", ExportFormat::TarGz)?;</code></pre>
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+
 
 
     </div>

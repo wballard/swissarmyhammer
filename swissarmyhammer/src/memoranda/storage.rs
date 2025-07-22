@@ -1,5 +1,5 @@
 use crate::error::{Result, SwissArmyHammerError};
-use crate::memoranda::{Memo, MemoId};
+use crate::memoranda::{Memo, MemoId, SearchOptions};
 use async_trait::async_trait;
 use std::path::PathBuf;
 use tokio::fs::OpenOptions;
@@ -201,9 +201,9 @@ pub trait MemoStorage: Send + Sync {
     /// # }
     /// ```
     async fn search_memos_advanced(
-        &self, 
-        query: &str, 
-        options: &crate::memoranda::SearchOptions
+        &self,
+        query: &str,
+        options: &crate::memoranda::SearchOptions,
     ) -> Result<Vec<crate::memoranda::SearchResult>>;
 
     /// Get all memo content formatted for AI consumption
@@ -237,10 +237,7 @@ pub trait MemoStorage: Send + Sync {
     /// # Ok(())
     /// # }
     /// ```
-    async fn get_all_context(
-        &self, 
-        options: &crate::memoranda::ContextOptions
-    ) -> Result<String>;
+    async fn get_all_context(&self, options: &crate::memoranda::ContextOptions) -> Result<String>;
 }
 
 /// Filesystem-based implementation of memo storage
@@ -289,22 +286,22 @@ pub struct FileSystemMemoStorage {
 ///
 /// * `memo` - The memo containing the text to highlight
 /// * `query` - The search query to highlight in the text
-/// * `case_sensitive` - Whether matching should be case sensitive
+/// * `options` - Search options including case sensitivity and excerpt length
 ///
 /// # Returns
 ///
 /// * `Vec<String>` - List of highlighted text snippets
-pub fn generate_highlights(memo: &Memo, query: &str, case_sensitive: bool) -> Vec<String> {
+pub fn generate_highlights(memo: &Memo, query: &str, options: &SearchOptions) -> Vec<String> {
     let mut highlights = Vec::new();
 
     // Generate highlight for title if it matches
-    let title_highlight = generate_text_highlight(&memo.title, query, case_sensitive);
+    let title_highlight = generate_text_highlight(&memo.title, query, options.case_sensitive);
     if let Some(highlight) = title_highlight {
-        highlights.push(format!("Title: {}", highlight));
+        highlights.push(format!("Title: {highlight}"));
     }
 
     // Generate highlights for content
-    let content_highlights = generate_text_excerpts(&memo.content, query, case_sensitive);
+    let content_highlights = generate_text_excerpts(&memo.content, query, options);
     highlights.extend(content_highlights);
 
     highlights
@@ -322,12 +319,20 @@ pub fn generate_highlights(memo: &Memo, query: &str, case_sensitive: bool) -> Ve
 ///
 /// * `Option<String>` - Highlighted text if matches found, None otherwise
 fn generate_text_highlight(text: &str, query: &str, case_sensitive: bool) -> Option<String> {
-    let search_text = if case_sensitive { text } else { &text.to_lowercase() };
-    let search_query = if case_sensitive { query } else { &query.to_lowercase() };
+    let search_text = if case_sensitive {
+        text
+    } else {
+        &text.to_lowercase()
+    };
+    let search_query = if case_sensitive {
+        query
+    } else {
+        &query.to_lowercase()
+    };
 
     if search_text.contains(search_query) {
         let highlighted = if case_sensitive {
-            text.replace(query, &format!("**{}**", query))
+            text.replace(query, &format!("**{query}**"))
         } else {
             // Case-insensitive replacement is more complex
             replace_case_insensitive(text, query)
@@ -346,41 +351,53 @@ fn generate_text_highlight(text: &str, query: &str, case_sensitive: bool) -> Opt
 ///
 /// * `content` - The content to search and excerpt from
 /// * `query` - The search query to highlight
-/// * `case_sensitive` - Whether matching should be case sensitive
+/// * `options` - Search options including case sensitivity and excerpt length
 ///
 /// # Returns
 ///
 /// * `Vec<String>` - List of text excerpts with highlights
-fn generate_text_excerpts(content: &str, query: &str, case_sensitive: bool) -> Vec<String> {
-    let search_content = if case_sensitive { content } else { &content.to_lowercase() };
-    let search_query = if case_sensitive { query } else { &query.to_lowercase() };
-    
+fn generate_text_excerpts(content: &str, query: &str, options: &SearchOptions) -> Vec<String> {
+    let search_content = if options.case_sensitive {
+        content
+    } else {
+        &content.to_lowercase()
+    };
+    let search_query = if options.case_sensitive {
+        query
+    } else {
+        &query.to_lowercase()
+    };
+
     let mut excerpts = Vec::new();
     let mut start_pos = 0;
-    const EXCERPT_LENGTH: usize = 60; // Characters around match
 
     while let Some(match_pos) = search_content[start_pos..].find(search_query) {
         let actual_pos = start_pos + match_pos;
-        
+
         // Calculate excerpt boundaries
-        let excerpt_start = actual_pos.saturating_sub(EXCERPT_LENGTH / 2);
-        let excerpt_end = (actual_pos + query.len() + EXCERPT_LENGTH / 2).min(content.len());
-        
+        let excerpt_start = actual_pos.saturating_sub(options.excerpt_length / 2);
+        let excerpt_end =
+            (actual_pos + query.len() + options.excerpt_length / 2).min(content.len());
+
         let excerpt = &content[excerpt_start..excerpt_end];
-        let highlighted_excerpt = if case_sensitive {
-            excerpt.replace(query, &format!("**{}**", query))
+        let highlighted_excerpt = if options.case_sensitive {
+            excerpt.replace(query, &format!("**{query}**"))
         } else {
             replace_case_insensitive(excerpt, query)
         };
-        
+
         let prefix = if excerpt_start > 0 { "..." } else { "" };
-        let suffix = if excerpt_end < content.len() { "..." } else { "" };
-        
-        excerpts.push(format!("{}{}{}", prefix, highlighted_excerpt, suffix));
-        
+        let suffix = if excerpt_end < content.len() {
+            "..."
+        } else {
+            ""
+        };
+
+        excerpts.push(format!("{prefix}{highlighted_excerpt}{suffix}"));
+
         // Move start position past this match to find next one
         start_pos = actual_pos + query.len();
-        
+
         // Limit number of excerpts to avoid overwhelming output
         if excerpts.len() >= 3 {
             break;
@@ -410,21 +427,21 @@ fn replace_case_insensitive(text: &str, query: &str) -> String {
 
     for (start, _) in lower_text.match_indices(&lower_query) {
         let end = start + query.len();
-        
+
         // Add text before match
         result.push_str(&text[last_end..start]);
-        
+
         // Add highlighted match (preserving original case)
         result.push_str("**");
         result.push_str(&text[start..end]);
         result.push_str("**");
-        
+
         last_end = end;
     }
-    
+
     // Add remaining text
     result.push_str(&text[last_end..]);
-    
+
     result
 }
 
@@ -673,16 +690,16 @@ impl MemoStorage for FileSystemMemoStorage {
     }
 
     async fn search_memos_advanced(
-        &self, 
-        query: &str, 
-        options: &crate::memoranda::SearchOptions
+        &self,
+        query: &str,
+        options: &crate::memoranda::SearchOptions,
     ) -> Result<Vec<crate::memoranda::SearchResult>> {
         // For now, provide a basic implementation that wraps the simple search
         // This will be enhanced with the advanced search engine
-        let query_to_use = if options.case_sensitive { 
-            query.to_string() 
-        } else { 
-            query.to_lowercase() 
+        let query_to_use = if options.case_sensitive {
+            query.to_string()
+        } else {
+            query.to_lowercase()
         };
 
         let all_memos = self.list_memos().await?;
@@ -715,7 +732,7 @@ impl MemoStorage for FileSystemMemoStorage {
                 }
 
                 let highlights = if options.include_highlights {
-                    generate_highlights(&memo, query, options.case_sensitive)
+                    generate_highlights(&memo, query, options)
                 } else {
                     Vec::new()
                 };
@@ -740,18 +757,15 @@ impl MemoStorage for FileSystemMemoStorage {
         Ok(results)
     }
 
-    async fn get_all_context(
-        &self, 
-        options: &crate::memoranda::ContextOptions
-    ) -> Result<String> {
+    async fn get_all_context(&self, options: &crate::memoranda::ContextOptions) -> Result<String> {
         let all_memos = self.list_memos().await?;
-        
+
         if all_memos.is_empty() {
             return Ok(String::new());
         }
 
         let mut context = String::new();
-        
+
         // Sort memos by creation date (newest first)
         let mut sorted_memos = all_memos;
         sorted_memos.sort_by(|a, b| b.created_at.cmp(&a.created_at));
@@ -983,16 +997,25 @@ mod tests {
 
         // Create test memos
         storage
-            .create_memo("Rust Programming".to_string(), "Learning Rust language".to_string())
+            .create_memo(
+                "Rust Programming".to_string(),
+                "Learning Rust language".to_string(),
+            )
             .await
             .unwrap();
         storage
-            .create_memo("Python Guide".to_string(), "Python programming tutorial".to_string())
+            .create_memo(
+                "Python Guide".to_string(),
+                "Python programming tutorial".to_string(),
+            )
             .await
             .unwrap();
 
         let options = crate::memoranda::SearchOptions::default();
-        let results = storage.search_memos_advanced("rust", &options).await.unwrap();
+        let results = storage
+            .search_memos_advanced("rust", &options)
+            .await
+            .unwrap();
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].memo.title, "Rust Programming");
@@ -1005,7 +1028,10 @@ mod tests {
         let (storage, _temp_dir) = create_test_storage();
 
         storage
-            .create_memo("Rust Programming".to_string(), "Learning rust language".to_string())
+            .create_memo(
+                "Rust Programming".to_string(),
+                "Learning rust language".to_string(),
+            )
             .await
             .unwrap();
 
@@ -1014,7 +1040,10 @@ mod tests {
             case_sensitive: false,
             ..Default::default()
         };
-        let results = storage.search_memos_advanced("RUST", &options_insensitive).await.unwrap();
+        let results = storage
+            .search_memos_advanced("RUST", &options_insensitive)
+            .await
+            .unwrap();
         assert_eq!(results.len(), 1);
 
         // Case sensitive
@@ -1022,10 +1051,16 @@ mod tests {
             case_sensitive: true,
             ..Default::default()
         };
-        let results = storage.search_memos_advanced("RUST", &options_sensitive).await.unwrap();
+        let results = storage
+            .search_memos_advanced("RUST", &options_sensitive)
+            .await
+            .unwrap();
         assert_eq!(results.len(), 0); // Should not find lowercase "rust"
 
-        let results = storage.search_memos_advanced("Rust", &options_sensitive).await.unwrap();
+        let results = storage
+            .search_memos_advanced("Rust", &options_sensitive)
+            .await
+            .unwrap();
         assert_eq!(results.len(), 1); // Should find "Rust" in title
     }
 
@@ -1034,7 +1069,10 @@ mod tests {
         let (storage, _temp_dir) = create_test_storage();
 
         storage
-            .create_memo("Project Meeting".to_string(), "Discussed project timeline and deliverables.".to_string())
+            .create_memo(
+                "Project Meeting".to_string(),
+                "Discussed project timeline and deliverables.".to_string(),
+            )
             .await
             .unwrap();
 
@@ -1042,11 +1080,14 @@ mod tests {
             include_highlights: true,
             ..Default::default()
         };
-        let results = storage.search_memos_advanced("project", &options).await.unwrap();
+        let results = storage
+            .search_memos_advanced("project", &options)
+            .await
+            .unwrap();
 
         assert_eq!(results.len(), 1);
         assert!(!results[0].highlights.is_empty());
-        
+
         // Check that highlights contain the expected markdown formatting
         let highlights_text = results[0].highlights.join(" ");
         assert!(highlights_text.contains("**project**") || highlights_text.contains("**Project**"));
@@ -1059,7 +1100,10 @@ mod tests {
         // Create multiple matching memos
         for i in 1..=5 {
             storage
-                .create_memo(format!("Test Memo {}", i), "Testing search functionality".to_string())
+                .create_memo(
+                    format!("Test Memo {}", i),
+                    "Testing search functionality".to_string(),
+                )
                 .await
                 .unwrap();
         }
@@ -1068,7 +1112,10 @@ mod tests {
             max_results: Some(3),
             ..Default::default()
         };
-        let results = storage.search_memos_advanced("test", &options).await.unwrap();
+        let results = storage
+            .search_memos_advanced("test", &options)
+            .await
+            .unwrap();
 
         assert_eq!(results.len(), 3); // Should be limited to 3 results
     }
@@ -1159,19 +1206,28 @@ mod tests {
             .await
             .unwrap();
         let content_memo = storage
-            .create_memo("Meeting Notes".to_string(), "Discussed project timeline".to_string())
+            .create_memo(
+                "Meeting Notes".to_string(),
+                "Discussed project timeline".to_string(),
+            )
             .await
             .unwrap();
 
         let options = crate::memoranda::SearchOptions::default();
-        let results = storage.search_memos_advanced("project", &options).await.unwrap();
+        let results = storage
+            .search_memos_advanced("project", &options)
+            .await
+            .unwrap();
 
         assert_eq!(results.len(), 2);
-        
+
         // Find results by ID to avoid order assumptions
         let title_result = results.iter().find(|r| r.memo.id == title_memo.id).unwrap();
-        let content_result = results.iter().find(|r| r.memo.id == content_memo.id).unwrap();
-        
+        let content_result = results
+            .iter()
+            .find(|r| r.memo.id == content_memo.id)
+            .unwrap();
+
         // Title match should have higher score than content match
         assert!(title_result.relevance_score > content_result.relevance_score);
     }

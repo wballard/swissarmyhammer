@@ -5,9 +5,9 @@ use swissarmyhammer::memoranda::{
     AdvancedMemoSearchEngine, FileSystemMemoStorage, MemoId, MemoStorage, SearchOptions,
 };
 
-// Preview length constants
-const LIST_PREVIEW_LENGTH: usize = 100;
-const SEARCH_PREVIEW_LENGTH: usize = 150;
+// Configurable preview length constants
+const DEFAULT_LIST_PREVIEW_LENGTH: usize = 100;
+const DEFAULT_SEARCH_PREVIEW_LENGTH: usize = 150;
 
 /// Format content preview with specified maximum length
 fn format_content_preview(content: &str, max_length: usize) -> String {
@@ -106,7 +106,7 @@ async fn list_memos(storage: FileSystemMemoStorage) -> Result<(), Box<dyn std::e
         );
 
         // Show a preview of content
-        let preview = format_content_preview(&memo.content, LIST_PREVIEW_LENGTH);
+        let preview = format_content_preview(&memo.content, DEFAULT_LIST_PREVIEW_LENGTH);
         println!("{} {}", "💬".dimmed(), preview.dimmed());
         println!();
     }
@@ -219,7 +219,7 @@ async fn try_advanced_search(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Create advanced search engine
     let search_engine = AdvancedMemoSearchEngine::new_in_memory().await?;
-    
+
     // Get all memos and index them
     let all_memos = storage.list_memos().await?;
     if !all_memos.is_empty() {
@@ -232,10 +232,13 @@ async fn try_advanced_search(
         exact_phrase: false,
         max_results: Some(50), // Reasonable limit
         include_highlights: true,
+        excerpt_length: 60,
     };
 
     // Perform advanced search
-    let search_results = search_engine.search(query, &search_options, &all_memos).await?;
+    let search_results = search_engine
+        .search(query, &search_options, &all_memos)
+        .await?;
 
     if search_results.is_empty() {
         println!(
@@ -258,7 +261,7 @@ async fn try_advanced_search(
     // Results are already sorted by relevance score from advanced search
     for search_result in search_results {
         let memo = &search_result.memo;
-        
+
         println!("{} {}", "🆔".dimmed(), memo.id.as_str().blue());
         println!("{} {}", "📄".dimmed(), memo.title.bold());
         println!(
@@ -279,9 +282,13 @@ async fn try_advanced_search(
 
         // Use advanced highlighting if available, otherwise fall back to preview
         if !search_result.highlights.is_empty() {
-            println!("{} {}", "💬".dimmed(), search_result.highlights.join(" ").dimmed());
+            println!(
+                "{} {}",
+                "💬".dimmed(),
+                search_result.highlights.join(" ").dimmed()
+            );
         } else {
-            let preview = format_content_preview(&memo.content, SEARCH_PREVIEW_LENGTH);
+            let preview = format_content_preview(&memo.content, DEFAULT_SEARCH_PREVIEW_LENGTH);
             // Enhanced highlighting - replace query with colored version (case insensitive)
             let highlighted_preview = if search_options.case_sensitive {
                 preview.replace(query, &query.yellow().to_string())
@@ -290,7 +297,7 @@ async fn try_advanced_search(
             };
             println!("{} {}", "💬".dimmed(), highlighted_preview.dimmed());
         }
-        
+
         println!();
     }
 
@@ -338,10 +345,11 @@ async fn fallback_basic_search(
         );
 
         // Show a highlighted preview of content
-        let preview = format_content_preview(&memo.content, SEARCH_PREVIEW_LENGTH);
+        let preview = format_content_preview(&memo.content, DEFAULT_SEARCH_PREVIEW_LENGTH);
 
         // Enhanced highlighting - case insensitive replacement
-        let highlighted_preview = replace_case_insensitive(&preview, query, &query.yellow().to_string());
+        let highlighted_preview =
+            replace_case_insensitive(&preview, query, &query.yellow().to_string());
         println!("{} {}", "💬".dimmed(), highlighted_preview.dimmed());
         println!();
     }
@@ -355,19 +363,19 @@ fn replace_case_insensitive(text: &str, pattern: &str, replacement: &str) -> Str
     let mut last_end = 0;
     let pattern_lower = pattern.to_lowercase();
     let text_lower = text.to_lowercase();
-    
+
     while let Some(start) = text_lower[last_end..].find(&pattern_lower) {
         let absolute_start = last_end + start;
         let absolute_end = absolute_start + pattern.len();
-        
+
         // Add text before the match
         result.push_str(&text[last_end..absolute_start]);
         // Add the replacement
         result.push_str(replacement);
-        
+
         last_end = absolute_end;
     }
-    
+
     // Add remaining text
     result.push_str(&text[last_end..]);
     result

@@ -493,6 +493,7 @@ pub struct ListMemosResponse {
 ///     exact_phrase: false,
 ///     max_results: Some(50),
 ///     include_highlights: true,
+///     excerpt_length: 80,
 /// };
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -505,6 +506,8 @@ pub struct SearchOptions {
     pub max_results: Option<usize>,
     /// Whether to include search result highlights (default: false)
     pub include_highlights: bool,
+    /// Number of characters to show around matches in excerpts (default: 60)
+    pub excerpt_length: usize,
 }
 
 impl Default for SearchOptions {
@@ -514,6 +517,7 @@ impl Default for SearchOptions {
             exact_phrase: false,
             max_results: None,
             include_highlights: false,
+            excerpt_length: 60,
         }
     }
 }
@@ -692,7 +696,7 @@ mod tests {
     #[test]
     fn test_search_options_default() {
         let options = SearchOptions::default();
-        
+
         assert!(!options.case_sensitive);
         assert!(!options.exact_phrase);
         assert!(options.max_results.is_none());
@@ -706,6 +710,7 @@ mod tests {
             exact_phrase: false,
             max_results: Some(25),
             include_highlights: true,
+            excerpt_length: 80,
         };
 
         let json = serde_json::to_string(&options).unwrap();
@@ -749,7 +754,7 @@ mod tests {
     #[test]
     fn test_context_options_default() {
         let options = ContextOptions::default();
-        
+
         assert!(options.include_metadata);
         assert!(options.max_tokens.is_none());
         assert_eq!(options.delimiter, "\n---\n");

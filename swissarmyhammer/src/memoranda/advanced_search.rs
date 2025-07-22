@@ -19,6 +19,27 @@ use tantivy::{
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
+/// Configuration constants for advanced search engine
+const DEFAULT_WRITER_BUFFER_SIZE: usize = 50_000_000; // 50MB buffer for index writer
+
+/// Helper functions for common error mappings
+impl AdvancedMemoSearchEngine {
+    /// Map Tantivy errors to SwissArmyHammerError for index operations
+    fn map_tantivy_error(context: &str, error: impl std::fmt::Display) -> SwissArmyHammerError {
+        SwissArmyHammerError::Other(format!("{context}: {error}"))
+    }
+
+    /// Map commit errors
+    fn map_commit_error(operation: &str, error: impl std::fmt::Display) -> SwissArmyHammerError {
+        Self::map_tantivy_error(&format!("Failed to commit {operation}"), error)
+    }
+
+    /// Map reload errors
+    fn map_reload_error(context: &str, error: impl std::fmt::Display) -> SwissArmyHammerError {
+        Self::map_tantivy_error(&format!("Failed to reload {context}"), error)
+    }
+}
+
 /// Advanced memo search engine using Tantivy for full-text indexing
 ///
 /// Provides high-performance search capabilities for memoranda with support for:
@@ -37,7 +58,7 @@ use tracing::{debug, info};
 /// use swissarmyhammer::memoranda::{AdvancedMemoSearchEngine, SearchOptions};
 ///
 /// let engine = AdvancedMemoSearchEngine::new_in_memory().await?;
-/// 
+///
 /// // Index some memos
 /// let memo1 = Memo::new("Project Meeting".to_string(), "Discussed timeline".to_string());
 /// engine.index_memo(&memo1).await?;
@@ -95,7 +116,7 @@ impl AdvancedMemoSearchEngine {
     ///
     /// ```rust,ignore
     /// use std::path::PathBuf;
-    /// 
+    ///
     /// let engine = AdvancedMemoSearchEngine::new_persistent(
     ///     PathBuf::from("/path/to/index")
     /// ).await?;
@@ -106,9 +127,9 @@ impl AdvancedMemoSearchEngine {
 
         let schema = Self::build_schema();
         let directory = MmapDirectory::open(path)
-            .map_err(|e| SwissArmyHammerError::Other(format!("Failed to open index directory: {}", e)))?;
+            .map_err(|e| Self::map_tantivy_error("Failed to open index directory", e))?;
         let index = Index::open_or_create(directory, schema)
-            .map_err(|e| SwissArmyHammerError::Other(format!("Failed to create index: {}", e)))?;
+            .map_err(|e| Self::map_tantivy_error("Failed to create index", e))?;
 
         Self::new_from_index(index).await
     }
@@ -116,23 +137,30 @@ impl AdvancedMemoSearchEngine {
     /// Create search engine from an existing Tantivy index
     async fn new_from_index(index: Index) -> Result<Self> {
         let schema = index.schema();
-        
-        let title_field = schema.get_field("title")
-            .map_err(|_| SwissArmyHammerError::Other("Missing title field in schema".to_string()))?;
-        let content_field = schema.get_field("content")
-            .map_err(|_| SwissArmyHammerError::Other("Missing content field in schema".to_string()))?;
-        let id_field = schema.get_field("id")
-            .map_err(|_| SwissArmyHammerError::Other("Missing id field in schema".to_string()))?;
-        let created_at_field = schema.get_field("created_at")
-            .map_err(|_| SwissArmyHammerError::Other("Missing created_at field in schema".to_string()))?;
-        let updated_at_field = schema.get_field("updated_at")
-            .map_err(|_| SwissArmyHammerError::Other("Missing updated_at field in schema".to_string()))?;
 
-        let writer = index.writer(50_000_000)
-            .map_err(|e| SwissArmyHammerError::Other(format!("Failed to create index writer: {}", e)))?;
-        
-        let reader = index.reader()
-            .map_err(|e| SwissArmyHammerError::Other(format!("Failed to create index reader: {}", e)))?;
+        let title_field = schema.get_field("title").map_err(|_| {
+            SwissArmyHammerError::Other("Missing title field in schema".to_string())
+        })?;
+        let content_field = schema.get_field("content").map_err(|_| {
+            SwissArmyHammerError::Other("Missing content field in schema".to_string())
+        })?;
+        let id_field = schema
+            .get_field("id")
+            .map_err(|_| SwissArmyHammerError::Other("Missing id field in schema".to_string()))?;
+        let created_at_field = schema.get_field("created_at").map_err(|_| {
+            SwissArmyHammerError::Other("Missing created_at field in schema".to_string())
+        })?;
+        let updated_at_field = schema.get_field("updated_at").map_err(|_| {
+            SwissArmyHammerError::Other("Missing updated_at field in schema".to_string())
+        })?;
+
+        let writer = index
+            .writer(DEFAULT_WRITER_BUFFER_SIZE)
+            .map_err(|e| Self::map_tantivy_error("Failed to create index writer", e))?;
+
+        let reader = index
+            .reader()
+            .map_err(|e| Self::map_tantivy_error("Failed to create index reader", e))?;
 
         Ok(Self {
             index,
@@ -149,22 +177,22 @@ impl AdvancedMemoSearchEngine {
     /// Build the Tantivy schema for memo indexing
     fn build_schema() -> Schema {
         use tantivy::schema::*;
-        
+
         let mut schema_builder = Schema::builder();
-        
+
         // Title field - searchable and stored, higher weight
         schema_builder.add_text_field("title", TEXT | STORED);
-        
+
         // Content field - searchable but not stored (too large)
         schema_builder.add_text_field("content", TEXT);
-        
+
         // ID field - stored for retrieval
         schema_builder.add_text_field("id", STORED);
-        
+
         // Timestamp fields - stored for metadata
         schema_builder.add_text_field("created_at", STORED);
         schema_builder.add_text_field("updated_at", STORED);
-        
+
         schema_builder.build()
     }
 
@@ -193,18 +221,20 @@ impl AdvancedMemoSearchEngine {
             let mut writer = self.writer.write().await;
             let id_term = Term::from_field_text(self.id_field, memo.id.as_str());
             writer.delete_term(id_term);
-            writer.commit()
-                .map_err(|e| SwissArmyHammerError::Other(format!("Failed to commit deletion: {}", e)))?;
+            writer
+                .commit()
+                .map_err(|e| Self::map_commit_error("deletion", e))?;
         }
-        
+
         // Reload reader to ensure deletions are visible
-        self.reader.reload()
-            .map_err(|e| SwissArmyHammerError::Other(format!("Failed to reload after deletion: {}", e)))?;
-        
+        self.reader
+            .reload()
+            .map_err(|e| Self::map_reload_error("after deletion", e))?;
+
         // Then, add the new document
         {
             let mut writer = self.writer.write().await;
-            
+
             let doc = doc!(
                 self.title_field => memo.title.clone(),
                 self.content_field => memo.content.clone(),
@@ -212,18 +242,21 @@ impl AdvancedMemoSearchEngine {
                 self.created_at_field => memo.created_at.to_rfc3339(),
                 self.updated_at_field => memo.updated_at.to_rfc3339(),
             );
-            
-            writer.add_document(doc)
-                .map_err(|e| SwissArmyHammerError::Other(format!("Failed to add document: {}", e)))?;
-            
-            writer.commit()
-                .map_err(|e| SwissArmyHammerError::Other(format!("Failed to commit addition: {}", e)))?;
+
+            writer
+                .add_document(doc)
+                .map_err(|e| Self::map_tantivy_error("Failed to add document", e))?;
+
+            writer
+                .commit()
+                .map_err(|e| Self::map_commit_error("addition", e))?;
         }
-        
+
         // Final reload to see the new document
-        self.reader.reload()
-            .map_err(|e| SwissArmyHammerError::Other(format!("Failed to reload after addition: {}", e)))?;
-        
+        self.reader
+            .reload()
+            .map_err(|e| Self::map_reload_error("after addition", e))?;
+
         debug!("Indexed memo: {} ({})", memo.title, memo.id);
         Ok(())
     }
@@ -263,14 +296,16 @@ impl AdvancedMemoSearchEngine {
             let mut writer = self.writer.write().await;
             let id_term = Term::from_field_text(self.id_field, memo_id.as_str());
             writer.delete_term(id_term);
-            writer.commit()
-                .map_err(|e| SwissArmyHammerError::Other(format!("Failed to commit removal: {}", e)))?;
+            writer
+                .commit()
+                .map_err(|e| Self::map_commit_error("removal", e))?;
         }
-        
+
         // Reload reader to see changes
-        self.reader.reload()
-            .map_err(|e| SwissArmyHammerError::Other(format!("Failed to reload index reader: {}", e)))?;
-        
+        self.reader
+            .reload()
+            .map_err(|e| Self::map_reload_error("index reader", e))?;
+
         debug!("Removed memo from index: {}", memo_id);
         Ok(())
     }
@@ -285,13 +320,15 @@ impl AdvancedMemoSearchEngine {
     /// * `Result<()>` - Success or error if commit fails
     pub async fn commit(&self) -> Result<()> {
         let mut writer = self.writer.write().await;
-        writer.commit()
-            .map_err(|e| SwissArmyHammerError::Other(format!("Failed to commit index: {}", e)))?;
-        
+        writer
+            .commit()
+            .map_err(|e| Self::map_commit_error("index", e))?;
+
         // Reload reader to see new changes
-        self.reader.reload()
-            .map_err(|e| SwissArmyHammerError::Other(format!("Failed to reload index reader: {}", e)))?;
-        
+        self.reader
+            .reload()
+            .map_err(|e| Self::map_reload_error("index reader", e))?;
+
         debug!("Committed index changes");
         Ok(())
     }
@@ -327,22 +364,25 @@ impl AdvancedMemoSearchEngine {
 
         // Parse query with support for different query types
         let parsed_query = self.parse_query(query, options)?;
-        
+
         let searcher = self.reader.searcher();
         let limit = options.max_results.unwrap_or(100);
-        
-        let top_docs = searcher.search(&*parsed_query, &TopDocs::with_limit(limit))
-            .map_err(|e| SwissArmyHammerError::Other(format!("Search failed: {}", e)))?;
+
+        let top_docs = searcher
+            .search(&*parsed_query, &TopDocs::with_limit(limit))
+            .map_err(|e| Self::map_tantivy_error("Search failed", e))?;
 
         let mut results = Vec::new();
-        let memo_map: HashMap<String, &Memo> = all_memos.iter()
+        let memo_map: HashMap<String, &Memo> = all_memos
+            .iter()
             .map(|memo| (memo.id.as_str().to_string(), memo))
             .collect();
 
         for (score, doc_address) in top_docs {
-            let doc: tantivy::TantivyDocument = searcher.doc(doc_address)
-                .map_err(|e| SwissArmyHammerError::Other(format!("Failed to retrieve document: {}", e)))?;
-            
+            let doc: tantivy::TantivyDocument = searcher
+                .doc(doc_address)
+                .map_err(|e| Self::map_tantivy_error("Failed to retrieve document", e))?;
+
             if let Some(id_value) = doc.get_first(self.id_field) {
                 if let Some(id_str) = id_value.as_str() {
                     if let Some(memo) = memo_map.get(id_str) {
@@ -390,54 +430,52 @@ impl AdvancedMemoSearchEngine {
         }
 
         // Default: simple term query using QueryParser
-        let query_parser = QueryParser::for_index(
-            &self.index,
-            vec![self.title_field, self.content_field],
-        );
+        let query_parser =
+            QueryParser::for_index(&self.index, vec![self.title_field, self.content_field]);
 
-        let parsed = query_parser.parse_query(query)
-            .map_err(|e| SwissArmyHammerError::Other(format!("Query parsing failed: {}", e)))?;
-        
+        let parsed = query_parser
+            .parse_query(query)
+            .map_err(|e| Self::map_tantivy_error("Query parsing failed", e))?;
+
         Ok(parsed)
     }
 
     /// Parse a phrase query ("exact phrase")
     fn parse_phrase_query(&self, query: &str) -> Result<Box<dyn Query>> {
         let phrase = if query.starts_with('"') && query.ends_with('"') {
-            &query[1..query.len()-1]
+            &query[1..query.len() - 1]
         } else {
             query
         };
 
         // For exact phrase matching, use QueryParser with quoted query
-        let query_parser = QueryParser::for_index(
-            &self.index,
-            vec![self.title_field, self.content_field],
-        );
+        let query_parser =
+            QueryParser::for_index(&self.index, vec![self.title_field, self.content_field]);
 
         // Ensure the phrase is properly quoted for Tantivy
-        let quoted_phrase = format!("\"{}\"", phrase);
-        let parsed = query_parser.parse_query(&quoted_phrase)
-            .map_err(|e| SwissArmyHammerError::Other(format!("Phrase query parsing failed: {}", e)))?;
-        
+        let quoted_phrase = format!("\"{phrase}\"");
+        let parsed = query_parser
+            .parse_query(&quoted_phrase)
+            .map_err(|e| Self::map_tantivy_error("Phrase query parsing failed", e))?;
+
         Ok(parsed)
     }
 
     /// Parse a boolean query (term1 AND term2, term1 OR term2)
     fn parse_boolean_query(&self, query: &str, _options: &SearchOptions) -> Result<Box<dyn Query>> {
         let mut subqueries = Vec::new();
-        
+
         // Simple parsing - handle AND queries for now
         if query.contains(" AND ") {
             let parts: Vec<&str> = query.split(" AND ").collect();
-            
+
             for part in parts {
                 let term_query = self.create_term_query(part.trim())?;
                 subqueries.push((Occur::Must, term_query));
             }
         } else if query.contains(" OR ") {
             let parts: Vec<&str> = query.split(" OR ").collect();
-            
+
             for part in parts {
                 let term_query = self.create_term_query(part.trim())?;
                 subqueries.push((Occur::Should, term_query));
@@ -449,7 +487,9 @@ impl AdvancedMemoSearchEngine {
         }
 
         if subqueries.is_empty() {
-            return Err(SwissArmyHammerError::Other("Empty boolean query".to_string()));
+            return Err(SwissArmyHammerError::Other(
+                "Empty boolean query".to_string(),
+            ));
         }
 
         let boolean_query = BooleanQuery::new(subqueries);
@@ -461,34 +501,37 @@ impl AdvancedMemoSearchEngine {
         // For now, fall back to regular term query since WildcardQuery may not be available
         // Remove the asterisk and do a prefix search
         let clean_query = query.trim_end_matches('*');
-        let query_parser = QueryParser::for_index(
-            &self.index,
-            vec![self.title_field, self.content_field],
-        );
+        let query_parser =
+            QueryParser::for_index(&self.index, vec![self.title_field, self.content_field]);
 
-        let parsed = query_parser.parse_query(clean_query)
-            .map_err(|e| SwissArmyHammerError::Other(format!("Wildcard query parsing failed: {}", e)))?;
-        
+        let parsed = query_parser
+            .parse_query(clean_query)
+            .map_err(|e| Self::map_tantivy_error("Wildcard query parsing failed", e))?;
+
         Ok(parsed)
     }
 
     /// Create a term query for a single search term
     fn create_term_query(&self, term: &str) -> Result<Box<dyn Query>> {
         // Use QueryParser for simplicity - it handles term queries across multiple fields
-        let query_parser = QueryParser::for_index(
-            &self.index,
-            vec![self.title_field, self.content_field],
-        );
+        let query_parser =
+            QueryParser::for_index(&self.index, vec![self.title_field, self.content_field]);
 
-        let parsed = query_parser.parse_query(term)
-            .map_err(|e| SwissArmyHammerError::Other(format!("Term query parsing failed: {}", e)))?;
-        
+        let parsed = query_parser
+            .parse_query(term)
+            .map_err(|e| Self::map_tantivy_error("Term query parsing failed", e))?;
+
         Ok(parsed)
     }
 
     /// Generate highlighted snippets for search results
-    fn generate_search_highlights(&self, memo: &Memo, query: &str, options: &SearchOptions) -> Vec<String> {
-        crate::memoranda::storage::generate_highlights(memo, query, options.case_sensitive)
+    fn generate_search_highlights(
+        &self,
+        memo: &Memo,
+        query: &str,
+        options: &SearchOptions,
+    ) -> Vec<String> {
+        crate::memoranda::storage::generate_highlights(memo, query, options)
     }
 
     /// Count the number of matches in a memo
@@ -512,14 +555,14 @@ impl AdvancedMemoSearchEngine {
         };
 
         let mut count = 0;
-        
+
         // Count occurrences in title
         let mut start = 0;
         while let Some(pos) = title_text[start..].find(&search_query) {
             count += 1;
             start += pos + search_query.len();
         }
-        
+
         // Count occurrences in content
         start = 0;
         while let Some(pos) = content_text[start..].find(&search_query) {
@@ -538,9 +581,18 @@ mod tests {
 
     fn create_test_memos() -> Vec<Memo> {
         vec![
-            Memo::new("Rust Programming Guide".to_string(), "Learning Rust language fundamentals".to_string()),
-            Memo::new("Python Tutorial".to_string(), "Python programming for beginners".to_string()),
-            Memo::new("Project Meeting".to_string(), "Discussed Rust project timeline".to_string()),
+            Memo::new(
+                "Rust Programming Guide".to_string(),
+                "Learning Rust language fundamentals".to_string(),
+            ),
+            Memo::new(
+                "Python Tutorial".to_string(),
+                "Python programming for beginners".to_string(),
+            ),
+            Memo::new(
+                "Project Meeting".to_string(),
+                "Discussed Rust project timeline".to_string(),
+            ),
         ]
     }
 
@@ -554,12 +606,12 @@ mod tests {
     async fn test_index_and_search() {
         let engine = AdvancedMemoSearchEngine::new_in_memory().await.unwrap();
         let memos = create_test_memos();
-        
+
         engine.index_memos(&memos).await.unwrap();
-        
+
         let options = SearchOptions::default();
         let results = engine.search("rust", &options, &memos).await.unwrap();
-        
+
         assert_eq!(results.len(), 2); // Should find "Rust Programming Guide" and "Project Meeting"
         assert!(results[0].relevance_score > 0.0);
     }
@@ -568,15 +620,18 @@ mod tests {
     async fn test_phrase_search() {
         let engine = AdvancedMemoSearchEngine::new_in_memory().await.unwrap();
         let memos = create_test_memos();
-        
+
         engine.index_memos(&memos).await.unwrap();
-        
+
         let options = SearchOptions {
             exact_phrase: true,
             ..Default::default()
         };
-        let results = engine.search("Rust Programming", &options, &memos).await.unwrap();
-        
+        let results = engine
+            .search("Rust Programming", &options, &memos)
+            .await
+            .unwrap();
+
         // Should find only "Rust Programming Guide", not "Project Meeting" with separate words
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].memo.title, "Rust Programming Guide");
@@ -586,12 +641,15 @@ mod tests {
     async fn test_boolean_search() {
         let engine = AdvancedMemoSearchEngine::new_in_memory().await.unwrap();
         let memos = create_test_memos();
-        
+
         engine.index_memos(&memos).await.unwrap();
-        
+
         let options = SearchOptions::default();
-        let results = engine.search("rust AND project", &options, &memos).await.unwrap();
-        
+        let results = engine
+            .search("rust AND project", &options, &memos)
+            .await
+            .unwrap();
+
         // Should find "Project Meeting" (contains both "rust" and "project")
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].memo.title, "Project Meeting");
@@ -601,45 +659,55 @@ mod tests {
     async fn test_search_with_highlights() {
         let engine = AdvancedMemoSearchEngine::new_in_memory().await.unwrap();
         let memos = create_test_memos();
-        
+
         engine.index_memos(&memos).await.unwrap();
-        
+
         let options = SearchOptions {
             include_highlights: true,
             ..Default::default()
         };
-        let results = engine.search("programming", &options, &memos).await.unwrap();
-        
+        let results = engine
+            .search("programming", &options, &memos)
+            .await
+            .unwrap();
+
         assert!(!results.is_empty());
         assert!(!results[0].highlights.is_empty());
-        
+
         let highlights_text = results[0].highlights.join(" ");
-        assert!(highlights_text.contains("**programming**") || highlights_text.contains("**Programming**"));
+        assert!(
+            highlights_text.contains("**programming**")
+                || highlights_text.contains("**Programming**")
+        );
     }
 
     #[tokio::test]
     async fn test_memo_removal() {
         let engine = AdvancedMemoSearchEngine::new_in_memory().await.unwrap();
         let memos = create_test_memos();
-        
+
         engine.index_memos(&memos).await.unwrap();
-        
+
         // Search should find results before removal
         let options = SearchOptions::default();
         let results_before = engine.search("rust", &options, &memos).await.unwrap();
         assert_eq!(results_before.len(), 2);
-        
+
         // Remove one memo
         let removed_memo_id = memos[0].id.clone();
         engine.remove_memo(&removed_memo_id).await.unwrap();
-        
+
         // Create filtered memo list excluding the removed memo
-        let remaining_memos: Vec<Memo> = memos.into_iter()
+        let remaining_memos: Vec<Memo> = memos
+            .into_iter()
             .filter(|memo| memo.id != removed_memo_id)
             .collect();
-        
+
         // Search should find fewer results after removal
-        let results_after = engine.search("rust", &options, &remaining_memos).await.unwrap();
+        let results_after = engine
+            .search("rust", &options, &remaining_memos)
+            .await
+            .unwrap();
         assert_eq!(results_after.len(), 1);
     }
 
@@ -648,45 +716,66 @@ mod tests {
         let engine = AdvancedMemoSearchEngine::new_in_memory().await.unwrap();
         let memos = create_test_memos();
         engine.index_memos(&memos).await.unwrap();
-        
+
         let options = SearchOptions::default();
-        
+
         // Empty query should return no results
         let results = engine.search("", &options, &memos).await.unwrap();
         assert_eq!(results.len(), 0);
-        
+
         // Whitespace-only query should return no results
         let results = engine.search("   \t\n  ", &options, &memos).await.unwrap();
         assert_eq!(results.len(), 0);
-        
+
         // Query that matches nothing should return empty results
-        let results = engine.search("nonexistentword", &options, &memos).await.unwrap();
+        let results = engine
+            .search("nonexistentword", &options, &memos)
+            .await
+            .unwrap();
         assert_eq!(results.len(), 0);
     }
 
     #[tokio::test]
     async fn test_special_characters_in_queries() {
         let engine = AdvancedMemoSearchEngine::new_in_memory().await.unwrap();
-        
+
         // Create memos with special characters
         let special_memos = vec![
-            Memo::new("C++ Programming".to_string(), "Learning C++/CLI syntax".to_string()),
-            Memo::new("Email: user@domain.com".to_string(), "Contact information".to_string()),
-            Memo::new("Path: /usr/local/bin".to_string(), "System directories".to_string()),
+            Memo::new(
+                "C++ Programming".to_string(),
+                "Learning C++/CLI syntax".to_string(),
+            ),
+            Memo::new(
+                "Email: user@domain.com".to_string(),
+                "Contact information".to_string(),
+            ),
+            Memo::new(
+                "Path: /usr/local/bin".to_string(),
+                "System directories".to_string(),
+            ),
         ];
-        
+
         engine.index_memos(&special_memos).await.unwrap();
-        
+
         let options = SearchOptions::default();
-        
+
         // Search for content with special characters
-        let results = engine.search("C++", &options, &special_memos).await.unwrap();
+        let results = engine
+            .search("C++", &options, &special_memos)
+            .await
+            .unwrap();
         assert!(results.len() > 0);
-        
-        let results = engine.search("user@domain.com", &options, &special_memos).await.unwrap();
+
+        let results = engine
+            .search("user@domain.com", &options, &special_memos)
+            .await
+            .unwrap();
         assert!(results.len() > 0);
-        
-        let results = engine.search("/usr/local", &options, &special_memos).await.unwrap();
+
+        let results = engine
+            .search("/usr/local", &options, &special_memos)
+            .await
+            .unwrap();
         assert!(results.len() > 0);
     }
 
@@ -695,27 +784,36 @@ mod tests {
         let engine = AdvancedMemoSearchEngine::new_in_memory().await.unwrap();
         let memos = create_test_memos();
         engine.index_memos(&memos).await.unwrap();
-        
+
         // Case insensitive search (default)
         let case_insensitive = SearchOptions {
             case_sensitive: false,
             ..Default::default()
         };
-        let results = engine.search("RUST", &case_insensitive, &memos).await.unwrap();
+        let results = engine
+            .search("RUST", &case_insensitive, &memos)
+            .await
+            .unwrap();
         assert!(results.len() > 0);
-        
+
         // Case sensitive search - Tantivy typically normalizes text during indexing,
         // so we test with a term that should have different behavior
         let case_sensitive = SearchOptions {
             case_sensitive: true,
             ..Default::default()
         };
-        let _results = engine.search("RUST", &case_sensitive, &memos).await.unwrap();
+        let _results = engine
+            .search("RUST", &case_sensitive, &memos)
+            .await
+            .unwrap();
         // Note: Tantivy may still find results due to text analysis during indexing
         // This is expected behavior for full-text search engines
-        
+
         // But exact case should work
-        let results = engine.search("Rust", &case_sensitive, &memos).await.unwrap();
+        let results = engine
+            .search("Rust", &case_sensitive, &memos)
+            .await
+            .unwrap();
         assert!(results.len() > 0);
     }
 
@@ -724,18 +822,24 @@ mod tests {
         let engine = AdvancedMemoSearchEngine::new_in_memory().await.unwrap();
         let memos = create_test_memos();
         engine.index_memos(&memos).await.unwrap();
-        
+
         // Search with no limit
         let unlimited = SearchOptions::default();
-        let all_results = engine.search("programming", &unlimited, &memos).await.unwrap();
-        
+        let all_results = engine
+            .search("programming", &unlimited, &memos)
+            .await
+            .unwrap();
+
         // Search with max results = 1
         let limited = SearchOptions {
             max_results: Some(1),
             ..Default::default()
         };
-        let limited_results = engine.search("programming", &limited, &memos).await.unwrap();
-        
+        let limited_results = engine
+            .search("programming", &limited, &memos)
+            .await
+            .unwrap();
+
         assert!(limited_results.len() <= 1);
         assert!(limited_results.len() <= all_results.len());
     }
@@ -745,32 +849,44 @@ mod tests {
         let engine = AdvancedMemoSearchEngine::new_in_memory().await.unwrap();
         let memos = create_test_memos();
         engine.index_memos(&memos).await.unwrap();
-        
+
         let options = SearchOptions::default();
-        
+
         // OR query should find more results than AND
-        let and_results = engine.search("rust AND programming", &options, &memos).await.unwrap();
-        let or_results = engine.search("rust OR python", &options, &memos).await.unwrap();
-        
+        let and_results = engine
+            .search("rust AND programming", &options, &memos)
+            .await
+            .unwrap();
+        let or_results = engine
+            .search("rust OR python", &options, &memos)
+            .await
+            .unwrap();
+
         assert!(or_results.len() >= and_results.len());
         assert!(or_results.len() > 0);
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_phrase_search_precision() {
         let engine = AdvancedMemoSearchEngine::new_in_memory().await.unwrap();
         let memos = create_test_memos();
         engine.index_memos(&memos).await.unwrap();
-        
+
         let phrase_options = SearchOptions {
             exact_phrase: true,
             ..Default::default()
         };
-        
+
         // Exact phrase should be more restrictive than individual words
-        let word_results = engine.search("rust programming", &SearchOptions::default(), &memos).await.unwrap();
-        let phrase_results = engine.search("rust programming", &phrase_options, &memos).await.unwrap();
-        
+        let word_results = engine
+            .search("rust programming", &SearchOptions::default(), &memos)
+            .await
+            .unwrap();
+        let phrase_results = engine
+            .search("rust programming", &phrase_options, &memos)
+            .await
+            .unwrap();
+
         // Phrase search should be more restrictive
         assert!(phrase_results.len() <= word_results.len());
     }
@@ -780,16 +896,19 @@ mod tests {
         let engine = AdvancedMemoSearchEngine::new_in_memory().await.unwrap();
         let memos = create_test_memos();
         engine.index_memos(&memos).await.unwrap();
-        
+
         let options = SearchOptions::default();
-        let results = engine.search("programming", &options, &memos).await.unwrap();
-        
+        let results = engine
+            .search("programming", &options, &memos)
+            .await
+            .unwrap();
+
         if results.len() > 1 {
             // Results should be ordered by relevance score (highest first)
-            for i in 0..results.len()-1 {
-                assert!(results[i].relevance_score >= results[i+1].relevance_score);
+            for i in 0..results.len() - 1 {
+                assert!(results[i].relevance_score >= results[i + 1].relevance_score);
             }
-            
+
             // All scores should be positive
             for result in &results {
                 assert!(result.relevance_score > 0.0);
@@ -800,30 +919,42 @@ mod tests {
     #[tokio::test]
     async fn test_index_update_on_memo_changes() {
         let engine = AdvancedMemoSearchEngine::new_in_memory().await.unwrap();
-        let mut memo = Memo::new("Test Document".to_string(), "Contains word zebra".to_string());
-        
+        let mut memo = Memo::new(
+            "Test Document".to_string(),
+            "Contains word zebra".to_string(),
+        );
+
         // Index original memo
         engine.index_memo(&memo).await.unwrap();
-        
+
         let options = SearchOptions::default();
-        
+
         // Search for original content should find it
-        let results = engine.search("zebra", &options, &[memo.clone()]).await.unwrap();
+        let results = engine
+            .search("zebra", &options, &[memo.clone()])
+            .await
+            .unwrap();
         assert_eq!(results.len(), 1);
-        
+
         // Update memo content to completely different words
         memo.update_content("Contains word elephant instead".to_string());
-        
+
         // Re-index updated memo
         engine.index_memo(&memo).await.unwrap();
-        
+
         // Search for new content should find it - this is the key functionality
-        let results = engine.search("elephant", &options, &[memo.clone()]).await.unwrap();
+        let results = engine
+            .search("elephant", &options, &[memo.clone()])
+            .await
+            .unwrap();
         assert_eq!(results.len(), 1);
-        
+
         // Verify that the engine can handle document updates - the exact replacement behavior
         // may vary with different Tantivy versions, but updating should work
-        let all_results = engine.search("contains", &options, &[memo.clone()]).await.unwrap();
+        let all_results = engine
+            .search("contains", &options, &[memo.clone()])
+            .await
+            .unwrap();
         assert!(all_results.len() > 0); // Should find at least the updated content
     }
 }

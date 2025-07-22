@@ -31,3 +31,6 @@ TEST_FAILURES.md
 
 # Test issue files
 swissarmyhammer/issues/
+
+# Runtime directories
+.swissarmyhammer/

@@ -103,3 +103,81 @@ doc/src/
 - [ ] Code review completed with consistent patterns
 - [ ] Documentation integrated with existing doc structure
 - [ ] All examples tested and working
+
+
+## Proposed Solution
+
+Based on my exploration of the codebase, here is my implementation plan:
+
+### Current State Analysis
+- ✅ **Core Implementation**: Well-structured memoranda system with comprehensive module documentation
+- ✅ **API Coverage**: All core types have good rustdoc documentation with examples
+- ✅ **CLI Implementation**: Functional CLI with memo commands (create, list, get, update, delete, search, context)
+- ✅ **MCP Integration**: MCP tools implemented with proper type handling
+- ✅ **Testing**: Comprehensive test coverage including property-based tests
+- ✅ **Advanced Features**: Advanced search engine with relevance scoring and highlighting
+
+### Implementation Plan
+
+#### Phase 1: Core Documentation (High Priority)
+1. **MCP Tools Documentation** (`doc/src/mcp-memoranda.md`)
+   - Document all 6 MCP tools: create, get, update, delete, search, list, get_all_context
+   - Include request/response examples and integration guide for AI assistants
+   - Performance considerations and error handling
+
+2. **CLI Reference** (`doc/src/cli-memoranda.md`)  
+   - Document all memo subcommands with examples
+   - Integration with existing CLI documentation structure
+   - Common workflow examples and troubleshooting
+
+3. **Module Documentation Enhancement** (`src/memoranda/mod.rs`)
+   - Add troubleshooting section for common issues
+   - Enhance examples with more complex usage patterns
+   - Document storage configuration options
+
+#### Phase 2: User Guides (Medium Priority)
+1. **Getting Started Guide** (`doc/examples/memoranda-quickstart.md`)
+   - Step-by-step tutorial for new users
+   - Basic CLI usage and MCP integration
+   - Common use cases and workflows
+
+2. **Advanced Usage Examples** (`doc/examples/memoranda-advanced.md`)
+   - Complex search queries and options
+   - AI assistant integration patterns
+   - Bulk operations and automation scenarios
+
+3. **API Examples** (`swissarmyhammer/examples/memoranda_usage.rs`)
+   - Programmatic usage examples
+   - Custom storage backend examples
+   - Integration with SwissArmyHammer workflows
+
+#### Phase 3: Integration & Polish (Low Priority) 
+1. **Documentation Integration**
+   - Update `doc/src/SUMMARY.md` to include memoranda sections
+   - Cross-reference with existing features
+   - Ensure consistent formatting and style
+
+2. **Code Review & Polish**
+   - Review error messages for consistency
+   - Check async/await patterns
+   - Performance optimization opportunities
+
+### Documentation Structure
+```
+doc/src/
+├── memoranda/           # New directory
+│   ├── overview.md     # High-level overview
+│   ├── cli-reference.md # CLI commands
+│   ├── mcp-tools.md    # MCP integration 
+│   └── troubleshooting.md # Common issues
+└── examples/
+    ├── memoranda-quickstart.md
+    └── memoranda-advanced.md
+```
+
+### Success Metrics
+- All MCP tools documented with working examples
+- Complete CLI reference with troubleshooting
+- Getting started guide enabling new users to be productive quickly
+- Advanced examples showcasing full system capabilities
+- Integration with existing documentation maintains consistency

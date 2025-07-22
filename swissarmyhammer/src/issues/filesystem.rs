@@ -63,7 +63,7 @@ pub trait IssueStorage: Send + Sync {
 
     /// Mark multiple issues as complete by name
     async fn mark_complete_batch(&self, names: Vec<&str>) -> Result<Vec<Issue>>;
-    
+
     /// Get the next pending issue (first alphabetically)
     /// Returns None if no pending issues exist
     async fn get_next_issue(&self) -> Result<Option<Issue>>;
@@ -487,13 +487,10 @@ impl IssueStorage for FileSystemIssueStorage {
 
         Ok(completed_issues)
     }
-    
+
     async fn get_next_issue(&self) -> Result<Option<Issue>> {
         let all_issues = self.list_issues().await?;
-        let next_issue = all_issues
-            .into_iter()
-            .filter(|issue| !issue.completed)
-            .next();
+        let next_issue = all_issues.into_iter().find(|issue| !issue.completed);
         Ok(next_issue)
     }
 }

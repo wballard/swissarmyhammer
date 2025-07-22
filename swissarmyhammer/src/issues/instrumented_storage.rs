@@ -157,7 +157,7 @@ impl IssueStorage for InstrumentedIssueStorage {
 
         result
     }
-    
+
     async fn get_next_issue(&self) -> Result<Option<Issue>> {
         let start = Instant::now();
         let result = self.storage.get_next_issue().await;

@@ -454,7 +454,7 @@ async fn show_next_issue(
     match storage.get_next_issue().await? {
         Some(issue) => {
             let status = format_issue_status(issue.completed);
-            
+
             println!("{} Next issue: {}", status, issue.name.as_str().bold());
             println!("📁 File: {}", issue.file_path.display());
             println!(

@@ -1540,39 +1540,33 @@ impl McpServer {
 
         // Use the new get_next_issue method from storage
         match issue_storage.get_next_issue().await {
-            Ok(Some(next_issue)) => {
-                Ok(CallToolResult {
-                    content: vec![Annotated::new(
-                        RawContent::Text(RawTextContent {
-                            text: format!("Next issue: {}", next_issue.name.as_str()),
-                        }),
-                        None,
-                    )],
-                    is_error: Some(false),
-                })
-            }
-            Ok(None) => {
-                Ok(CallToolResult {
-                    content: vec![Annotated::new(
-                        RawContent::Text(RawTextContent {
-                            text: "No pending issues found. All issues are completed!".to_string(),
-                        }),
-                        None,
-                    )],
-                    is_error: Some(false),
-                })
-            }
-            Err(e) => {
-                Ok(CallToolResult {
-                    content: vec![Annotated::new(
-                        RawContent::Text(RawTextContent {
-                            text: format!("Failed to get next issue: {e}"),
-                        }),
-                        None,
-                    )],
-                    is_error: Some(true),
-                })
-            }
+            Ok(Some(next_issue)) => Ok(CallToolResult {
+                content: vec![Annotated::new(
+                    RawContent::Text(RawTextContent {
+                        text: format!("Next issue: {}", next_issue.name.as_str()),
+                    }),
+                    None,
+                )],
+                is_error: Some(false),
+            }),
+            Ok(None) => Ok(CallToolResult {
+                content: vec![Annotated::new(
+                    RawContent::Text(RawTextContent {
+                        text: "No pending issues found. All issues are completed!".to_string(),
+                    }),
+                    None,
+                )],
+                is_error: Some(false),
+            }),
+            Err(e) => Ok(CallToolResult {
+                content: vec![Annotated::new(
+                    RawContent::Text(RawTextContent {
+                        text: format!("Failed to get next issue: {e}"),
+                    }),
+                    None,
+                )],
+                is_error: Some(true),
+            }),
         }
     }
 

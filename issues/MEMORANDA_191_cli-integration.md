@@ -75,3 +75,45 @@ swissarmyhammer memo context
 - [ ] Command completion working
 - [ ] Terminal output properly formatted
 - [ ] Integration tests for CLI commands
+
+## Proposed Solution
+
+Based on my analysis of the existing codebase, I will implement the memoranda CLI integration by following these steps:
+
+### 1. Add MemoCommands enum to cli.rs
+- Add `Memo { subcommand: MemoCommands }` to the main `Commands` enum
+- Create `MemoCommands` enum with all operations:
+  - `Create { title: String, content: Option<String> }`
+  - `Update { id: String, content: Option<String> }`
+  - `Get { id: String }`
+  - `Delete { id: String }`
+  - `List`
+  - `Search { query: String }`
+  - `Context`
+
+### 2. Create swissarmyhammer-cli/src/memo.rs
+- Implement `handle_memo_command()` function following the pattern from `issue.rs`
+- Use the existing `FileSystemMemoStorage` from the memoranda library
+- Support stdin input for content (using `-` as content value)
+- Add colored terminal output for user-friendly display
+- Handle all CRUD operations with proper error messages
+
+### 3. Update main.rs integration
+- Add `mod memo;` import
+- Add memo command routing in the main match statement
+- Use existing error handling patterns with `handle_cli_result`
+
+### 4. Update completions.rs
+- Add memo command completion support
+- Include memo ID completion where applicable
+
+### 5. Add error handling
+- Extend existing CLI error handling to support memoranda errors
+- Ensure proper exit codes for different error conditions
+
+### 6. Testing
+- Create comprehensive tests for all memo CLI operations
+- Test stdin content input, error conditions, and output formatting
+- Follow existing test patterns from other CLI modules
+
+This approach leverages the existing memoranda library implementation and follows established CLI patterns in the codebase for consistency and maintainability.

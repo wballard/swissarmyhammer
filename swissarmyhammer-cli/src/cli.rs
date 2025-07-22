@@ -269,6 +269,39 @@ Examples:
         #[command(subcommand)]
         subcommand: IssueCommands,
     },
+    /// Memoranda (memo) management commands
+    #[command(long_about = "
+Manage memos with comprehensive CLI commands for creating, updating, and tracking structured text notes.
+Memos are stored as JSON files with unique ULID identifiers and automatic timestamping.
+
+Basic usage:
+  swissarmyhammer memo create <title>           # Create new memo
+  swissarmyhammer memo list                     # List all memos
+  swissarmyhammer memo get <id>                 # Get specific memo
+  swissarmyhammer memo update <id>              # Update memo content
+  swissarmyhammer memo delete <id>              # Delete memo
+  swissarmyhammer memo search <query>           # Search memos
+  swissarmyhammer memo context                  # Get all context for AI
+
+Content input:
+  --content \"text\"                            # Specify content directly
+  --content -                                   # Read content from stdin
+  (no --content)                               # Interactive prompt for content
+
+Examples:
+  swissarmyhammer memo create \"Meeting Notes\"
+  swissarmyhammer memo create \"Task List\" --content \"1. Review code\\n2. Write tests\"
+  swissarmyhammer memo list
+  swissarmyhammer memo search \"meeting\"
+  swissarmyhammer memo get 01GX5Q2D1NPRZ3KXFW2H8V3A1Y
+  swissarmyhammer memo update 01GX5Q2D1NPRZ3KXFW2H8V3A1Y --content \"Updated content\"
+  swissarmyhammer memo delete 01GX5Q2D1NPRZ3KXFW2H8V3A1Y
+  swissarmyhammer memo context
+")]
+    Memo {
+        #[command(subcommand)]
+        subcommand: MemoCommands,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -711,6 +744,45 @@ pub enum IssueCommands {
     Status,
     /// Show the next issue to work on
     Next,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum MemoCommands {
+    /// Create a new memo
+    Create {
+        /// Memo title
+        title: String,
+        /// Memo content (use - for stdin)
+        #[arg(short, long)]
+        content: Option<String>,
+    },
+    /// List all memos
+    List,
+    /// Get a specific memo by ID
+    Get {
+        /// Memo ID (ULID)
+        id: String,
+    },
+    /// Update a memo's content
+    Update {
+        /// Memo ID (ULID)
+        id: String,
+        /// New content (use - for stdin)
+        #[arg(short, long)]
+        content: Option<String>,
+    },
+    /// Delete a memo
+    Delete {
+        /// Memo ID (ULID)
+        id: String,
+    },
+    /// Search memos by content and title
+    Search {
+        /// Search query
+        query: String,
+    },
+    /// Get all memos as context for AI
+    Context,
 }
 
 impl Cli {
@@ -1505,6 +1577,187 @@ mod tests {
             }
         } else {
             panic!("Expected Issue command");
+        }
+    }
+
+    #[test]
+    fn test_memo_create_basic() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer",
+            "memo",
+            "create",
+            "Meeting Notes",
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Memo { subcommand }) = cli.command {
+            if let MemoCommands::Create { title, content } = subcommand {
+                assert_eq!(title, "Meeting Notes");
+                assert_eq!(content, None);
+            } else {
+                panic!("Expected Create subcommand");
+            }
+        } else {
+            panic!("Expected Memo command");
+        }
+    }
+
+    #[test]
+    fn test_memo_create_with_content() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer",
+            "memo",
+            "create",
+            "Task List",
+            "--content",
+            "1. Review code\n2. Write tests",
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Memo { subcommand }) = cli.command {
+            if let MemoCommands::Create { title, content } = subcommand {
+                assert_eq!(title, "Task List");
+                assert_eq!(content, Some("1. Review code\n2. Write tests".to_string()));
+            } else {
+                panic!("Expected Create subcommand");
+            }
+        } else {
+            panic!("Expected Memo command");
+        }
+    }
+
+    #[test]
+    fn test_memo_list() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer",
+            "memo",
+            "list",
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Memo { subcommand }) = cli.command {
+            if let MemoCommands::List = subcommand {
+                // Test passes
+            } else {
+                panic!("Expected List subcommand");
+            }
+        } else {
+            panic!("Expected Memo command");
+        }
+    }
+
+    #[test]
+    fn test_memo_get() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer",
+            "memo",
+            "get",
+            "01GX5Q2D1NPRZ3KXFW2H8V3A1Y",
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Memo { subcommand }) = cli.command {
+            if let MemoCommands::Get { id } = subcommand {
+                assert_eq!(id, "01GX5Q2D1NPRZ3KXFW2H8V3A1Y");
+            } else {
+                panic!("Expected Get subcommand");
+            }
+        } else {
+            panic!("Expected Memo command");
+        }
+    }
+
+    #[test]
+    fn test_memo_update() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer",
+            "memo",
+            "update",
+            "01GX5Q2D1NPRZ3KXFW2H8V3A1Y",
+            "--content",
+            "Updated content",
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Memo { subcommand }) = cli.command {
+            if let MemoCommands::Update { id, content } = subcommand {
+                assert_eq!(id, "01GX5Q2D1NPRZ3KXFW2H8V3A1Y");
+                assert_eq!(content, Some("Updated content".to_string()));
+            } else {
+                panic!("Expected Update subcommand");
+            }
+        } else {
+            panic!("Expected Memo command");
+        }
+    }
+
+    #[test]
+    fn test_memo_delete() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer",
+            "memo",
+            "delete",
+            "01GX5Q2D1NPRZ3KXFW2H8V3A1Y",
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Memo { subcommand }) = cli.command {
+            if let MemoCommands::Delete { id } = subcommand {
+                assert_eq!(id, "01GX5Q2D1NPRZ3KXFW2H8V3A1Y");
+            } else {
+                panic!("Expected Delete subcommand");
+            }
+        } else {
+            panic!("Expected Memo command");
+        }
+    }
+
+    #[test]
+    fn test_memo_search() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer",
+            "memo",
+            "search",
+            "meeting notes",
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Memo { subcommand }) = cli.command {
+            if let MemoCommands::Search { query } = subcommand {
+                assert_eq!(query, "meeting notes");
+            } else {
+                panic!("Expected Search subcommand");
+            }
+        } else {
+            panic!("Expected Memo command");
+        }
+    }
+
+    #[test]
+    fn test_memo_context() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer",
+            "memo",
+            "context",
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Memo { subcommand }) = cli.command {
+            if let MemoCommands::Context = subcommand {
+                // Test passes
+            } else {
+                panic!("Expected Context subcommand");
+            }
+        } else {
+            panic!("Expected Memo command");
         }
     }
 }

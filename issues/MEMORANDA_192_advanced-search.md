@@ -65,6 +65,70 @@ pub struct SearchResult {
 - Ensure search remains fast even with hundreds of memos
 - Make search configurable for different use cases
 
+## Proposed Solution
+
+After analyzing the existing memoranda implementation, I found that there's already a basic search system with simple case-insensitive substring matching. The current implementation in `FileSystemMemoStorage::search_memos()` loads all memos and filters them in memory.
+
+### Implementation Plan
+
+#### 1. Enhanced Search Structures
+- Add `SearchOptions` struct with configurable search behavior (case sensitivity, max results, highlighting)
+- Add `SearchResult` struct with relevance scoring and match highlights
+- Extend existing `MemoStorage` trait with advanced search methods
+- Keep existing `search_memos` for backward compatibility
+
+#### 2. Search Indexing System
+- Create `AdvancedMemoSearchEngine` that wraps existing storage with search indexing
+- Use Tantivy (already used in existing search.rs) for full-text indexing
+- Lazy-load index on first search operation
+- Update index automatically on memo create/update/delete operations
+- In-memory indexing by default, with optional persistent indexing
+
+#### 3. Query Parser
+- Implement query parsing for boolean operators: `term1 AND term2`, `term1 OR term2`  
+- Support phrase searches with quotes: `"exact phrase"`
+- Support wildcard searches: `term*`
+- Default behavior: multiple terms treated as AND operation
+- Fall back to simple search for malformed queries
+
+#### 4. Relevance Scoring & Ranking
+- Title matches weighted higher than content matches (3x weight)
+- Exact matches weighted higher than partial matches
+- Multiple term matches increase score
+- Phrase matches get highest weight
+- Sort results by relevance score descending
+
+#### 5. Context-Aware Features
+- Implement `get_all_context()` method that concatenates all memo content
+- Include metadata (title, dates) with clear delimiters
+- Optimize for AI consumption with token-efficient formatting
+- Add configurable limits to prevent excessive token usage
+
+#### 6. Performance Optimizations
+- Benchmark with collections of 1000+ memos
+- Implement result caching for repeated queries
+- Optimize common case of recent memo access
+- Configurable index update strategies (immediate vs. batched)
+
+### File Structure Changes
+```
+src/memoranda/
+  ├── mod.rs (existing - add new types)
+  ├── storage.rs (existing - extend trait)
+  └── advanced_search.rs (new - main implementation)
+```
+
+### API Extensions
+```rust
+// New advanced search method on MemoStorage trait
+async fn search_memos_advanced(&self, query: &str, options: &SearchOptions) -> Result<Vec<SearchResult>>;
+
+// New context method
+async fn get_all_context(&self, options: &ContextOptions) -> Result<String>;
+```
+
+This approach builds on existing infrastructure while providing comprehensive advanced search capabilities.
+
 ## Acceptance Criteria
 - [ ] Full-text search working across title and content
 - [ ] Search query parsing supports basic boolean operations

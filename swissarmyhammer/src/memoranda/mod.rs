@@ -71,6 +71,10 @@ use ulid::Ulid;
 pub mod storage;
 pub use storage::{FileSystemMemoStorage, MemoState, MemoStorage};
 
+/// Advanced search engine with full-text indexing and query parsing
+pub mod advanced_search;
+pub use advanced_search::AdvancedMemoSearchEngine;
+
 /// A unique identifier for memos using ULID (Universally Unique Lexicographically Sortable Identifier)
 ///
 /// ULIDs provide both uniqueness and natural ordering, making them ideal for memo identification
@@ -474,6 +478,112 @@ pub struct ListMemosResponse {
     pub total_count: usize,
 }
 
+/// Options for configuring advanced memo search behavior
+///
+/// Controls search behavior including case sensitivity, result limits,
+/// and search result formatting options.
+///
+/// # Examples
+///
+/// ```rust
+/// use swissarmyhammer::memoranda::SearchOptions;
+///
+/// let options = SearchOptions {
+///     case_sensitive: false,
+///     exact_phrase: false,
+///     max_results: Some(50),
+///     include_highlights: true,
+/// };
+/// ```
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SearchOptions {
+    /// Whether search should be case-sensitive (default: false)
+    pub case_sensitive: bool,
+    /// Whether to treat query as exact phrase match (default: false)
+    pub exact_phrase: bool,
+    /// Maximum number of results to return (default: None for unlimited)
+    pub max_results: Option<usize>,
+    /// Whether to include search result highlights (default: false)
+    pub include_highlights: bool,
+}
+
+impl Default for SearchOptions {
+    fn default() -> Self {
+        Self {
+            case_sensitive: false,
+            exact_phrase: false,
+            max_results: None,
+            include_highlights: false,
+        }
+    }
+}
+
+/// A search result containing a memo with relevance scoring and match highlights
+///
+/// Represents a memo that matches a search query, along with metadata about
+/// the match quality and highlighted text snippets where matches were found.
+///
+/// # Examples
+///
+/// ```rust
+/// use swissarmyhammer::memoranda::{SearchResult, Memo};
+///
+/// let memo = Memo::new("Project Notes".to_string(), "Important project details".to_string());
+/// let result = SearchResult {
+///     memo,
+///     relevance_score: 85.5,
+///     highlights: vec!["**Project** Notes".to_string()],
+///     match_count: 1,
+/// };
+/// ```
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SearchResult {
+    /// The memo that matched the search query
+    pub memo: Memo,
+    /// Relevance score (0.0-100.0, higher is more relevant)
+    pub relevance_score: f32,
+    /// Highlighted text snippets showing where matches were found
+    pub highlights: Vec<String>,
+    /// Total number of matches found in this memo
+    pub match_count: usize,
+}
+
+/// Options for configuring context generation for AI consumption
+///
+/// Controls how memo content is formatted and concatenated when generating
+/// context for AI assistants or other automated processing.
+///
+/// # Examples
+///
+/// ```rust
+/// use swissarmyhammer::memoranda::ContextOptions;
+///
+/// let options = ContextOptions {
+///     include_metadata: true,
+///     max_tokens: Some(8000),
+///     delimiter: "\n---\n".to_string(),
+/// };
+/// ```
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ContextOptions {
+    /// Whether to include memo metadata (titles, dates) in context (default: true)
+    pub include_metadata: bool,
+    /// Maximum number of tokens to include (approximate, default: None)
+    pub max_tokens: Option<usize>,
+    /// Delimiter to use between memos (default: "\n---\n")
+    pub delimiter: String,
+}
+
+impl Default for ContextOptions {
+    fn default() -> Self {
+        Self {
+            include_metadata: true,
+            max_tokens: None,
+            delimiter: "\n---\n".to_string(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -577,5 +687,85 @@ mod tests {
         let deserialized: SearchMemosRequest = serde_json::from_str(&json).unwrap();
 
         assert_eq!(search_request, deserialized);
+    }
+
+    #[test]
+    fn test_search_options_default() {
+        let options = SearchOptions::default();
+        
+        assert!(!options.case_sensitive);
+        assert!(!options.exact_phrase);
+        assert!(options.max_results.is_none());
+        assert!(!options.include_highlights);
+    }
+
+    #[test]
+    fn test_search_options_serialization() {
+        let options = SearchOptions {
+            case_sensitive: true,
+            exact_phrase: false,
+            max_results: Some(25),
+            include_highlights: true,
+        };
+
+        let json = serde_json::to_string(&options).unwrap();
+        let deserialized: SearchOptions = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(options, deserialized);
+    }
+
+    #[test]
+    fn test_search_result_creation() {
+        let memo = Memo::new("Test Title".to_string(), "Test Content".to_string());
+        let result = SearchResult {
+            memo: memo.clone(),
+            relevance_score: 95.5,
+            highlights: vec!["**Test** Title".to_string()],
+            match_count: 1,
+        };
+
+        assert_eq!(result.memo, memo);
+        assert_eq!(result.relevance_score, 95.5);
+        assert_eq!(result.highlights.len(), 1);
+        assert_eq!(result.match_count, 1);
+    }
+
+    #[test]
+    fn test_search_result_serialization() {
+        let memo = Memo::new("Title".to_string(), "Content".to_string());
+        let result = SearchResult {
+            memo,
+            relevance_score: 75.0,
+            highlights: vec!["High**light**ed text".to_string()],
+            match_count: 2,
+        };
+
+        let json = serde_json::to_string(&result).unwrap();
+        let deserialized: SearchResult = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(result, deserialized);
+    }
+
+    #[test]
+    fn test_context_options_default() {
+        let options = ContextOptions::default();
+        
+        assert!(options.include_metadata);
+        assert!(options.max_tokens.is_none());
+        assert_eq!(options.delimiter, "\n---\n");
+    }
+
+    #[test]
+    fn test_context_options_serialization() {
+        let options = ContextOptions {
+            include_metadata: false,
+            max_tokens: Some(5000),
+            delimiter: "\n\n===\n\n".to_string(),
+        };
+
+        let json = serde_json::to_string(&options).unwrap();
+        let deserialized: ContextOptions = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(options, deserialized);
     }
 }

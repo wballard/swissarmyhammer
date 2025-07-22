@@ -1,7 +1,9 @@
 use crate::cli::MemoCommands;
 use colored::*;
 use std::io::{self, Read};
-use swissarmyhammer::memoranda::{FileSystemMemoStorage, MemoId, MemoStorage};
+use swissarmyhammer::memoranda::{
+    AdvancedMemoSearchEngine, FileSystemMemoStorage, MemoId, MemoStorage, SearchOptions,
+};
 
 // Preview length constants
 const LIST_PREVIEW_LENGTH: usize = 100;
@@ -201,6 +203,104 @@ async fn search_memos(
     storage: FileSystemMemoStorage,
     query: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // Try to use advanced search for better highlighting and relevance scoring
+    match try_advanced_search(&storage, query).await {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            // Fallback to basic search if advanced search fails
+            fallback_basic_search(&storage, query).await
+        }
+    }
+}
+
+async fn try_advanced_search(
+    storage: &FileSystemMemoStorage,
+    query: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Create advanced search engine
+    let search_engine = AdvancedMemoSearchEngine::new_in_memory().await?;
+    
+    // Get all memos and index them
+    let all_memos = storage.list_memos().await?;
+    if !all_memos.is_empty() {
+        search_engine.index_memos(&all_memos).await?;
+    }
+
+    // Configure search options for better highlighting
+    let search_options = SearchOptions {
+        case_sensitive: false,
+        exact_phrase: false,
+        max_results: Some(50), // Reasonable limit
+        include_highlights: true,
+    };
+
+    // Perform advanced search
+    let search_results = search_engine.search(query, &search_options, &all_memos).await?;
+
+    if search_results.is_empty() {
+        println!(
+            "{} No memos found matching \"{}\"",
+            "🔍".blue(),
+            query.yellow()
+        );
+        return Ok(());
+    }
+
+    println!(
+        "{} Found {} memo{} matching \"{}\"",
+        "🔍".green(),
+        search_results.len().to_string().bold(),
+        if search_results.len() == 1 { "" } else { "s" },
+        query.yellow()
+    );
+    println!();
+
+    // Results are already sorted by relevance score from advanced search
+    for search_result in search_results {
+        let memo = &search_result.memo;
+        
+        println!("{} {}", "🆔".dimmed(), memo.id.as_str().blue());
+        println!("{} {}", "📄".dimmed(), memo.title.bold());
+        println!(
+            "{} {}",
+            "📅".dimmed(),
+            memo.created_at
+                .format("%Y-%m-%d %H:%M:%S UTC")
+                .to_string()
+                .dimmed()
+        );
+
+        // Show relevance score
+        println!(
+            "{} {:.1}% relevance",
+            "⭐".dimmed(),
+            search_result.relevance_score.to_string().cyan()
+        );
+
+        // Use advanced highlighting if available, otherwise fall back to preview
+        if !search_result.highlights.is_empty() {
+            println!("{} {}", "💬".dimmed(), search_result.highlights.join(" ").dimmed());
+        } else {
+            let preview = format_content_preview(&memo.content, SEARCH_PREVIEW_LENGTH);
+            // Enhanced highlighting - replace query with colored version (case insensitive)
+            let highlighted_preview = if search_options.case_sensitive {
+                preview.replace(query, &query.yellow().to_string())
+            } else {
+                replace_case_insensitive(&preview, query, &query.yellow().to_string())
+            };
+            println!("{} {}", "💬".dimmed(), highlighted_preview.dimmed());
+        }
+        
+        println!();
+    }
+
+    Ok(())
+}
+
+async fn fallback_basic_search(
+    storage: &FileSystemMemoStorage,
+    query: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let results = storage.search_memos(query).await?;
 
     if results.is_empty() {
@@ -213,8 +313,8 @@ async fn search_memos(
     }
 
     println!(
-        "{} Found {} memo{} matching \"{}\"",
-        "🔍".green(),
+        "{} Found {} memo{} matching \"{}\" (basic search)",
+        "🔍".yellow(),
         results.len().to_string().bold(),
         if results.len() == 1 { "" } else { "s" },
         query.yellow()
@@ -240,13 +340,37 @@ async fn search_memos(
         // Show a highlighted preview of content
         let preview = format_content_preview(&memo.content, SEARCH_PREVIEW_LENGTH);
 
-        // Simple highlighting - replace query with colored version
-        let highlighted_preview = preview.replace(query, &query.yellow().to_string());
+        // Enhanced highlighting - case insensitive replacement
+        let highlighted_preview = replace_case_insensitive(&preview, query, &query.yellow().to_string());
         println!("{} {}", "💬".dimmed(), highlighted_preview.dimmed());
         println!();
     }
 
     Ok(())
+}
+
+/// Case-insensitive string replacement for highlighting
+fn replace_case_insensitive(text: &str, pattern: &str, replacement: &str) -> String {
+    let mut result = String::new();
+    let mut last_end = 0;
+    let pattern_lower = pattern.to_lowercase();
+    let text_lower = text.to_lowercase();
+    
+    while let Some(start) = text_lower[last_end..].find(&pattern_lower) {
+        let absolute_start = last_end + start;
+        let absolute_end = absolute_start + pattern.len();
+        
+        // Add text before the match
+        result.push_str(&text[last_end..absolute_start]);
+        // Add the replacement
+        result.push_str(replacement);
+        
+        last_end = absolute_end;
+    }
+    
+    // Add remaining text
+    result.push_str(&text[last_end..]);
+    result
 }
 
 async fn get_context(storage: FileSystemMemoStorage) -> Result<(), Box<dyn std::error::Error>> {

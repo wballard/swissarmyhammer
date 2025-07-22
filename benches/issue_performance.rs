@@ -5,10 +5,8 @@ use tokio::runtime::Runtime;
 use tokio::time::Duration;
 
 use swissarmyhammer::issues::{
-    FileSystemIssueStorage, InstrumentedIssueStorage, IssueStorage, Operation,
-    PerformanceMetrics,
+    FileSystemIssueStorage, InstrumentedIssueStorage, IssueStorage, Operation, PerformanceMetrics,
 };
-
 
 fn setup_fs_storage() -> (FileSystemIssueStorage, TempDir) {
     let temp_dir = TempDir::new().unwrap();

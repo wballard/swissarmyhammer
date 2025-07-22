@@ -8,6 +8,7 @@ mod flow;
 mod issue;
 mod list;
 mod logging;
+mod memo;
 // prompt_loader module removed - using SDK's PromptResolver directly
 mod prompt;
 mod search;
@@ -134,6 +135,10 @@ async fn main() {
         Some(Commands::Issue { subcommand }) => {
             tracing::info!("Running issue command");
             run_issue(subcommand).await
+        }
+        Some(Commands::Memo { subcommand }) => {
+            tracing::info!("Running memo command");
+            run_memo(subcommand).await
         }
         None => {
             // This case is handled early above for performance
@@ -264,6 +269,18 @@ async fn run_issue(subcommand: cli::IssueCommands) -> i32 {
         Ok(_) => EXIT_SUCCESS,
         Err(e) => {
             tracing::error!("Issue error: {}", e);
+            EXIT_WARNING
+        }
+    }
+}
+
+async fn run_memo(subcommand: cli::MemoCommands) -> i32 {
+    use memo;
+
+    match memo::handle_memo_command(subcommand).await {
+        Ok(_) => EXIT_SUCCESS,
+        Err(e) => {
+            tracing::error!("Memo error: {}", e);
             EXIT_WARNING
         }
     }

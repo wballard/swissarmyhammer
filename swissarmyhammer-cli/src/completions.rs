@@ -174,6 +174,14 @@ mod tests {
             output_str.contains("completion"),
             "Completion should include 'completion' command"
         );
+        assert!(
+            output_str.contains("memo"),
+            "Completion should include 'memo' command"
+        );
+        assert!(
+            output_str.contains("issue"),
+            "Completion should include 'issue' command"
+        );
 
         // Check for prompt subcommands
         assert!(

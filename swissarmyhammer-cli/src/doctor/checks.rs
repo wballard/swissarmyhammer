@@ -36,6 +36,8 @@ pub mod check_names {
     pub const WORKFLOW_RUN_STORAGE_SPACE: &str = "Workflow run storage space";
     pub const WORKFLOW_NAME_CONFLICTS: &str = "Workflow name conflicts";
     pub const WORKFLOW_CIRCULAR_DEPS: &str = "Workflow circular dependencies";
+    pub const SWISSARMYHAMMER_CONFIG_VALIDATION: &str = "SwissArmyHammer configuration validation";
+    pub const SWISSARMYHAMMER_CONFIG_FILE: &str = "SwissArmyHammer configuration file";
 }
 
 /// Format strings used throughout the module
@@ -848,6 +850,92 @@ fn check_circular_dependencies(checks: &mut Vec<Check>) {
         message: "Circular dependency checking requires workflow execution".to_string(),
         fix: None,
     });
+}
+
+/// Check SwissArmyHammer configuration validation
+///
+/// Verifies that the current SwissArmyHammer configuration is valid by:
+/// - Loading the configuration using Config::new()
+/// - Running validation checks on the loaded configuration
+/// - Reporting any validation errors or confirming configuration is valid
+pub fn check_swissarmyhammer_config_validation(checks: &mut Vec<Check>) -> Result<()> {
+    use swissarmyhammer::config::Config;
+
+    // Load configuration using the same method as the CLI
+    let config = Config::new();
+
+    // Validate the configuration
+    match config.validate() {
+        Ok(()) => {
+            checks.push(Check {
+                name: check_names::SWISSARMYHAMMER_CONFIG_VALIDATION.to_string(),
+                status: CheckStatus::Ok,
+                message: "SwissArmyHammer configuration is valid".to_string(),
+                fix: None,
+            });
+        }
+        Err(e) => {
+            checks.push(Check {
+                name: check_names::SWISSARMYHAMMER_CONFIG_VALIDATION.to_string(),
+                status: CheckStatus::Error,
+                message: format!("SwissArmyHammer configuration validation failed: {}", e),
+                fix: Some(format!("Fix configuration errors. Run 'swissarmyhammer config validate' for details. {}", Config::validation_help())),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+/// Check SwissArmyHammer configuration file status
+///
+/// Reports on the status of SwissArmyHammer configuration files by:
+/// - Checking if a YAML configuration file is found
+/// - Reporting the location of the configuration file if found
+/// - Validating the YAML file can be loaded successfully
+pub fn check_swissarmyhammer_config_file(checks: &mut Vec<Check>) -> Result<()> {
+    use swissarmyhammer::config::{Config, YamlConfig};
+
+    match Config::find_yaml_config_file() {
+        Some(config_path) => {
+            // Try to load the YAML config to verify it's valid
+            match YamlConfig::load_from_file(&config_path) {
+                Ok(_) => {
+                    checks.push(Check {
+                        name: check_names::SWISSARMYHAMMER_CONFIG_FILE.to_string(),
+                        status: CheckStatus::Ok,
+                        message: format!(
+                            "Configuration file loaded successfully: {:?}",
+                            config_path
+                        ),
+                        fix: None,
+                    });
+                }
+                Err(e) => {
+                    checks.push(Check {
+                        name: check_names::SWISSARMYHAMMER_CONFIG_FILE.to_string(),
+                        status: CheckStatus::Error,
+                        message: format!("Configuration file error at {:?}: {}", config_path, e),
+                        fix: Some(format!("Fix YAML syntax errors in {:?} or run 'swissarmyhammer config init' to create a new config file", config_path)),
+                    });
+                }
+            }
+        }
+        None => {
+            checks.push(Check {
+                name: check_names::SWISSARMYHAMMER_CONFIG_FILE.to_string(),
+                status: CheckStatus::Ok,
+                message: "No configuration file found (using environment variables and defaults)"
+                    .to_string(),
+                fix: Some(
+                    "Run 'swissarmyhammer config init' to create an example configuration file"
+                        .to_string(),
+                ),
+            });
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

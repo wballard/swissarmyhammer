@@ -102,6 +102,13 @@ pub trait IssueStorage: Send + Sync {
     /// Mark an issue as complete (move to complete directory)
     async fn mark_complete(&self, number: u32) -> Result<Issue>;
 
+    /// Mark an issue as complete with cost data integration
+    async fn mark_complete_with_cost(
+        &self,
+        number: u32,
+        cost_data: crate::cost::IssueCostData,
+    ) -> Result<Issue>;
+
     /// Batch operations for better performance
     /// Create multiple issues at once
     async fn create_issues_batch(&self, issues: Vec<(String, String)>) -> Result<Vec<Issue>>;
@@ -147,7 +154,10 @@ impl FileSystemIssueStorage {
     ///
     /// Uses current working directory joined with "issues" as the default location
     pub fn new_default() -> Result<Self> {
-        let current_dir = std::env::current_dir().map_err(SwissArmyHammerError::Io)?;
+        let current_dir = std::env::current_dir().unwrap_or_else(|e| {
+            tracing::debug!("Failed to get current directory: {e}, using fallback");
+            std::path::PathBuf::from(".")
+        });
         let issues_dir = current_dir.join("issues");
         Self::new(issues_dir)
     }
@@ -197,7 +207,7 @@ impl FileSystemIssueStorage {
 
         // Parse filename - supports both numbered and non-numbered formats
         let (parsed_number, name) = parse_any_issue_filename(filename)?;
-        
+
         let number = match parsed_number {
             Some(num) => {
                 // Validate numbered files against the configured maximum
@@ -209,21 +219,22 @@ impl FileSystemIssueStorage {
                     )));
                 }
                 num
-            },
+            }
             None => {
                 // For non-numbered files, generate a virtual number based on filename hash
                 // This ensures consistent ordering while keeping non-numbered files separate
                 // from numbered ones. Use a high base (500,000) to avoid conflicts.
                 use std::collections::hash_map::DefaultHasher;
                 use std::hash::{Hash, Hasher};
-                
+
                 let mut hasher = DefaultHasher::new();
                 filename.hash(&mut hasher);
                 let hash = hasher.finish();
-                
+
                 // Map hash to virtual number range to avoid conflicts with numbered files
                 let config = Config::global();
-                config.virtual_issue_number_base + ((hash % config.virtual_issue_number_range as u64) as u32)
+                config.virtual_issue_number_base
+                    + ((hash % config.virtual_issue_number_range as u64) as u32)
             }
         };
 
@@ -424,12 +435,38 @@ impl FileSystemIssueStorage {
         Ok(Issue { content, ..issue })
     }
 
+    /// Move issue between directories with optional cost data integration
+    async fn move_issue_with_cost(
+        &self,
+        number: u32,
+        to_completed: bool,
+        cost_data: Option<crate::cost::IssueCostData>,
+    ) -> Result<Issue> {
+        self.move_issue_internal(number, to_completed, cost_data)
+            .await
+    }
+
     /// Move issue between directories
     async fn move_issue(&self, number: u32, to_completed: bool) -> Result<Issue> {
+        self.move_issue_internal(number, to_completed, None).await
+    }
+
+    /// Internal method for moving issues with optional cost integration
+    async fn move_issue_internal(
+        &self,
+        number: u32,
+        to_completed: bool,
+        cost_data: Option<crate::cost::IssueCostData>,
+    ) -> Result<Issue> {
         debug!(
-            "Moving issue {} to {}",
+            "Moving issue {} to {} {}",
             number,
-            if to_completed { "completed" } else { "pending" }
+            if to_completed { "completed" } else { "pending" },
+            if cost_data.is_some() {
+                "with cost data"
+            } else {
+                "without cost data"
+            }
         );
 
         // Find current issue
@@ -439,6 +476,36 @@ impl FileSystemIssueStorage {
         if issue.completed == to_completed {
             debug!("Issue {} already in target state", number);
             return Ok(issue);
+        }
+
+        // Add cost section if completing issue and cost data is provided
+        if to_completed && cost_data.is_some() {
+            let cost_data = cost_data.unwrap();
+            let formatter = crate::cost::CostSectionFormatter::default();
+            let cost_section = formatter.format_cost_section(&cost_data);
+
+            if !cost_section.is_empty() {
+                // Check if cost section already exists
+                if !issue.content.contains("## Cost Analysis") {
+                    // Add cost section to the end of the content
+                    let updated_content = if issue.content.ends_with('\n') {
+                        format!("{}\n{}", issue.content, cost_section)
+                    } else {
+                        format!("{}\n\n{}", issue.content, cost_section)
+                    };
+
+                    // Write updated content to the current file
+                    std::fs::write(&issue.file_path, updated_content.clone())
+                        .map_err(SwissArmyHammerError::Io)?;
+
+                    // Update issue content in memory
+                    issue.content = updated_content;
+
+                    debug!("Added cost section to issue {}", number);
+                } else {
+                    debug!("Cost section already exists in issue {}, skipping", number);
+                }
+            }
         }
 
         // Determine source and target paths
@@ -488,7 +555,7 @@ impl IssueStorage for FileSystemIssueStorage {
         // Since list_issues_in_dir is now recursive, we only need to scan the root issues directory
         // This will automatically find issues in both pending and completed directories
         let all_issues = self.list_issues_in_dir(&self.state.issues_dir)?;
-        
+
         Ok(all_issues)
     }
 
@@ -527,6 +594,15 @@ impl IssueStorage for FileSystemIssueStorage {
 
     async fn mark_complete(&self, number: u32) -> Result<Issue> {
         self.move_issue(number, true).await
+    }
+
+    async fn mark_complete_with_cost(
+        &self,
+        number: u32,
+        cost_data: crate::cost::IssueCostData,
+    ) -> Result<Issue> {
+        self.move_issue_with_cost(number, true, Some(cost_data))
+            .await
     }
 
     async fn create_issues_batch(&self, issues: Vec<(String, String)>) -> Result<Vec<Issue>> {
@@ -814,7 +890,7 @@ pub fn parse_issue_filename(filename: &str) -> Result<(u32, String)> {
 /// let (number, name) = parse_any_issue_filename("TODO").unwrap();
 /// assert_eq!(number, None); // Will be assigned virtual number (500000+)
 /// assert_eq!(name, "TODO");
-/// 
+///
 /// let (number, name) = parse_any_issue_filename("meeting-notes").unwrap();
 /// assert_eq!(number, None); // Will be assigned virtual number (500000+)
 /// assert_eq!(name, "meeting-notes");
@@ -824,15 +900,15 @@ pub fn parse_any_issue_filename(filename: &str) -> Result<(Option<u32>, String)>
     if let Ok((number, name)) = parse_issue_filename(filename) {
         return Ok((Some(number), name));
     }
-    
+
     // If that fails, treat the entire filename as the issue name
     // Validate that the filename is not empty and is safe
     if filename.is_empty() {
         return Err(SwissArmyHammerError::Other(
-            "Issue filename cannot be empty".to_string()
+            "Issue filename cannot be empty".to_string(),
         ));
     }
-    
+
     Ok((None, filename.to_string()))
 }
 
@@ -1056,54 +1132,54 @@ pub fn validate_issue_name(name: &str) -> Result<()> {
 }
 
 /// Check if a file path represents a valid issue file
-/// 
+///
 /// Determines whether a given file path is a valid issue file that can be processed
 /// by the issue system. This function supports both the traditional numbered format
 /// and the newer flexible format that allows any markdown file.
-/// 
+///
 /// ## Supported Formats
-/// 
+///
 /// ### Traditional Numbered Format (Legacy)
 /// Files with 6-digit zero-padded numbers followed by an underscore and name:
 /// - `000001_my_first_issue.md` - Valid numbered issue
 /// - `000123_bug_fix.md` - Valid numbered issue
 /// - `999999_last_issue.md` - Valid numbered issue (up to max_issue_number)
-/// 
+///
 /// ### Flexible Format (New)
 /// Any markdown file with a non-empty filename:
 /// - `README.md` - Valid issue (gets virtual number)
 /// - `feature-request.md` - Valid issue (gets virtual number)
 /// - `bug-report.md` - Valid issue (gets virtual number)
 /// - `project-notes.md` - Valid issue (gets virtual number)
-/// 
+///
 /// ## Requirements
-/// 
+///
 /// 1. **File Extension**: Must have `.md` extension (case-sensitive)
 /// 2. **Non-Empty Name**: The filename (without extension) must not be empty
 /// 3. **UTF-8 Compatible**: Filename must be valid UTF-8
-/// 
+///
 /// ## Virtual Numbering
-/// 
-/// Non-numbered files are assigned virtual issue numbers in the range 
+///
+/// Non-numbered files are assigned virtual issue numbers in the range
 /// [`Config::global().virtual_issue_number_base`..`Config::global().virtual_issue_number_base + Config::global().virtual_issue_number_range`]
 /// based on a hash of the filename. This ensures consistent numbering while avoiding
 /// conflicts with traditionally numbered issues.
-/// 
+///
 /// ## Examples
-/// 
+///
 /// ```rust
 /// use std::path::Path;
 /// use swissarmyhammer::issues::filesystem::is_issue_file;
-/// 
+///
 /// // Traditional numbered formats
 /// assert!(is_issue_file(Path::new("000001_first_issue.md")));
 /// assert!(is_issue_file(Path::new("000123_bug_fix.md")));
-/// 
+///
 /// // Flexible formats
 /// assert!(is_issue_file(Path::new("README.md")));
 /// assert!(is_issue_file(Path::new("project-notes.md")));
 /// assert!(is_issue_file(Path::new("feature-request.md")));
-/// 
+///
 /// // Invalid files
 /// assert!(!is_issue_file(Path::new("document.txt"))); // Wrong extension
 /// assert!(!is_issue_file(Path::new(".md")));          // Empty name
@@ -1276,7 +1352,8 @@ mod tests {
         assert!(result.is_ok());
         let issue = result.unwrap();
         assert_eq!(issue.name, "invalid_filename");
-        assert!(issue.number.value() >= Config::global().virtual_issue_number_base); // Virtual number for non-numbered files
+        assert!(issue.number.value() >= Config::global().virtual_issue_number_base);
+        // Virtual number for non-numbered files
     }
 
     #[test]
@@ -1293,7 +1370,8 @@ mod tests {
         assert!(result.is_ok());
         let issue = result.unwrap();
         assert_eq!(issue.name, "abc123_test");
-        assert!(issue.number.value() >= Config::global().virtual_issue_number_base); // Virtual number for non-numbered files
+        assert!(issue.number.value() >= Config::global().virtual_issue_number_base);
+        // Virtual number for non-numbered files
     }
 
     #[test]
@@ -1310,7 +1388,8 @@ mod tests {
         assert!(result.is_ok());
         let issue = result.unwrap();
         assert_eq!(issue.name, "1000000_test");
-        assert!(issue.number.value() >= Config::global().virtual_issue_number_base); // Virtual number for non-numbered files
+        assert!(issue.number.value() >= Config::global().virtual_issue_number_base);
+        // Virtual number for non-numbered files
     }
 
     #[tokio::test]
@@ -1528,11 +1607,11 @@ mod tests {
 
         let issues = storage.list_issues_in_dir(&issues_dir).unwrap();
         assert_eq!(issues.len(), 3); // All .md files are valid issues now
-        
+
         // Sort by number to make assertions predictable
         let mut sorted_issues = issues;
         sorted_issues.sort_by_key(|issue| issue.number);
-        
+
         assert_eq!(sorted_issues[0].number, IssueNumber::from(1));
         assert_eq!(sorted_issues[1].number, IssueNumber::from(3));
         // README.md gets a virtual number in virtual range
@@ -1554,7 +1633,8 @@ mod tests {
         assert!(result.is_ok());
         let issue = result.unwrap();
         assert_eq!(issue.name, "000123test");
-        assert!(issue.number.value() >= Config::global().virtual_issue_number_base); // Virtual number for non-numbered files
+        assert!(issue.number.value() >= Config::global().virtual_issue_number_base);
+        // Virtual number for non-numbered files
     }
 
     #[test]
@@ -1605,7 +1685,8 @@ mod tests {
         assert!(result.is_ok());
         let issue = result.unwrap();
         assert_eq!(issue.name, "_test");
-        assert!(issue.number.value() >= Config::global().virtual_issue_number_base); // Virtual number for non-numbered files
+        assert!(issue.number.value() >= Config::global().virtual_issue_number_base);
+        // Virtual number for non-numbered files
     }
 
     #[test]
@@ -1659,18 +1740,18 @@ mod tests {
         let issues = storage.list_issues_in_dir(&issues_dir).unwrap();
         // All .md files are now valid issues (1 numbered + 3 non-numbered)
         assert_eq!(issues.len(), 4);
-        
+
         // Sort to make assertions predictable
         let mut sorted_issues = issues;
         sorted_issues.sort_by_key(|issue| issue.number);
-        
+
         // First issue should be the numbered one
         assert_eq!(sorted_issues[0].number, IssueNumber::from(1));
         assert_eq!(sorted_issues[0].name, "valid");
-        
+
         // The other 3 should be non-numbered with virtual numbers >= virtual_base
-        for i in 1..4 {
-            assert!(sorted_issues[i].number.value() >= Config::global().virtual_issue_number_base);
+        for issue in sorted_issues.iter().skip(1).take(3) {
+            assert!(issue.number.value() >= Config::global().virtual_issue_number_base);
         }
     }
 
@@ -2034,7 +2115,7 @@ mod tests {
 
         // Test filename that looks like numbered but isn't
         let (number, name) = parse_any_issue_filename("123_not_6_digits").unwrap();
-        assert_eq!(number, None);  // Should be treated as non-numbered
+        assert_eq!(number, None); // Should be treated as non-numbered
         assert_eq!(name, "123_not_6_digits");
 
         // Test filename with underscores but not numbered format
@@ -2055,7 +2136,7 @@ mod tests {
         let readme_path = issues_dir.join("README.md");
         let notes_path = issues_dir.join("NOTES.md");
         let todo_path = issues_dir.join("TODO.md");
-        
+
         std::fs::write(&readme_path, issue_content).unwrap();
         std::fs::write(&notes_path, issue_content).unwrap();
         std::fs::write(&todo_path, issue_content).unwrap();
@@ -2066,21 +2147,30 @@ mod tests {
         let issue3 = storage.parse_issue_from_file(&todo_path).unwrap();
 
         let config = Config::global();
-        
+
         // All should have virtual numbers >= virtual_issue_number_base
         assert!(issue1.number.value() >= config.virtual_issue_number_base);
         assert!(issue2.number.value() >= config.virtual_issue_number_base);
         assert!(issue3.number.value() >= config.virtual_issue_number_base);
 
         // Virtual numbers should be within the expected range
-        assert!(issue1.number.value() < config.virtual_issue_number_base + config.virtual_issue_number_range);
-        assert!(issue2.number.value() < config.virtual_issue_number_base + config.virtual_issue_number_range);
-        assert!(issue3.number.value() < config.virtual_issue_number_base + config.virtual_issue_number_range);
+        assert!(
+            issue1.number.value()
+                < config.virtual_issue_number_base + config.virtual_issue_number_range
+        );
+        assert!(
+            issue2.number.value()
+                < config.virtual_issue_number_base + config.virtual_issue_number_range
+        );
+        assert!(
+            issue3.number.value()
+                < config.virtual_issue_number_base + config.virtual_issue_number_range
+        );
 
         // Same filename should always generate the same virtual number (deterministic hashing)
         let issue1_again = storage.parse_issue_from_file(&readme_path).unwrap();
         assert_eq!(issue1.number, issue1_again.number);
-        
+
         // Different filenames should have different virtual numbers
         assert_ne!(issue1.number, issue2.number);
         assert_ne!(issue2.number, issue3.number);
@@ -2096,10 +2186,21 @@ mod tests {
 
         // Create multiple non-numbered files with different names
         let test_names = vec![
-            "test1", "test2", "test3", "test4", "test5",
-            "README", "NOTES", "TODO", "CHANGELOG", "DESIGN",
-            "bug-report", "feature-request", "meeting-notes",
-            "project-spec", "user-guide"
+            "test1",
+            "test2",
+            "test3",
+            "test4",
+            "test5",
+            "README",
+            "NOTES",
+            "TODO",
+            "CHANGELOG",
+            "DESIGN",
+            "bug-report",
+            "feature-request",
+            "meeting-notes",
+            "project-spec",
+            "user-guide",
         ];
 
         let mut created_issues = Vec::new();
@@ -2116,25 +2217,30 @@ mod tests {
             let config = Config::global();
             // All should be virtual numbers
             assert!(issue.number.value() >= config.virtual_issue_number_base);
-            
+
             // Each should be unique (hash algorithm should distribute properly)
-            assert!(virtual_numbers.insert(issue.number.value()), 
-                "Duplicate virtual number found: {}", issue.number.value());
+            assert!(
+                virtual_numbers.insert(issue.number.value()),
+                "Duplicate virtual number found: {}",
+                issue.number.value()
+            );
         }
 
         // Test that we actually created the expected number of issues
         assert_eq!(created_issues.len(), test_names.len());
-        
+
         // Test that filename-to-virtual-number mapping is consistent
         for (i, name) in test_names.iter().enumerate() {
             let file_path = issues_dir.join(format!("{name}.md"));
             let re_parsed = storage.parse_issue_from_file(&file_path).unwrap();
-            assert_eq!(re_parsed.number, created_issues[i].number,
-                "Virtual number changed for {name} on re-parsing");
+            assert_eq!(
+                re_parsed.number, created_issues[i].number,
+                "Virtual number changed for {name} on re-parsing"
+            );
         }
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_mixed_numbered_and_non_numbered_sorting() {
         // Test that numbered and non-numbered issues are sorted correctly together
         let temp_dir = TempDir::new().unwrap();
@@ -2143,47 +2249,64 @@ mod tests {
 
         // Create mix of numbered and non-numbered issues
         let content = "Test issue content";
-        
+
         // Create some traditional numbered issues via API
-        let _numbered1 = storage.create_issue("first".to_string(), content.to_string()).await.unwrap(); // Should get number 1
-        let _numbered2 = storage.create_issue("second".to_string(), content.to_string()).await.unwrap(); // Should get number 2
-        
-        // Create some non-numbered issues directly on disk  
+        let _numbered1 = storage
+            .create_issue("first".to_string(), content.to_string())
+            .await
+            .unwrap(); // Should get number 1
+        let _numbered2 = storage
+            .create_issue("second".to_string(), content.to_string())
+            .await
+            .unwrap(); // Should get number 2
+
+        // Create some non-numbered issues directly on disk
         let readme_path = issues_dir.join("README.md");
         let notes_path = issues_dir.join("NOTES.md");
         std::fs::write(&readme_path, content).unwrap();
         std::fs::write(&notes_path, content).unwrap();
         let _non_numbered1 = storage.parse_issue_from_file(&readme_path).unwrap();
         let _non_numbered2 = storage.parse_issue_from_file(&notes_path).unwrap();
-        
+
         // Create another numbered issue
-        let _numbered3 = storage.create_issue("third".to_string(), content.to_string()).await.unwrap(); // Should get number 3
-        
+        let _numbered3 = storage
+            .create_issue("third".to_string(), content.to_string())
+            .await
+            .unwrap(); // Should get number 3
+
         // List all issues
         let all_issues = storage.list_issues().await.unwrap();
-        
+
         // Should have all 5 issues
         assert_eq!(all_issues.len(), 5);
-        
+
         // Issues should be sorted by number (numbered first, then virtual)
         let config = Config::global();
         let mut prev_number = 0;
         let mut seen_virtual = false;
-        
+
         for issue in &all_issues {
             if issue.number.value() < config.virtual_issue_number_base {
                 // This is a numbered issue
-                assert!(!seen_virtual, "Numbered issue found after virtual issue in sort order");
-                assert!(issue.number.value() > prev_number, "Numbered issues should be in ascending order");
+                assert!(
+                    !seen_virtual,
+                    "Numbered issue found after virtual issue in sort order"
+                );
+                assert!(
+                    issue.number.value() > prev_number,
+                    "Numbered issues should be in ascending order"
+                );
                 prev_number = issue.number.value();
             } else {
                 // This is a virtual number issue
                 seen_virtual = true;
-                assert!(issue.number.value() >= config.virtual_issue_number_base, 
-                    "Virtual issue number should be >= base");
+                assert!(
+                    issue.number.value() >= config.virtual_issue_number_base,
+                    "Virtual issue number should be >= base"
+                );
             }
         }
-        
+
         // Verify we have the expected numbered issues in order
         assert_eq!(all_issues[0].number.value(), 1);
         assert_eq!(all_issues[0].name, "first");
@@ -2191,7 +2314,7 @@ mod tests {
         assert_eq!(all_issues[1].name, "second");
         assert_eq!(all_issues[2].number.value(), 3);
         assert_eq!(all_issues[2].name, "third");
-        
+
         // The remaining two should be virtual numbered issues
         assert!(all_issues[3].number.value() >= config.virtual_issue_number_base);
         assert!(all_issues[4].number.value() >= config.virtual_issue_number_base);
@@ -2202,11 +2325,11 @@ mod tests {
         // Test edge cases around virtual number boundaries
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let config = Config::global();
-        
+
         // Test the virtual number calculation directly
-        let test_filenames = vec![
+        let test_filenames = [
             "", // Edge case - empty (should be handled elsewhere)
             "a", // Single character
             "very_long_filename_that_might_cause_issues_with_hashing_and_boundary_calculations_test",
@@ -2217,21 +2340,31 @@ mod tests {
             "filename.with.dots",
             "filename with spaces", // Spaces (if allowed)
         ];
-        
+
         for filename in test_filenames.iter().filter(|f| !f.is_empty()) {
             let mut hasher = DefaultHasher::new();
             filename.hash(&mut hasher);
             let hash = hasher.finish();
-            
-            let virtual_number = config.virtual_issue_number_base + ((hash % config.virtual_issue_number_range as u64) as u32);
-            
+
+            let virtual_number = config.virtual_issue_number_base
+                + ((hash % config.virtual_issue_number_range as u64) as u32);
+
             // Verify virtual number is within expected bounds
-            assert!(virtual_number >= config.virtual_issue_number_base, 
-                "Virtual number {} for '{}' should be >= {}", 
-                virtual_number, filename, config.virtual_issue_number_base);
-            assert!(virtual_number < config.virtual_issue_number_base + config.virtual_issue_number_range,
-                "Virtual number {} for '{}' should be < {}", 
-                virtual_number, filename, config.virtual_issue_number_base + config.virtual_issue_number_range);
+            assert!(
+                virtual_number >= config.virtual_issue_number_base,
+                "Virtual number {} for '{}' should be >= {}",
+                virtual_number,
+                filename,
+                config.virtual_issue_number_base
+            );
+            assert!(
+                virtual_number
+                    < config.virtual_issue_number_base + config.virtual_issue_number_range,
+                "Virtual number {} for '{}' should be < {}",
+                virtual_number,
+                filename,
+                config.virtual_issue_number_base + config.virtual_issue_number_range
+            );
         }
     }
 
@@ -2251,7 +2384,11 @@ mod tests {
         std::fs::write(&dots_path, "content").unwrap();
         let result = storage.parse_issue_from_file(&dots_path);
         // This should actually work - filename is "..." which is non-empty
-        assert!(result.is_ok(), "Filename with dots should parse as non-numbered: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Filename with dots should parse as non-numbered: {:?}",
+            result
+        );
         if let Ok(issue) = result {
             assert_eq!(issue.name, "...");
             let config = Config::global();
@@ -2263,10 +2400,16 @@ mod tests {
         std::fs::write(&no_ext_path, "content").unwrap();
         let result = storage.parse_issue_from_file(&no_ext_path);
         // parse_issue_from_file doesn't enforce .md extension - that's handled by directory scanning
-        assert!(result.is_ok(), "parse_issue_from_file should work on any file regardless of extension");
-        
+        assert!(
+            result.is_ok(),
+            "parse_issue_from_file should work on any file regardless of extension"
+        );
+
         // But is_issue_file should reject non-.md files
-        assert!(!is_issue_file(&no_ext_path), "is_issue_file should reject non-.md files");
+        assert!(
+            !is_issue_file(&no_ext_path),
+            "is_issue_file should reject non-.md files"
+        );
 
         // Test moderately long filename (avoid filesystem limits)
         let long_name = "a".repeat(200); // Use 200 chars to avoid filesystem limits
@@ -2284,7 +2427,10 @@ mod tests {
         let special_path = issues_dir.join("!@#$%^&*()_+.md");
         std::fs::write(&special_path, "content").unwrap();
         let result = storage.parse_issue_from_file(&special_path);
-        assert!(result.is_ok(), "Special characters should be valid in non-numbered format");
+        assert!(
+            result.is_ok(),
+            "Special characters should be valid in non-numbered format"
+        );
         let issue = result.unwrap();
         let config = Config::global();
         assert!(issue.number.value() >= config.virtual_issue_number_base);
@@ -2296,16 +2442,15 @@ mod tests {
 
         // Test file with invalid UTF-8 in content (might fail content reading)
         let utf8_path = issues_dir.join("utf8_test.md");
-        std::fs::write(&utf8_path, &[0xFF, 0xFE, 0xFD, 0xFC]).unwrap(); // Invalid UTF-8
+        std::fs::write(&utf8_path, [0xFF, 0xFE, 0xFD, 0xFC]).unwrap(); // Invalid UTF-8
         let result = storage.parse_issue_from_file(&utf8_path);
         // Invalid UTF-8 content might cause parsing to fail, which is expected behavior
         match result {
             Ok(_) => {
                 // If it succeeds, the system handled invalid UTF-8 gracefully
-            },
+            }
             Err(_) => {
                 // If it fails, that's expected due to invalid UTF-8 content
-                assert!(true, "Invalid UTF-8 content caused parsing to fail, which is acceptable");
             }
         }
     }
@@ -2395,7 +2540,7 @@ mod tests {
         // Valid issue files - non-numbered format (new)
         assert!(is_issue_file(Path::new("123_test.md"))); // Now valid: any .md file
         assert!(is_issue_file(Path::new("000123test.md"))); // Now valid: any .md file
-        assert!(is_issue_file(Path::new("abc123_test.md"))); // Now valid: any .md file  
+        assert!(is_issue_file(Path::new("abc123_test.md"))); // Now valid: any .md file
         assert!(is_issue_file(Path::new("README.md"))); // Now valid: any .md file
         assert!(is_issue_file(Path::new("bug-report.md"))); // Valid: non-numbered
         assert!(is_issue_file(Path::new("my-feature.md"))); // Valid: non-numbered
@@ -2998,5 +3143,203 @@ mod tests {
         // Verify original issue was not updated
         let retrieved_issue = storage.get_issue(issue.number.value()).await.unwrap();
         assert_eq!(retrieved_issue.content, "Content");
+    }
+
+    #[tokio::test]
+    async fn test_mark_complete_with_cost_data() {
+        use crate::cost::{
+            ApiCall, ApiCallStatus, CostSession, CostSessionStatus, IssueId as CostIssueId,
+            PaidPlanConfig, PricingModel,
+        };
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let storage = FileSystemIssueStorage::new(temp_dir.path().to_path_buf()).unwrap();
+
+        // Create test issue
+        let issue = storage
+            .create_issue(
+                "test_cost_issue".to_string(),
+                "# Test Issue\n\nTest content".to_string(),
+            )
+            .await
+            .unwrap();
+
+        // Create mock cost data
+        let cost_issue_id = CostIssueId::new("test-issue").unwrap();
+        let mut session = CostSession::new(cost_issue_id);
+
+        let mut call1 = ApiCall::new(
+            "https://api.anthropic.com/v1/messages",
+            "claude-3-sonnet-20241022",
+        )
+        .unwrap();
+        call1.complete(1000, 1500, ApiCallStatus::Success, None);
+        session.add_api_call(call1).unwrap();
+
+        let mut call2 = ApiCall::new(
+            "https://api.anthropic.com/v1/messages",
+            "claude-3-sonnet-20241022",
+        )
+        .unwrap();
+        call2.complete(800, 1200, ApiCallStatus::Success, None);
+        session.add_api_call(call2).unwrap();
+
+        session.complete(CostSessionStatus::Completed).unwrap();
+
+        // Create IssueCostData
+        let pricing_model = PricingModel::Paid(PaidPlanConfig::new_with_defaults());
+        let cost_data = crate::cost::CostSectionFormatter::create_issue_cost_data(
+            session,
+            pricing_model,
+            None, // No calculator for test
+        )
+        .unwrap();
+
+        // Mark complete with cost data
+        let completed_issue = storage
+            .mark_complete_with_cost(issue.number.into(), cost_data)
+            .await
+            .unwrap();
+
+        assert!(completed_issue.completed);
+        assert!(completed_issue.content.contains("## Cost Analysis"));
+        assert!(completed_issue
+            .content
+            .contains("**Total Cost**: Unlimited Plan"));
+        assert!(completed_issue.content.contains("**Total API Calls**: 2"));
+        assert!(completed_issue
+            .content
+            .contains("**Total Input Tokens**: 1,800"));
+        assert!(completed_issue
+            .content
+            .contains("**Total Output Tokens**: 2,700"));
+
+        // Verify the file was moved to completed directory and contains cost section
+        let completed_content = std::fs::read_to_string(&completed_issue.file_path).unwrap();
+        assert!(completed_content.contains("## Cost Analysis"));
+        assert!(completed_content.contains("### API Call Breakdown"));
+    }
+
+    #[tokio::test]
+    async fn test_mark_complete_with_cost_idempotent() {
+        use crate::cost::{
+            CostSession, CostSessionStatus, IssueId as CostIssueId, MaxPlanConfig, PricingModel,
+        };
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let storage = FileSystemIssueStorage::new(temp_dir.path().to_path_buf()).unwrap();
+
+        // Create test issue
+        let issue = storage
+            .create_issue(
+                "test_cost_idempotent".to_string(),
+                "# Test Issue\n\nTest content".to_string(),
+            )
+            .await
+            .unwrap();
+
+        // Create mock cost data
+        let cost_issue_id = CostIssueId::new("test-issue").unwrap();
+        let mut session = CostSession::new(cost_issue_id);
+        session.complete(CostSessionStatus::Completed).unwrap();
+
+        let pricing_model = PricingModel::Max(MaxPlanConfig::new(true));
+        let cost_data =
+            crate::cost::CostSectionFormatter::create_issue_cost_data(session, pricing_model, None)
+                .unwrap();
+
+        // Mark complete with cost data first time
+        let completed_issue1 = storage
+            .mark_complete_with_cost(issue.number.into(), cost_data.clone())
+            .await
+            .unwrap();
+
+        let content_after_first = completed_issue1.content.clone();
+
+        // Mark complete with cost data second time - should not duplicate cost section
+        let completed_issue2 = storage
+            .mark_complete_with_cost(issue.number.into(), cost_data)
+            .await
+            .unwrap();
+
+        assert_eq!(completed_issue1.content, completed_issue2.content);
+        assert_eq!(content_after_first, completed_issue2.content);
+
+        // Count occurrences of "## Cost Analysis" - should be exactly 1
+        let cost_section_count = completed_issue2.content.matches("## Cost Analysis").count();
+        assert_eq!(cost_section_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_mark_complete_without_cost_data_backwards_compatible() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let storage = FileSystemIssueStorage::new(temp_dir.path().to_path_buf()).unwrap();
+
+        // Create test issue
+        let issue = storage
+            .create_issue(
+                "test_backwards_compat".to_string(),
+                "# Test Issue\n\nTest content".to_string(),
+            )
+            .await
+            .unwrap();
+
+        // Mark complete without cost data (old behavior)
+        let completed_issue = storage.mark_complete(issue.number.into()).await.unwrap();
+
+        assert!(completed_issue.completed);
+        assert!(!completed_issue.content.contains("## Cost Analysis"));
+        assert_eq!(completed_issue.content, "# Test Issue\n\nTest content");
+    }
+
+    #[tokio::test]
+    async fn test_cost_section_formatting_configuration() {
+        use crate::cost::{
+            CostFormattingConfig, CostSectionFormatter, CostSession, CostSessionStatus,
+            DetailLevel, IssueId as CostIssueId, MaxPlanConfig, PricingModel,
+        };
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let storage = FileSystemIssueStorage::new(temp_dir.path().to_path_buf()).unwrap();
+
+        let _issue = storage
+            .create_issue(
+                "test_config".to_string(),
+                "# Test Issue\n\nTest content".to_string(),
+            )
+            .await
+            .unwrap();
+
+        // Create cost data
+        let cost_issue_id = CostIssueId::new("test-issue").unwrap();
+        let mut session = CostSession::new(cost_issue_id);
+        session.complete(CostSessionStatus::Completed).unwrap();
+
+        let pricing_model = PricingModel::Max(MaxPlanConfig::new(true));
+        let cost_data =
+            CostSectionFormatter::create_issue_cost_data(session, pricing_model, None).unwrap();
+
+        // Test with disabled configuration
+        let disabled_config = CostFormattingConfig {
+            enabled: false,
+            ..CostFormattingConfig::default()
+        };
+
+        let formatter = CostSectionFormatter::new(disabled_config);
+        let cost_section = formatter.format_cost_section(&cost_data);
+        assert!(cost_section.is_empty());
+
+        // Test with summary only configuration
+        let summary_config = CostFormattingConfig {
+            detail_level: DetailLevel::Summary,
+            show_breakdown_table: false,
+            ..CostFormattingConfig::default()
+        };
+
+        let summary_formatter = CostSectionFormatter::new(summary_config);
+        let summary_section = summary_formatter.format_cost_section(&cost_data);
+        assert!(summary_section.contains("## Cost Analysis"));
+        assert!(!summary_section.contains("### API Call Breakdown"));
+        assert!(!summary_section.contains("### Cost Summary"));
     }
 }

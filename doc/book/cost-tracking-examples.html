@@ -1,0 +1,956 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Examples and Tutorials - SwissArmyHammer Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Complete guide to using SwissArmyHammer - the MCP server for managing prompts">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">SwissArmyHammer Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/cost-tracking-examples.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="cost-tracking-examples-and-tutorials"><a class="header" href="#cost-tracking-examples-and-tutorials">Cost Tracking Examples and Tutorials</a></h1>
+<p>This guide provides complete, working examples for different cost tracking scenarios in SwissArmyHammer.</p>
+<h2 id="table-of-contents"><a class="header" href="#table-of-contents">Table of Contents</a></h2>
+<ul>
+<li><a href="#basic-setup-examples">Basic Setup Examples</a></li>
+<li><a href="#advanced-configuration-examples">Advanced Configuration Examples</a></li>
+<li><a href="#custom-reporting-examples">Custom Reporting Examples</a></li>
+<li><a href="#integration-examples">Integration Examples</a></li>
+<li><a href="#production-configuration-examples">Production Configuration Examples</a></li>
+<li><a href="#environment-specific-examples">Environment-Specific Examples</a></li>
+</ul>
+<h2 id="basic-setup-examples"><a class="header" href="#basic-setup-examples">Basic Setup Examples</a></h2>
+<h3 id="example-1-individual-developer-setup"><a class="header" href="#example-1-individual-developer-setup">Example 1: Individual Developer Setup</a></h3>
+<p><strong>Scenario</strong>: Solo developer wanting to track costs for personal Claude usage.</p>
+<p><strong>Configuration</strong> (<code>swissarmyhammer.yaml</code>):</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+  rates:
+    input_token_cost: 0.000015   # Claude Sonnet rates
+    output_token_cost: 0.000075
+  reporting:
+    include_in_issues: true
+    detailed_breakdown: true
+    cost_precision_decimals: 4
+</code></pre>
+<p><strong>Usage</strong>:</p>
+<pre><code class="language-bash"># Work on an issue - cost tracking happens automatically
+swissarmyhammer issue work feature-implementation.md
+
+# Check cost tracking status
+swissarmyhammer doctor
+</code></pre>
+<p><strong>Expected Output</strong> (in completed issue):</p>
+<pre><code class="language-markdown">## Cost Analysis
+
+**Total Cost**: $0.12
+**Total API Calls**: 2
+**Total Input Tokens**: 950
+**Total Output Tokens**: 1,240  
+**Session Duration**: 1m 45s
+
+### API Call Breakdown
+| Timestamp | Endpoint | Input | Output | Cost | Status |
+|-----------|----------|-------|--------|------|--------|
+| 10:30:20 | /v1/messages | 450 | 580 | $0.05 | ✓ |
+| 10:30:45 | /v1/messages | 500 | 660 | $0.07 | ✓ |
+</code></pre>
+<h3 id="example-2-unlimited-plan-with-cost-estimation"><a class="header" href="#example-2-unlimited-plan-with-cost-estimation">Example 2: Unlimited Plan with Cost Estimation</a></h3>
+<p><strong>Scenario</strong>: Developer with unlimited Claude access who wants to understand usage patterns.</p>
+<p><strong>Configuration</strong>:</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "max"  # No actual costs, just estimation
+  reporting:
+    include_in_issues: true
+    detailed_breakdown: false  # Simpler reports
+    include_performance_metrics: true
+</code></pre>
+<p><strong>Expected Output</strong>:</p>
+<pre><code class="language-markdown">## Cost Analysis (Estimated)
+
+**Estimated Cost**: $0.12 (if on paid plan)
+**Total API Calls**: 2
+**Total Tokens**: 2,190 (950 input, 1,240 output)
+**Token Efficiency**: 1.31 (output/input ratio)
+**Session Duration**: 1m 45s
+</code></pre>
+<h3 id="example-3-minimal-cost-tracking"><a class="header" href="#example-3-minimal-cost-tracking">Example 3: Minimal Cost Tracking</a></h3>
+<p><strong>Scenario</strong>: Basic cost tracking with minimal configuration and reporting.</p>
+<p><strong>Configuration</strong>:</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+  rates:
+    input_token_cost: 0.000015
+    output_token_cost: 0.000075
+  reporting:
+    include_in_issues: true
+    detailed_breakdown: false
+    cost_precision_decimals: 2
+</code></pre>
+<p><strong>Expected Output</strong>:</p>
+<pre><code class="language-markdown">## Cost Analysis
+
+**Total Cost**: $0.12
+**API Calls**: 2
+**Duration**: 1m 45s
+</code></pre>
+<h2 id="advanced-configuration-examples"><a class="header" href="#advanced-configuration-examples">Advanced Configuration Examples</a></h2>
+<h3 id="example-4-team-environment-with-database"><a class="header" href="#example-4-team-environment-with-database">Example 4: Team Environment with Database</a></h3>
+<p><strong>Scenario</strong>: Development team sharing cost data and needing historical analytics.</p>
+<p><strong>Configuration</strong>:</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+  rates:
+    input_token_cost: 0.000015
+    output_token_cost: 0.000075
+  
+  # Enhanced session management for team use
+  session_management:
+    max_concurrent_sessions: 200     # Higher limit for team
+    session_timeout_hours: 48        # Longer timeout
+    cleanup_interval_hours: 4        # More frequent cleanup
+  
+  # Enable persistent storage
+  database:
+    enabled: true
+    file_path: "/shared/swissarmyhammer-costs.db"
+    retention_days: 365              # Full year of data
+    connection_timeout_seconds: 60   # Higher timeout
+    max_connections: 20              # More connections
+  
+  # Enable cross-issue analytics
+  aggregation:
+    enabled: true
+    retention_days: 180
+    max_stored_sessions: 50000       # Higher limits
+  
+  # Comprehensive reporting
+  reporting:
+    include_in_issues: true
+    detailed_breakdown: true
+    currency_locale: "en-US"
+    include_performance_metrics: true
+    cost_precision_decimals: 6
+</code></pre>
+<p><strong>Setup Commands</strong>:</p>
+<pre><code class="language-bash"># Create shared directory
+mkdir -p /shared
+chmod 755 /shared
+
+# Initialize database
+swissarmyhammer doctor
+
+# Verify team setup
+swissarmyhammer doctor --verbose
+</code></pre>
+<h3 id="example-5-high-volume-production-environment"><a class="header" href="#example-5-high-volume-production-environment">Example 5: High-Volume Production Environment</a></h3>
+<p><strong>Scenario</strong>: Production system processing many issues with optimized performance settings.</p>
+<p><strong>Configuration</strong>:</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+  rates:
+    input_token_cost: 0.000015
+    output_token_cost: 0.000075
+  
+  # Optimized for high throughput
+  session_management:
+    max_concurrent_sessions: 500
+    session_timeout_hours: 12        # Shorter timeout
+    cleanup_interval_hours: 2        # More aggressive cleanup
+    max_api_calls_per_session: 1000  # Higher call limits
+  
+  # High-performance database settings
+  database:
+    enabled: true
+    file_path: "/data/costs.db"
+    connection_timeout_seconds: 30
+    max_connections: 50              # Large connection pool
+    retention_days: 90               # Shorter retention for performance
+  
+  # Lightweight reporting
+  reporting:
+    include_in_issues: true
+    detailed_breakdown: false        # Reduced overhead
+    include_performance_metrics: false
+    cost_precision_decimals: 4
+  
+  # Disabled aggregation for performance
+  aggregation:
+    enabled: false
+</code></pre>
+<p><strong>Monitoring Script</strong> (<code>monitor-costs.sh</code>):</p>
+<pre><code class="language-bash">#!/bin/bash
+
+# Monitor cost tracking performance
+echo "=== Cost Tracking Status ==="
+swissarmyhammer doctor | grep -A 10 "Cost tracking"
+
+echo "=== Database Size ==="
+ls -lh /data/costs.db
+
+echo "=== Memory Usage ==="
+ps aux | grep swissarmyhammer | awk '{print $4, $6}'
+
+echo "=== Active Sessions ==="
+sqlite3 /data/costs.db "SELECT COUNT(*) FROM cost_sessions WHERE completed_at IS NULL;"
+</code></pre>
+<h2 id="custom-reporting-examples"><a class="header" href="#custom-reporting-examples">Custom Reporting Examples</a></h2>
+<h3 id="example-6-csv-export-configuration"><a class="header" href="#example-6-csv-export-configuration">Example 6: CSV Export Configuration</a></h3>
+<p><strong>Scenario</strong>: Export cost data to CSV for external analysis.</p>
+<p><strong>Configuration</strong>:</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+  rates:
+    input_token_cost: 0.000015
+    output_token_cost: 0.000075
+  database:
+    enabled: true
+    file_path: "./costs.db"
+  reporting:
+    include_in_issues: false  # Disable markdown reports
+    export_csv: true          # Custom extension point
+    csv_file_path: "./cost-exports/"
+</code></pre>
+<p><strong>Export Script</strong> (<code>export-costs.py</code>):</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+import sqlite3
+import csv
+import sys
+from datetime import datetime
+
+def export_costs_csv(db_path, output_dir):
+    """Export cost data to CSV files"""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    
+    # Export sessions
+    cursor = conn.execute("""
+        SELECT session_id, issue_id, started_at, completed_at,
+               total_input_tokens, total_output_tokens, total_cost
+        FROM cost_sessions 
+        WHERE completed_at IS NOT NULL
+        ORDER BY started_at DESC
+    """)
+    
+    with open(f"{output_dir}/sessions.csv", 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Session ID', 'Issue ID', 'Started', 'Completed', 
+                        'Input Tokens', 'Output Tokens', 'Total Cost'])
+        
+        for row in cursor:
+            writer.writerow(row)
+    
+    # Export API calls
+    cursor = conn.execute("""
+        SELECT call_id, session_id, started_at, endpoint, model,
+               input_tokens, output_tokens, status
+        FROM api_calls
+        ORDER BY started_at DESC
+    """)
+    
+    with open(f"{output_dir}/api_calls.csv", 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Call ID', 'Session ID', 'Started', 'Endpoint', 
+                        'Model', 'Input Tokens', 'Output Tokens', 'Status'])
+        
+        for row in cursor:
+            writer.writerow(row)
+    
+    conn.close()
+    print(f"Cost data exported to {output_dir}/")
+
+if __name__ == "__main__":
+    export_costs_csv("./costs.db", "./cost-exports")
+</code></pre>
+<h3 id="example-7-custom-markdown-template"><a class="header" href="#example-7-custom-markdown-template">Example 7: Custom Markdown Template</a></h3>
+<p><strong>Scenario</strong>: Customize the cost report format in issue markdown.</p>
+<p><strong>Custom Template</strong> (<code>cost-report-template.md.liquid</code>):</p>
+<pre><code class="language-liquid">## 💰 Cost Analysis
+
+{% if session.pricing_model == "paid" -%}
+**💵 Total Cost**: ${{ session.total_cost | money_format }}
+{% else -%}
+**📊 Estimated Cost**: ${{ session.total_cost | money_format }} (hypothetical)
+{% endif -%}
+
+**📞 API Calls**: {{ session.api_calls | size }}
+**📥 Input Tokens**: {{ session.total_input_tokens | number_format }}
+**📤 Output Tokens**: {{ session.total_output_tokens | number_format }}
+**⏱️ Duration**: {{ session.duration | duration_format }}
+
+{% if session.api_calls | size &gt; 0 -%}
+### 📋 Performance Summary
+
+- **Average Cost per Call**: ${{ session.average_cost_per_call | money_format }}
+- **Token Efficiency**: {{ session.token_efficiency | round: 2 }}x (output/input ratio)
+- **Success Rate**: {{ session.success_rate | percentage }}
+- **Average Response Time**: {{ session.average_response_time | duration_format }}
+
+{% if detailed_breakdown -%}
+### 🔍 Detailed Breakdown
+
+| Time | Endpoint | Model | Input | Output | Duration | Cost | Status |
+|------|----------|-------|-------|--------|----------|------|--------|
+{% for call in session.api_calls -%}
+| {{ call.started_at | time_format }} | {{ call.endpoint | truncate: 20 }} | {{ call.model }} | {{ call.input_tokens }} | {{ call.output_tokens }} | {{ call.duration | duration_format }} | ${{ call.cost | money_format }} | {{ call.status | status_icon }} |
+{% endfor -%}
+{% endif -%}
+
+### 💡 Cost Optimization Tips
+
+{% if session.token_efficiency &lt; 1.2 -%}
+- Consider optimizing prompts to generate more focused responses
+{% endif -%}
+{% if session.average_response_time &gt; 5 -%}
+- API calls are taking longer than expected - check prompt complexity
+{% endif -%}
+{% if session.api_calls | size &gt; 10 -%}
+- High number of API calls - consider batching operations
+{% endif -%}
+
+{% endif -%}
+</code></pre>
+<h3 id="example-8-slack-integration"><a class="header" href="#example-8-slack-integration">Example 8: Slack Integration</a></h3>
+<p><strong>Scenario</strong>: Send cost alerts to Slack when thresholds are exceeded.</p>
+<p><strong>Configuration</strong>:</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+  rates:
+    input_token_cost: 0.000015
+    output_token_cost: 0.000075
+  
+  # Custom webhook configuration (extension point)
+  notifications:
+    slack_webhook_url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+    cost_threshold: 1.00  # Alert when session exceeds $1.00
+    daily_digest: true    # Send daily cost summary
+</code></pre>
+<p><strong>Slack Notification Script</strong> (<code>slack-notify.py</code>):</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+import json
+import requests
+from datetime import datetime
+
+def send_cost_alert(webhook_url, session_data):
+    """Send cost alert to Slack"""
+    
+    color = "danger" if session_data['total_cost'] &gt; 1.00 else "good"
+    
+    payload = {
+        "attachments": [{
+            "color": color,
+            "title": f"Cost Alert: Issue {session_data['issue_id']}",
+            "fields": [
+                {
+                    "title": "Total Cost",
+                    "value": f"${session_data['total_cost']:.4f}",
+                    "short": True
+                },
+                {
+                    "title": "API Calls", 
+                    "value": str(session_data['api_calls']),
+                    "short": True
+                },
+                {
+                    "title": "Duration",
+                    "value": session_data['duration'],
+                    "short": True
+                },
+                {
+                    "title": "Tokens Used",
+                    "value": f"{session_data['total_tokens']:,}",
+                    "short": True
+                }
+            ],
+            "footer": "SwissArmyHammer Cost Tracking",
+            "ts": int(datetime.now().timestamp())
+        }]
+    }
+    
+    response = requests.post(webhook_url, json=payload)
+    response.raise_for_status()
+    
+    print(f"Slack notification sent for {session_data['issue_id']}")
+</code></pre>
+<h2 id="integration-examples"><a class="header" href="#integration-examples">Integration Examples</a></h2>
+<h3 id="example-9-cicd-pipeline-integration"><a class="header" href="#example-9-cicd-pipeline-integration">Example 9: CI/CD Pipeline Integration</a></h3>
+<p><strong>Scenario</strong>: Integrate cost tracking into GitHub Actions workflow.</p>
+<p><strong>GitHub Actions Workflow</strong> (<code>.github/workflows/issue-processing.yml</code>):</p>
+<pre><code class="language-yaml">name: Process Issues with Cost Tracking
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_file:
+        description: 'Issue file to process'
+        required: true
+        type: string
+
+jobs:
+  process-issue:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      
+    - name: Install SwissArmyHammer
+      run: |
+        curl -sSL https://raw.githubusercontent.com/wballard/swissarmyhammer/main/install.sh | sh
+        echo "$HOME/.local/bin" &gt;&gt; $GITHUB_PATH
+    
+    - name: Configure Cost Tracking
+      env:
+        CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+        SAH_COST_TRACKING_ENABLED: true
+        SAH_COST_PRICING_MODEL: paid
+        SAH_COST_INPUT_TOKEN_COST: 0.000015
+        SAH_COST_OUTPUT_TOKEN_COST: 0.000075
+        SAH_COST_DATABASE_ENABLED: true
+        SAH_COST_DATABASE_FILE_PATH: ./github-actions-costs.db
+      run: |
+        swissarmyhammer doctor
+    
+    - name: Process Issue
+      env:
+        CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      run: |
+        swissarmyhammer issue work "${{ github.event.inputs.issue_file }}"
+    
+    - name: Extract Cost Data
+      run: |
+        python3 scripts/extract-costs.py ./github-actions-costs.db &gt;&gt; $GITHUB_STEP_SUMMARY
+    
+    - name: Upload Cost Database
+      uses: actions/upload-artifact@v3
+      with:
+        name: cost-tracking-data
+        path: github-actions-costs.db
+        
+    - name: Cost Summary Comment
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const costData = fs.readFileSync('cost-summary.md', 'utf8');
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: costData
+          });
+</code></pre>
+<h3 id="example-10-docker-environment"><a class="header" href="#example-10-docker-environment">Example 10: Docker Environment</a></h3>
+<p><strong>Scenario</strong>: Run SwissArmyHammer with cost tracking in Docker container.</p>
+<p><strong>Dockerfile</strong>:</p>
+<pre><code class="language-dockerfile">FROM rust:1.75-slim as builder
+
+# Install SwissArmyHammer
+WORKDIR /app
+COPY . .
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update &amp;&amp; apt-get install -y \
+    ca-certificates \
+    sqlite3 \
+    &amp;&amp; rm -rf /var/lib/apt/lists/*
+
+# Copy binary
+COPY --from=builder /app/target/release/swissarmyhammer /usr/local/bin/
+
+# Create data directory
+RUN mkdir -p /data &amp;&amp; chmod 755 /data
+
+# Copy default configuration
+COPY docker/swissarmyhammer.yaml /etc/swissarmyhammer/
+
+WORKDIR /workspace
+VOLUME ["/workspace", "/data"]
+
+ENTRYPOINT ["swissarmyhammer"]
+</code></pre>
+<p><strong>Docker Compose</strong> (<code>docker-compose.yml</code>):</p>
+<pre><code class="language-yaml">version: '3.8'
+
+services:
+  swissarmyhammer:
+    build: .
+    environment:
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - SAH_COST_TRACKING_ENABLED=true
+      - SAH_COST_PRICING_MODEL=paid  
+      - SAH_COST_INPUT_TOKEN_COST=0.000015
+      - SAH_COST_OUTPUT_TOKEN_COST=0.000075
+      - SAH_COST_DATABASE_ENABLED=true
+      - SAH_COST_DATABASE_FILE_PATH=/data/costs.db
+    volumes:
+      - ./workspace:/workspace
+      - cost_data:/data
+    command: ["serve", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "8080:8080"
+
+volumes:
+  cost_data:
+    driver: local
+</code></pre>
+<p><strong>Usage</strong>:</p>
+<pre><code class="language-bash"># Start container with cost tracking
+docker-compose up -d
+
+# Process issue via container
+docker-compose exec swissarmyhammer issue work issue-file.md
+
+# View cost database
+docker-compose exec swissarmyhammer sqlite3 /data/costs.db "SELECT * FROM cost_sessions;"
+</code></pre>
+<h2 id="production-configuration-examples"><a class="header" href="#production-configuration-examples">Production Configuration Examples</a></h2>
+<h3 id="example-11-multi-environment-setup"><a class="header" href="#example-11-multi-environment-setup">Example 11: Multi-Environment Setup</a></h3>
+<p><strong>Scenario</strong>: Different configurations for development, staging, and production environments.</p>
+<p><strong>Development</strong> (<code>config/development.yaml</code>):</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+  rates:
+    input_token_cost: 0.000015
+    output_token_cost: 0.000075
+  reporting:
+    include_in_issues: true
+    detailed_breakdown: true
+    cost_precision_decimals: 6  # High precision for development
+  aggregation:
+    enabled: true  # Full analytics in development
+</code></pre>
+<p><strong>Staging</strong> (<code>config/staging.yaml</code>):</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+  rates:
+    input_token_cost: 0.000015
+    output_token_cost: 0.000075
+  database:
+    enabled: true
+    file_path: "/data/staging-costs.db"
+    retention_days: 30  # Shorter retention
+  reporting:
+    include_in_issues: true
+    detailed_breakdown: false  # Lighter reports
+    cost_precision_decimals: 4
+  session_management:
+    cleanup_interval_hours: 2  # More aggressive cleanup
+</code></pre>
+<p><strong>Production</strong> (<code>config/production.yaml</code>):</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+  rates:
+    input_token_cost: 0.000015
+    output_token_cost: 0.000075
+  
+  # High-performance settings
+  session_management:
+    max_concurrent_sessions: 1000
+    session_timeout_hours: 6
+    cleanup_interval_hours: 1
+    max_api_calls_per_session: 2000
+  
+  # Production database
+  database:
+    enabled: true
+    file_path: "/data/production-costs.db" 
+    connection_timeout_seconds: 120
+    max_connections: 100
+    retention_days: 365
+  
+  # Minimal reporting for performance
+  reporting:
+    include_in_issues: false  # Disable for performance
+    detailed_breakdown: false
+  
+  # Disabled aggregation
+  aggregation:
+    enabled: false
+</code></pre>
+<p><strong>Environment Script</strong> (<code>scripts/set-environment.sh</code>):</p>
+<pre><code class="language-bash">#!/bin/bash
+
+ENV=${1:-development}
+
+case $ENV in
+  development)
+    export SAH_CONFIG_FILE="config/development.yaml"
+    export SAH_COST_DATABASE_FILE_PATH="./dev-costs.db"
+    ;;
+  staging) 
+    export SAH_CONFIG_FILE="config/staging.yaml"
+    export SAH_COST_DATABASE_FILE_PATH="/data/staging-costs.db"
+    ;;
+  production)
+    export SAH_CONFIG_FILE="config/production.yaml"
+    export SAH_COST_DATABASE_FILE_PATH="/data/production-costs.db"
+    ;;
+  *)
+    echo "Invalid environment: $ENV"
+    exit 1
+    ;;
+esac
+
+echo "Environment set to: $ENV"
+echo "Config file: $SAH_CONFIG_FILE"
+swissarmyhammer doctor
+</code></pre>
+<h3 id="example-12-load-balancer-configuration"><a class="header" href="#example-12-load-balancer-configuration">Example 12: Load Balancer Configuration</a></h3>
+<p><strong>Scenario</strong>: Multiple SwissArmyHammer instances sharing cost tracking data.</p>
+<p><strong>Shared Configuration</strong> (<code>config/shared.yaml</code>):</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+  rates:
+    input_token_cost: 0.000015
+    output_token_cost: 0.000075
+  
+  # Shared database backend  
+  database:
+    enabled: true
+    file_path: "/shared/nfs/costs.db"  # Network shared storage
+    connection_timeout_seconds: 180   # Higher timeout for network
+    max_connections: 200              # Support multiple instances
+    retention_days: 365
+  
+  # Instance-specific session management
+  session_management:
+    max_concurrent_sessions: 200      # Per instance
+    session_timeout_hours: 24
+    cleanup_interval_hours: 6
+  
+  # Lightweight reporting
+  reporting:
+    include_in_issues: true
+    detailed_breakdown: false
+    cost_precision_decimals: 4
+    
+  # Shared aggregation
+  aggregation:
+    enabled: true
+    retention_days: 90
+    max_stored_sessions: 100000       # Higher limit for shared data
+</code></pre>
+<p><strong>Load Balancer Setup</strong> (<code>nginx.conf</code>):</p>
+<pre><code class="language-nginx">upstream swissarmyhammer {
+    server 10.0.1.10:8080 weight=1;
+    server 10.0.1.11:8080 weight=1;
+    server 10.0.1.12:8080 weight=1;
+}
+
+server {
+    listen 80;
+    server_name swissarmyhammer.internal;
+    
+    location / {
+        proxy_pass http://swissarmyhammer;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        
+        # Ensure session affinity for cost tracking
+        sticky_cookie_path /;
+    }
+}
+</code></pre>
+<h2 id="environment-specific-examples"><a class="header" href="#environment-specific-examples">Environment-Specific Examples</a></h2>
+<h3 id="example-13-local-development-with-hot-reload"><a class="header" href="#example-13-local-development-with-hot-reload">Example 13: Local Development with Hot Reload</a></h3>
+<p><strong>Configuration</strong> (<code>swissarmyhammer-dev.yaml</code>):</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+  rates:
+    input_token_cost: 0.000015
+    output_token_cost: 0.000075
+  
+  # Development-friendly settings
+  session_management:
+    max_concurrent_sessions: 10       # Lower for local development
+    session_timeout_hours: 1          # Quick cleanup
+    cleanup_interval_hours: 0.25      # Clean up every 15 minutes
+  
+  # Local database
+  database:
+    enabled: true
+    file_path: "./dev-costs.db"
+    retention_days: 7                 # Short retention for development
+  
+  # Detailed reporting for debugging
+  reporting:
+    include_in_issues: true
+    detailed_breakdown: true
+    include_performance_metrics: true
+    cost_precision_decimals: 8        # Maximum precision for analysis
+  
+  # Full aggregation for testing
+  aggregation:
+    enabled: true
+    retention_days: 7
+    max_stored_sessions: 1000
+</code></pre>
+<p><strong>Development Script</strong> (<code>dev.sh</code>):</p>
+<pre><code class="language-bash">#!/bin/bash
+
+# Development environment setup
+export RUST_LOG=debug
+export SAH_CONFIG_FILE="swissarmyhammer-dev.yaml"
+
+# Clean up previous session
+rm -f dev-costs.db
+
+echo "Starting SwissArmyHammer in development mode..."
+echo "Cost tracking enabled with detailed logging"
+
+# Watch for configuration changes
+fswatch -o swissarmyhammer-dev.yaml | while read f; do
+  echo "Configuration changed, restarting..."
+  pkill swissarmyhammer
+  swissarmyhammer serve --reload &amp;
+done &amp;
+
+# Start with hot reload
+swissarmyhammer serve --reload --config swissarmyhammer-dev.yaml
+</code></pre>
+<p>This comprehensive examples guide provides practical, tested configurations for every major use case of SwissArmyHammer’s cost tracking system.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="cost-tracking-configuration.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="cost-tracking-migration-guide.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="cost-tracking-configuration.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="cost-tracking-migration-guide.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

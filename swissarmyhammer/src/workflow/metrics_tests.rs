@@ -5,8 +5,8 @@ use crate::workflow::{StateId, WorkflowName, WorkflowRunId, WorkflowRunStatus};
 use chrono::Utc;
 use std::time::Duration;
 
-// Import the constant from the parent module
-use super::metrics::MAX_TREND_DATA_POINTS;
+// Import the constant from the trends module
+use super::metrics::trends::MAX_TREND_DATA_POINTS;
 
 #[test]
 fn test_workflow_metrics_new() {
@@ -49,7 +49,7 @@ fn test_record_state_execution() {
     metrics.record_state_execution(&run_id, state_id.clone(), duration);
     
     let run_metrics = metrics.run_metrics.get(&run_id).unwrap();
-    assert_eq!(run_metrics.state_durations.get(&state_id), Some(&duration));
+    assert_eq!(run_metrics.state_durations.get(&state_id).map(|(d, _)| d), Some(&duration));
 }
 
 #[test]

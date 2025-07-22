@@ -406,10 +406,11 @@ impl FileSystemWorkflowStorage {
     /// Find the appropriate path to store a workflow (uses local directory if available, falls back to user)
     fn workflow_storage_path(&self, name: &WorkflowName) -> Result<PathBuf> {
         // Try to find a local .swissarmyhammer directory first
-        let current_dir = std::env::current_dir()?;
-        let local_dir = current_dir.join(".swissarmyhammer").join("workflows");
-        if local_dir.exists() {
-            return Ok(local_dir.join(format!("{}.mermaid", name.as_str())));
+        if let Ok(current_dir) = std::env::current_dir() {
+            let local_dir = current_dir.join(".swissarmyhammer").join("workflows");
+            if local_dir.exists() {
+                return Ok(local_dir.join(format!("{}.mermaid", name.as_str())));
+            }
         }
 
         // Fall back to user directory
@@ -823,7 +824,7 @@ impl WorkflowStorageBackend for CompressedWorkflowStorage {
 
         // Create a temporary workflow with compressed data stored as description
         // This is a workaround since we can't modify the storage interface
-        let mut compressed_workflow = workflow.clone();
+        let mut compressed_workflow = workflow;
         compressed_workflow.description = format!(
             "COMPRESSED_DATA:{}",
             general_purpose::STANDARD.encode(&compressed_data)

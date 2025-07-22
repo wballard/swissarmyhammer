@@ -30,6 +30,7 @@ swissarmyhammer [COMMAND] [OPTIONS]
 | [`serve`](./cli-serve.md) | Run as MCP server for Claude Code integration |
 | [`search`](./cli-search.md) | Search and discover prompts with powerful filtering |
 | [`test`](./cli-test.md) | Interactively test prompts with arguments |
+| [`config`](#configuration-commands) | Manage SwissArmyHammer configuration |
 | [`doctor`](./cli-doctor.md) | Diagnose configuration and setup issues |
 | [`completion`](./cli-completion.md) | Generate shell completion scripts |
 
@@ -74,6 +75,21 @@ swissarmyhammer completion bash > ~/.bash_completion.d/swissarmyhammer
 swissarmyhammer completion zsh > ~/.zfunc/_swissarmyhammer
 ```
 
+### Manage Configuration
+```bash
+# View current configuration
+swissarmyhammer config show
+
+# Validate configuration
+swissarmyhammer config validate
+
+# Generate example configuration
+swissarmyhammer config init
+
+# Get configuration help
+swissarmyhammer config help
+```
+
 ## Exit Codes
 
 - `0` - Success
@@ -90,5 +106,55 @@ SwissArmyHammer looks for prompts in these directories (in order):
 1. Built-in prompts (embedded in the binary)
 2. User prompts: `~/.swissarmyhammer/prompts/`
 3. Local prompts: `./.swissarmyhammer/prompts/` (current directory)
+
+## Configuration Commands
+
+### `swissarmyhammer config`
+
+Manage SwissArmyHammer configuration.
+
+For detailed configuration guide and examples, see [Configuration](configuration.md). For complete schema reference, see [Configuration Schema](configuration-schema.md).
+
+#### Subcommands
+
+##### `config show`
+Display current configuration values and their sources.
+
+```bash
+swissarmyhammer config show
+```
+
+Example output:
+```
+📋 Current Configuration:
+base_branch: main
+issue_branch_prefix: issue/
+issue_number_width: 6
+```
+
+##### `config validate`
+Validate the current configuration for errors.
+
+```bash
+swissarmyhammer config validate
+```
+
+Returns exit code 0 if valid, 1 if invalid.
+
+##### `config init`
+Generate an example configuration file in the current directory.
+
+```bash
+swissarmyhammer config init
+```
+
+Creates `swissarmyhammer.yaml` with example configuration.
+
+##### `config help`
+Show detailed configuration help and documentation.
+
+```bash
+swissarmyhammer config help
+```
 
 For detailed command documentation, see the individual command pages linked in the table above.

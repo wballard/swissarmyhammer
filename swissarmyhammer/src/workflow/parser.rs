@@ -205,7 +205,7 @@ impl MermaidParser {
         // Find initial state - look for [*] as source in transitions
         let initial_state_id = Self::find_initial_state(&state_diagram.transitions)?;
 
-        let mut workflow = Workflow::new(workflow_name, description, initial_state_id.clone());
+        let mut workflow = Workflow::new(workflow_name, description, initial_state_id);
 
         // Convert all states from mermaid to our format
         for (state_id, mermaid_state) in state_diagram.states {
@@ -316,11 +316,7 @@ impl MermaidParser {
         // Find initial state - look for [*] as source in transitions
         let initial_state_id = Self::find_initial_state(&state_diagram.transitions)?;
 
-        let mut workflow = Workflow::new(
-            workflow_name,
-            workflow_description,
-            initial_state_id.clone(),
-        );
+        let mut workflow = Workflow::new(workflow_name, workflow_description, initial_state_id);
 
         // Convert all states from mermaid to our format
         for (state_id, mermaid_state) in state_diagram.states {

@@ -3,33 +3,70 @@
 //! This module provides comprehensive metrics tracking for workflow execution,
 //! including timing, success/failure rates, and resource usage statistics.
 
+pub mod cleanup;
+pub mod cost;
+pub mod trends;
+
+#[cfg(test)]
+pub mod cost_integration_tests;
+
+#[cfg(test)]
+pub mod performance_tests;
+
+// Re-export from submodules
+pub use cost::{ActionCostBreakdown, CostMetrics};
+pub use trends::ResourceTrends;
+
+use crate::cost::CostSessionId;
 use crate::workflow::{StateId, WorkflowName, WorkflowRunId, WorkflowRunStatus};
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
+use tracing::warn;
 
-/// Maximum number of data points to keep in resource trends
-pub const MAX_TREND_DATA_POINTS: usize = 100;
+/// Cost trend data points containing timestamps and cost values
+pub type CostTrend = Vec<(DateTime<Utc>, Decimal)>;
 
-/// Maximum number of run metrics to keep in memory
-pub const MAX_RUN_METRICS: usize = 1000;
+/// Performance trend data points containing timestamps and efficiency metrics  
+pub type PerformanceTrend = Vec<(DateTime<Utc>, f64)>;
 
-/// Maximum number of workflow metrics to keep in memory
-pub const MAX_WORKFLOW_METRICS: usize = 100;
+/// Configuration for workflow metrics collection and memory management
+#[derive(Debug, Clone)]
+pub struct WorkflowMetricsConfig {
+    /// Maximum number of workflow metrics to keep in memory
+    pub max_workflow_metrics: usize,
+    /// Maximum number of state durations per run
+    pub max_state_durations_per_run: usize,
+    /// Maximum number of data points to keep in resource trends
+    pub max_trend_data_points: usize,
+    /// Maximum number of run metrics to keep in memory
+    pub max_run_metrics: usize,
+    /// Maximum age of completed runs before cleanup (in days)
+    pub max_completed_run_age_days: i64,
+    /// Maximum age of workflow summary metrics before cleanup (in days)
+    pub max_workflow_summary_age_days: i64,
+}
 
-/// Maximum number of state durations per run
-pub const MAX_STATE_DURATIONS_PER_RUN: usize = 50;
-
-/// Maximum age of completed runs before cleanup (in days)
-pub const MAX_COMPLETED_RUN_AGE_DAYS: i64 = 7;
-
-/// Maximum age of workflow summary metrics before cleanup (in days)
-pub const MAX_WORKFLOW_SUMMARY_AGE_DAYS: i64 = 30;
+impl Default for WorkflowMetricsConfig {
+    fn default() -> Self {
+        Self {
+            max_workflow_metrics: 100,
+            max_state_durations_per_run: 50,
+            max_trend_data_points: 100,
+            max_run_metrics: 1000,
+            max_completed_run_age_days: 7,
+            max_workflow_summary_age_days: 30,
+        }
+    }
+}
 
 /// Metrics collector for workflow execution
 #[derive(Debug, Clone)]
 pub struct WorkflowMetrics {
+    /// Configuration for metrics collection
+    pub config: WorkflowMetricsConfig,
     /// Metrics for individual workflow runs
     pub run_metrics: HashMap<WorkflowRunId, RunMetrics>,
     /// Aggregated metrics by workflow name
@@ -47,30 +84,34 @@ pub struct RunMetrics {
     pub workflow_name: WorkflowName,
     /// When the run started
     pub started_at: DateTime<Utc>,
-    /// When the run completed (if completed)
+    /// When the run completed (if it has)
     pub completed_at: Option<DateTime<Utc>>,
     /// Final status of the run
     pub status: WorkflowRunStatus,
-    /// Total execution duration
-    pub total_duration: Option<Duration>,
-    /// Per-state execution times
-    pub state_durations: HashMap<StateId, Duration>,
-    /// Number of state transitions
+    /// Number of state transitions executed
     pub transition_count: usize,
-    /// Memory usage metrics
-    pub memory_metrics: MemoryMetrics,
-    /// Error details if run failed
+    /// Total execution duration
+    pub duration: Option<Duration>,
+    /// Total execution duration (alias for compatibility)
+    pub total_duration: Option<Duration>,
+    /// Error details if the run failed
     pub error_details: Option<String>,
+    /// Time spent in each state with timestamps for LRU eviction
+    pub state_durations: HashMap<StateId, (Duration, DateTime<Utc>)>,
+    /// Memory usage metrics
+    pub memory_metrics: Option<MemoryMetrics>,
+    /// Cost tracking metrics
+    pub cost_metrics: Option<CostMetrics>,
 }
 
-/// Memory usage metrics for a workflow run
+/// Memory usage tracking for a workflow run
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryMetrics {
     /// Peak memory usage during execution
     pub peak_memory_bytes: u64,
-    /// Memory usage at start
+    /// Initial memory usage at start
     pub initial_memory_bytes: u64,
-    /// Memory usage at end
+    /// Final memory usage at completion
     pub final_memory_bytes: u64,
     /// Number of context variables
     pub context_variables_count: usize,
@@ -103,6 +144,33 @@ pub struct WorkflowSummaryMetrics {
     pub hot_states: Vec<StateExecutionCount>,
     /// Last updated timestamp
     pub last_updated: DateTime<Utc>,
+    /// Cost summary for this workflow
+    pub cost_summary: Option<WorkflowCostSummary>,
+}
+
+/// Cost summary for workflow runs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowCostSummary {
+    /// Total cost across all runs
+    pub total_cost: Decimal,
+    /// Average cost per run
+    pub average_cost: Decimal,
+    /// Minimum cost per run
+    pub min_cost: Decimal,
+    /// Maximum cost per run
+    pub max_cost: Decimal,
+    /// Total number of tokens used
+    pub total_tokens: u32,
+    /// Average tokens per run
+    pub average_tokens: u32,
+    /// Cost trend over time
+    pub cost_trend: Vec<(DateTime<Utc>, Decimal)>,
+    /// Token efficiency trend over time
+    pub efficiency_trend: Vec<(DateTime<Utc>, f64)>,
+    /// Most expensive action across all runs
+    pub most_expensive_action: Option<String>,
+    /// Most token-intensive action across all runs
+    pub most_token_intensive_action: Option<String>,
 }
 
 /// State execution count for hot state tracking
@@ -110,48 +178,58 @@ pub struct WorkflowSummaryMetrics {
 pub struct StateExecutionCount {
     /// State identifier
     pub state_id: StateId,
-    /// Number of times executed
-    pub execution_count: usize,
-    /// Total time spent in this state
-    pub total_duration: Duration,
-    /// Average time per execution
-    pub average_duration: Duration,
+    /// Number of times this state was executed
+    pub count: usize,
 }
 
-/// Global metrics across all workflows
+/// Global execution statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlobalMetrics {
-    /// Total number of workflow runs
+    /// Total number of workflow runs across all workflows
     pub total_runs: usize,
-    /// Overall success rate (0.0 to 1.0)
-    pub success_rate: f64,
-    /// Total execution time across all runs
-    pub total_execution_time: Duration,
-    /// Average execution time across all runs
-    pub average_execution_time: Duration,
-    /// Number of active workflows
-    pub active_workflows: usize,
-    /// Number of unique workflows executed
-    pub unique_workflows: usize,
+    /// Total number of successful runs
+    pub total_successful_runs: usize,
+    /// Total number of failed runs
+    pub total_failed_runs: usize,
+    /// Total number of cancelled runs
+    pub total_cancelled_runs: usize,
+    /// Average run duration across all workflows
+    pub average_run_duration: Option<Duration>,
     /// System resource usage trends
     pub resource_trends: ResourceTrends,
+    /// Global cost tracking metrics
+    pub cost_metrics: Option<GlobalCostMetrics>,
 }
 
-/// Resource usage trends over time
+/// Global cost tracking metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceTrends {
-    /// Memory usage trend (bytes over time)
-    pub memory_trend: Vec<(DateTime<Utc>, u64)>,
-    /// CPU usage trend (percentage over time)
-    pub cpu_trend: Vec<(DateTime<Utc>, f64)>,
-    /// Throughput trend (runs per hour)
-    pub throughput_trend: Vec<(DateTime<Utc>, f64)>,
+pub struct GlobalCostMetrics {
+    /// Total system cost across all workflows
+    pub total_system_cost: Decimal,
+    /// Average cost per run across all workflows
+    pub average_cost_per_run: Decimal,
+    /// Total tokens used across all workflows
+    pub total_tokens: u32,
+    /// Average tokens per run across all workflows
+    pub average_tokens_per_run: u32,
+    /// System-wide cost efficiency (average output/input ratio)
+    pub system_efficiency_ratio: f64,
+    /// Total API calls across all workflows
+    pub total_api_calls: usize,
+    /// Average cost per API call across system
+    pub average_cost_per_api_call: Decimal,
 }
 
 impl WorkflowMetrics {
-    /// Create a new metrics collector
+    /// Create a new metrics collector with default configuration
     pub fn new() -> Self {
+        Self::with_config(WorkflowMetricsConfig::default())
+    }
+
+    /// Create a new metrics collector with custom configuration
+    pub fn with_config(config: WorkflowMetricsConfig) -> Self {
         Self {
+            config,
             run_metrics: HashMap::new(),
             workflow_metrics: HashMap::new(),
             global_metrics: GlobalMetrics::new(),
@@ -162,25 +240,32 @@ impl WorkflowMetrics {
     pub fn start_run(&mut self, run_id: WorkflowRunId, workflow_name: WorkflowName) {
         // Validate inputs
         if !Self::is_valid_workflow_name(&workflow_name) {
+            warn!(
+                workflow_name = %workflow_name.as_str(),
+                run_id = %run_id,
+                "Attempted to start run with invalid workflow name, ignoring request"
+            );
             return;
         }
         let run_metrics = RunMetrics {
             run_id,
-            workflow_name: workflow_name.clone(),
+            workflow_name,
             started_at: Utc::now(),
             completed_at: None,
             status: WorkflowRunStatus::Running,
-            total_duration: None,
-            state_durations: HashMap::new(),
             transition_count: 0,
-            memory_metrics: MemoryMetrics::new(),
+            duration: None,
+            total_duration: None,
             error_details: None,
+            state_durations: HashMap::new(),
+            memory_metrics: None,
+            cost_metrics: None,
         };
 
         self.run_metrics.insert(run_id, run_metrics);
 
         // Enforce bounds checking - remove oldest run metrics if we exceed the limit
-        if self.run_metrics.len() > MAX_RUN_METRICS {
+        if self.run_metrics.len() > self.config.max_run_metrics {
             self.cleanup_old_run_metrics();
         }
 
@@ -194,21 +279,30 @@ impl WorkflowMetrics {
         state_id: StateId,
         duration: Duration,
     ) {
-        // Validate inputs
-        if !Self::is_valid_state_id(&state_id) {
-            return;
-        }
-
         if let Some(run_metrics) = self.run_metrics.get_mut(run_id) {
-            // Enforce bounds checking - don't allow too many state durations per run
-            if run_metrics.state_durations.len() >= MAX_STATE_DURATIONS_PER_RUN {
-                return;
+            // Keep only the most recent state durations to prevent unbounded growth
+            if run_metrics.state_durations.len() >= self.config.max_state_durations_per_run {
+                // Find and remove the least recently used (oldest timestamp) entry
+                if let Some(lru_state) = run_metrics
+                    .state_durations
+                    .iter()
+                    .min_by_key(|(_, (_, timestamp))| timestamp)
+                    .map(|(state, _)| state.clone())
+                {
+                    run_metrics.state_durations.remove(&lru_state);
+                }
             }
-            run_metrics.state_durations.insert(state_id, duration);
+
+            let now = Utc::now();
+            run_metrics
+                .state_durations
+                .insert(state_id, (duration, now));
+            run_metrics.transition_count += 1;
+            self.update_global_metrics();
         }
     }
 
-    /// Record state transition
+    /// Record a state transition
     pub fn record_transition(&mut self, run_id: &WorkflowRunId) {
         if let Some(run_metrics) = self.run_metrics.get_mut(run_id) {
             run_metrics.transition_count += 1;
@@ -220,34 +314,112 @@ impl WorkflowMetrics {
         &mut self,
         run_id: &WorkflowRunId,
         status: WorkflowRunStatus,
-        error_details: Option<String>,
+        total_duration: Duration,
     ) {
         let workflow_name = if let Some(run_metrics) = self.run_metrics.get_mut(run_id) {
-            let now = Utc::now();
-            run_metrics.completed_at = Some(now);
+            run_metrics.completed_at = Some(Utc::now());
             run_metrics.status = status;
-            run_metrics.error_details = error_details;
-            run_metrics.total_duration = Some(
-                now.signed_duration_since(run_metrics.started_at)
-                    .to_std()
-                    .unwrap_or(Duration::ZERO),
-            );
+            run_metrics.duration = Some(total_duration);
+            run_metrics.total_duration = Some(total_duration);
             run_metrics.workflow_name.clone()
         } else {
             return;
         };
 
-        // Update workflow summary metrics
-        if let Some(run_metrics) = self.run_metrics.get(run_id).cloned() {
-            self.update_workflow_summary(&workflow_name, &run_metrics);
-        }
+        self.update_workflow_summary_metrics(&workflow_name);
         self.update_global_metrics();
     }
 
-    /// Update memory metrics for a run
+    /// Complete a workflow run with error details
+    pub fn complete_run_with_error(
+        &mut self,
+        run_id: &WorkflowRunId,
+        status: WorkflowRunStatus,
+        total_duration: Duration,
+        error_details: Option<String>,
+    ) {
+        let workflow_name = if let Some(run_metrics) = self.run_metrics.get_mut(run_id) {
+            run_metrics.completed_at = Some(Utc::now());
+            run_metrics.status = status;
+            run_metrics.duration = Some(total_duration);
+            run_metrics.total_duration = Some(total_duration);
+            run_metrics.error_details = error_details;
+            run_metrics.workflow_name.clone()
+        } else {
+            return;
+        };
+
+        self.update_workflow_summary_metrics(&workflow_name);
+        self.update_global_metrics();
+    }
+
+    /// Start cost tracking for a run
+    pub fn start_cost_tracking(&mut self, run_id: &WorkflowRunId, session_id: CostSessionId) {
+        if let Some(run_metrics) = self.run_metrics.get_mut(run_id) {
+            run_metrics.cost_metrics = Some(CostMetrics::new(session_id));
+        }
+    }
+
+    /// Complete cost tracking for a run
+    pub fn complete_cost_tracking(&mut self, run_id: &WorkflowRunId) {
+        if let Some(run_metrics) = self.run_metrics.get_mut(run_id) {
+            if let Some(cost_metrics) = &mut run_metrics.cost_metrics {
+                cost_metrics.complete();
+            }
+        }
+    }
+
+    /// Update cost metrics for a run
+    pub fn update_cost_metrics(&mut self, run_id: &WorkflowRunId, cost_metrics: CostMetrics) {
+        // Update cost trends in global resource trends before moving the cost_metrics
+        self.update_cost_trends(&cost_metrics);
+
+        // Now get the mutable reference to run_metrics and update it
+        if let Some(run_metrics) = self.run_metrics.get_mut(run_id) {
+            run_metrics.cost_metrics = Some(cost_metrics);
+        }
+    }
+
+    /// Update cost trends in global resource trends
+    pub fn update_cost_trends(&mut self, cost_metrics: &CostMetrics) {
+        // Add cost trend point
+        self.global_metrics
+            .resource_trends
+            .add_cost_point(cost_metrics.total_cost, self.config.max_trend_data_points);
+
+        // Add token efficiency trend point if available
+        if let Some(efficiency) = cost_metrics.token_efficiency_ratio() {
+            self.global_metrics
+                .resource_trends
+                .add_token_efficiency_point(efficiency, self.config.max_trend_data_points);
+        }
+
+        // Add average cost per call trend point if available
+        if let Some(avg_cost) = cost_metrics.average_cost_per_call() {
+            self.global_metrics
+                .resource_trends
+                .add_avg_cost_per_call_point(avg_cost, self.config.max_trend_data_points);
+        }
+    }
+
+    /// Add action cost to a run's cost metrics
+    pub fn add_action_cost(
+        &mut self,
+        run_id: &WorkflowRunId,
+        action_name: String,
+        breakdown: ActionCostBreakdown,
+    ) {
+        if let Some(run_metrics) = self.run_metrics.get_mut(run_id) {
+            if let Some(cost_metrics) = &mut run_metrics.cost_metrics {
+                cost_metrics.add_action_cost(action_name, breakdown);
+            }
+        }
+    }
+
+    /// Update memory metrics for a specific run
     pub fn update_memory_metrics(&mut self, run_id: &WorkflowRunId, memory_metrics: MemoryMetrics) {
         if let Some(run_metrics) = self.run_metrics.get_mut(run_id) {
-            run_metrics.memory_metrics = memory_metrics;
+            run_metrics.memory_metrics = Some(memory_metrics);
         }
     }
 
@@ -256,8 +428,8 @@ impl WorkflowMetrics {
         self.run_metrics.get(run_id)
     }
 
-    /// Get summary metrics for a workflow
-    pub fn get_workflow_summary(
+    /// Get aggregated metrics for a workflow
+    pub fn get_workflow_metrics(
         &self,
         workflow_name: &WorkflowName,
     ) -> Option<&WorkflowSummaryMetrics> {
@@ -270,157 +442,387 @@ impl WorkflowMetrics {
     }
 
     /// Update workflow summary metrics
-    fn update_workflow_summary(&mut self, workflow_name: &WorkflowName, run_metrics: &RunMetrics) {
-        // Enforce bounds checking for workflow metrics
-        if self.workflow_metrics.len() >= MAX_WORKFLOW_METRICS
-            && !self.workflow_metrics.contains_key(workflow_name)
-        {
-            return; // Skip if we would exceed the limit for a new workflow
+    /// Calculate duration statistics for a set of runs
+    fn calculate_duration_stats(
+        &self,
+        runs: &[&RunMetrics],
+    ) -> (Option<Duration>, Option<Duration>, Option<Duration>, f64) {
+        let durations: Vec<_> = runs.iter().filter_map(|run| run.duration).collect();
+        let average_duration = if !durations.is_empty() {
+            let total_nanos: u64 = durations.iter().map(|d| d.as_nanos() as u64).sum();
+            Some(Duration::from_nanos(total_nanos / durations.len() as u64))
+        } else {
+            None
+        };
+
+        let min_duration = durations.iter().min().copied();
+        let max_duration = durations.iter().max().copied();
+
+        let average_transitions = if !runs.is_empty() {
+            runs.iter().map(|run| run.transition_count).sum::<usize>() as f64 / runs.len() as f64
+        } else {
+            0.0
+        };
+
+        (
+            average_duration,
+            min_duration,
+            max_duration,
+            average_transitions,
+        )
+    }
+
+    /// Calculate hot states (most frequently executed states) from run data
+    fn calculate_hot_states(&self, runs: &[&RunMetrics]) -> Vec<StateExecutionCount> {
+        let mut state_counts: HashMap<StateId, usize> = HashMap::new();
+        for run in runs {
+            for state_id in run.state_durations.keys() {
+                *state_counts.entry(state_id.clone()).or_insert(0) += 1;
+            }
         }
 
-        let summary = self
-            .workflow_metrics
-            .entry(workflow_name.clone())
-            .or_insert_with(|| WorkflowSummaryMetrics::new(workflow_name.clone()));
+        let mut hot_states: Vec<StateExecutionCount> = state_counts
+            .into_iter()
+            .map(|(state_id, count)| StateExecutionCount { state_id, count })
+            .collect();
+        hot_states.sort_by(|a, b| b.count.cmp(&a.count));
+        hot_states.truncate(10); // Keep only top 10
 
-        summary.total_runs += 1;
-        match run_metrics.status {
-            WorkflowRunStatus::Completed => summary.successful_runs += 1,
-            WorkflowRunStatus::Failed => summary.failed_runs += 1,
-            WorkflowRunStatus::Cancelled => summary.cancelled_runs += 1,
-            _ => {}
+        hot_states
+    }
+
+    /// Enforce workflow metrics limits by removing oldest entries
+    fn enforce_workflow_metrics_limits(&mut self) {
+        if self.workflow_metrics.len() > self.config.max_workflow_metrics {
+            let oldest_workflow = self
+                .workflow_metrics
+                .iter()
+                .min_by_key(|(_, metrics)| metrics.last_updated)
+                .map(|(name, _)| name.clone());
+
+            if let Some(oldest) = oldest_workflow {
+                self.workflow_metrics.remove(&oldest);
+            }
+        }
+    }
+
+    fn update_workflow_summary_metrics(&mut self, workflow_name: &WorkflowName) {
+        let runs: Vec<_> = self
+            .run_metrics
+            .values()
+            .filter(|run| &run.workflow_name == workflow_name)
+            .collect();
+
+        if runs.is_empty() {
+            return;
         }
 
-        if let Some(duration) = run_metrics.total_duration {
-            summary.update_duration_stats(duration);
+        let total_runs = runs.len();
+        let successful_runs = runs
+            .iter()
+            .filter(|run| run.status == WorkflowRunStatus::Completed)
+            .count();
+        let failed_runs = runs
+            .iter()
+            .filter(|run| run.status == WorkflowRunStatus::Failed)
+            .count();
+        let cancelled_runs = runs
+            .iter()
+            .filter(|run| run.status == WorkflowRunStatus::Cancelled)
+            .count();
+
+        let (average_duration, min_duration, max_duration, average_transitions) =
+            self.calculate_duration_stats(&runs);
+
+        let hot_states = self.calculate_hot_states(&runs);
+
+        let cost_summary = self.calculate_workflow_cost_summary(&runs);
+
+        let summary = WorkflowSummaryMetrics {
+            workflow_name: workflow_name.clone(),
+            total_runs,
+            successful_runs,
+            failed_runs,
+            cancelled_runs,
+            average_duration,
+            min_duration,
+            max_duration,
+            average_transitions,
+            hot_states,
+            last_updated: Utc::now(),
+            cost_summary,
+        };
+
+        self.workflow_metrics.insert(workflow_name.clone(), summary);
+
+        self.enforce_workflow_metrics_limits();
+    }
+
+    /// Calculate basic cost statistics for workflow runs
+    fn calculate_basic_cost_stats(
+        &self,
+        cost_runs: &[&CostMetrics],
+    ) -> (Decimal, Decimal, Decimal, Decimal, u32, u32) {
+        let total_cost = cost_runs.iter().map(|cm| cm.total_cost).sum::<Decimal>();
+        let total_tokens = cost_runs.iter().map(|cm| cm.total_tokens()).sum::<u32>();
+
+        let average_cost = if !cost_runs.is_empty() {
+            total_cost / Decimal::from(cost_runs.len())
+        } else {
+            Decimal::ZERO
+        };
+
+        let average_tokens = if !cost_runs.is_empty() {
+            total_tokens / cost_runs.len() as u32
+        } else {
+            0
+        };
+
+        let min_cost = cost_runs
+            .iter()
+            .map(|cm| cm.total_cost)
+            .min()
+            .unwrap_or(Decimal::ZERO);
+
+        let max_cost = cost_runs
+            .iter()
+            .map(|cm| cm.total_cost)
+            .max()
+            .unwrap_or(Decimal::ZERO);
+
+        (
+            total_cost,
+            average_cost,
+            min_cost,
+            max_cost,
+            total_tokens,
+            average_tokens,
+        )
+    }
+
+    /// Build cost and efficiency trends from run data
+    fn build_cost_trends(&self, runs: &[&RunMetrics]) -> (CostTrend, PerformanceTrend) {
+        let cost_trend: Vec<_> = runs
+            .iter()
+            .filter_map(|run| {
+                run.cost_metrics
+                    .as_ref()
+                    .and_then(|cm| run.completed_at.map(|completed| (completed, cm.total_cost)))
+            })
+            .collect();
+
+        let efficiency_trend: Vec<_> = runs
+            .iter()
+            .filter_map(|run| {
+                run.cost_metrics.as_ref().and_then(|cm| {
+                    cm.token_efficiency_ratio()
+                        .and_then(|ratio| run.completed_at.map(|completed| (completed, ratio)))
+                })
+            })
+            .collect();
+
+        (cost_trend, efficiency_trend)
+    }
+
+    /// Find the most expensive and most token-intensive actions
+    fn find_most_expensive_actions(
+        &self,
+        cost_runs: &[&CostMetrics],
+    ) -> (Option<String>, Option<String>) {
+        let mut all_actions: HashMap<&str, (Decimal, u32)> = HashMap::new();
+        for cost_metrics in cost_runs {
+            for (action_name, breakdown) in &cost_metrics.cost_by_action {
+                let entry = all_actions
+                    .entry(action_name.as_str())
+                    .or_insert((Decimal::ZERO, 0));
+                entry.0 += breakdown.cost;
+                entry.1 += breakdown.total_tokens();
+            }
         }
 
-        summary.average_transitions = (summary.average_transitions
-            * (summary.total_runs - 1) as f64
-            + run_metrics.transition_count as f64)
-            / summary.total_runs as f64;
-        summary.update_hot_states(&run_metrics.state_durations);
-        summary.last_updated = Utc::now();
+        let most_expensive_action = all_actions
+            .iter()
+            .max_by(|a, b| a.1 .0.cmp(&b.1 .0))
+            .map(|(name, _)| name.to_string());
+
+        let most_token_intensive_action = all_actions
+            .iter()
+            .max_by_key(|&(_, (_, tokens))| tokens)
+            .map(|(name, _)| name.to_string());
+
+        (most_expensive_action, most_token_intensive_action)
+    }
+
+    /// Calculate cost summary for a set of workflow runs
+    fn calculate_workflow_cost_summary(&self, runs: &[&RunMetrics]) -> Option<WorkflowCostSummary> {
+        let cost_runs: Vec<_> = runs
+            .iter()
+            .filter_map(|run| run.cost_metrics.as_ref())
+            .collect();
+
+        if cost_runs.is_empty() {
+            return None;
+        }
+
+        let (total_cost, average_cost, min_cost, max_cost, total_tokens, average_tokens) =
+            self.calculate_basic_cost_stats(&cost_runs);
+
+        let (cost_trend, efficiency_trend) = self.build_cost_trends(runs);
+
+        let (most_expensive_action, most_token_intensive_action) =
+            self.find_most_expensive_actions(&cost_runs);
+
+        Some(WorkflowCostSummary {
+            total_cost,
+            average_cost,
+            min_cost,
+            max_cost,
+            total_tokens,
+            average_tokens,
+            cost_trend,
+            efficiency_trend,
+            most_expensive_action,
+            most_token_intensive_action,
+        })
     }
 
     /// Update global metrics
     fn update_global_metrics(&mut self) {
         let total_runs = self.run_metrics.len();
-        let successful_runs = self
+        let total_successful_runs = self
             .run_metrics
             .values()
-            .filter(|r| r.status == WorkflowRunStatus::Completed)
+            .filter(|run| run.status == WorkflowRunStatus::Completed)
             .count();
-
-        self.global_metrics.total_runs = total_runs;
-        self.global_metrics.success_rate = if total_runs > 0 {
-            successful_runs as f64 / total_runs as f64
-        } else {
-            0.0
-        };
-        self.global_metrics.unique_workflows = self.workflow_metrics.len();
-        self.global_metrics.active_workflows = self
+        let total_failed_runs = self
             .run_metrics
             .values()
-            .filter(|r| r.status == WorkflowRunStatus::Running)
+            .filter(|run| run.status == WorkflowRunStatus::Failed)
+            .count();
+        let total_cancelled_runs = self
+            .run_metrics
+            .values()
+            .filter(|run| run.status == WorkflowRunStatus::Cancelled)
             .count();
 
-        // Calculate total and average execution times
         let completed_runs: Vec<_> = self
             .run_metrics
             .values()
-            .filter_map(|r| r.total_duration)
+            .filter_map(|run| run.duration)
             .collect();
-        if !completed_runs.is_empty() {
-            self.global_metrics.total_execution_time = completed_runs.iter().sum();
-            let total_nanos = completed_runs.iter().map(|d| d.as_nanos()).sum::<u128>();
-            let avg_nanos = total_nanos / completed_runs.len() as u128;
-            self.global_metrics.average_execution_time = Duration::from_nanos(avg_nanos as u64);
+        let average_run_duration = if !completed_runs.is_empty() {
+            let total_nanos: u64 = completed_runs.iter().map(|d| d.as_nanos() as u64).sum();
+            Some(Duration::from_nanos(
+                total_nanos / completed_runs.len() as u64,
+            ))
+        } else {
+            None
+        };
+
+        // Calculate global cost metrics
+        let cost_metrics = self.calculate_global_cost_metrics();
+
+        self.global_metrics = GlobalMetrics {
+            total_runs,
+            total_successful_runs,
+            total_failed_runs,
+            total_cancelled_runs,
+            average_run_duration,
+            resource_trends: self.global_metrics.resource_trends.clone(),
+            cost_metrics,
+        };
+    }
+
+    /// Calculate global cost metrics across all workflow runs
+    fn calculate_global_cost_metrics(&self) -> Option<GlobalCostMetrics> {
+        let cost_runs: Vec<_> = self
+            .run_metrics
+            .values()
+            .filter_map(|run| run.cost_metrics.as_ref())
+            .collect();
+
+        if cost_runs.is_empty() {
+            return None;
         }
+
+        let total_system_cost = cost_runs.iter().map(|cm| cm.total_cost).sum::<Decimal>();
+        let total_tokens = cost_runs.iter().map(|cm| cm.total_tokens()).sum::<u32>();
+        let total_api_calls = cost_runs.iter().map(|cm| cm.api_call_count).sum::<usize>();
+
+        let average_cost_per_run = if !cost_runs.is_empty() {
+            total_system_cost / Decimal::from(cost_runs.len())
+        } else {
+            Decimal::ZERO
+        };
+
+        let average_tokens_per_run = if !cost_runs.is_empty() {
+            total_tokens / cost_runs.len() as u32
+        } else {
+            0
+        };
+
+        let average_cost_per_api_call = if total_api_calls > 0 {
+            total_system_cost / Decimal::from(total_api_calls)
+        } else {
+            Decimal::ZERO
+        };
+
+        // Calculate system-wide efficiency ratio
+        let total_input_tokens = cost_runs
+            .iter()
+            .map(|cm| cm.total_input_tokens)
+            .sum::<u32>();
+        let total_output_tokens = cost_runs
+            .iter()
+            .map(|cm| cm.total_output_tokens)
+            .sum::<u32>();
+
+        let system_efficiency_ratio = if total_input_tokens > 0 {
+            total_output_tokens as f64 / total_input_tokens as f64
+        } else {
+            0.0
+        };
+
+        Some(GlobalCostMetrics {
+            total_system_cost,
+            average_cost_per_run,
+            total_tokens,
+            average_tokens_per_run,
+            system_efficiency_ratio,
+            total_api_calls,
+            average_cost_per_api_call,
+        })
     }
 
     /// Validate workflow name
-    fn is_valid_workflow_name(workflow_name: &WorkflowName) -> bool {
-        !workflow_name.as_str().trim().is_empty()
+    fn is_valid_workflow_name(name: &WorkflowName) -> bool {
+        !name.as_str().trim().is_empty()
     }
+}
 
-    /// Validate state ID
-    fn is_valid_state_id(state_id: &StateId) -> bool {
-        !state_id.as_str().trim().is_empty()
+impl Default for WorkflowMetrics {
+    fn default() -> Self {
+        Self::new()
     }
+}
 
-    /// Clean up old run metrics when limit is exceeded
-    fn cleanup_old_run_metrics(&mut self) {
-        // Find the oldest completed runs and remove them
-        let mut completed_runs: Vec<_> = self
-            .run_metrics
-            .iter()
-            .filter(|(_, run)| run.completed_at.is_some())
-            .map(|(id, run)| (*id, run.completed_at.unwrap()))
-            .collect();
-
-        // Sort by completion time (oldest first)
-        completed_runs.sort_by_key(|(_, completed_at)| *completed_at);
-
-        // Remove the oldest runs to get back under the limit
-        let excess_count = self.run_metrics.len().saturating_sub(MAX_RUN_METRICS);
-        completed_runs
-            .into_iter()
-            .take(excess_count)
-            .for_each(|(run_id, _)| {
-                self.run_metrics.remove(&run_id);
-            });
+impl Default for MemoryMetrics {
+    fn default() -> Self {
+        Self::new()
     }
+}
 
-    /// Comprehensive cleanup of old metrics data
-    pub fn cleanup_old_metrics(&mut self) {
-        let now = Utc::now();
-        let mut removed_runs = 0;
-        let mut removed_workflows = 0;
-
-        // Clean up old completed runs
-        let cutoff_date = now - chrono::Duration::days(MAX_COMPLETED_RUN_AGE_DAYS);
-        let runs_to_remove: Vec<_> = self
-            .run_metrics
-            .iter()
-            .filter(|(_, run)| {
-                if let Some(completed_at) = run.completed_at {
-                    completed_at < cutoff_date
-                } else {
-                    false
-                }
-            })
-            .map(|(id, _)| *id)
-            .collect();
-
-        for run_id in runs_to_remove {
-            self.run_metrics.remove(&run_id);
-            removed_runs += 1;
-        }
-
-        // Clean up old workflow summary metrics
-        let workflow_cutoff_date = now - chrono::Duration::days(MAX_WORKFLOW_SUMMARY_AGE_DAYS);
-        let workflows_to_remove: Vec<_> = self
-            .workflow_metrics
-            .iter()
-            .filter(|(_, summary)| summary.last_updated < workflow_cutoff_date)
-            .map(|(name, _)| name.clone())
-            .collect();
-
-        for workflow_name in workflows_to_remove {
-            self.workflow_metrics.remove(&workflow_name);
-            removed_workflows += 1;
-        }
-
-        // Update global metrics after cleanup
-        self.update_global_metrics();
-
-        if removed_runs > 0 || removed_workflows > 0 {
-            tracing::info!(
-                "Metrics cleanup completed: removed {} old runs and {} old workflow summaries",
-                removed_runs,
-                removed_workflows
-            );
+impl GlobalMetrics {
+    /// Create new global metrics
+    pub fn new() -> Self {
+        Self {
+            total_runs: 0,
+            total_successful_runs: 0,
+            total_failed_runs: 0,
+            total_cancelled_runs: 0,
+            average_run_duration: None,
+            resource_trends: ResourceTrends::new(),
+            cost_metrics: None,
         }
     }
 }
@@ -437,254 +839,33 @@ impl MemoryMetrics {
         }
     }
 
-    /// Update memory metrics
-    pub fn update(&mut self, current_memory: u64, context_vars: usize, history_size: usize) {
-        if current_memory > self.peak_memory_bytes {
-            self.peak_memory_bytes = current_memory;
+    /// Update peak memory if current usage is higher
+    pub fn update_peak_memory(&mut self, current_bytes: u64) {
+        if current_bytes > self.peak_memory_bytes {
+            self.peak_memory_bytes = current_bytes;
         }
+    }
+
+    /// Set final memory usage
+    pub fn set_final_memory(&mut self, bytes: u64) {
+        self.final_memory_bytes = bytes;
+    }
+
+    /// Calculate memory growth
+    pub fn memory_growth(&self) -> i64 {
+        self.final_memory_bytes as i64 - self.initial_memory_bytes as i64
+    }
+
+    /// Update memory metrics with current values
+    pub fn update(&mut self, memory_bytes: u64, context_vars: usize, history_size: usize) {
+        self.update_peak_memory(memory_bytes);
         self.context_variables_count = context_vars;
         self.history_size = history_size;
-    }
-}
-
-impl WorkflowSummaryMetrics {
-    /// Create new workflow summary metrics
-    pub fn new(workflow_name: WorkflowName) -> Self {
-        Self {
-            workflow_name,
-            total_runs: 0,
-            successful_runs: 0,
-            failed_runs: 0,
-            cancelled_runs: 0,
-            average_duration: None,
-            min_duration: None,
-            max_duration: None,
-            average_transitions: 0.0,
-            hot_states: Vec::new(),
-            last_updated: Utc::now(),
-        }
-    }
-
-    /// Update duration statistics
-    fn update_duration_stats(&mut self, duration: Duration) {
-        if let Some(avg) = self.average_duration {
-            let total_nanos = avg.as_nanos() * (self.total_runs - 1) as u128 + duration.as_nanos();
-            let avg_nanos = total_nanos / self.total_runs as u128;
-            self.average_duration = Some(Duration::from_nanos(avg_nanos as u64));
-        } else {
-            self.average_duration = Some(duration);
-        }
-
-        if let Some(min) = self.min_duration {
-            if duration < min {
-                self.min_duration = Some(duration);
-            }
-        } else {
-            self.min_duration = Some(duration);
-        }
-
-        if let Some(max) = self.max_duration {
-            if duration > max {
-                self.max_duration = Some(duration);
-            }
-        } else {
-            self.max_duration = Some(duration);
-        }
-    }
-
-    /// Update hot states tracking
-    fn update_hot_states(&mut self, state_durations: &HashMap<StateId, Duration>) {
-        for (state_id, duration) in state_durations {
-            if let Some(state_count) = self.hot_states.iter_mut().find(|s| s.state_id == *state_id)
-            {
-                state_count.execution_count += 1;
-                state_count.total_duration += *duration;
-                let avg_nanos =
-                    state_count.total_duration.as_nanos() / state_count.execution_count as u128;
-                state_count.average_duration = Duration::from_nanos(avg_nanos as u64);
-            } else {
-                self.hot_states.push(StateExecutionCount {
-                    state_id: state_id.clone(),
-                    execution_count: 1,
-                    total_duration: *duration,
-                    average_duration: *duration,
-                });
-            }
-        }
-
-        // Sort by execution count (descending) and keep top 10
-        self.hot_states
-            .sort_by(|a, b| b.execution_count.cmp(&a.execution_count));
-        self.hot_states.truncate(10);
-    }
-
-    /// Get success rate for this workflow
-    pub fn success_rate(&self) -> f64 {
-        if self.total_runs > 0 {
-            self.successful_runs as f64 / self.total_runs as f64
-        } else {
-            0.0
-        }
-    }
-}
-
-impl GlobalMetrics {
-    /// Create new global metrics
-    pub fn new() -> Self {
-        Self {
-            total_runs: 0,
-            success_rate: 0.0,
-            total_execution_time: Duration::ZERO,
-            average_execution_time: Duration::ZERO,
-            active_workflows: 0,
-            unique_workflows: 0,
-            resource_trends: ResourceTrends::new(),
-        }
     }
 }
 
 impl Default for GlobalMetrics {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl ResourceTrends {
-    /// Create new resource trends
-    pub fn new() -> Self {
-        Self {
-            memory_trend: Vec::new(),
-            cpu_trend: Vec::new(),
-            throughput_trend: Vec::new(),
-        }
-    }
-
-    /// Add memory usage data point
-    pub fn add_memory_point(&mut self, memory_bytes: u64) {
-        self.memory_trend.push((Utc::now(), memory_bytes));
-        // Keep only last MAX_TREND_DATA_POINTS data points
-        if self.memory_trend.len() > MAX_TREND_DATA_POINTS {
-            self.memory_trend.remove(0);
-        }
-    }
-
-    /// Add CPU usage data point
-    pub fn add_cpu_point(&mut self, cpu_percentage: f64) {
-        self.cpu_trend.push((Utc::now(), cpu_percentage));
-        // Keep only last MAX_TREND_DATA_POINTS data points
-        if self.cpu_trend.len() > MAX_TREND_DATA_POINTS {
-            self.cpu_trend.remove(0);
-        }
-    }
-
-    /// Add throughput data point
-    pub fn add_throughput_point(&mut self, runs_per_hour: f64) {
-        self.throughput_trend.push((Utc::now(), runs_per_hour));
-        // Keep only last MAX_TREND_DATA_POINTS data points
-        if self.throughput_trend.len() > MAX_TREND_DATA_POINTS {
-            self.throughput_trend.remove(0);
-        }
-    }
-}
-
-impl Default for WorkflowMetrics {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Default for MemoryMetrics {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Default for ResourceTrends {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::workflow::{StateId, WorkflowName, WorkflowRunId, WorkflowRunStatus};
-    use std::time::Duration;
-
-    #[test]
-    fn test_workflow_metrics_new() {
-        let metrics = WorkflowMetrics::new();
-
-        assert_eq!(metrics.run_metrics.len(), 0);
-        assert_eq!(metrics.workflow_metrics.len(), 0);
-        assert_eq!(metrics.global_metrics.total_runs, 0);
-        assert_eq!(metrics.global_metrics.success_rate, 0.0);
-    }
-
-    #[test]
-    fn test_start_run() {
-        let mut metrics = WorkflowMetrics::new();
-        let run_id = WorkflowRunId::new();
-        let workflow_name = WorkflowName::new("test_workflow");
-
-        metrics.start_run(run_id, workflow_name.clone());
-
-        assert_eq!(metrics.run_metrics.len(), 1);
-        assert!(metrics.run_metrics.contains_key(&run_id));
-
-        let run_metrics = metrics
-            .run_metrics
-            .get(&run_id)
-            .expect("Run metrics should exist after start_run");
-        assert_eq!(run_metrics.workflow_name, workflow_name);
-        assert_eq!(run_metrics.status, WorkflowRunStatus::Running);
-        assert_eq!(run_metrics.transition_count, 0);
-    }
-
-    #[test]
-    fn test_record_state_execution() {
-        let mut metrics = WorkflowMetrics::new();
-        let run_id = WorkflowRunId::new();
-        let workflow_name = WorkflowName::new("test_workflow");
-
-        metrics.start_run(run_id, workflow_name);
-
-        let state_id = StateId::new("test_state");
-        let duration = Duration::from_secs(2);
-
-        metrics.record_state_execution(&run_id, state_id.clone(), duration);
-
-        let run_metrics = metrics
-            .run_metrics
-            .get(&run_id)
-            .expect("Run metrics should exist after start_run");
-        assert_eq!(run_metrics.state_durations.get(&state_id), Some(&duration));
-    }
-
-    #[test]
-    fn test_memory_metrics() {
-        let mut memory_metrics = MemoryMetrics::new();
-
-        assert_eq!(memory_metrics.peak_memory_bytes, 0);
-        assert_eq!(memory_metrics.context_variables_count, 0);
-        assert_eq!(memory_metrics.history_size, 0);
-
-        // Update memory metrics
-        memory_metrics.update(1024, 5, 10);
-        assert_eq!(memory_metrics.peak_memory_bytes, 1024);
-        assert_eq!(memory_metrics.context_variables_count, 5);
-        assert_eq!(memory_metrics.history_size, 10);
-
-        // Update with higher memory - should update peak
-        memory_metrics.update(2048, 8, 15);
-        assert_eq!(memory_metrics.peak_memory_bytes, 2048);
-        assert_eq!(memory_metrics.context_variables_count, 8);
-        assert_eq!(memory_metrics.history_size, 15);
-
-        // Update with lower memory - should not update peak
-        memory_metrics.update(512, 3, 5);
-        assert_eq!(memory_metrics.peak_memory_bytes, 2048); // Still the peak
-        assert_eq!(memory_metrics.context_variables_count, 3);
-        assert_eq!(memory_metrics.history_size, 5);
     }
 }

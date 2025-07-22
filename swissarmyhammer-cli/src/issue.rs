@@ -1,6 +1,7 @@
 use crate::cli::IssueCommands;
 use colored::*;
 use std::io::{self, Read};
+use swissarmyhammer::config::Config;
 use swissarmyhammer::git::GitOperations;
 use swissarmyhammer::issues::{FileSystemIssueStorage, IssueStorage};
 
@@ -15,6 +16,7 @@ fn format_issue_status(completed: bool) -> colored::ColoredString {
 pub async fn handle_issue_command(
     command: IssueCommands,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let config = Config::new();
     let storage = FileSystemIssueStorage::new_default()?;
 
     match command {
@@ -47,16 +49,16 @@ pub async fn handle_issue_command(
             complete_issue(storage, number).await?;
         }
         IssueCommands::Work { number } => {
-            work_issue(storage, number).await?;
+            work_issue(storage, &config, number).await?;
         }
         IssueCommands::Merge {
             number,
             keep_branch,
         } => {
-            merge_issue(storage, number, keep_branch).await?;
+            merge_issue(storage, &config, number, keep_branch).await?;
         }
         IssueCommands::Current => {
-            show_current_issue(storage).await?;
+            show_current_issue(storage, &config).await?;
         }
         IssueCommands::Status => {
             show_status(storage).await?;
@@ -295,6 +297,7 @@ async fn complete_issue(
 
 async fn work_issue(
     storage: FileSystemIssueStorage,
+    config: &Config,
     number: u32,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let issue = storage.get_issue(number).await?;
@@ -307,7 +310,7 @@ async fn work_issue(
         return Ok(());
     }
 
-    let git_ops = GitOperations::new()?;
+    let git_ops = GitOperations::new(config)?;
     let branch_identifier = format!("{:06}_{}", issue.number, issue.name);
     let branch_name = git_ops.create_work_branch(&branch_identifier)?;
 
@@ -325,6 +328,7 @@ async fn work_issue(
 
 async fn merge_issue(
     storage: FileSystemIssueStorage,
+    config: &Config,
     number: u32,
     keep_branch: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -339,7 +343,7 @@ async fn merge_issue(
         return Ok(());
     }
 
-    let git_ops = GitOperations::new()?;
+    let git_ops = GitOperations::new(config)?;
     let branch_identifier = format!("{:06}_{}", issue.number, issue.name);
 
     git_ops.merge_issue_branch(&branch_identifier)?;
@@ -364,8 +368,9 @@ async fn merge_issue(
 
 async fn show_current_issue(
     storage: FileSystemIssueStorage,
+    config: &Config,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let git_ops = GitOperations::new()?;
+    let git_ops = GitOperations::new(config)?;
     let current_branch = git_ops.current_branch()?;
 
     if current_branch.starts_with("issue/") {

@@ -1,0 +1,23 @@
+# Example SwissArmyHammer configuration file
+# Place this file as 'swissarmyhammer.yaml' in your repository root
+
+# Base branch that pull requests will merge into
+# This is the target branch for all PRs created by SwissArmyHammer
+base_branch: "main"
+
+# Prefix for issue branches
+# This determines how issue branches are named
+issue_branch_prefix: "issue/"
+
+# Width for issue numbers in display
+# Controls padding for issue numbers in output
+issue_number_width: 6
+
+# You can also customize these values for your workflow:
+# Examples:
+# base_branch: "develop"             # For GitFlow development workflow
+# base_branch: "master"              # For legacy repositories
+# base_branch: "release/v2"          # For release-branch workflows
+# issue_branch_prefix: "feature/"    # Use "feature/" prefix instead
+# issue_branch_prefix: "bug/"        # Use "bug/" for bug-focused workflows
+# issue_number_width: 8              # Use wider padding for larger issue numbers

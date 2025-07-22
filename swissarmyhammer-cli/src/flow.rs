@@ -937,17 +937,21 @@ async fn metrics_workflow_command(
                 println!("📊 Global Workflow Metrics");
                 println!("========================");
                 println!("Total runs: {}", global_metrics.total_runs);
-                println!("Success rate: {:.2}%", global_metrics.success_rate * 100.0);
+                let success_rate = if global_metrics.total_runs > 0 {
+                    global_metrics.total_successful_runs as f64 / global_metrics.total_runs as f64
+                } else {
+                    0.0
+                };
+                println!("Success rate: {:.2}%", success_rate * 100.0);
                 println!(
                     "Average execution time: {:.2}s",
-                    global_metrics.average_execution_time.as_secs_f64()
+                    global_metrics
+                        .average_run_duration
+                        .map(|d| d.as_secs_f64())
+                        .unwrap_or(0.0)
                 );
-                println!(
-                    "Total execution time: {:.2}s",
-                    global_metrics.total_execution_time.as_secs_f64()
-                );
-                println!("Active workflows: {}", global_metrics.active_workflows);
-                println!("Unique workflows: {}", global_metrics.unique_workflows);
+                // Total execution time is not available in current metrics
+                // Active and unique workflows are not tracked in current metrics
             }
             OutputFormat::Json => {
                 let json_output = serde_json::to_string_pretty(&global_metrics)?;
@@ -980,7 +984,7 @@ async fn metrics_workflow_command(
                     }
                     println!("Transitions: {}", run_metrics.transition_count);
                     println!("State execution times:");
-                    for (state_id, duration) in &run_metrics.state_durations {
+                    for (state_id, (duration, _)) in &run_metrics.state_durations {
                         println!("  {}: {:.2}s", state_id, duration.as_secs_f64());
                     }
                 }
@@ -1000,17 +1004,19 @@ async fn metrics_workflow_command(
         // Show metrics for specific workflow
         let workflow_name_typed = WorkflowName::new(&workflow_name);
 
-        if let Some(workflow_metrics) = metrics.get_workflow_summary(&workflow_name_typed) {
+        if let Some(workflow_metrics) = metrics.get_workflow_metrics(&workflow_name_typed) {
             match format {
                 OutputFormat::Table => {
                     println!("📊 Workflow Metrics: {workflow_name}");
                     println!("Total runs: {}", workflow_metrics.total_runs);
                     println!("Successful runs: {}", workflow_metrics.successful_runs);
                     println!("Failed runs: {}", workflow_metrics.failed_runs);
-                    println!(
-                        "Success rate: {:.2}%",
-                        workflow_metrics.success_rate() * 100.0
-                    );
+                    let success_rate = if workflow_metrics.total_runs > 0 {
+                        workflow_metrics.successful_runs as f64 / workflow_metrics.total_runs as f64
+                    } else {
+                        0.0
+                    };
+                    println!("Success rate: {:.2}%", success_rate * 100.0);
                     if let Some(avg_duration) = workflow_metrics.average_duration {
                         println!("Average duration: {:.2}s", avg_duration.as_secs_f64());
                     }
@@ -1029,10 +1035,8 @@ async fn metrics_workflow_command(
                         println!("Hot states:");
                         for state_count in &workflow_metrics.hot_states {
                             println!(
-                                "  {}: {} executions ({:.2}s avg)",
-                                state_count.state_id,
-                                state_count.execution_count,
-                                state_count.average_duration.as_secs_f64()
+                                "  {}: {} executions",
+                                state_count.state_id, state_count.count
                             );
                         }
                     }

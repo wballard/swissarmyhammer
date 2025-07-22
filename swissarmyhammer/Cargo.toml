@@ -41,6 +41,7 @@ dashmap = { workspace = true }
 regex = { workspace = true }
 chrono = { workspace = true }
 ulid = { version = "1.1", features = ["serde"] }
+rust_decimal = { version = "1.36", features = ["serde", "macros"] }
 
 # Search functionality
 tantivy = { workspace = true }
@@ -68,9 +69,21 @@ rayon = "1.8"
 base64 = "0.22"
 which = "8.0.0"
 
+# Financial calculations (already included above)
+
+# Text processing
+unicode-normalization = "0.1"
+
+# Database (optional SQLite for cost analytics)
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "json", "rust_decimal"], optional = true }
+
 # Syntax highlighting
 syntect = { workspace = true }
 
+
+[features]
+default = []
+database = ["sqlx"]
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -78,6 +91,7 @@ proptest = { workspace = true }
 criterion = { workspace = true }
 serial_test = { workspace = true }
 futures = "0.3"
+tokio-test = "0.4"
 
 [lib]
 name = "swissarmyhammer"

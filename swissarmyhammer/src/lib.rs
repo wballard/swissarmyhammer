@@ -91,6 +91,9 @@ pub mod fs_utils;
 /// Validation framework for checking content integrity
 pub mod validation;
 
+/// Cost tracking system for API call monitoring
+pub mod cost;
+
 // Re-export core types
 pub use file_loader::FileSource;
 pub use fs_utils::{FileSystem, FileSystemUtils};
@@ -136,14 +139,19 @@ pub mod prelude {
         State, StateId, Transition, Workflow, WorkflowName, WorkflowRun, WorkflowRunId,
         WorkflowRunStatus,
     };
-    
+
+    pub use crate::cost::{
+        ApiCall, ApiCallId, ApiCallStatus, CostError, CostSession, CostSessionId,
+        CostSessionStatus, CostTracker, IssueId,
+    };
+
     // Common utilities for easy access
     pub use crate::common::{
-        error_context::IoResultExt,
         env_loader::EnvLoader,
+        error_context::IoResultExt,
         file_types::{is_prompt_file, ExtensionMatcher},
-        mcp_errors::{ToSwissArmyHammerError, McpResultExt},
-        validation_builders::{ValidationErrorBuilder, ValidationChain, quick},
+        mcp_errors::{McpResultExt, ToSwissArmyHammerError},
+        validation_builders::{quick, ValidationChain, ValidationErrorBuilder},
     };
 }
 

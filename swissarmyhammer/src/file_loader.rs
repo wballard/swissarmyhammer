@@ -327,14 +327,16 @@ impl VirtualFileSystem {
 
     /// Load local files by walking up the directory tree
     fn load_local_files(&mut self) -> Result<()> {
-        let current_dir = std::env::current_dir()?;
+        if let Ok(current_dir) = std::env::current_dir() {
+            // Find all .swissarmyhammer directories from current to root, excluding home
+            let directories = find_swissarmyhammer_dirs_upward(&current_dir, true);
 
-        // Find all .swissarmyhammer directories from current to root, excluding home
-        let directories = find_swissarmyhammer_dirs_upward(&current_dir, true);
-
-        // Load directories (already in root-to-current order)
-        for dir in directories {
-            self.load_directory(&dir, FileSource::Local)?;
+            // Load directories (already in root-to-current order)
+            for dir in directories {
+                self.load_directory(&dir, FileSource::Local)?;
+            }
+        } else {
+            tracing::debug!("Unable to get current directory, skipping local file loading");
         }
 
         Ok(())
@@ -352,16 +354,19 @@ impl VirtualFileSystem {
             }
         }
 
-        // Local directories
-        let current_dir = std::env::current_dir()?;
-        let swissarmyhammer_dirs = find_swissarmyhammer_dirs_upward(&current_dir, true);
+        // Local directories - handle current_dir failure gracefully
+        if let Ok(current_dir) = std::env::current_dir() {
+            let swissarmyhammer_dirs = find_swissarmyhammer_dirs_upward(&current_dir, true);
 
-        // Add subdirectories that exist
-        for dir in swissarmyhammer_dirs {
-            let subdir = dir.join(&self.subdirectory);
-            if subdir.exists() && subdir.is_dir() {
-                directories.push(subdir);
+            // Add subdirectories that exist
+            for dir in swissarmyhammer_dirs {
+                let subdir = dir.join(&self.subdirectory);
+                if subdir.exists() && subdir.is_dir() {
+                    directories.push(subdir);
+                }
             }
+        } else {
+            tracing::debug!("Unable to get current directory, skipping local directory search");
         }
 
         Ok(directories)

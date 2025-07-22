@@ -1,0 +1,614 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Troubleshooting - SwissArmyHammer Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Complete guide to using SwissArmyHammer - the MCP server for managing prompts">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">SwissArmyHammer Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/cost-tracking-troubleshooting.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="cost-tracking-troubleshooting-guide"><a class="header" href="#cost-tracking-troubleshooting-guide">Cost Tracking Troubleshooting Guide</a></h1>
+<p>This guide helps you diagnose and resolve common issues with SwissArmyHammer’s cost tracking system.</p>
+<h2 id="quick-diagnostics"><a class="header" href="#quick-diagnostics">Quick Diagnostics</a></h2>
+<h3 id="check-cost-tracking-status"><a class="header" href="#check-cost-tracking-status">Check Cost Tracking Status</a></h3>
+<p>Run the diagnostic command to see current status:</p>
+<pre><code class="language-bash">swissarmyhammer doctor
+</code></pre>
+<p>Look for the cost tracking section in the output:</p>
+<pre><code>✓ Cost tracking: enabled
+  - Pricing model: paid
+  - Current sessions: 2 active
+  - Database: disabled
+  - Last cleanup: 2024-01-15 10:30:00 UTC
+</code></pre>
+<h2 id="common-issues-and-solutions"><a class="header" href="#common-issues-and-solutions">Common Issues and Solutions</a></h2>
+<h3 id="issue-cost-tracking-not-working"><a class="header" href="#issue-cost-tracking-not-working">Issue: Cost Tracking Not Working</a></h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>No cost analysis appears in completed issues</li>
+<li><code>swissarmyhammer doctor</code> shows “Cost tracking: disabled”</li>
+</ul>
+<p><strong>Solution 1: Enable Cost Tracking</strong></p>
+<p>Check your <code>swissarmyhammer.yaml</code> file:</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true  # Must be explicitly set to true
+  pricing_model: "paid"
+  rates:
+    input_token_cost: 0.000015
+    output_token_cost: 0.000075
+</code></pre>
+<p><strong>Solution 2: Verify Configuration File Location</strong></p>
+<p>Ensure SwissArmyHammer is reading your config file:</p>
+<pre><code class="language-bash"># Check current config
+swissarmyhammer doctor --verbose
+
+# Specify config file explicitly  
+swissarmyhammer --config ./swissarmyhammer.yaml doctor
+</code></pre>
+<p><strong>Solution 3: Check Environment Variables</strong></p>
+<p>Environment variables override config file settings:</p>
+<pre><code class="language-bash"># Check for conflicting environment variables
+env | grep SAH_COST
+
+# If you see SAH_COST_TRACKING_ENABLED=false, either:
+unset SAH_COST_TRACKING_ENABLED
+# Or set it properly:
+export SAH_COST_TRACKING_ENABLED=true
+</code></pre>
+<h3 id="issue-invalid-pricing-model-error"><a class="header" href="#issue-invalid-pricing-model-error">Issue: “Invalid pricing model” Error</a></h3>
+<p><strong>Symptoms:</strong></p>
+<pre><code>Error: Invalid pricing model 'payed'. Must be 'paid' or 'max'
+</code></pre>
+<p><strong>Solution:</strong></p>
+<p>Fix the spelling in your configuration:</p>
+<pre><code class="language-yaml">cost_tracking:
+  pricing_model: "paid"  # Not "payed", "Pay", or "PAID"
+</code></pre>
+<p>Valid options are exactly:</p>
+<ul>
+<li><code>"paid"</code> - for users on paid Claude plans</li>
+<li><code>"max"</code> - for unlimited plan users</li>
+</ul>
+<h3 id="issue-missing-token-costs"><a class="header" href="#issue-missing-token-costs">Issue: Missing Token Costs</a></h3>
+<p><strong>Symptoms:</strong></p>
+<pre><code>Error: Pricing rates required when pricing_model is 'paid'
+</code></pre>
+<p><strong>Solution:</strong></p>
+<p>Add the required <code>rates</code> section:</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+  rates:  # This section is required for "paid" model
+    input_token_cost: 0.000015
+    output_token_cost: 0.000075
+</code></pre>
+<p>For unlimited plans, use:</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "max"  # No rates section needed
+</code></pre>
+<h3 id="issue-cost-reports-not-appearing-in-issues"><a class="header" href="#issue-cost-reports-not-appearing-in-issues">Issue: Cost Reports Not Appearing in Issues</a></h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>Cost tracking is enabled and working</li>
+<li>Issues complete successfully but no cost section appears</li>
+</ul>
+<p><strong>Solution 1: Check Reporting Settings</strong></p>
+<p>Ensure reporting is enabled:</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+  rates:
+    input_token_cost: 0.000015
+    output_token_cost: 0.000075
+  reporting:
+    include_in_issues: true  # Must be true
+</code></pre>
+<p><strong>Solution 2: Verify Issue Completion</strong></p>
+<p>Cost reports are only added to <em>completed</em> issues. Check that:</p>
+<ol>
+<li>Your issue workflow completed successfully</li>
+<li>The issue file exists and is writable</li>
+<li>No errors occurred during issue processing</li>
+</ol>
+<p><strong>Solution 3: Check File Permissions</strong></p>
+<p>Ensure SwissArmyHammer can write to the issue file:</p>
+<pre><code class="language-bash"># Check file permissions
+ls -la your-issue.md
+
+# Fix permissions if needed
+chmod 644 your-issue.md
+</code></pre>
+<h3 id="issue-incorrect-cost-calculations"><a class="header" href="#issue-incorrect-cost-calculations">Issue: Incorrect Cost Calculations</a></h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>Costs seem too high or too low</li>
+<li>Token counts don’t match expectations</li>
+</ul>
+<p><strong>Solution 1: Verify Token Rates</strong></p>
+<p>Check you’re using the correct rates for your Claude plan:</p>
+<div class="table-wrapper"><table><thead><tr><th>Model</th><th>Input (per million)</th><th>Output (per million)</th><th>Config Values</th></tr></thead><tbody>
+<tr><td>Sonnet</td><td>$15</td><td>$75</td><td><code>0.000015</code> / <code>0.000075</code></td></tr>
+<tr><td>Opus</td><td>$75</td><td>$375</td><td><code>0.000075</code> / <code>0.000375</code></td></tr>
+<tr><td>Haiku</td><td>$2.50</td><td>$12.50</td><td><code>0.0000025</code> / <code>0.0000125</code></td></tr>
+</tbody></table>
+</div>
+<p><strong>Solution 2: Enable Detailed Breakdown</strong></p>
+<p>Get more visibility into calculations:</p>
+<pre><code class="language-yaml">cost_tracking:
+  reporting:
+    detailed_breakdown: true  # Shows per-API-call costs
+    include_performance_metrics: true  # Shows token efficiency
+</code></pre>
+<p><strong>Solution 3: Check Token Counting</strong></p>
+<p>Enable debug logging to see token extraction:</p>
+<pre><code class="language-bash">RUST_LOG=debug swissarmyhammer issue work your-issue.md
+</code></pre>
+<p>Look for log entries about token counting and API response parsing.</p>
+<h3 id="issue-database-errors"><a class="header" href="#issue-database-errors">Issue: Database Errors</a></h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>“Database connection failed” errors</li>
+<li>“Unable to create cost database” messages</li>
+</ul>
+<p><strong>Solution 1: Check Database Configuration</strong></p>
+<p>Verify database settings:</p>
+<pre><code class="language-yaml">cost_tracking:
+  database:
+    enabled: true
+    file_path: "./costs.db"  # Ensure directory exists and is writable
+    connection_timeout_seconds: 30
+</code></pre>
+<p><strong>Solution 2: Create Database Directory</strong></p>
+<p>Ensure the database directory exists:</p>
+<pre><code class="language-bash"># If file_path is "./data/costs.db"
+mkdir -p ./data
+
+# Check permissions
+ls -ld ./data
+</code></pre>
+<p><strong>Solution 3: Disable Database Temporarily</strong></p>
+<p>If database issues persist, disable it temporarily:</p>
+<pre><code class="language-yaml">cost_tracking:
+  database:
+    enabled: false  # Cost tracking will work without database
+</code></pre>
+<p><strong>Solution 4: Reset Database</strong></p>
+<p>If database is corrupted:</p>
+<pre><code class="language-bash"># Backup first (if needed)
+cp costs.db costs.db.backup
+
+# Remove corrupted database
+rm costs.db
+
+# SwissArmyHammer will recreate it on next run
+</code></pre>
+<h3 id="issue-high-memory-usage"><a class="header" href="#issue-high-memory-usage">Issue: High Memory Usage</a></h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>SwissArmyHammer using excessive memory</li>
+<li>System becoming slow during issue processing</li>
+</ul>
+<p><strong>Solution 1: Reduce Session Limits</strong></p>
+<p>Lower memory usage by reducing session retention:</p>
+<pre><code class="language-yaml">cost_tracking:
+  session_management:
+    max_concurrent_sessions: 50     # Reduce from default 100
+    max_api_calls_per_session: 200  # Reduce from default 500
+    session_timeout_hours: 12       # Reduce from default 24
+</code></pre>
+<p><strong>Solution 2: Enable Database Storage</strong></p>
+<p>Move cost data from memory to disk:</p>
+<pre><code class="language-yaml">cost_tracking:
+  database:
+    enabled: true  # Moves long-term storage to SQLite
+</code></pre>
+<p><strong>Solution 3: Increase Cleanup Frequency</strong></p>
+<p>Clean up old data more often:</p>
+<pre><code class="language-yaml">cost_tracking:
+  session_management:
+    cleanup_interval_hours: 2  # Clean up every 2 hours instead of 6
+</code></pre>
+<p><strong>Solution 4: Disable Aggregation</strong></p>
+<p>Disable memory-intensive features:</p>
+<pre><code class="language-yaml">cost_tracking:
+  aggregation:
+    enabled: false  # Disables cross-issue analytics
+</code></pre>
+<h3 id="issue-slow-performance"><a class="header" href="#issue-slow-performance">Issue: Slow Performance</a></h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>Issue processing slower than expected</li>
+<li>Long delays when starting/completing issues</li>
+</ul>
+<p><strong>Solution 1: Optimize Reporting</strong></p>
+<p>Reduce reporting overhead:</p>
+<pre><code class="language-yaml">cost_tracking:
+  reporting:
+    detailed_breakdown: false  # Skip detailed API call tables
+    include_performance_metrics: false  # Skip performance calculations
+</code></pre>
+<p><strong>Solution 2: Increase Database Timeouts</strong></p>
+<p>If using database, increase timeouts:</p>
+<pre><code class="language-yaml">cost_tracking:
+  database:
+    connection_timeout_seconds: 60  # Increase from default 30
+    max_connections: 20             # Increase from default 10
+</code></pre>
+<p><strong>Solution 3: Disable Features Temporarily</strong></p>
+<p>For debugging, disable cost tracking entirely:</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: false
+</code></pre>
+<p>Then re-enable with minimal configuration once performance is acceptable.</p>
+<h3 id="issue-configuration-validation-errors"><a class="header" href="#issue-configuration-validation-errors">Issue: Configuration Validation Errors</a></h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>SwissArmyHammer won’t start</li>
+<li>Configuration validation errors on startup</li>
+</ul>
+<p><strong>Solution 1: Check YAML Syntax</strong></p>
+<p>Validate your YAML file:</p>
+<pre><code class="language-bash"># Use a YAML validator
+python -c "import yaml; yaml.safe_load(open('swissarmyhammer.yaml'))"
+
+# Or use an online YAML validator
+</code></pre>
+<p><strong>Solution 2: Check Value Ranges</strong></p>
+<p>Common validation failures:</p>
+<pre><code class="language-yaml">cost_tracking:
+  rates:
+    input_token_cost: 0.000015   # Must be &gt; 0 and &lt; 1.0
+    output_token_cost: 0.000075  # Must be &gt; 0 and &lt; 1.0
+  session_management:
+    max_concurrent_sessions: 100 # Must be 1-10,000
+    session_timeout_hours: 24    # Must be 1-168
+</code></pre>
+<p><strong>Solution 3: Use Default Values</strong></p>
+<p>Start with minimal valid configuration:</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: true
+  pricing_model: "paid"
+  rates:
+    input_token_cost: 0.000015
+    output_token_cost: 0.000075
+</code></pre>
+<p>Add additional options after confirming basic setup works.</p>
+<h2 id="advanced-troubleshooting"><a class="header" href="#advanced-troubleshooting">Advanced Troubleshooting</a></h2>
+<h3 id="enable-debug-logging"><a class="header" href="#enable-debug-logging">Enable Debug Logging</a></h3>
+<p>For detailed troubleshooting information:</p>
+<pre><code class="language-bash">RUST_LOG=swissarmyhammer::cost=debug swissarmyhammer issue work your-issue.md
+</code></pre>
+<p>This shows detailed logs for:</p>
+<ul>
+<li>Cost session creation and management</li>
+<li>API call recording and token extraction</li>
+<li>Cost calculations and formatting</li>
+<li>Database operations (if enabled)</li>
+</ul>
+<h3 id="check-system-resources"><a class="header" href="#check-system-resources">Check System Resources</a></h3>
+<p>Monitor resource usage during cost tracking:</p>
+<pre><code class="language-bash"># Monitor memory usage
+top -p $(pgrep swissarmyhammer)
+
+# Check disk space (if using database)
+df -h .
+
+# Monitor file descriptors  
+lsof -p $(pgrep swissarmyhammer) | wc -l
+</code></pre>
+<h3 id="validate-token-extraction"><a class="header" href="#validate-token-extraction">Validate Token Extraction</a></h3>
+<p>Test token counting with a simple API call:</p>
+<pre><code class="language-bash"># Enable token counting debug logs
+RUST_LOG=swissarmyhammer::cost::token_counter=trace swissarmyhammer issue work test-issue.md
+</code></pre>
+<p>Look for log entries showing:</p>
+<ul>
+<li>Raw API response parsing</li>
+<li>Token count extraction attempts</li>
+<li>Validation against estimated counts</li>
+</ul>
+<h3 id="database-inspection"><a class="header" href="#database-inspection">Database Inspection</a></h3>
+<p>If using SQLite database, inspect the data:</p>
+<pre><code class="language-bash"># Open database
+sqlite3 costs.db
+
+# Check tables
+.tables
+
+# View recent sessions
+SELECT * FROM cost_sessions ORDER BY started_at DESC LIMIT 10;
+
+# View API calls
+SELECT * FROM api_calls ORDER BY started_at DESC LIMIT 10;
+
+# Exit
+.quit
+</code></pre>
+<h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
+<h3 id="before-asking-for-help"><a class="header" href="#before-asking-for-help">Before Asking for Help</a></h3>
+<ol>
+<li><strong>Run <code>swissarmyhammer doctor</code></strong> and include the output</li>
+<li><strong>Check recent logs</strong> with debug logging enabled</li>
+<li><strong>Test with minimal configuration</strong> to isolate the issue</li>
+<li><strong>Verify your SwissArmyHammer version</strong> is current</li>
+</ol>
+<h3 id="information-to-provide"><a class="header" href="#information-to-provide">Information to Provide</a></h3>
+<p>When reporting issues, include:</p>
+<ul>
+<li><strong>SwissArmyHammer version</strong>: <code>swissarmyhammer --version</code></li>
+<li><strong>Operating system and version</strong></li>
+<li><strong>Full configuration file</strong> (redact sensitive values)</li>
+<li><strong>Complete error message</strong> and stack trace if available</li>
+<li><strong>Debug logs</strong> for the failing operation</li>
+<li><strong>Steps to reproduce</strong> the issue</li>
+</ul>
+<h3 id="common-support-scenarios"><a class="header" href="#common-support-scenarios">Common Support Scenarios</a></h3>
+<p><strong>Performance Issues:</strong></p>
+<ul>
+<li>System specs (CPU, RAM, disk)</li>
+<li>Number of concurrent issues being processed</li>
+<li>Database file size (if using database)</li>
+<li>Sample issue complexity and API call counts</li>
+</ul>
+<p><strong>Configuration Issues:</strong></p>
+<ul>
+<li>Full <code>swissarmyhammer.yaml</code> content</li>
+<li>Environment variables (relevant SAH_COST_* variables)</li>
+<li>File permissions and ownership</li>
+<li>Directory structure where SwissArmyHammer is running</li>
+</ul>
+<p><strong>Cost Calculation Issues:</strong></p>
+<ul>
+<li>Expected vs actual costs</li>
+<li>Claude plan type and pricing tier</li>
+<li>Sample API responses (if possible)</li>
+<li>Token counting debug logs</li>
+</ul>
+<h3 id="emergency-troubleshooting"><a class="header" href="#emergency-troubleshooting">Emergency Troubleshooting</a></h3>
+<p>If cost tracking is completely broken and blocking your work:</p>
+<ol>
+<li>
+<p><strong>Disable cost tracking</strong> immediately:</p>
+<pre><code class="language-yaml">cost_tracking:
+  enabled: false
+</code></pre>
+</li>
+<li>
+<p><strong>Continue your work</strong> without cost tracking</p>
+</li>
+<li>
+<p><strong>Troubleshoot separately</strong> using test issues</p>
+</li>
+<li>
+<p><strong>Re-enable gradually</strong> once issues are resolved</p>
+</li>
+</ol>
+<p>This ensures cost tracking problems don’t interfere with your primary SwissArmyHammer usage.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="cost-tracking-migration-guide.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="file-watching.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="cost-tracking-migration-guide.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="file-watching.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

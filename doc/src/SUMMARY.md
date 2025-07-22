@@ -42,6 +42,13 @@
 - [Sharing and Collaboration](./sharing-guide.md)
 - [MCP Protocol](./mcp-protocol.md)
 - [Configuration](./configuration.md)
+  - [Configuration Schema Reference](./configuration-schema.md)
+- [Cost Tracking](./cost-tracking-overview.md)
+  - [Getting Started](./cost-tracking-getting-started.md)
+  - [Configuration Reference](./cost-tracking-configuration.md)
+  - [Examples and Tutorials](./cost-tracking-examples.md)
+  - [Migration Guide](./cost-tracking-migration-guide.md)
+  - [Troubleshooting](./cost-tracking-troubleshooting.md)
 - [File Watching](./file-watching.md)
 - [Prompt Overrides](./prompt-overrides.md)
 
@@ -57,6 +64,7 @@
 - [Contributing](./contributing.md)
 - [Development Setup](./development.md)
 - [Testing](./testing.md)
+- [Cost Tracking Architecture](./cost-tracking-architecture.md)
 - [Release Process](./release-process.md)
 
 # Appendix

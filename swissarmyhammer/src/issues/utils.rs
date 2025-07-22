@@ -47,14 +47,14 @@ impl ContentSource {
             ContentSource::Direct(content) => Ok(content.clone()),
             ContentSource::File(path) => {
                 let content = std::fs::read_to_string(path).map_err(|e| {
-                    SwissArmyHammerError::Other(format!("Failed to read file {:?}: {}", path, e))
+                    SwissArmyHammerError::Other(format!("Failed to read file {path:?}: {e}"))
                 })?;
                 Ok(content.trim().to_string())
             }
             ContentSource::Stdin => {
                 let mut buffer = String::new();
                 io::stdin().read_to_string(&mut buffer).map_err(|e| {
-                    SwissArmyHammerError::Other(format!("Failed to read from stdin: {}", e))
+                    SwissArmyHammerError::Other(format!("Failed to read from stdin: {e}"))
                 })?;
                 Ok(buffer.trim().to_string())
             }
@@ -65,10 +65,7 @@ impl ContentSource {
 
 /// Convenience function for getting content from CLI-style arguments
 /// This maintains backward compatibility with existing CLI code
-pub fn get_content_from_args(
-    content: Option<String>,
-    file: Option<PathBuf>,
-) -> Result<String> {
+pub fn get_content_from_args(content: Option<String>, file: Option<PathBuf>) -> Result<String> {
     let source = ContentSource::from_args(content, file)?;
     source.read_content()
 }
@@ -96,7 +93,7 @@ pub struct IssueMergeResult {
 }
 
 /// Create or switch to a work branch for an issue
-/// 
+///
 /// This function encapsulates the business logic for issue branch management:
 /// - Validates the issue exists
 /// - Creates or switches to the appropriate issue branch
@@ -108,15 +105,15 @@ pub async fn work_on_issue<S: IssueStorage>(
 ) -> Result<IssueBranchResult> {
     // Get the issue to ensure it exists
     let issue = storage.get_issue(issue_name).await?;
-    
+
     // Create work branch with format: issue/{issue_name}
     let branch_name = format!("issue/{}", issue.name);
     let current_branch = git_ops.current_branch()?;
     let created_new_branch = current_branch != branch_name;
-    
+
     // Create or switch to the work branch
     let actual_branch_name = git_ops.create_work_branch(&issue.name)?;
-    
+
     Ok(IssueBranchResult {
         issue,
         branch_name: actual_branch_name,
@@ -138,20 +135,19 @@ pub async fn merge_issue_branch<S: IssueStorage>(
 ) -> Result<IssueMergeResult> {
     // Get the issue to ensure it exists
     let issue = storage.get_issue(issue_name).await?;
-    
+
     // Validate that the issue is completed
     if !issue.completed {
         return Err(SwissArmyHammerError::Other(format!(
-            "Issue '{}' must be completed before merging",
-            issue_name
+            "Issue '{issue_name}' must be completed before merging"
         )));
     }
-    
+
     let branch_name = format!("issue/{}", issue.name);
-    
+
     // Merge the issue branch
     git_ops.merge_issue_branch(&issue.name)?;
-    
+
     // Optionally delete the branch
     let branch_deleted = if delete_branch {
         match git_ops.delete_branch(&branch_name) {
@@ -165,7 +161,7 @@ pub async fn merge_issue_branch<S: IssueStorage>(
     } else {
         false
     };
-    
+
     Ok(IssueMergeResult {
         issue,
         branch_name,
@@ -179,7 +175,7 @@ pub async fn merge_issue_branch<S: IssueStorage>(
 /// to extract the issue name from branches following the "issue/{name}" pattern.
 pub fn get_current_issue_from_branch(git_ops: &GitOperations) -> Result<Option<String>> {
     let current_branch = git_ops.current_branch()?;
-    
+
     // Parse issue name from branch name pattern: issue/{issue_name}
     if let Some(stripped) = current_branch.strip_prefix("issue/") {
         Ok(Some(stripped.to_string()))
@@ -212,19 +208,19 @@ impl ProjectStatus {
     pub fn from_issues(issues: Vec<Issue>) -> Self {
         let completed_issues: Vec<Issue> = issues.iter().filter(|i| i.completed).cloned().collect();
         let active_issues: Vec<Issue> = issues.iter().filter(|i| !i.completed).cloned().collect();
-        
+
         let total_issues = issues.len();
         let completed_count = completed_issues.len();
         let active_count = active_issues.len();
-        
+
         let completion_percentage = if total_issues > 0 {
             (completed_count * 100) / total_issues
         } else {
             0
         };
-        
+
         let all_complete = active_count == 0 && total_issues > 0;
-        
+
         Self {
             total_issues,
             completed_count,
@@ -235,7 +231,7 @@ impl ProjectStatus {
             completed_issues,
         }
     }
-    
+
     /// Generate a simple status summary text
     pub fn summary(&self) -> String {
         format!(
@@ -243,7 +239,7 @@ impl ProjectStatus {
             self.total_issues, self.active_count, self.completed_count, self.completion_percentage
         )
     }
-    
+
     /// Generate a detailed status report
     pub fn detailed_report(&self) -> String {
         if self.all_complete {
@@ -257,12 +253,13 @@ impl ProjectStatus {
                     .join("\n")
             )
         } else {
-            let active_list = self.active_issues
+            let active_list = self
+                .active_issues
                 .iter()
                 .map(|issue| format!("• {}", issue.name))
                 .collect::<Vec<_>>()
                 .join("\n");
-                
+
             let completed_list = if self.completed_count > 0 {
                 self.completed_issues
                     .iter()
@@ -272,7 +269,7 @@ impl ProjectStatus {
             } else {
                 "None".to_string()
             };
-            
+
             format!(
                 "⏳ Project has active issues ({}% complete)\n\n📊 Project Status:\n• Total Issues: {}\n• Completed: {} ({}%)\n• Active: {}\n\n🔄 Active Issues:\n{}\n\n✅ Completed Issues:\n{}",
                 self.completion_percentage,
@@ -333,7 +330,8 @@ mod tests {
         assert_eq!(source, ContentSource::Empty);
 
         // Error case: both content and file
-        let result = ContentSource::from_args(Some("content".to_string()), Some(PathBuf::from("/test")));
+        let result =
+            ContentSource::from_args(Some("content".to_string()), Some(PathBuf::from("/test")));
         assert!(result.is_err());
     }
 
@@ -401,7 +399,7 @@ mod tests {
             .args(["config", "user.name", "Test User"])
             .output()
             .unwrap();
-        
+
         Command::new("git")
             .current_dir(repo_path)
             .args(["config", "user.email", "test@example.com"])
@@ -479,7 +477,11 @@ mod tests {
             created_at: Utc::now(),
         };
 
-        let issues = vec![active_issue1.clone(), active_issue2.clone(), completed_issue.clone()];
+        let issues = vec![
+            active_issue1.clone(),
+            active_issue2.clone(),
+            completed_issue.clone(),
+        ];
         let status = ProjectStatus::from_issues(issues);
 
         // Check counts

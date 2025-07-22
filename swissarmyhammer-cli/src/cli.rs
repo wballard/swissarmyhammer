@@ -253,6 +253,7 @@ Basic usage:
   swissarmyhammer issue work <number>           # Start working on issue (creates git branch)
   swissarmyhammer issue merge <number>          # Merge completed issue to main
   swissarmyhammer issue current                 # Show current issue
+  swissarmyhammer issue next                    # Show next issue to work on
   swissarmyhammer issue status                  # Show project status
 
 Examples:
@@ -708,6 +709,8 @@ pub enum IssueCommands {
     Current,
     /// Show project status
     Status,
+    /// Show the next issue to work on
+    Next,
 }
 
 impl Cli {

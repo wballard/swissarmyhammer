@@ -29,4 +29,4 @@ DO NOT code now, the goal is just to create `./CODE_REVIEW.md` todo items.
   - Append any lint warnings or errors to do to ./CODE_REVIEW.md
 - Report your progress
 
-{% render review_format %}
+{% render "review_format" %}

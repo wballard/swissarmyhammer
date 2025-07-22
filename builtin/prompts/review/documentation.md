@@ -28,4 +28,4 @@ Improve the documentation quality.
   - Ask youself, how can I do a better job on this documentation file?
   - Append any improvements to do to the ./DOCUMENTATION_REVIEW.md
 
-  {% render review_format %}
+{% render "review_format" %}

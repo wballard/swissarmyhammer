@@ -59,7 +59,7 @@ pub struct MockMemoStorage {
 }
 
 /// Configuration options for controlling mock storage behavior during tests
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MockStorageConfig {
     /// Whether to simulate storage failures for create operations
     pub fail_create: bool,
@@ -89,21 +89,6 @@ pub struct MockStorageConfig {
     pub operation_delay_ms: Option<u64>,
 }
 
-impl Default for MockStorageConfig {
-    fn default() -> Self {
-        Self {
-            fail_create: false,
-            fail_get: false,
-            fail_update: false,
-            fail_delete: false,
-            fail_list: false,
-            fail_search: false,
-            fail_context: false,
-            max_memos: None,
-            operation_delay_ms: None,
-        }
-    }
-}
 
 impl MockMemoStorage {
     /// Create a new mock storage instance with default configuration

@@ -106,4 +106,4 @@ Provide refactored code that addresses the security issues identified.
   - summarize your findings
   - write your findings to the code review output
 
-{% render review_format %}
+{% render "review_format" %}

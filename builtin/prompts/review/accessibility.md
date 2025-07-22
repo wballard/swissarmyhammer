@@ -21,6 +21,9 @@ arguments:
 
 Review all code in the current project.
 
+{% render "principals" %}
+{% render "coding_standards" %}
+
 ## Review Parameters
 
 - **WCAG Level**: {{wcag_level}}
@@ -137,7 +140,7 @@ Provide specific code changes to:
 ## Process
 
 - list all source files in the project and create a markdown scratchpad file, this is your todo list
-- create a ACCESSIBILITY_REVIEW.md markdown file, this is your code review output
+- create a CODE_REVIEW.md markdown file, this is your code review output
 - for each file in the todo list
   - perform the Accessibility Audit
   - summarize your findings

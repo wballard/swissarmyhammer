@@ -4,9 +4,8 @@ This guide showcases practical workflow examples demonstrating various features 
 
 ## Example Workflows
 
-Example workflows are located in both:
-- `builtin/workflows/` - Basic example workflows
-- `builtin/prompts/workflows/` - Advanced workflow patterns
+Example workflows are located in:
+- `builtin/workflows/` - Example workflows demonstrating various features and patterns
 
 All workflows can be run directly or used as templates for your own workflows.
 
@@ -45,127 +44,27 @@ swissarmyhammer flow run example-actions
 - Variable substitution
 - Sub-workflow execution
 
-### 1. Code Review Workflow
+### Greeting Workflow
 
-**File**: `prompts/builtin/workflows/code-review.md`  
-**Type**: Linear workflow
+**File**: `builtin/workflows/greeting.md`  
+**Type**: Template variable demonstration
 
-A straightforward sequential workflow for automated code review:
+A simple workflow that demonstrates using template variables in workflows:
 
 ```bash
-swissarmyhammer flow run code-review --var code_path=src/main
+swissarmyhammer flow run greeting --set name=John --set language=English
 ```
 
 **Features demonstrated**:
+- Template variables with `--set` parameters
+- Variable defaults with liquid templates
 - Linear state progression
-- State variables
-- Conditional transitions based on quality checks
-- Feedback loops for addressing issues
+- Prompt execution with variable substitution
 
 **Use cases**:
-- Automated code quality checks
-- Pre-commit validations
-- Continuous integration pipelines
-
-### 2. Deployment Pipeline
-
-**File**: `prompts/builtin/workflows/deployment-pipeline.md`  
-**Type**: Interactive workflow with choices
-
-An interactive deployment workflow with environment selection and rollback options:
-
-```bash
-swissarmyhammer flow run deployment-pipeline --var app_name=myservice
-```
-
-**Features demonstrated**:
-- User choice actions for environment selection
-- Conditional transitions based on build/test results
-- Rollback mechanisms
-- Different deployment paths for different environments
-- Auto-rollback configuration
-
-**Use cases**:
-- Application deployments
-- Infrastructure provisioning
-- Release management
-
-### 3. Data Processing Pipeline
-
-**File**: `prompts/builtin/workflows/data-processing-pipeline.md`  
-**Type**: Parallel execution workflow
-
-A high-performance data processing workflow that handles multiple data sources concurrently:
-
-```bash
-swissarmyhammer flow run data-processing-pipeline \
-  --var data_sources=logs,metrics,events
-```
-
-**Features demonstrated**:
-- Parallel state execution
-- Synchronization points with `wait_for_parallel`
-- Parallel actions within states
-- Timeout management for long-running tasks
-- Aggregation of parallel results
-
-**Use cases**:
-- ETL pipelines
-- Data analysis workflows
-- Batch processing systems
-- Report generation
-
-### 4. Database Migration
-
-**File**: `prompts/builtin/workflows/database-migration.md`  
-**Type**: Error handling workflow
-
-A robust database migration workflow with comprehensive error handling:
-
-```bash
-swissarmyhammer flow run database-migration --var target_version=v2.0
-```
-
-**Features demonstrated**:
-- Multiple error states for different failure types
-- Retry logic with configurable attempts
-- Multi-level rollback (migration rollback, backup restore)
-- Emergency mode for critical failures
-- Validation at every step
-- Graceful degradation
-
-**Use cases**:
-- Database schema updates
-- Data migrations
-- System upgrades
-- Critical operations requiring rollback capability
-
-### 5. Multi-Step Refactoring
-
-**File**: `prompts/builtin/workflows/multi-step-refactoring.md`  
-**Type**: Nested workflow orchestration
-
-A complex refactoring workflow that coordinates multiple sub-workflows:
-
-```bash
-swissarmyhammer flow run multi-step-refactoring \
-  --var project_path=src/core \
-  --var refactoring_scope=full
-```
-
-**Features demonstrated**:
-- Single workflow execution with `run_workflow`
-- Sequential workflow execution
-- Parallel workflow execution
-- Conditional workflow execution
-- Data passing between workflows
-- Complex orchestration patterns
-
-**Use cases**:
-- Large-scale refactoring projects
-- Multi-phase deployments
-- Complex automation pipelines
-- Orchestrating microservices
+- Learning template variable usage
+- Building parameterized workflows
+- Dynamic workflow customization
 
 ## Running Example Workflows
 
@@ -179,12 +78,12 @@ swissarmyhammer flow run <workflow-name>
 
 ### With Custom Variables
 
-Override default variables:
+Customize workflows with variables:
 
 ```bash
-swissarmyhammer flow run code-review \
-  --var code_path=lib/ \
-  --var review_depth=security-focused
+swissarmyhammer flow run greeting \
+  --set name="Your Name" \
+  --set language="French"
 ```
 
 ### Resume from Failure
@@ -192,7 +91,7 @@ swissarmyhammer flow run code-review \
 If a workflow fails, you can resume from where it left off:
 
 ```bash
-swissarmyhammer flow run database-migration --resume <run_id>
+swissarmyhammer flow run example-actions --resume <run_id>
 ```
 
 ### List Available Workflows
@@ -225,58 +124,41 @@ To create your own workflow based on an example:
 
 ### Common Modifications
 
-**Adding error handling** to the code review workflow:
+**Adding error handling** to workflows:
 
 ```markdown
 ## Actions
 
-- AnalyzeCode: Execute prompt "analyze-codebase" with path="${code_path}"
-- HandleError: Log error "Code analysis failed: ${error}"
-- Continue: Log "Continuing with partial results"
+- ProcessData: Execute prompt "process-data" with path="${data_path}"
+- HandleError: Log error "Data processing failed: ${error}"
+- Retry: Log "Retrying with different parameters"
 ```
 
 And add retry logic in the Mermaid diagram:
 
 ```mermaid
-AnalyzeCode --> HandleError: OnFailure
-HandleError --> RetryWait
-RetryWait --> AnalyzeCode
+ProcessData --> HandleError: OnFailure
+HandleError --> Retry
+Retry --> ProcessData
 ```
 
-**Making deployment pipeline fully automated**:
+**Adding template variables** to customize workflows:
 
-Pass variables when running the workflow:
+Pass variables when running any workflow:
 
 ```bash
-swissarmyhammer flow run deployment-pipeline \
-  --var auto_deploy=true \
-  --var target_env=staging \
-  --var skip_confirmations=true
+swissarmyhammer flow run greeting \
+  --set name="Your Name" \
+  --set language="French"
 ```
 
-**Adding notifications** to data processing:
+**Adding notifications** to workflows:
 
 ```markdown
 ## Actions
 
-- PublishResults: Execute prompt "send-notification" with channel="#data-team" message="Pipeline completed: ${result_count} records processed"
-```
-
-Or for multiple notifications:
-
-```mermaid
-stateDiagram-v2
-    ProcessData --> NotifyStart
-    
-    state NotifyStart <<fork>>
-    NotifyStart --> NotifySlack
-    NotifyStart --> NotifyEmail
-    NotifyStart --> LogMetrics
-    
-    state NotifyEnd <<join>>
-    NotifySlack --> NotifyEnd
-    NotifyEmail --> NotifyEnd
-    LogMetrics --> NotifyEnd
+- CompleteTask: Log "Task completed successfully"
+- NotifyUser: Execute prompt "send-notification" with message="Workflow completed: ${result}"
 ```
 
 ## Best Practices from Examples
@@ -366,7 +248,7 @@ stateDiagram-v2
 
 2. **Variable errors**:
    ```bash
-   swissarmyhammer flow show code-review  # View workflow details
+   swissarmyhammer flow show greeting  # View workflow details
    ```
 
 3. **State transition failures**:
@@ -383,19 +265,19 @@ stateDiagram-v2
 
 1. Use verbose output:
    ```bash
-   swissarmyhammer workflow run deployment-pipeline -v
+   swissarmyhammer workflow run example-actions -v
    ```
 
 2. Enable debug mode:
    ```bash
-   swissarmyhammer workflow run data-processing-pipeline --debug
+   swissarmyhammer workflow run greeting --debug
    ```
 
-3. Test with minimal data:
+3. Test with custom variables:
    ```bash
-   swissarmyhammer workflow run data-processing-pipeline \
-     --set data_sources=logs \
-     --set processing_mode=sequential
+   swissarmyhammer workflow run greeting \
+     --set name="Test User" \
+     --set language="Spanish"
    ```
 
 ## Next Steps

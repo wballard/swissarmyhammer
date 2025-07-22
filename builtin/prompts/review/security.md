@@ -19,6 +19,9 @@ Please review the all code in this project with a focus on: {{context}}
 
 ## Security Analysis
 
+{% render "principals" %}
+{% render "coding_standards" %}
+
 ### 1. Vulnerability Scan
 
 Analyzing for common security vulnerabilities:
@@ -97,7 +100,7 @@ Provide refactored code that addresses the security issues identified.
 ## Process
 
 - list all source files in the project and create a markdown scratchpad file, this is your todo list
-- create a SECURITY_REVIEW.md markdown file, this is your code review output
+- create a CODE_REVIEW.md markdown file, this is your code review output
 - for each file in the todo list
   - perform the Security Analysis
   - summarize your findings

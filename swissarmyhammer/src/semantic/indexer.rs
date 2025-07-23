@@ -158,7 +158,7 @@ pub struct IndexingStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::semantic::{SemanticConfig, VectorStorage};
+    use crate::semantic::{SemanticConfig, VectorStorage, ParserConfig};
     use tempfile::TempDir;
     use std::fs;
 

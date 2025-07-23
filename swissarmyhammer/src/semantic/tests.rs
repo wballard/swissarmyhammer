@@ -43,9 +43,10 @@ mod tests {
     fn test_semantic_config_default() {
         let config = SemanticConfig::default();
         assert!(config.database_path.to_string_lossy().contains("semantic.db"));
-        assert_eq!(config.max_chunks_per_file, 100);
-        assert_eq!(config.min_chunk_size, 50);
-        assert_eq!(config.max_chunk_size, 2000);
+        assert_eq!(config.embedding_model, "nomic-ai/nomic-embed-code");
+        assert_eq!(config.chunk_size, 512);
+        assert_eq!(config.chunk_overlap, 64);
+        assert_eq!(config.similarity_threshold, 0.7);
     }
 
     #[test]
@@ -125,18 +126,17 @@ mod tests {
         let chunk = CodeChunk {
             id: "test-1".to_string(),
             file_path: PathBuf::from("test.rs"),
-            content: "fn main() {}".to_string(),
             language: Language::Rust,
+            content: "fn main() {}".to_string(),
             start_line: 1,
             end_line: 1,
-            content_hash: "abc123".to_string(),
-            embedding: Some(vec![0.1, 0.2, 0.3]),
+            chunk_type: ChunkType::Function,
+            content_hash: ContentHash("abc123".to_string()),
         };
         
         assert_eq!(chunk.id, "test-1");
         assert_eq!(chunk.language, Language::Rust);
-        assert!(chunk.embedding.is_some());
-        assert_eq!(chunk.embedding.as_ref().unwrap().len(), 3);
+        assert_eq!(chunk.chunk_type, ChunkType::Function);
     }
 
     #[test]
@@ -146,20 +146,21 @@ mod tests {
         let chunk = CodeChunk {
             id: "test-1".to_string(),
             file_path: PathBuf::from("test.rs"),
-            content: "fn main() {}".to_string(),
             language: Language::Rust,
+            content: "fn main() {}".to_string(),
             start_line: 1,
             end_line: 1,
-            content_hash: "abc123".to_string(),
-            embedding: None,
+            chunk_type: ChunkType::Function,
+            content_hash: ContentHash("abc123".to_string()),
         };
         
-        let result = SearchResult {
+        let result = SemanticSearchResult {
             chunk,
-            score: 0.95,
+            similarity_score: 0.95,
+            excerpt: "fn main() {}".to_string(),
         };
         
-        assert_eq!(result.score, 0.95);
+        assert_eq!(result.similarity_score, 0.95);
         assert_eq!(result.chunk.id, "test-1");
     }
 

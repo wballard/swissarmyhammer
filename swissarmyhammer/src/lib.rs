@@ -102,7 +102,7 @@ pub mod validation;
 pub use file_loader::FileSource;
 
 /// File system utilities and abstractions
-pub use fs_utils::{FileSystem, FileSystemUtils};
+pub use fs_utils::{FileSystem, FileSystemUtils, FilePermissions};
 
 /// Plugin system types for extending functionality
 pub use plugins::{CustomLiquidFilter, PluginRegistry, SwissArmyHammerPlugin};
@@ -179,6 +179,7 @@ pub mod prelude {
         error_context::IoResultExt,
         file_types::{is_prompt_file, ExtensionMatcher},
         mcp_errors::{McpResultExt, ToSwissArmyHammerError},
+        rate_limiter::{get_rate_limiter, RateLimiter, RateLimiterConfig, RateLimitStatus},
         validation_builders::{quick, ValidationChain, ValidationErrorBuilder},
     };
 }

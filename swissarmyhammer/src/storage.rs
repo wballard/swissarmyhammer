@@ -146,6 +146,27 @@ impl FileSystemStorage {
         Ok(storage)
     }
 
+    /// Create a new file system storage with custom filesystem utils (for testing)
+    #[cfg(test)]
+    pub fn new_with_fs_utils(base_path: impl AsRef<Path>, fs_utils: FileSystemUtils) -> Result<Self> {
+        let base_path = base_path.as_ref().to_path_buf();
+
+        if !fs_utils.fs().exists(&base_path) {
+            fs_utils.fs().create_dir_all(&base_path)?;
+        }
+
+        let storage = Self {
+            base_path,
+            cache: dashmap::DashMap::new(),
+            fs_utils,
+        };
+
+        // Load existing prompts into cache
+        storage.reload_cache()?;
+
+        Ok(storage)
+    }
+
     /// Reload the cache from disk
     pub fn reload_cache(&self) -> Result<()> {
         self.cache.clear();
@@ -524,8 +545,13 @@ mod tests {
 
     #[test]
     fn test_filesystem_storage_store_and_get() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        use crate::fs_utils::tests::MockFileSystem;
+        use crate::fs_utils::FileSystem;
+        use std::sync::Arc;
+
+        let mock_fs = Arc::new(MockFileSystem::new());
+        let fs_utils = FileSystemUtils::with_fs(mock_fs.clone());
+        let mut storage = FileSystemStorage::new_with_fs_utils("/test", fs_utils).unwrap();
 
         let prompt = create_test_prompt("fs-test", "Filesystem test template");
         storage.store(prompt.clone()).unwrap();
@@ -535,9 +561,9 @@ mod tests {
         assert_eq!(retrieved.template, prompt.template);
         assert_eq!(retrieved.description, prompt.description);
 
-        // Check that file was created
-        let prompt_file = temp_dir.path().join("fs-test.yaml");
-        assert!(prompt_file.exists());
+        // Check that file was created in mock filesystem
+        let prompt_file = std::path::Path::new("/test/fs-test.yaml");
+        assert!(mock_fs.is_file(prompt_file));
     }
 
     #[test]
@@ -555,8 +581,13 @@ mod tests {
 
     #[test]
     fn test_filesystem_storage_remove() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        use crate::fs_utils::tests::MockFileSystem;
+        use crate::fs_utils::FileSystem;
+        use std::sync::Arc;
+
+        let mock_fs = Arc::new(MockFileSystem::new());
+        let fs_utils = FileSystemUtils::with_fs(mock_fs.clone());
+        let mut storage = FileSystemStorage::new_with_fs_utils("/test", fs_utils).unwrap();
 
         let prompt = create_test_prompt("remove-test", "Template");
         storage.store(prompt).unwrap();
@@ -565,9 +596,9 @@ mod tests {
         storage.remove("remove-test").unwrap();
         assert!(storage.get("remove-test").is_err());
 
-        // Check that file was removed
-        let prompt_file = temp_dir.path().join("remove-test.yaml");
-        assert!(!prompt_file.exists());
+        // Check that file was removed from mock filesystem
+        let prompt_file = std::path::Path::new("/test/remove-test.yaml");
+        assert!(!mock_fs.is_file(prompt_file));
     }
 
     #[test]
@@ -585,8 +616,12 @@ mod tests {
 
     #[test]
     fn test_filesystem_storage_list() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        use crate::fs_utils::tests::MockFileSystem;
+        use std::sync::Arc;
+
+        let mock_fs = Arc::new(MockFileSystem::new());
+        let fs_utils = FileSystemUtils::with_fs(mock_fs.clone());
+        let mut storage = FileSystemStorage::new_with_fs_utils("/test", fs_utils).unwrap();
 
         assert_eq!(storage.list().unwrap().len(), 0);
 
@@ -607,8 +642,12 @@ mod tests {
 
     #[test]
     fn test_filesystem_storage_search() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        use crate::fs_utils::tests::MockFileSystem;
+        use std::sync::Arc;
+
+        let mock_fs = Arc::new(MockFileSystem::new());
+        let fs_utils = FileSystemUtils::with_fs(mock_fs.clone());
+        let mut storage = FileSystemStorage::new_with_fs_utils("/test", fs_utils).unwrap();
 
         let prompt1 =
             Prompt::new("search-test-1", "Template").with_description("Contains keyword UNIQUE");
@@ -625,8 +664,12 @@ mod tests {
 
     #[test]
     fn test_filesystem_storage_reload_cache() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        use crate::fs_utils::tests::MockFileSystem;
+        use std::sync::Arc;
+
+        let mock_fs = Arc::new(MockFileSystem::new());
+        let fs_utils = FileSystemUtils::with_fs(mock_fs.clone());
+        let mut storage = FileSystemStorage::new_with_fs_utils("/test", fs_utils).unwrap();
 
         let prompt = create_test_prompt("reload-test", "Template");
         storage.store(prompt.clone()).unwrap();
@@ -642,8 +685,12 @@ mod tests {
 
     #[test]
     fn test_filesystem_storage_clone_box() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        use crate::fs_utils::tests::MockFileSystem;
+        use std::sync::Arc;
+
+        let mock_fs = Arc::new(MockFileSystem::new());
+        let fs_utils = FileSystemUtils::with_fs(mock_fs.clone());
+        let mut storage = FileSystemStorage::new_with_fs_utils("/test", fs_utils).unwrap();
 
         let prompt = create_test_prompt("clone-fs-test", "Template");
         storage.store(prompt.clone()).unwrap();
@@ -655,8 +702,12 @@ mod tests {
 
     #[test]
     fn test_filesystem_storage_exists_and_count() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut storage = FileSystemStorage::new(temp_dir.path()).unwrap();
+        use crate::fs_utils::tests::MockFileSystem;
+        use std::sync::Arc;
+
+        let mock_fs = Arc::new(MockFileSystem::new());
+        let fs_utils = FileSystemUtils::with_fs(mock_fs.clone());
+        let mut storage = FileSystemStorage::new_with_fs_utils("/test", fs_utils).unwrap();
 
         assert_eq!(storage.count().unwrap(), 0);
         assert!(!storage.exists("test").unwrap());
@@ -690,8 +741,13 @@ mod tests {
 
     #[test]
     fn test_prompt_storage_file_system() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut storage = PromptStorage::file_system(temp_dir.path()).unwrap();
+        use crate::fs_utils::tests::MockFileSystem;
+        use std::sync::Arc;
+
+        let mock_fs = Arc::new(MockFileSystem::new());
+        let fs_utils = FileSystemUtils::with_fs(mock_fs.clone());
+        let filesystem_storage = Arc::new(FileSystemStorage::new_with_fs_utils("/test", fs_utils).unwrap());
+        let mut storage = PromptStorage::new(filesystem_storage);
         let prompt = create_test_prompt("fs-storage-test", "Template");
 
         storage.store(prompt.clone()).unwrap();

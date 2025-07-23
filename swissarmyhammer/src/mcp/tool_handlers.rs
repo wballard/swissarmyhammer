@@ -5,8 +5,10 @@ use super::responses::{
     create_error_response, create_issue_response, create_mark_complete_response,
     create_success_response,
 };
+use super::shared_utils::{McpErrorHandler, McpFormatter, McpValidation};
 use super::types::*;
 use super::utils::validate_issue_name;
+use crate::common::rate_limiter::get_rate_limiter;
 use crate::config::Config;
 use crate::git::GitOperations;
 use crate::issues::{Issue, IssueStorage};
@@ -62,24 +64,40 @@ impl ToolHandlers {
             "• {} ({})\n  Created: {}\n  Updated: {}\n  Preview: {}",
             memo.title,
             memo.id,
-            memo.created_at.format("%Y-%m-%d %H:%M"),
-            memo.updated_at.format("%Y-%m-%d %H:%M"),
-            memo.content
-                .chars()
-                .take(preview_length)
-                .collect::<String>()
-                + if memo.content.len() > preview_length {
-                    "..."
-                } else {
-                    ""
-                }
+            McpFormatter::format_timestamp(memo.created_at),
+            McpFormatter::format_timestamp(memo.updated_at),
+            McpFormatter::format_preview(&memo.content, preview_length)
         )
+    }
+
+    /// Check rate limit for an MCP operation
+    ///
+    /// Applies rate limiting to prevent DoS attacks. Uses client identification
+    /// based on request context when available, falls back to a default client ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `operation` - The operation being performed
+    /// * `cost` - Token cost of the operation (default: 1, expensive: 2-5)
+    /// * `client_id` - Optional client identifier (falls back to "unknown")
+    ///
+    /// # Returns
+    ///
+    /// * `Result<(), McpError>` - Ok if operation is allowed, error if rate limited
+    fn check_rate_limit(&self, operation: &str, cost: u32, client_id: Option<&str>) -> std::result::Result<(), McpError> {
+        let client = client_id.unwrap_or("unknown");
+        let rate_limiter = get_rate_limiter();
+        
+        rate_limiter.check_rate_limit(client, operation, cost)
+            .map_err(|e| {
+                tracing::warn!("Rate limit exceeded for client '{}', operation '{}': {}", client, operation, e);
+                McpError::invalid_params(e.to_string(), None)
+            })
     }
 
     /// Handle memo operation errors consistently based on error type
     ///
-    /// Maps specific memo errors to appropriate MCP error responses
-    /// following the pattern: user input errors -> invalid_params, system errors -> internal_error
+    /// Uses the shared error handler for consistent error mapping across all MCP operations.
     ///
     /// # Arguments
     ///
@@ -90,27 +108,7 @@ impl ToolHandlers {
     ///
     /// * `McpError` - Appropriate MCP error response
     fn handle_memo_error(error: crate::error::SwissArmyHammerError, operation: &str) -> McpError {
-        use crate::error::SwissArmyHammerError;
-        match error {
-            // User input errors
-            SwissArmyHammerError::MemoNotFound(id) => {
-                tracing::warn!("Memo not found: {}", id);
-                McpError::invalid_params(format!("Memo not found: {id}"), None)
-            }
-            SwissArmyHammerError::InvalidMemoId(id) => {
-                tracing::warn!("Invalid memo ID: {}", id);
-                McpError::invalid_params(format!("Invalid memo ID format: {id}"), None)
-            }
-            SwissArmyHammerError::MemoAlreadyExists(id) => {
-                tracing::warn!("Memo already exists: {}", id);
-                McpError::invalid_params(format!("Memo already exists: {id}"), None)
-            }
-            // System errors
-            error => {
-                tracing::error!("Failed to {}: {}", operation, error);
-                McpError::internal_error(format!("Failed to {operation}: {error}"), None)
-            }
-        }
+        McpErrorHandler::handle_error(error, operation)
     }
 
     /// Handle the issue_create tool operation.
@@ -129,13 +127,24 @@ impl ToolHandlers {
         &self,
         request: CreateIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
+        // Apply rate limiting for issue creation
+        self.check_rate_limit("issue_create", 1, None)?;
+        
         tracing::debug!("Creating issue: {:?}", request.name);
 
         // Validate issue name using shared validation logic, or use empty string for nameless issues
         let validated_name = match &request.name {
-            Some(name) => validate_issue_name(name.as_str())?,
+            Some(name) => {
+                McpValidation::validate_not_empty(name.as_str(), "issue name")
+                    .map_err(|e| McpErrorHandler::handle_error(e, "validate issue name"))?;
+                validate_issue_name(name.as_str())?
+            }
             None => String::new(), // Empty name for nameless issues - skip validation
         };
+
+        // Validate content is not empty
+        McpValidation::validate_not_empty(&request.content, "issue content")
+            .map_err(|e| McpErrorHandler::handle_error(e, "validate issue content"))?;
 
         let issue_storage = self.issue_storage.write().await;
         match issue_storage
@@ -146,20 +155,7 @@ impl ToolHandlers {
                 tracing::info!("Created issue {}", issue.name);
                 Ok(create_issue_response(&issue))
             }
-            Err(crate::SwissArmyHammerError::IssueAlreadyExists(num)) => {
-                tracing::warn!("Issue #{:06} already exists", num);
-                Err(McpError::invalid_params(
-                    format!("Issue #{num:06} already exists"),
-                    None,
-                ))
-            }
-            Err(e) => {
-                tracing::error!("Failed to create issue: {}", e);
-                Err(McpError::internal_error(
-                    format!("Failed to create issue: {e}"),
-                    None,
-                ))
-            }
+            Err(e) => Err(McpErrorHandler::handle_error(e, "create issue"))
         }
     }
 
@@ -178,6 +174,10 @@ impl ToolHandlers {
         &self,
         request: MarkCompleteRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
+        // Validate issue name is not empty
+        McpValidation::validate_not_empty(request.name.as_str(), "issue name")
+            .map_err(|e| McpErrorHandler::handle_error(e, "validate issue name"))?;
+            
         let issue_storage = self.issue_storage.write().await;
         match issue_storage.mark_complete(request.name.as_str()).await {
             Ok(issue) => Ok(create_mark_complete_response(&issue)),
@@ -345,6 +345,12 @@ impl ToolHandlers {
         &self,
         request: UpdateIssueRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
+        // Validate issue name and content
+        McpValidation::validate_not_empty(request.name.as_str(), "issue name")
+            .map_err(|e| McpErrorHandler::handle_error(e, "validate issue name"))?;
+        McpValidation::validate_not_empty(&request.content, "issue content")
+            .map_err(|e| McpErrorHandler::handle_error(e, "validate issue content"))?;
+            
         let issue_storage = self.issue_storage.write().await;
         match issue_storage
             .update_issue(request.name.as_str(), request.content)
@@ -593,6 +599,12 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         tracing::debug!("Creating memo with title: {}", request.title);
 
+        // Validate memo title and content
+        McpValidation::validate_not_empty(&request.title, "memo title")
+            .map_err(|e| McpErrorHandler::handle_error(e, "validate memo title"))?;
+        McpValidation::validate_not_empty(&request.content, "memo content")
+            .map_err(|e| McpErrorHandler::handle_error(e, "validate memo content"))?;
+
         let memo_storage = self.memo_storage.write().await;
         match memo_storage
             .create_memo(request.title, request.content)
@@ -626,6 +638,10 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         tracing::debug!("Getting memo with ID: {}", request.id);
 
+        // Validate memo ID format using shared validation
+        McpValidation::validate_ulid(&request.id, "memo ID")
+            .map_err(|e| McpErrorHandler::handle_error(e, "validate memo ID"))?;
+
         let memo_id = match MemoId::from_string(request.id.clone()) {
             Ok(id) => id,
             Err(_) => {
@@ -642,16 +658,14 @@ impl ToolHandlers {
                 tracing::info!("Retrieved memo {}", memo.id);
                 Ok(create_success_response(format!(
                     "Memo found:\n\nID: {}\nTitle: {}\nCreated: {}\nUpdated: {}\n\nContent:\n{}",
-                    memo.id, memo.title, memo.created_at, memo.updated_at, memo.content
+                    memo.id, 
+                    memo.title, 
+                    McpFormatter::format_timestamp(memo.created_at),
+                    McpFormatter::format_timestamp(memo.updated_at),
+                    memo.content
                 )))
             }
-            Err(e) => {
-                tracing::warn!("Memo not found: {}", e);
-                Err(McpError::invalid_params(
-                    format!("Memo not found: {e}"),
-                    None,
-                ))
-            }
+            Err(e) => Err(McpErrorHandler::handle_error(e, "get memo"))
         }
     }
 
@@ -672,6 +686,12 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         tracing::debug!("Updating memo with ID: {}", request.id);
 
+        // Validate memo ID format and content using shared validation
+        McpValidation::validate_ulid(&request.id, "memo ID")
+            .map_err(|e| McpErrorHandler::handle_error(e, "validate memo ID"))?;
+        McpValidation::validate_not_empty(&request.content, "memo content")
+            .map_err(|e| McpErrorHandler::handle_error(e, "validate memo content"))?;
+
         let memo_id = match MemoId::from_string(request.id.clone()) {
             Ok(id) => id,
             Err(_) => {
@@ -688,16 +708,13 @@ impl ToolHandlers {
                 tracing::info!("Updated memo {}", memo.id);
                 Ok(create_success_response(format!(
                     "Successfully updated memo:\n\nID: {}\nTitle: {}\nUpdated: {}\n\nContent:\n{}",
-                    memo.id, memo.title, memo.updated_at, memo.content
+                    memo.id, 
+                    memo.title, 
+                    McpFormatter::format_timestamp(memo.updated_at), 
+                    memo.content
                 )))
             }
-            Err(e) => {
-                tracing::error!("Failed to update memo: {}", e);
-                Err(McpError::internal_error(
-                    format!("Failed to update memo: {e}"),
-                    None,
-                ))
-            }
+            Err(e) => Err(McpErrorHandler::handle_error(e, "update memo"))
         }
     }
 
@@ -718,6 +735,10 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         tracing::debug!("Deleting memo with ID: {}", request.id);
 
+        // Validate memo ID format using shared validation
+        McpValidation::validate_ulid(&request.id, "memo ID")
+            .map_err(|e| McpErrorHandler::handle_error(e, "validate memo ID"))?;
+
         let memo_id = match MemoId::from_string(request.id.clone()) {
             Ok(id) => id,
             Err(_) => {
@@ -737,13 +758,7 @@ impl ToolHandlers {
                     request.id
                 )))
             }
-            Err(e) => {
-                tracing::error!("Failed to delete memo: {}", e);
-                Err(McpError::internal_error(
-                    format!("Failed to delete memo: {e}"),
-                    None,
-                ))
-            }
+            Err(e) => Err(McpErrorHandler::handle_error(e, "delete memo"))
         }
     }
 
@@ -773,20 +788,15 @@ impl ToolHandlers {
                         .collect::<Vec<_>>()
                         .join("\n\n");
 
+                    let summary = McpFormatter::format_list_summary("memo", memos.len(), memos.len());
                     Ok(create_success_response(format!(
-                        "Found {} memos:\n\n{}",
-                        memos.len(),
+                        "{}:\n\n{}",
+                        summary,
                         memo_list
                     )))
                 }
             }
-            Err(e) => {
-                tracing::error!("Failed to list memos: {}", e);
-                Err(McpError::internal_error(
-                    format!("Failed to list memos: {e}"),
-                    None,
-                ))
-            }
+            Err(e) => Err(McpErrorHandler::handle_error(e, "list memos"))
         }
     }
 
@@ -806,6 +816,10 @@ impl ToolHandlers {
         request: SearchMemosRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         tracing::debug!("Searching memos with query: {}", request.query);
+
+        // Validate search query is not empty
+        McpValidation::validate_not_empty(&request.query, "search query")
+            .map_err(|e| McpErrorHandler::handle_error(e, "validate search query"))?;
 
         let memo_storage = self.memo_storage.read().await;
         match memo_storage.search_memos(&request.query).await {
@@ -832,13 +846,7 @@ impl ToolHandlers {
                     )))
                 }
             }
-            Err(e) => {
-                tracing::error!("Failed to search memos: {}", e);
-                Err(McpError::internal_error(
-                    format!("Failed to search memos: {e}"),
-                    None,
-                ))
-            }
+            Err(e) => Err(McpErrorHandler::handle_error(e, "search memos"))
         }
     }
 
@@ -873,29 +881,23 @@ impl ToolHandlers {
                                 "=== {} (ID: {}) ===\nCreated: {}\nUpdated: {}\n\n{}",
                                 memo.title,
                                 memo.id,
-                                memo.created_at.format("%Y-%m-%d %H:%M"),
-                                memo.updated_at.format("%Y-%m-%d %H:%M"),
+                                McpFormatter::format_timestamp(memo.created_at),
+                                McpFormatter::format_timestamp(memo.updated_at),
                                 memo.content
                             )
                         })
                         .collect::<Vec<_>>()
                         .join(&format!("\n\n{}\n\n", "=".repeat(80)));
 
+                    let summary = McpFormatter::format_list_summary("memo", sorted_memos.len(), sorted_memos.len());
                     Ok(create_success_response(format!(
-                        "All memo context ({} memo{}):\n\n{}",
-                        sorted_memos.len(),
-                        if sorted_memos.len() == 1 { "" } else { "s" },
+                        "All memo context ({}):\n\n{}",
+                        summary.to_lowercase(),
                         context
                     )))
                 }
             }
-            Err(e) => {
-                tracing::error!("Failed to get memo context: {}", e);
-                Err(McpError::internal_error(
-                    format!("Failed to get memo context: {e}"),
-                    None,
-                ))
-            }
+            Err(e) => Err(McpErrorHandler::handle_error(e, "get memo context"))
         }
     }
 

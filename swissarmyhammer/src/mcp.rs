@@ -24,6 +24,7 @@ pub mod error_handling;
 pub mod file_watcher;
 pub mod memo_types;
 pub mod responses;
+pub mod shared_utils;
 pub mod tool_handlers;
 pub mod types;
 pub mod utils;

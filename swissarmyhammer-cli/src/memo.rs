@@ -26,11 +26,11 @@ pub async fn handle_memo_command(command: MemoCommands) -> Result<(), Box<dyn st
     match storage.migrate_from_json(true).await {
         Ok(migrated_count) => {
             if migrated_count > 0 {
-                println!("Migrated {} JSON memos to markdown format.", migrated_count);
+                println!("Migrated {migrated_count} JSON memos to markdown format.");
             }
         }
         Err(e) => {
-            eprintln!("Warning: Failed to migrate JSON memos to markdown format: {}", e);
+            eprintln!("Warning: Failed to migrate JSON memos to markdown format: {e}");
             // Continue execution - migration failure should not prevent CLI operation
         }
     }
@@ -558,7 +558,7 @@ async fn migrate_memos(
     remove_json: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("🔄 Starting migration from JSON to markdown format...");
-    
+
     match storage.migrate_from_json(remove_json).await {
         Ok(migrated_count) => {
             if migrated_count == 0 {
@@ -569,7 +569,7 @@ async fn migrate_memos(
                     migrated_count,
                     if migrated_count == 1 { "" } else { "s" }
                 );
-                
+
                 if remove_json {
                     println!("🗑️  Original JSON files have been removed.");
                 } else {
@@ -579,11 +579,11 @@ async fn migrate_memos(
             }
         }
         Err(e) => {
-            eprintln!("❌ Migration failed: {}", e);
+            eprintln!("❌ Migration failed: {e}");
             eprintln!("   JSON files have been preserved for safety.");
             return Err(e.into());
         }
     }
-    
+
     Ok(())
 }

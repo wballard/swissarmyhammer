@@ -2863,6 +2863,13 @@ mod tests {
                 .output()
                 .expect("Failed to init git repo");
 
+            // Explicitly set the default branch name to "main" for consistency
+            Command::new("git")
+                .args(["branch", "-M", "main"])
+                .current_dir(&temp_path)
+                .output()
+                .expect("Failed to set main branch");
+
             // Set up git config for testing
             Command::new("git")
                 .args(["config", "user.email", "test@example.com"])

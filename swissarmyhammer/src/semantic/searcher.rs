@@ -43,25 +43,39 @@ impl SemanticSearcher {
     }
 
     /// Search for code chunks semantically similar to the query
-    pub fn search(&self, query: &str, options: &SearchOptions) -> Result<Vec<SemanticSearchResult>> {
+    pub fn search(
+        &self,
+        query: &str,
+        options: &SearchOptions,
+    ) -> Result<Vec<SemanticSearchResult>> {
         // Generate embedding for the query
         let query_embedding = self.embedding_service.embed_text(query)?;
 
         // Search for similar chunks in storage
-        let mut results = self.storage.search_similar(&query_embedding, options.limit * 2, options.min_score)?;
+        let mut results =
+            self.storage
+                .search_similar(&query_embedding, options.limit * 2, options.min_score)?;
 
         // Apply filters
         results = self.apply_filters(results, options);
 
         // Sort by score (highest first) and limit results
-        results.sort_by(|a, b| b.similarity_score.partial_cmp(&a.similarity_score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.similarity_score
+                .partial_cmp(&a.similarity_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results.truncate(options.limit);
 
         Ok(results)
     }
 
     /// Search for code chunks with multiple query terms
-    pub fn search_multi(&self, queries: &[&str], options: &SearchOptions) -> Result<Vec<SemanticSearchResult>> {
+    pub fn search_multi(
+        &self,
+        queries: &[&str],
+        options: &SearchOptions,
+    ) -> Result<Vec<SemanticSearchResult>> {
         let mut all_results = Vec::new();
 
         for query in queries {
@@ -80,7 +94,11 @@ impl SemanticSearcher {
         }
 
         // Sort and limit
-        merged_results.sort_by(|a, b| b.similarity_score.partial_cmp(&a.similarity_score).unwrap_or(std::cmp::Ordering::Equal));
+        merged_results.sort_by(|a, b| {
+            b.similarity_score
+                .partial_cmp(&a.similarity_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         merged_results.truncate(options.limit);
 
         Ok(merged_results)
@@ -93,7 +111,11 @@ impl SemanticSearcher {
     }
 
     /// Apply filters to search results
-    fn apply_filters(&self, mut results: Vec<SemanticSearchResult>, options: &SearchOptions) -> Vec<SemanticSearchResult> {
+    fn apply_filters(
+        &self,
+        mut results: Vec<SemanticSearchResult>,
+        options: &SearchOptions,
+    ) -> Vec<SemanticSearchResult> {
         // Filter by minimum score
         results.retain(|result| result.similarity_score >= options.min_score);
 
@@ -104,11 +126,7 @@ impl SemanticSearcher {
 
         // Filter by file pattern
         if let Some(ref pattern) = options.file_filter {
-            results.retain(|result| {
-                result.chunk.file_path
-                    .to_string_lossy()
-                    .contains(pattern)
-            });
+            results.retain(|result| result.chunk.file_path.to_string_lossy().contains(pattern));
         }
 
         results
@@ -118,7 +136,9 @@ impl SemanticSearcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::semantic::{SemanticConfig, VectorStorage, Language, CodeChunk, ChunkType, ContentHash};
+    use crate::semantic::{
+        ChunkType, CodeChunk, ContentHash, Language, SemanticConfig, VectorStorage,
+    };
     use std::path::PathBuf;
 
     fn create_test_searcher() -> Result<SemanticSearcher> {
@@ -151,7 +171,7 @@ mod tests {
     fn test_search_empty_results() {
         let searcher = create_test_searcher().unwrap();
         let options = SearchOptions::default();
-        
+
         let results = searcher.search("fn main", &options);
         assert!(results.is_ok());
         assert_eq!(results.unwrap().len(), 0);
@@ -170,20 +190,20 @@ mod tests {
     fn test_apply_filters_min_score() {
         let searcher = create_test_searcher().unwrap();
         let chunk = create_test_chunk();
-        
+
         let results = vec![
-            SemanticSearchResult { 
-                chunk: chunk.clone(), 
+            SemanticSearchResult {
+                chunk: chunk.clone(),
                 similarity_score: 0.8,
                 excerpt: "test excerpt".to_string(),
             },
-            SemanticSearchResult { 
-                chunk: chunk.clone(), 
+            SemanticSearchResult {
+                chunk: chunk.clone(),
                 similarity_score: 0.3,
                 excerpt: "test excerpt".to_string(),
             },
-            SemanticSearchResult { 
-                chunk, 
+            SemanticSearchResult {
+                chunk,
                 similarity_score: 0.1,
                 excerpt: "test excerpt".to_string(),
             },
@@ -204,19 +224,19 @@ mod tests {
         let searcher = create_test_searcher().unwrap();
         let mut rust_chunk = create_test_chunk();
         rust_chunk.language = Language::Rust;
-        
+
         let mut python_chunk = create_test_chunk();
         python_chunk.language = Language::Python;
         python_chunk.id = "test-chunk-2".to_string();
 
         let results = vec![
-            SemanticSearchResult { 
-                chunk: rust_chunk, 
+            SemanticSearchResult {
+                chunk: rust_chunk,
                 similarity_score: 0.8,
                 excerpt: "test excerpt".to_string(),
             },
-            SemanticSearchResult { 
-                chunk: python_chunk, 
+            SemanticSearchResult {
+                chunk: python_chunk,
                 similarity_score: 0.9,
                 excerpt: "test excerpt".to_string(),
             },

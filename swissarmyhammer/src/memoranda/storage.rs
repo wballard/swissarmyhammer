@@ -1181,7 +1181,6 @@ impl MarkdownMemoStorage {
         }
         Ok(())
     }
-
 }
 
 #[async_trait]
@@ -2628,4 +2627,3 @@ mod tests {
         assert!(!results[0].highlights.is_empty());
     }
 }
-

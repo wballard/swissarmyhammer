@@ -264,6 +264,36 @@ pub fn generate_excerpt_with_long_text(content: &str, query: &str, max_length: u
     }
 }
 
+/// Run semantic search commands
+pub async fn run_search(subcommand: SearchCommands) -> i32 {
+    use crate::exit_codes::EXIT_SUCCESS;
+
+    match subcommand {
+        SearchCommands::Index { glob, force } => {
+            println!("🚧 Semantic search indexing is not yet implemented.");
+            println!("Would index files matching: {glob}");
+            if force {
+                println!("Force re-indexing: enabled");
+            }
+            // TODO: Implement semantic search indexing
+            // For now, return success to allow CLI compilation
+            EXIT_SUCCESS
+        }
+        SearchCommands::Query {
+            query,
+            limit,
+            format: _format,
+        } => {
+            println!("🚧 Semantic search querying is not yet implemented.");
+            println!("Would search for: {query}");
+            println!("Result limit: {limit}");
+            // TODO: Implement semantic search querying
+            // For now, return success to allow CLI compilation
+            EXIT_SUCCESS
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -302,31 +332,5 @@ mod tests {
 
         assert_eq!(result.name, "test-prompt");
         assert_eq!(result.score, 100.0);
-    }
-}
-
-/// Run semantic search commands
-pub async fn run_search(subcommand: SearchCommands) -> i32 {
-    use crate::exit_codes::{EXIT_ERROR, EXIT_SUCCESS};
-    
-    match subcommand {
-        SearchCommands::Index { glob, force } => {
-            println!("🚧 Semantic search indexing is not yet implemented.");
-            println!("Would index files matching: {}", glob);
-            if force {
-                println!("Force re-indexing: enabled");
-            }
-            // TODO: Implement semantic search indexing
-            // For now, return success to allow CLI compilation
-            EXIT_SUCCESS
-        }
-        SearchCommands::Query { query, limit, format: _format } => {
-            println!("🚧 Semantic search querying is not yet implemented.");
-            println!("Would search for: {}", query);
-            println!("Result limit: {}", limit);
-            // TODO: Implement semantic search querying
-            // For now, return success to allow CLI compilation
-            EXIT_SUCCESS
-        }
     }
 }

@@ -1,22 +1,21 @@
 //! Integration tests for semantic search module
 
 #[cfg(test)]
-mod tests {
+mod integration_tests {
     use crate::semantic::*;
-    use tempfile::TempDir;
 
     #[test]
     fn test_semantic_module_imports() {
         // Test that all module exports are accessible
         let _config = SemanticConfig::default();
         let _language = Language::Rust;
-        
+
         // Verify we can create core components
         let parser_config = ParserConfig::default();
         assert!(CodeParser::new(parser_config).is_ok());
-        
+
         assert!(EmbeddingService::new().is_ok());
-        
+
         let config = SemanticConfig::default();
         assert!(VectorStorage::new(config).is_ok());
     }
@@ -26,12 +25,12 @@ mod tests {
         // Test Language enum serialization/deserialization
         let languages = vec![
             Language::Rust,
-            Language::Python, 
+            Language::Python,
             Language::TypeScript,
             Language::JavaScript,
             Language::Dart,
         ];
-        
+
         for lang in languages {
             let serialized = serde_json::to_string(&lang).unwrap();
             let deserialized: Language = serde_json::from_str(&serialized).unwrap();
@@ -42,7 +41,10 @@ mod tests {
     #[test]
     fn test_semantic_config_default() {
         let config = SemanticConfig::default();
-        assert!(config.database_path.to_string_lossy().contains("semantic.db"));
+        assert!(config
+            .database_path
+            .to_string_lossy()
+            .contains("semantic.db"));
         assert_eq!(config.embedding_model, "nomic-ai/nomic-embed-code");
         assert_eq!(config.chunk_size, 512);
         assert_eq!(config.chunk_overlap, 64);
@@ -74,7 +76,7 @@ mod tests {
         assert!(options.file_filter.is_none());
     }
 
-    #[test] 
+    #[test]
     fn test_semantic_utils() {
         // Test text normalization
         let input = "  fn main() {  \n\n  println!(\"hello\");  \n  }  \n\n";
@@ -82,13 +84,13 @@ mod tests {
         assert!(!normalized.contains("  "));
         assert!(normalized.contains("fn main()"));
         assert!(normalized.contains("println!"));
-        
+
         // Test cosine similarity
         let a = vec![1.0, 0.0, 0.0];
         let b = vec![1.0, 0.0, 0.0];
         let similarity = SemanticUtils::cosine_similarity(&a, &b);
         assert!((similarity - 1.0).abs() < 1e-6);
-        
+
         // Test chunk ID generation
         let path = std::path::Path::new("test.rs");
         let id = SemanticUtils::generate_chunk_id(path, 1, 5);
@@ -99,10 +101,10 @@ mod tests {
     fn test_file_extensions_for_languages() {
         let rust_exts = SemanticUtils::get_file_extensions_for_language(&Language::Rust);
         assert!(rust_exts.contains(&"rs"));
-        
+
         let python_exts = SemanticUtils::get_file_extensions_for_language(&Language::Python);
         assert!(python_exts.contains(&"py"));
-        
+
         let ts_exts = SemanticUtils::get_file_extensions_for_language(&Language::TypeScript);
         assert!(ts_exts.contains(&"ts"));
     }
@@ -110,19 +112,29 @@ mod tests {
     #[test]
     fn test_should_index_file() {
         // Should index normal source files
-        assert!(SemanticUtils::should_index_file(std::path::Path::new("src/main.rs")));
-        assert!(SemanticUtils::should_index_file(std::path::Path::new("lib/utils.py")));
-        
+        assert!(SemanticUtils::should_index_file(std::path::Path::new(
+            "src/main.rs"
+        )));
+        assert!(SemanticUtils::should_index_file(std::path::Path::new(
+            "lib/utils.py"
+        )));
+
         // Should not index hidden files or build directories
-        assert!(!SemanticUtils::should_index_file(std::path::Path::new(".hidden/file.rs")));
-        assert!(!SemanticUtils::should_index_file(std::path::Path::new("target/debug/main")));
-        assert!(!SemanticUtils::should_index_file(std::path::Path::new("node_modules/package/index.js")));
+        assert!(!SemanticUtils::should_index_file(std::path::Path::new(
+            ".hidden/file.rs"
+        )));
+        assert!(!SemanticUtils::should_index_file(std::path::Path::new(
+            "target/debug/main"
+        )));
+        assert!(!SemanticUtils::should_index_file(std::path::Path::new(
+            "node_modules/package/index.js"
+        )));
     }
 
     #[test]
     fn test_code_chunk_creation() {
         use std::path::PathBuf;
-        
+
         let chunk = CodeChunk {
             id: "test-1".to_string(),
             file_path: PathBuf::from("test.rs"),
@@ -133,7 +145,7 @@ mod tests {
             chunk_type: ChunkType::Function,
             content_hash: ContentHash("abc123".to_string()),
         };
-        
+
         assert_eq!(chunk.id, "test-1");
         assert_eq!(chunk.language, Language::Rust);
         assert_eq!(chunk.chunk_type, ChunkType::Function);
@@ -142,7 +154,7 @@ mod tests {
     #[test]
     fn test_search_result_creation() {
         use std::path::PathBuf;
-        
+
         let chunk = CodeChunk {
             id: "test-1".to_string(),
             file_path: PathBuf::from("test.rs"),
@@ -153,13 +165,13 @@ mod tests {
             chunk_type: ChunkType::Function,
             content_hash: ContentHash("abc123".to_string()),
         };
-        
+
         let result = SemanticSearchResult {
             chunk,
             similarity_score: 0.95,
             excerpt: "fn main() {}".to_string(),
         };
-        
+
         assert_eq!(result.similarity_score, 0.95);
         assert_eq!(result.chunk.id, "test-1");
     }

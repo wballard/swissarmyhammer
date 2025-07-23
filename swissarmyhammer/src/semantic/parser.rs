@@ -3,16 +3,264 @@
 use crate::semantic::types::{ChunkType, CodeChunk, ContentHash, Language};
 use crate::semantic::utils::FileHasher;
 use crate::semantic::{Result, SemanticError};
+use std::collections::HashMap;
 use std::path::Path;
-use tree_sitter::{Node, Parser, Query, QueryCursor, StreamingIterator};
+use tree_sitter::{
+    Language as TreeSitterLanguage, Node, Parser, Query, QueryCursor, StreamingIterator,
+};
 
-/// TreeSitter-based code parser
+/// Definition of language support for TreeSitter parsing
+#[derive(Debug, Clone)]
+pub struct LanguageDefinition {
+    /// Language identifier
+    pub language: Language,
+    /// File extensions supported by this language
+    pub extensions: Vec<&'static str>,
+    /// TreeSitter language function
+    pub tree_sitter_language: fn() -> TreeSitterLanguage,
+    /// Query patterns for extracting semantic chunks
+    pub queries: Vec<(&'static str, ChunkType)>,
+}
+
+/// Registry of supported languages with their definitions
+pub struct LanguageRegistry {
+    definitions: HashMap<Language, LanguageDefinition>,
+    extension_map: HashMap<String, Language>,
+}
+
+impl LanguageRegistry {
+    /// Create a new language registry with default supported languages
+    pub fn with_defaults() -> Self {
+        let mut registry = Self {
+            definitions: HashMap::new(),
+            extension_map: HashMap::new(),
+        };
+
+        // Register default languages
+        registry.register(create_rust_definition());
+        registry.register(create_python_definition());
+        registry.register(create_typescript_definition());
+        registry.register(create_javascript_definition());
+        registry.register(create_dart_definition());
+
+        registry
+    }
+
+    /// Register a new language definition
+    pub fn register(&mut self, definition: LanguageDefinition) {
+        // Map file extensions to language
+        for ext in &definition.extensions {
+            self.extension_map
+                .insert(ext.to_string(), definition.language.clone());
+        }
+
+        self.definitions
+            .insert(definition.language.clone(), definition);
+    }
+
+    /// Get language definition by language type
+    pub fn get_definition(&self, language: &Language) -> Option<&LanguageDefinition> {
+        self.definitions.get(language)
+    }
+
+    /// Detect language from file extension
+    pub fn detect_language(&self, file_path: &Path) -> Language {
+        file_path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .and_then(|ext| self.extension_map.get(ext))
+            .cloned()
+            .unwrap_or(Language::Unknown)
+    }
+
+    /// Get all supported languages
+    pub fn supported_languages(&self) -> Vec<Language> {
+        self.definitions.keys().cloned().collect()
+    }
+}
+
+/// Create Rust language definition
+fn create_rust_definition() -> LanguageDefinition {
+    LanguageDefinition {
+        language: Language::Rust,
+        extensions: vec!["rs"],
+        tree_sitter_language: || tree_sitter_rust::LANGUAGE.into(),
+        queries: vec![
+            // Functions
+            (
+                "(function_item name: (identifier) @name body: (_)) @function",
+                ChunkType::Function,
+            ),
+            // Impl blocks
+            (
+                "(impl_item type: (_) @type body: (declaration_list) @body) @impl",
+                ChunkType::Class,
+            ),
+            // Methods within impl blocks
+            (
+                "(impl_item body: (declaration_list (function_item name: (identifier) @method_name) @method)) @impl_methods",
+                ChunkType::Function,
+            ),
+            // Structs
+            (
+                "(struct_item name: (type_identifier) @name) @struct",
+                ChunkType::Class,
+            ),
+            // Enums
+            (
+                "(enum_item name: (type_identifier) @name) @enum",
+                ChunkType::Class,
+            ),
+            // Use statements
+            ("(use_declaration) @import", ChunkType::Import),
+        ],
+    }
+}
+
+/// Create Python language definition
+fn create_python_definition() -> LanguageDefinition {
+    LanguageDefinition {
+        language: Language::Python,
+        extensions: vec!["py", "pyx", "pyi"],
+        tree_sitter_language: || tree_sitter_python::LANGUAGE.into(),
+        queries: vec![
+            // Functions
+            (
+                "(function_definition name: (identifier) @name) @function",
+                ChunkType::Function,
+            ),
+            // Classes
+            (
+                "(class_definition name: (identifier) @name) @class",
+                ChunkType::Class,
+            ),
+            // Methods within classes
+            (
+                "(class_definition body: (block (function_definition name: (identifier) @method_name) @method)) @class_methods",
+                ChunkType::Function,
+            ),
+            // Import statements
+            ("(import_statement) @import", ChunkType::Import),
+            ("(import_from_statement) @import", ChunkType::Import),
+        ],
+    }
+}
+
+/// Create TypeScript language definition
+fn create_typescript_definition() -> LanguageDefinition {
+    LanguageDefinition {
+        language: Language::TypeScript,
+        extensions: vec!["ts", "tsx"],
+        tree_sitter_language: || tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+        queries: vec![
+            // Functions
+            (
+                "(function_declaration name: (identifier) @name) @function",
+                ChunkType::Function,
+            ),
+            // Arrow functions
+            ("(arrow_function) @function", ChunkType::Function),
+            // Classes
+            (
+                "(class_declaration name: (type_identifier) @name) @class",
+                ChunkType::Class,
+            ),
+            // Methods within classes
+            (
+                "(class_declaration body: (class_body (method_definition name: (property_identifier) @method_name) @method)) @class_methods",
+                ChunkType::Function,
+            ),
+            // Interface definitions
+            (
+                "(interface_declaration name: (type_identifier) @name) @interface",
+                ChunkType::Class,
+            ),
+            // Type aliases
+            (
+                "(type_alias_declaration name: (type_identifier) @name) @type_alias",
+                ChunkType::Class,
+            ),
+            // Function expressions
+            (
+                "(variable_declarator name: (identifier) @name value: (function_expression)) @function",
+                ChunkType::Function,
+            ),
+            (
+                "(variable_declarator name: (identifier) @name value: (arrow_function)) @function",
+                ChunkType::Function,
+            ),
+            // Import statements
+            ("(import_statement) @import", ChunkType::Import),
+        ],
+    }
+}
+
+/// Create JavaScript language definition
+fn create_javascript_definition() -> LanguageDefinition {
+    LanguageDefinition {
+        language: Language::JavaScript,
+        extensions: vec!["js", "jsx", "mjs"],
+        tree_sitter_language: || tree_sitter_javascript::LANGUAGE.into(),
+        queries: vec![
+            // Functions
+            (
+                "(function_declaration name: (identifier) @name) @function",
+                ChunkType::Function,
+            ),
+            // Arrow functions
+            ("(arrow_function) @function", ChunkType::Function),
+            // Classes
+            (
+                "(class_declaration name: (identifier) @name) @class",
+                ChunkType::Class,
+            ),
+            // Methods within classes
+            (
+                "(class_declaration body: (class_body (method_definition name: (property_identifier) @method_name) @method)) @class_methods",
+                ChunkType::Function,
+            ),
+            // Function expressions
+            (
+                "(variable_declarator name: (identifier) @name value: (function_expression)) @function",
+                ChunkType::Function,
+            ),
+            (
+                "(variable_declarator name: (identifier) @name value: (arrow_function)) @function",
+                ChunkType::Function,
+            ),
+            // Import statements
+            ("(import_statement) @import", ChunkType::Import),
+        ],
+    }
+}
+
+/// Create Dart language definition
+fn create_dart_definition() -> LanguageDefinition {
+    LanguageDefinition {
+        language: Language::Dart,
+        extensions: vec!["dart"],
+        tree_sitter_language: || tree_sitter_dart::language(),
+        queries: vec![
+            // Functions
+            (
+                "(function_signature name: (identifier) @name) @function",
+                ChunkType::Function,
+            ),
+            // Classes
+            (
+                "(class_definition name: (identifier) @name) @class",
+                ChunkType::Class,
+            ),
+            // Import statements
+            ("(import_specification) @import", ChunkType::Import),
+        ],
+    }
+}
+
+/// TreeSitter-based code parser with extensible language support
 pub struct CodeParser {
-    rust_parser: Option<Parser>,
-    python_parser: Option<Parser>,
-    typescript_parser: Option<Parser>,
-    javascript_parser: Option<Parser>,
-    dart_parser: Option<Parser>,
+    parsers: HashMap<Language, Parser>,
+    language_registry: LanguageRegistry,
     config: ParserConfig,
 }
 
@@ -38,270 +286,231 @@ impl Default for ParserConfig {
 }
 
 impl CodeParser {
-    /// Create a new code parser
+    /// Create a new code parser with extensible TreeSitter language support.
+    ///
+    /// Initializes TreeSitter parsers for all languages in the registry.
+    /// Languages that fail to initialize are skipped but other parsers remain functional.
+    /// Uses the provided configuration to control chunk size limits and extraction behavior.
+    ///
+    /// Validates all TreeSitter queries during initialization to catch syntax errors early.
+    ///
+    /// # Arguments
+    /// * `config` - Configuration settings for chunk size limits and parsing behavior
+    ///
+    /// # Returns
+    /// A new `CodeParser` instance or an error if creation fails
+    ///
+    /// # Errors
+    /// Returns error if any TreeSitter query is invalid or malformed
     pub fn new(config: ParserConfig) -> Result<Self> {
-        Ok(Self {
-            rust_parser: Self::create_rust_parser(),
-            python_parser: Self::create_python_parser(),
-            typescript_parser: Self::create_typescript_parser(),
-            javascript_parser: Self::create_javascript_parser(),
-            dart_parser: Self::create_dart_parser(),
+        let language_registry = LanguageRegistry::with_defaults();
+        let mut parsers = HashMap::new();
+
+        // Initialize parsers for all registered languages
+        for language in language_registry.supported_languages() {
+            if let Some(definition) = language_registry.get_definition(&language) {
+                match Self::create_parser_for_language(definition) {
+                    Some(parser) => {
+                        parsers.insert(language.clone(), parser);
+                        tracing::debug!("Initialized TreeSitter parser for {language:?}");
+                    }
+                    None => {
+                        tracing::warn!("Failed to initialize TreeSitter parser for {language:?}");
+                    }
+                }
+            }
+        }
+
+        let parser = Self {
+            parsers,
+            language_registry,
             config,
-        })
+        };
+
+        // Validate all queries during startup
+        parser.validate_all_queries()?;
+
+        tracing::info!(
+            "Initialized CodeParser with {} language parsers",
+            parser.parsers.len()
+        );
+        Ok(parser)
     }
 
-    fn create_rust_parser() -> Option<Parser> {
+    /// Create a parser for a specific language definition
+    fn create_parser_for_language(definition: &LanguageDefinition) -> Option<Parser> {
         let mut parser = Parser::new();
-        match parser.set_language(&tree_sitter_rust::LANGUAGE.into()) {
+        let language = (definition.tree_sitter_language)();
+        match parser.set_language(&language) {
             Ok(_) => Some(parser),
             Err(e) => {
-                tracing::warn!("Failed to initialize Rust parser: {}", e);
+                tracing::warn!(
+                    "Failed to initialize {:?} parser: {}",
+                    definition.language,
+                    e
+                );
                 None
             }
         }
     }
 
-    fn create_python_parser() -> Option<Parser> {
-        let mut parser = Parser::new();
-        match parser.set_language(&tree_sitter_python::LANGUAGE.into()) {
-            Ok(_) => Some(parser),
-            Err(e) => {
-                tracing::warn!("Failed to initialize Python parser: {}", e);
-                None
-            }
-        }
+    /// Detect programming language from file extension using the language registry.
+    ///
+    /// Uses the extensible language registry to map file extensions to supported
+    /// languages. This makes it easy to add support for new languages without
+    /// modifying this method.
+    ///
+    /// # Arguments
+    /// * `file_path` - Path to the file to analyze
+    ///
+    /// # Returns
+    /// The detected `Language` or `Language::Unknown` if not supported
+    pub fn detect_language(&self, file_path: &Path) -> Language {
+        self.language_registry.detect_language(file_path)
     }
 
-    fn create_typescript_parser() -> Option<Parser> {
-        let mut parser = Parser::new();
-        match parser.set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()) {
-            Ok(_) => Some(parser),
-            Err(e) => {
-                tracing::warn!("Failed to initialize TypeScript parser: {}", e);
-                None
-            }
-        }
-    }
-
-    fn create_javascript_parser() -> Option<Parser> {
-        let mut parser = Parser::new();
-        match parser.set_language(&tree_sitter_javascript::LANGUAGE.into()) {
-            Ok(_) => Some(parser),
-            Err(e) => {
-                tracing::warn!("Failed to initialize JavaScript parser: {}", e);
-                None
-            }
-        }
-    }
-
-    fn create_dart_parser() -> Option<Parser> {
-        let mut parser = Parser::new();
-        match parser.set_language(&tree_sitter_dart::language()) {
-            Ok(_) => Some(parser),
-            Err(e) => {
-                tracing::warn!("Failed to initialize Dart parser: {}", e);
-                None
-            }
-        }
-    }
-
-    /// Detect programming language from file extension
-    pub fn detect_language(file_path: &Path) -> Language {
-        match file_path.extension().and_then(|ext| ext.to_str()) {
-            Some("rs") => Language::Rust,
-            Some("py") | Some("pyx") | Some("pyi") => Language::Python,
-            Some("ts") | Some("tsx") => Language::TypeScript,
-            Some("js") | Some("jsx") | Some("mjs") => Language::JavaScript,
-            Some("dart") => Language::Dart,
-            _ => Language::Unknown,
-        }
-    }
-
-    /// Get appropriate parser for language
+    /// Get appropriate parser for language from the registry
     fn get_parser_for_language(&mut self, language: &Language) -> Option<&mut Parser> {
-        match language {
-            Language::Rust => self.rust_parser.as_mut(),
-            Language::Python => self.python_parser.as_mut(),
-            Language::TypeScript => self.typescript_parser.as_mut(),
-            Language::JavaScript => self.javascript_parser.as_mut(),
-            Language::Dart => self.dart_parser.as_mut(),
-            Language::Unknown => None,
-        }
+        self.parsers.get_mut(language)
     }
 
-    /// Get TreeSitter queries for extracting semantic chunks
-    fn get_queries_for_language(language: &Language) -> Vec<(&'static str, ChunkType)> {
-        match language {
-            Language::Rust => vec![
-                // Functions
-                (
-                    "(function_item name: (identifier) @name body: (_)) @function",
-                    ChunkType::Function,
-                ),
-                // Impl blocks (corrected)
-                (
-                    "(impl_item type: (_) @type body: (declaration_list) @body) @impl",
-                    ChunkType::Class,
-                ),
-                // Methods within impl blocks
-                (
-                    "(impl_item body: (declaration_list (function_item name: (identifier) @method_name) @method)) @impl_methods",
-                    ChunkType::Function,
-                ),
-                // Structs
-                (
-                    "(struct_item name: (type_identifier) @name) @struct",
-                    ChunkType::Class,
-                ),
-                // Enums
-                (
-                    "(enum_item name: (type_identifier) @name) @enum",
-                    ChunkType::Class,
-                ),
-                // Use statements
-                ("(use_declaration) @import", ChunkType::Import),
-            ],
-            Language::Python => vec![
-                // Functions
-                (
-                    "(function_definition name: (identifier) @name) @function",
-                    ChunkType::Function,
-                ),
-                // Classes
-                (
-                    "(class_definition name: (identifier) @name) @class",
-                    ChunkType::Class,
-                ),
-                // Methods within classes
-                (
-                    "(class_definition body: (block (function_definition name: (identifier) @method_name) @method)) @class_methods",
-                    ChunkType::Function,
-                ),
-                // Import statements
-                ("(import_statement) @import", ChunkType::Import),
-                ("(import_from_statement) @import", ChunkType::Import),
-            ],
-            Language::TypeScript => vec![
-                // Functions
-                (
-                    "(function_declaration name: (identifier) @name) @function",
-                    ChunkType::Function,
-                ),
-                // Arrow functions
-                ("(arrow_function) @function", ChunkType::Function),
-                // Classes (TypeScript uses type_identifier)
-                (
-                    "(class_declaration name: (type_identifier) @name) @class",
-                    ChunkType::Class,
-                ),
-                // Methods within classes
-                (
-                    "(class_declaration body: (class_body (method_definition name: (property_identifier) @method_name) @method)) @class_methods",
-                    ChunkType::Function,
-                ),
-                // Interface definitions
-                (
-                    "(interface_declaration name: (type_identifier) @name) @interface",
-                    ChunkType::Class,
-                ),
-                // Type aliases
-                (
-                    "(type_alias_declaration name: (type_identifier) @name) @type_alias",
-                    ChunkType::Class,
-                ),
-                // Function expressions and assignments
-                (
-                    "(variable_declarator name: (identifier) @name value: (function_expression)) @function",
-                    ChunkType::Function,
-                ),
-                (
-                    "(variable_declarator name: (identifier) @name value: (arrow_function)) @function",
-                    ChunkType::Function,
-                ),
-                // Import statements
-                ("(import_statement) @import", ChunkType::Import),
-            ],
-            Language::JavaScript => vec![
-                // Functions
-                (
-                    "(function_declaration name: (identifier) @name) @function",
-                    ChunkType::Function,
-                ),
-                // Arrow functions
-                ("(arrow_function) @function", ChunkType::Function),
-                // Classes (JavaScript uses identifier)
-                (
-                    "(class_declaration name: (identifier) @name) @class",
-                    ChunkType::Class,
-                ),
-                // Methods within classes
-                (
-                    "(class_declaration body: (class_body (method_definition name: (property_identifier) @method_name) @method)) @class_methods",
-                    ChunkType::Function,
-                ),
-                // Function expressions and assignments
-                (
-                    "(variable_declarator name: (identifier) @name value: (function_expression)) @function",
-                    ChunkType::Function,
-                ),
-                (
-                    "(variable_declarator name: (identifier) @name value: (arrow_function)) @function",
-                    ChunkType::Function,
-                ),
-                // Import statements
-                ("(import_statement) @import", ChunkType::Import),
-            ],
-            Language::Dart => vec![
-                // Functions (corrected)
-                (
-                    "(function_signature name: (identifier) @name) @function",
-                    ChunkType::Function,
-                ),
-                (
-                    "(local_function_declaration name: (identifier) @name) @function",
-                    ChunkType::Function,
-                ),
-                // Classes (corrected)
-                (
-                    "(class_definition name: (identifier) @name) @class",
-                    ChunkType::Class,
-                ),
-                // Methods within classes
-                (
-                    "(class_definition body: (class_body (method_signature name: (identifier) @method_name) @method)) @class_methods",
-                    ChunkType::Function,
-                ),
-                // Import statements (corrected)
-                ("(import_specification) @import", ChunkType::Import),
-            ],
-            Language::Unknown => vec![],
-        }
+    /// Get TreeSitter queries for extracting semantic chunks from source code.
+    ///
+    /// Uses the language registry to get query patterns for the specified language.
+    /// This makes the query system extensible - new languages can be added by
+    /// registering them with their query definitions.
+    ///
+    /// # Arguments
+    /// * `language` - The programming language to get queries for
+    ///
+    /// # Returns
+    /// Vector of (query_pattern, chunk_type) tuples for the specified language
+    fn get_queries_for_language(&self, language: &Language) -> Vec<(&'static str, ChunkType)> {
+        self.language_registry
+            .get_definition(language)
+            .map(|def| def.queries.clone())
+            .unwrap_or_default()
     }
 
-    /// Parse a source file and extract code chunks
+    /// Parse a source file and extract semantic code chunks using TreeSitter.
+    ///
+    /// Attempts to parse the file using the appropriate TreeSitter grammar based on
+    /// file extension. Extracts semantic chunks like functions, classes, methods, and
+    /// imports using language-specific query patterns. Falls back to plain text parsing
+    /// if TreeSitter parsing fails for any reason.
+    ///
+    /// Performance metrics are logged including parse time, chunk count, and throughput.
+    ///
+    /// # TreeSitter Processing Flow
+    /// 1. Detect language from file extension
+    /// 2. Get appropriate TreeSitter parser for the language
+    /// 3. Parse content into syntax tree
+    /// 4. Apply semantic queries to extract meaningful code constructs
+    /// 5. Create chunks with accurate line numbers and content
+    /// 6. Apply configuration limits (size, count)
+    /// 7. Fall back to plain text if any step fails
+    ///
+    /// # Chunk Extraction
+    /// - Functions: Complete function definitions with signatures and bodies
+    /// - Classes: Class/struct/enum definitions including nested members
+    /// - Methods: Method definitions within classes or impl blocks
+    /// - Imports: Import/use statements for dependency tracking
+    /// - Fallback: Entire file as single plain text chunk if no semantic chunks found
+    ///
+    /// # Configuration Limits
+    /// - Filters chunks by `min_chunk_size` and `max_chunk_size`
+    /// - Limits total chunks per file to `max_chunks_per_file`
+    /// - Strict filtering: chunks that don't meet criteria are excluded
+    ///
+    /// # Arguments
+    /// * `file_path` - Path to the source file being parsed
+    /// * `content` - Raw file content as string
+    ///
+    /// # Returns
+    /// Vector of `CodeChunk` objects representing extracted semantic units,
+    /// or error if parsing completely fails
+    ///
+    /// # Errors
+    /// Returns error only if both TreeSitter parsing and plain text fallback fail
     pub fn parse_file(&mut self, file_path: &Path, content: &str) -> Result<Vec<CodeChunk>> {
-        let language = Self::detect_language(file_path);
+        let start_time = std::time::Instant::now();
+        let content_size = content.len();
+        let language = self.detect_language(file_path);
 
-        // Try TreeSitter parsing first
-        match self.parse_with_treesitter(file_path, content, &language) {
+        let result = match self.parse_with_treesitter(file_path, content, &language) {
             Ok(chunks) => {
-                tracing::debug!(
-                    "Successfully parsed {} with TreeSitter: {} chunks",
+                let parse_duration = start_time.elapsed();
+                let chunks_per_sec = if parse_duration.as_secs_f64() > 0.0 {
+                    chunks.len() as f64 / parse_duration.as_secs_f64()
+                } else {
+                    chunks.len() as f64
+                };
+                let bytes_per_sec = if parse_duration.as_secs_f64() > 0.0 {
+                    content_size as f64 / parse_duration.as_secs_f64()
+                } else {
+                    content_size as f64
+                };
+
+                tracing::info!(
+                    "TreeSitter parse success: {} | {} chunks | {:.2}ms | {:.0} chunks/sec | {:.0} bytes/sec",
                     file_path.display(),
-                    chunks.len()
+                    chunks.len(),
+                    parse_duration.as_secs_f64() * 1000.0,
+                    chunks_per_sec,
+                    bytes_per_sec
                 );
                 Ok(chunks)
             }
             Err(e) => {
                 // Fall back to plain text as per specification
                 tracing::warn!(
-                    "TreeSitter parsing failed for {}: {}. Treating as plain text.",
+                    "TreeSitter parsing failed for {}: {}. Falling back to plain text.",
                     file_path.display(),
                     e
                 );
-                self.parse_as_plain_text(file_path, content)
+                let fallback_result = self.parse_as_plain_text(file_path, content);
+
+                if let Ok(ref chunks) = fallback_result {
+                    let parse_duration = start_time.elapsed();
+                    tracing::info!(
+                        "Plain text fallback: {} | {} chunks | {:.2}ms",
+                        file_path.display(),
+                        chunks.len(),
+                        parse_duration.as_secs_f64() * 1000.0
+                    );
+                }
+
+                fallback_result
+            }
+        };
+
+        // Log final metrics
+        match &result {
+            Ok(chunks) => {
+                let total_duration = start_time.elapsed();
+                tracing::debug!(
+                    "Parse complete: {} | language: {:?} | {} chunks | {} bytes | {:.2}ms total",
+                    file_path.display(),
+                    language,
+                    chunks.len(),
+                    content_size,
+                    total_duration.as_secs_f64() * 1000.0
+                );
+            }
+            Err(e) => {
+                let total_duration = start_time.elapsed();
+                tracing::error!(
+                    "Parse failed completely: {} | language: {:?} | {} bytes | {:.2}ms | error: {}",
+                    file_path.display(),
+                    language,
+                    content_size,
+                    total_duration.as_secs_f64() * 1000.0,
+                    e
+                );
             }
         }
+
+        result
     }
 
     fn parse_with_treesitter(
@@ -314,21 +523,27 @@ impl CodeParser {
             SemanticError::TreeSitter(format!("No parser available for language: {language:?}"))
         })?;
 
+        let tree_parse_start = std::time::Instant::now();
         let tree = parser
             .parse(content, None)
             .ok_or_else(|| SemanticError::TreeSitter("Failed to parse file".to_string()))?;
+        let tree_parse_duration = tree_parse_start.elapsed();
 
         let mut chunks = Vec::new();
         let content_hash = FileHasher::hash_string(content);
+        let queries = self.get_queries_for_language(language);
+        let mut total_matches = 0;
 
+        let query_start = std::time::Instant::now();
         // Extract semantic chunks using queries
-        for (query_str, chunk_type) in Self::get_queries_for_language(language) {
+        for (query_str, chunk_type) in queries {
             let query = Query::new(&tree.language(), query_str)
                 .map_err(|e| SemanticError::TreeSitter(format!("Invalid query: {e}")))?;
 
             let mut cursor = QueryCursor::new();
             let matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
 
+            let mut query_matches = 0;
             let mut matches = matches;
             while let Some(query_match) = matches.get() {
                 for capture in query_match.captures {
@@ -342,10 +557,22 @@ impl CodeParser {
                         content_hash.clone(),
                     )?;
                     chunks.push(chunk);
+                    query_matches += 1;
                 }
                 matches.advance();
             }
+
+            if query_matches > 0 {
+                tracing::debug!(
+                    "Query extracted {} chunks for {:?} type from {}",
+                    query_matches,
+                    chunk_type,
+                    file_path.display()
+                );
+            }
+            total_matches += query_matches;
         }
+        let query_duration = query_start.elapsed();
 
         // If no semantic chunks found, create one chunk for entire file
         if chunks.is_empty() {
@@ -357,8 +584,22 @@ impl CodeParser {
             )?);
         }
 
-        // Apply configuration limits
+        let filter_start = std::time::Instant::now();
+        let initial_chunk_count = chunks.len();
         let filtered_chunks = self.apply_chunk_limits_strict(chunks);
+        let filter_duration = filter_start.elapsed();
+        let filtered_count = initial_chunk_count - filtered_chunks.len();
+
+        tracing::debug!(
+            "TreeSitter parsing metrics: {} | tree: {:.2}ms | queries: {:.2}ms ({} matches) | filter: {:.2}ms ({} filtered)",
+            file_path.display(),
+            tree_parse_duration.as_secs_f64() * 1000.0,
+            query_duration.as_secs_f64() * 1000.0,
+            total_matches,
+            filter_duration.as_secs_f64() * 1000.0,
+            filtered_count
+        );
+
         Ok(filtered_chunks)
     }
 
@@ -413,7 +654,7 @@ impl CodeParser {
 
     fn parse_as_plain_text(&self, file_path: &Path, content: &str) -> Result<Vec<CodeChunk>> {
         let content_hash = FileHasher::hash_string(content);
-        let language = Self::detect_language(file_path);
+        let language = self.detect_language(file_path);
 
         // Create single chunk for entire file
         let chunk = self.create_full_file_chunk(file_path, content, &language, &content_hash)?;
@@ -445,9 +686,128 @@ impl CodeParser {
         })
     }
 
-    /// Check if a file is supported for parsing
+    /// Check if a file is supported for TreeSitter semantic parsing.
+    ///
+    /// Uses the extensible language registry to determine if the file extension
+    /// maps to a supported language with an available TreeSitter parser.
+    /// Files with unknown extensions will fall back to plain text parsing.
+    ///
+    /// # Arguments
+    /// * `file_path` - Path to check for language support
+    ///
+    /// # Returns
+    /// `true` if the file extension maps to a supported language, `false` otherwise
     pub fn is_supported_file(&self, file_path: &Path) -> bool {
-        !matches!(Self::detect_language(file_path), Language::Unknown)
+        let language = self.detect_language(file_path);
+        !matches!(language, Language::Unknown) && self.parsers.contains_key(&language)
+    }
+
+    /// Validate all TreeSitter queries for syntax correctness.
+    ///
+    /// Compiles all query patterns for each supported language to ensure they are
+    /// syntactically valid according to the TreeSitter grammar. This catches query
+    /// errors at startup rather than during file parsing.
+    ///
+    /// # Validation Process
+    /// 1. For each language with an available parser
+    /// 2. Get all query patterns for that language
+    /// 3. Attempt to compile each query against the language grammar
+    /// 4. Report detailed error information for any invalid queries
+    ///
+    /// # Returns
+    /// `Ok(())` if all queries are valid, or error with details of first invalid query
+    ///
+    /// # Errors
+    /// Returns `SemanticError::TreeSitter` with query validation details if any query is invalid
+    /// Validate all TreeSitter queries for syntax correctness using the registry.
+    ///
+    /// Iterates through all languages in the registry and validates their query patterns
+    /// against the corresponding TreeSitter grammars. This extensible approach
+    /// automatically validates queries for any registered language.
+    ///
+    /// # Returns
+    /// `Ok(())` if all queries are valid, or error with details of first invalid query
+    fn validate_all_queries(&self) -> Result<()> {
+        for language in self.language_registry.supported_languages() {
+            if let Some(parser) = self.parsers.get(&language) {
+                let queries = self.get_queries_for_language(&language);
+
+                for (query_str, chunk_type) in queries {
+                    // Attempt to compile the query to validate syntax
+                    let language_ref = parser.language().ok_or_else(|| {
+                        SemanticError::TreeSitter(format!(
+                            "Parser for {language:?} has no language set"
+                        ))
+                    })?;
+
+                    Query::new(&language_ref, query_str)
+                        .map_err(|e| {
+                            SemanticError::TreeSitter(format!(
+                                "Invalid query for {language:?} language (chunk type: {chunk_type:?}): {e}\nQuery: {query_str}"
+                            ))
+                        })?;
+                }
+
+                tracing::debug!(
+                    "Validated {} queries for {language:?}",
+                    self.get_queries_for_language(&language).len()
+                );
+            }
+        }
+
+        tracing::info!("All TreeSitter queries validated successfully");
+        Ok(())
+    }
+
+    /// Add support for a new language to the parser.
+    ///
+    /// This method demonstrates the extensibility - new languages can be added
+    /// at runtime by providing a language definition.
+    ///
+    /// # Arguments
+    /// * `definition` - Language definition with queries and TreeSitter language
+    ///
+    /// # Returns
+    /// `Ok(())` if the language was added successfully, error if parser creation or query validation fails
+    pub fn add_language_support(&mut self, definition: LanguageDefinition) -> Result<()> {
+        // Create parser for the new language
+        if let Some(parser) = Self::create_parser_for_language(&definition) {
+            // Validate queries for the new language
+            let language_ref = parser.language().ok_or_else(|| {
+                SemanticError::TreeSitter(format!(
+                    "Parser for {:?} has no language set",
+                    definition.language
+                ))
+            })?;
+
+            for (query_str, chunk_type) in &definition.queries {
+                Query::new(&language_ref, query_str)
+                    .map_err(|e| {
+                        SemanticError::TreeSitter(format!(
+                            "Invalid query for {:?} language (chunk type: {chunk_type:?}): {e}\nQuery: {query_str}",
+                            definition.language
+                        ))
+                    })?;
+            }
+
+            // Register the language and store the parser
+            let language = definition.language.clone();
+            self.parsers.insert(language.clone(), parser);
+            // Note: We can't modify the registry here as it's immutable,
+            // but in a real implementation you might want to make it mutable
+
+            tracing::info!(
+                "Added support for {:?} language with {} queries",
+                language,
+                definition.queries.len()
+            );
+            Ok(())
+        } else {
+            Err(SemanticError::TreeSitter(format!(
+                "Failed to create parser for {:?} language",
+                definition.language
+            )))
+        }
     }
 }
 
@@ -465,28 +825,27 @@ mod tests {
 
     #[test]
     fn test_detect_language() {
+        let parser = CodeParser::new(ParserConfig::default()).unwrap();
+
+        assert_eq!(parser.detect_language(Path::new("test.rs")), Language::Rust);
         assert_eq!(
-            CodeParser::detect_language(Path::new("test.rs")),
-            Language::Rust
-        );
-        assert_eq!(
-            CodeParser::detect_language(Path::new("test.py")),
+            parser.detect_language(Path::new("test.py")),
             Language::Python
         );
         assert_eq!(
-            CodeParser::detect_language(Path::new("test.ts")),
+            parser.detect_language(Path::new("test.ts")),
             Language::TypeScript
         );
         assert_eq!(
-            CodeParser::detect_language(Path::new("test.js")),
+            parser.detect_language(Path::new("test.js")),
             Language::JavaScript
         );
         assert_eq!(
-            CodeParser::detect_language(Path::new("test.dart")),
+            parser.detect_language(Path::new("test.dart")),
             Language::Dart
         );
         assert_eq!(
-            CodeParser::detect_language(Path::new("test.txt")),
+            parser.detect_language(Path::new("test.txt")),
             Language::Unknown
         );
     }

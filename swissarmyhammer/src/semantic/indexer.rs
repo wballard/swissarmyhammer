@@ -25,7 +25,23 @@ pub struct IndexingOptions {
 }
 
 impl FileIndexer {
-    /// Create a new file indexer
+    /// Create a new file indexer with TreeSitter parsing capabilities.
+    ///
+    /// Combines a TreeSitter-based code parser, embedding service, and vector storage
+    /// to create a complete semantic search indexing pipeline.
+    ///
+    /// # Components
+    /// - `parser`: TreeSitter-based parser that extracts semantic chunks from source code
+    /// - `embedding_service`: Service for generating vector embeddings from text chunks
+    /// - `storage`: Vector database for storing code chunks and their embeddings
+    ///
+    /// # Arguments
+    /// * `parser` - Configured `CodeParser` with TreeSitter support for target languages
+    /// * `embedding_service` - Service for generating vector embeddings from code chunks
+    /// * `storage` - Vector storage backend for persisting chunks and embeddings
+    ///
+    /// # Returns
+    /// A new `FileIndexer` ready to process source files
     pub fn new(
         parser: CodeParser,
         embedding_service: EmbeddingService,
@@ -38,7 +54,46 @@ impl FileIndexer {
         }
     }
 
-    /// Index files matching the given glob pattern
+    /// Index source files using TreeSitter parsing and semantic embeddings.
+    ///
+    /// Recursively walks the directory tree from `root_path`, processes supported source files
+    /// with TreeSitter parsing to extract semantic chunks, generates vector embeddings,
+    /// and stores everything in the vector database for semantic search.
+    ///
+    /// # Processing Pipeline
+    /// 1. **File Discovery**: Walk directory tree, filter by glob patterns and file types
+    /// 2. **TreeSitter Parsing**: Extract semantic chunks (functions, classes, methods) from source
+    /// 3. **Embedding Generation**: Create vector embeddings for each code chunk
+    /// 4. **Storage**: Persist chunks and embeddings in vector database
+    /// 5. **Statistics**: Track processed, skipped, and failed files
+    ///
+    /// # Supported Languages
+    /// Only files with TreeSitter parser support are processed:
+    /// - Rust (`.rs`)
+    /// - Python (`.py`, `.pyx`, `.pyi`)
+    /// - TypeScript (`.ts`, `.tsx`)
+    /// - JavaScript (`.js`, `.jsx`, `.mjs`)
+    /// - Dart (`.dart`)
+    ///
+    /// # Filtering and Limits
+    /// - **Glob Patterns**: Include only files matching optional glob pattern
+    /// - **Change Detection**: Skip files already indexed (unless `force: true`)
+    /// - **File Limits**: Stop after processing `max_files` if specified
+    /// - **Chunk Filtering**: Apply parser configuration limits for chunk size and count
+    ///
+    /// # Error Handling
+    /// Individual file failures are logged but don't stop the indexing process.
+    /// Failed files are counted in statistics but don't cause the operation to fail.
+    ///
+    /// # Arguments
+    /// * `root_path` - Root directory to start recursive file discovery
+    /// * `options` - Configuration for glob patterns, file limits, and force re-indexing
+    ///
+    /// # Returns
+    /// `IndexingStats` with counts of processed, skipped, and failed files plus total chunks
+    ///
+    /// # Errors
+    /// Returns error only if directory walking fails or database operations fail
     pub fn index_files(
         &mut self,
         root_path: &Path,
@@ -102,18 +157,29 @@ impl FileIndexer {
         Ok(stats)
     }
 
-    /// Index a single file
+    /// Index a single file with performance metrics.
+    ///
+    /// Tracks timing for file reading, parsing, embedding generation, and storage operations.
     fn index_single_file(&mut self, file_path: &Path) -> Result<usize> {
+        let total_start = std::time::Instant::now();
+
         // Read file content
+        let read_start = std::time::Instant::now();
         let content =
             std::fs::read_to_string(file_path).map_err(crate::error::SwissArmyHammerError::Io)?;
+        let read_duration = read_start.elapsed();
+        let file_size = content.len();
 
         // Parse into chunks
+        let parse_start = std::time::Instant::now();
         let chunks = self.parser.parse_file(file_path, &content)?;
+        let parse_duration = parse_start.elapsed();
 
         // Generate embeddings for chunks
+        let embed_start = std::time::Instant::now();
         let chunk_texts: Vec<&str> = chunks.iter().map(|c| c.content.as_str()).collect();
         let embedding_vectors = self.embedding_service.embed_batch(&chunk_texts)?;
+        let embed_duration = embed_start.elapsed();
 
         // Create embedding objects
         let embeddings: Vec<Embedding> = chunks
@@ -126,6 +192,7 @@ impl FileIndexer {
             .collect();
 
         // Store chunks and embeddings
+        let store_start = std::time::Instant::now();
         let chunk_count = chunks.len();
         for chunk in chunks {
             self.storage.store_chunk(&chunk)?;
@@ -134,6 +201,22 @@ impl FileIndexer {
         for embedding in embeddings {
             self.storage.store_embedding(&embedding)?;
         }
+        let store_duration = store_start.elapsed();
+
+        let total_duration = total_start.elapsed();
+
+        // Log comprehensive indexing metrics
+        tracing::info!(
+            "Indexed file: {} | {} bytes | {} chunks | total: {:.2}ms | read: {:.2}ms | parse: {:.2}ms | embed: {:.2}ms | store: {:.2}ms",
+            file_path.display(),
+            file_size,
+            chunk_count,
+            total_duration.as_secs_f64() * 1000.0,
+            read_duration.as_secs_f64() * 1000.0,
+            parse_duration.as_secs_f64() * 1000.0,
+            embed_duration.as_secs_f64() * 1000.0,
+            store_duration.as_secs_f64() * 1000.0
+        );
 
         Ok(chunk_count)
     }

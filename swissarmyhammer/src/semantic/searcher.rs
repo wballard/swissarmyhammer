@@ -48,7 +48,7 @@ impl SemanticSearcher {
         let query_embedding = self.embedding_service.embed_text(query)?;
 
         // Search for similar chunks in storage
-        let mut results = self.storage.search_similar(&query_embedding, options.limit * 2)?;
+        let mut results = self.storage.search_similar(&query_embedding, options.limit * 2, options.min_score)?;
 
         // Apply filters
         results = self.apply_filters(results, options);
@@ -118,7 +118,7 @@ impl SemanticSearcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::semantic::{SemanticConfig, VectorStorage, Language, CodeChunk};
+    use crate::semantic::{SemanticConfig, VectorStorage, Language, CodeChunk, ChunkType, ContentHash};
     use std::path::PathBuf;
 
     fn create_test_searcher() -> Result<SemanticSearcher> {
@@ -132,12 +132,12 @@ mod tests {
         CodeChunk {
             id: "test-chunk-1".to_string(),
             file_path: PathBuf::from("test.rs"),
-            content: "fn main() { println!(\"Hello, world!\"); }".to_string(),
             language: Language::Rust,
+            content: "fn main() { println!(\"Hello, world!\"); }".to_string(),
             start_line: 1,
             end_line: 1,
-            content_hash: "test-hash".to_string(),
-            embedding: Some(vec![0.1, 0.2, 0.3]),
+            chunk_type: ChunkType::Function,
+            content_hash: ContentHash("test-hash".to_string()),
         }
     }
 
@@ -172,9 +172,21 @@ mod tests {
         let chunk = create_test_chunk();
         
         let results = vec![
-            SearchResult { chunk: chunk.clone(), score: 0.8 },
-            SearchResult { chunk: chunk.clone(), score: 0.3 },
-            SearchResult { chunk, score: 0.1 },
+            SemanticSearchResult { 
+                chunk: chunk.clone(), 
+                similarity_score: 0.8,
+                excerpt: "test excerpt".to_string(),
+            },
+            SemanticSearchResult { 
+                chunk: chunk.clone(), 
+                similarity_score: 0.3,
+                excerpt: "test excerpt".to_string(),
+            },
+            SemanticSearchResult { 
+                chunk, 
+                similarity_score: 0.1,
+                excerpt: "test excerpt".to_string(),
+            },
         ];
 
         let options = SearchOptions {
@@ -184,7 +196,7 @@ mod tests {
 
         let filtered = searcher.apply_filters(results, &options);
         assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].score, 0.8);
+        assert_eq!(filtered[0].similarity_score, 0.8);
     }
 
     #[test]
@@ -198,8 +210,16 @@ mod tests {
         python_chunk.id = "test-chunk-2".to_string();
 
         let results = vec![
-            SearchResult { chunk: rust_chunk, score: 0.8 },
-            SearchResult { chunk: python_chunk, score: 0.9 },
+            SemanticSearchResult { 
+                chunk: rust_chunk, 
+                similarity_score: 0.8,
+                excerpt: "test excerpt".to_string(),
+            },
+            SemanticSearchResult { 
+                chunk: python_chunk, 
+                similarity_score: 0.9,
+                excerpt: "test excerpt".to_string(),
+            },
         ];
 
         let options = SearchOptions {

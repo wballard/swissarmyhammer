@@ -6,78 +6,58 @@
 
 use crate::error::{Result, SwissArmyHammerError};
 use crate::semantic::{
-    types::{CodeChunk, Embedding, IndexedFile, SemanticSearchResult, ContentHash, Language, ChunkType, FileId},
+    types::{
+        CodeChunk, ContentHash, Embedding, IndexStats, IndexedFile, Language, SemanticSearchResult,
+    },
     SemanticConfig,
 };
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
-/// DuckDB-based vector storage for code chunks and embeddings
+/// Vector storage for code chunks and embeddings (with in-memory fallback)
 pub struct VectorStorage {
     db_path: PathBuf,
-    config: SemanticConfig,
+    _config: SemanticConfig,
+    // In-memory storage for file metadata when DuckDB is not available
+    indexed_files: Mutex<HashMap<PathBuf, (ContentHash, IndexedFile)>>,
 }
 
 impl VectorStorage {
     /// Create a new vector storage instance
     pub fn new(config: SemanticConfig) -> Result<Self> {
         let db_path = config.database_path.clone();
-        
+
         // Ensure parent directory exists
         if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(SwissArmyHammerError::Io)?;
+            std::fs::create_dir_all(parent).map_err(SwissArmyHammerError::Io)?;
         }
-        
-        Ok(Self { db_path, config })
+
+        Ok(Self {
+            db_path,
+            _config: config,
+            indexed_files: Mutex::new(HashMap::new()),
+        })
     }
 
     /// Initialize the database schema
     pub fn initialize(&self) -> Result<()> {
-        // TODO: Implement DuckDB schema initialization
-        // This would create the following tables:
-        //
-        // CREATE TABLE IF NOT EXISTS indexed_files (
-        //     file_id TEXT PRIMARY KEY,
-        //     path TEXT NOT NULL,
-        //     language TEXT NOT NULL,
-        //     content_hash TEXT NOT NULL,
-        //     chunk_count INTEGER NOT NULL,
-        //     indexed_at TIMESTAMP NOT NULL
-        // );
-        //
-        // CREATE TABLE IF NOT EXISTS code_chunks (
-        //     chunk_id TEXT PRIMARY KEY,
-        //     file_id TEXT NOT NULL,
-        //     content TEXT NOT NULL,
-        //     start_line INTEGER NOT NULL,
-        //     end_line INTEGER NOT NULL,
-        //     chunk_type TEXT NOT NULL,
-        //     language TEXT NOT NULL,
-        //     content_hash TEXT NOT NULL,
-        //     FOREIGN KEY (file_id) REFERENCES indexed_files(file_id)
-        // );
-        //
-        // CREATE TABLE IF NOT EXISTS embeddings (
-        //     chunk_id TEXT PRIMARY KEY,
-        //     embedding FLOAT[384] NOT NULL,
-        //     FOREIGN KEY (chunk_id) REFERENCES code_chunks(chunk_id)
-        // );
-        //
-        // CREATE INDEX IF NOT EXISTS idx_chunks_file_id ON code_chunks(file_id);
-        // CREATE INDEX IF NOT EXISTS idx_chunks_language ON code_chunks(language);
-        // CREATE INDEX IF NOT EXISTS idx_files_content_hash ON indexed_files(content_hash);
-        
-        tracing::info!("Initializing vector storage at: {}", self.db_path.display());
+        // TODO: Implement DuckDB schema initialization when DuckDB is available
+        // For now, just log that we're using in-memory storage
+        tracing::info!(
+            "Initializing vector storage at: {} (using in-memory fallback)",
+            self.db_path.display()
+        );
         Ok(())
     }
 
     /// Store indexed file metadata
     pub fn store_indexed_file(&self, file: &IndexedFile) -> Result<()> {
         // TODO: Implement DuckDB file metadata storage
-        // INSERT OR REPLACE INTO indexed_files 
-        // (file_id, path, language, content_hash, chunk_count, indexed_at) 
+        // INSERT OR REPLACE INTO indexed_files
+        // (file_id, path, language, content_hash, chunk_count, indexed_at)
         // VALUES (?, ?, ?, ?, ?, ?)
-        
+
         tracing::debug!("Storing indexed file: {}", file.path.display());
         Ok(())
     }
@@ -85,10 +65,10 @@ impl VectorStorage {
     /// Store a code chunk
     pub fn store_chunk(&self, chunk: &CodeChunk) -> Result<()> {
         // TODO: Implement DuckDB chunk storage
-        // INSERT OR REPLACE INTO code_chunks 
+        // INSERT OR REPLACE INTO code_chunks
         // (chunk_id, file_id, content, start_line, end_line, chunk_type, language, content_hash)
         // VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        
+
         tracing::debug!("Storing chunk: {}", chunk.id);
         Ok(())
     }
@@ -97,15 +77,15 @@ impl VectorStorage {
     pub fn store_embedding(&self, embedding: &Embedding) -> Result<()> {
         // TODO: Implement DuckDB embedding storage
         // INSERT OR REPLACE INTO embeddings (chunk_id, embedding) VALUES (?, ?)
-        
+
         tracing::debug!("Storing embedding for chunk: {}", embedding.chunk_id);
         Ok(())
     }
 
     /// Search for similar chunks using vector similarity
     pub fn search_similar(
-        &self, 
-        query_embedding: &[f32], 
+        &self,
+        query_embedding: &[f32],
         limit: usize,
         threshold: f32,
     ) -> Result<Vec<SemanticSearchResult>> {
@@ -115,14 +95,14 @@ impl VectorStorage {
         // WHERE array_cosine_similarity(e.embedding, ?) >= ?
         // ORDER BY similarity DESC
         // LIMIT ?
-        
+
         tracing::debug!(
-            "Searching for similar embeddings: query_dim={}, limit={}, threshold={}", 
-            query_embedding.len(), 
-            limit, 
+            "Searching for similar embeddings: query_dim={}, limit={}, threshold={}",
+            query_embedding.len(),
+            limit,
             threshold
         );
-        
+
         // Return empty results for now
         Ok(vec![])
     }
@@ -132,7 +112,7 @@ impl VectorStorage {
         // TODO: Implement DuckDB chunk retrieval
         // SELECT chunk_id, file_id, content, start_line, end_line, chunk_type, language, content_hash
         // FROM code_chunks WHERE chunk_id = ?
-        
+
         tracing::debug!("Getting chunk: {}", chunk_id);
         Ok(None)
     }
@@ -142,29 +122,42 @@ impl VectorStorage {
         // TODO: Implement DuckDB file chunks retrieval
         // SELECT chunk_id, file_id, content, start_line, end_line, chunk_type, language, content_hash
         // FROM code_chunks WHERE file_id = ?
-        
+
         tracing::debug!("Getting chunks for file: {}", file_path.display());
         Ok(vec![])
     }
 
     /// Check if file needs re-indexing based on content hash
-    pub fn needs_reindexing(&self, file_path: &Path, _current_hash: &ContentHash) -> Result<bool> {
-        // TODO: Implement DuckDB hash comparison
-        // SELECT content_hash FROM indexed_files WHERE path = ?
-        
+    pub fn needs_reindexing(&self, file_path: &Path, current_hash: &ContentHash) -> Result<bool> {
         tracing::debug!("Checking if file needs reindexing: {}", file_path.display());
-        
-        // For now, always return true (needs indexing) since we have no persistent storage
-        Ok(true)
+
+        // Get the stored hash for this file
+        match self.get_file_hash(file_path)? {
+            Some(stored_hash) => {
+                // File exists in index - compare hashes
+                let needs_reindexing = stored_hash != *current_hash;
+                if needs_reindexing {
+                    tracing::debug!("File {} has changed (hash mismatch)", file_path.display());
+                } else {
+                    tracing::debug!("File {} unchanged (hash match)", file_path.display());
+                }
+                Ok(needs_reindexing)
+            }
+            None => {
+                // File not in index - needs indexing
+                tracing::debug!("File {} not in index - needs indexing", file_path.display());
+                Ok(true)
+            }
+        }
     }
 
     /// Check if a file has been indexed
     pub fn is_file_indexed(&self, file_path: &Path) -> Result<bool> {
         // TODO: Implement DuckDB file indexing check
         // SELECT 1 FROM indexed_files WHERE path = ? LIMIT 1
-        
+
         tracing::debug!("Checking if file is indexed: {}", file_path.display());
-        
+
         // For now, always return false since we have no persistent storage
         Ok(false)
     }
@@ -172,11 +165,11 @@ impl VectorStorage {
     /// Remove all data for a file (for re-indexing)
     pub fn remove_file(&self, file_path: &Path) -> Result<()> {
         // TODO: Implement DuckDB file removal
-        // DELETE FROM embeddings WHERE chunk_id IN 
+        // DELETE FROM embeddings WHERE chunk_id IN
         // (SELECT chunk_id FROM code_chunks WHERE file_id = ?)
         // DELETE FROM code_chunks WHERE file_id = ?
         // DELETE FROM indexed_files WHERE path = ?
-        
+
         tracing::debug!("Removing file: {}", file_path.display());
         Ok(())
     }
@@ -186,7 +179,7 @@ impl VectorStorage {
         // TODO: Implement DuckDB statistics gathering
         // SELECT COUNT(*) FROM code_chunks;
         // SELECT COUNT(DISTINCT file_id) FROM code_chunks;
-        
+
         Ok(StorageStats {
             total_chunks: 0,
             total_files: 0,
@@ -200,7 +193,7 @@ impl VectorStorage {
         // TODO: Implement DuckDB language filtering
         // SELECT chunk_id, file_id, content, start_line, end_line, chunk_type, language, content_hash
         // FROM code_chunks WHERE language = ?
-        
+
         tracing::debug!("Getting chunks by language: {:?}", language);
         Ok(vec![])
     }
@@ -210,14 +203,62 @@ impl VectorStorage {
         // TODO: Implement DuckDB maintenance
         // VACUUM;
         // ANALYZE;
-        
+
         tracing::info!("Performing database maintenance");
+        Ok(())
+    }
+
+    /// Check if file exists in index
+    pub fn file_exists(&self, file_path: &Path) -> Result<bool> {
+        let indexed_files = self.indexed_files.lock().map_err(|e| {
+            SwissArmyHammerError::Config(format!("Failed to lock indexed_files: {e}"))
+        })?;
+
+        Ok(indexed_files.contains_key(file_path))
+    }
+
+    /// Get file hash from index
+    pub fn get_file_hash(&self, file_path: &Path) -> Result<Option<ContentHash>> {
+        let indexed_files = self.indexed_files.lock().map_err(|e| {
+            SwissArmyHammerError::Config(format!("Failed to lock indexed_files: {e}"))
+        })?;
+
+        Ok(indexed_files.get(file_path).map(|(hash, _)| hash.clone()))
+    }
+
+    /// Get statistics about indexed files
+    pub fn get_index_stats(&self) -> Result<IndexStats> {
+        let indexed_files = self.indexed_files.lock().map_err(|e| {
+            SwissArmyHammerError::Config(format!("Failed to lock indexed_files: {e}"))
+        })?;
+
+        let file_count = indexed_files.len();
+
+        // For now, assume each file has 1 chunk and 1 embedding
+        // In a real implementation, these would be separate collections
+        let chunk_count = file_count;
+        let embedding_count = file_count;
+
+        Ok(IndexStats {
+            file_count,
+            chunk_count,
+            embedding_count,
+        })
+    }
+
+    /// Store indexed file (for internal use in testing/development)
+    pub fn store_indexed_file_internal(&self, file: &IndexedFile) -> Result<()> {
+        let mut indexed_files = self.indexed_files.lock().map_err(|e| {
+            SwissArmyHammerError::Config(format!("Failed to lock indexed_files: {e}"))
+        })?;
+
+        indexed_files.insert(file.path.clone(), (file.content_hash.clone(), file.clone()));
         Ok(())
     }
 }
 
 /// Statistics about the vector storage
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct StorageStats {
     /// Total number of code chunks stored
     pub total_chunks: usize,
@@ -229,20 +270,10 @@ pub struct StorageStats {
     pub database_size_bytes: u64,
 }
 
-impl Default for StorageStats {
-    fn default() -> Self {
-        Self {
-            total_chunks: 0,
-            total_files: 0,
-            total_embeddings: 0,
-            database_size_bytes: 0,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::semantic::types::{ChunkType, FileId};
     use chrono::Utc;
 
     fn create_test_config() -> SemanticConfig {
@@ -273,7 +304,7 @@ mod tests {
         vector[0] = 0.1;
         vector[1] = 0.2;
         vector[2] = 0.3;
-        
+
         Embedding {
             chunk_id: "test-chunk-1".to_string(),
             vector,

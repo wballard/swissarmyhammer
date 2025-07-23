@@ -22,7 +22,6 @@ fn format_content_preview(content: &str, max_length: usize) -> String {
 pub async fn handle_memo_command(command: MemoCommands) -> Result<(), Box<dyn std::error::Error>> {
     let storage = MarkdownMemoStorage::new_default()?;
 
-
     match command {
         MemoCommands::Create { title, content } => {
             create_memo(storage, title, content).await?;
@@ -536,4 +535,3 @@ fn get_content_input(content: Option<String>) -> Result<String, Box<dyn std::err
         }
     }
 }
-

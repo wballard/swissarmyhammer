@@ -39,7 +39,7 @@ impl CodeParser {
     /// Parse a source file and extract code chunks
     pub fn parse_file(&self, file_path: &Path, content: &str) -> Result<Vec<CodeChunk>> {
         let language = self.detect_language(file_path)?;
-        
+
         // TODO: Implement actual TreeSitter parsing
         // For now, create a simple chunk from the entire content
         let chunk = CodeChunk {
@@ -58,9 +58,7 @@ impl CodeParser {
 
     /// Detect the programming language from file extension
     fn detect_language(&self, file_path: &Path) -> Result<Language> {
-        let extension = file_path
-            .extension()
-            .and_then(|ext| ext.to_str());
+        let extension = file_path.extension().and_then(|ext| ext.to_str());
 
         match extension {
             Some("rs") => Ok(Language::Rust),
@@ -68,7 +66,9 @@ impl CodeParser {
             Some("ts") => Ok(Language::TypeScript),
             Some("js") => Ok(Language::JavaScript),
             Some("dart") => Ok(Language::Dart),
-            _ => Ok(Language::Unknown),
+            _ => Err(crate::SwissArmyHammerError::Other(format!(
+                "Unsupported file extension: {file_path:?}"
+            ))),
         }
     }
 
@@ -85,7 +85,6 @@ impl CodeParser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     #[test]
     fn test_parser_creation() {
@@ -99,12 +98,27 @@ mod tests {
         let config = ParserConfig::default();
         let parser = CodeParser::new(config).unwrap();
 
-        assert_eq!(parser.detect_language(Path::new("test.rs")).unwrap(), Language::Rust);
-        assert_eq!(parser.detect_language(Path::new("test.py")).unwrap(), Language::Python);
-        assert_eq!(parser.detect_language(Path::new("test.ts")).unwrap(), Language::TypeScript);
-        assert_eq!(parser.detect_language(Path::new("test.js")).unwrap(), Language::JavaScript);
-        assert_eq!(parser.detect_language(Path::new("test.dart")).unwrap(), Language::Dart);
-        
+        assert_eq!(
+            parser.detect_language(Path::new("test.rs")).unwrap(),
+            Language::Rust
+        );
+        assert_eq!(
+            parser.detect_language(Path::new("test.py")).unwrap(),
+            Language::Python
+        );
+        assert_eq!(
+            parser.detect_language(Path::new("test.ts")).unwrap(),
+            Language::TypeScript
+        );
+        assert_eq!(
+            parser.detect_language(Path::new("test.js")).unwrap(),
+            Language::JavaScript
+        );
+        assert_eq!(
+            parser.detect_language(Path::new("test.dart")).unwrap(),
+            Language::Dart
+        );
+
         assert!(parser.detect_language(Path::new("test.txt")).is_err());
     }
 
@@ -122,13 +136,13 @@ mod tests {
     fn test_parse_file() {
         let config = ParserConfig::default();
         let parser = CodeParser::new(config).unwrap();
-        
+
         let file_path = Path::new("test.rs");
         let content = "fn main() {\n    println!(\"Hello, world!\");\n}";
-        
+
         let chunks = parser.parse_file(file_path, content);
         assert!(chunks.is_ok());
-        
+
         let chunks = chunks.unwrap();
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0].language, Language::Rust);

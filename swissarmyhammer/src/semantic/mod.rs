@@ -24,31 +24,31 @@ pub enum SemanticError {
     /// Database operation failed
     #[error("Database error: {0}")]
     Database(String),
-    
+
     /// Embedding generation failed
     #[error("Embedding error: {0}")]
     Embedding(String),
-    
+
     /// File system operation failed
     #[error("File system error: {0}")]
     FileSystem(#[from] std::io::Error),
-    
+
     /// TreeSitter parsing failed
     #[error("TreeSitter parsing error: {0}")]
     TreeSitter(String),
-    
+
     /// Invalid configuration
     #[error("Invalid configuration: {0}")]
     Config(String),
-    
+
     /// Serialization or deserialization failed
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
-    
+
     /// Index operation failed
     #[error("Index error: {0}")]
     Index(String),
-    
+
     /// Search operation failed
     #[error("Search error: {0}")]
     Search(String),

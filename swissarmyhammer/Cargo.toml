@@ -50,12 +50,12 @@ fuzzy-matcher = { workspace = true }
 # TODO: Enable these dependencies when implementing actual functionality
 # mistralrs = { workspace = true }
 # duckdb = { workspace = true }
-# tree-sitter = { workspace = true }
-# tree-sitter-rust = { workspace = true }
-# tree-sitter-python = { workspace = true }
-# tree-sitter-typescript = { workspace = true }  
-# tree-sitter-javascript = { workspace = true }
-# tree-sitter-dart = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-rust = { workspace = true }
+tree-sitter-python = { workspace = true }
+tree-sitter-typescript = { workspace = true }  
+tree-sitter-javascript = { workspace = true }
+tree-sitter-dart = { workspace = true }
 md5 = { workspace = true }
 
 # MCP support

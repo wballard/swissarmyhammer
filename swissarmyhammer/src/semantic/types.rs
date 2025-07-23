@@ -13,7 +13,7 @@ pub struct FileId(pub String);
 pub struct ContentHash(pub String);
 
 /// Programming language detected for a file
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Language {
     /// Rust programming language
     Rust,

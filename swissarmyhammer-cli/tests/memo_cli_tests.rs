@@ -194,10 +194,12 @@ fn test_cli_memo_get_invalid_id() {
     let temp_dir = TempDir::new().unwrap();
 
     memo_cmd_with_dir(&temp_dir)
-        .args(["memo", "get", "invalid-memo-id"])
+        .args(["memo", "get", "invalid/memo/id"]) // Use forward slashes which are forbidden
         .assert()
         .failure()
-        .stderr(predicate::str::contains("Invalid memo ID format"));
+        .stderr(predicate::str::contains(
+            "Memo ID contains invalid character",
+        ));
 }
 
 #[test]
@@ -265,12 +267,14 @@ fn test_cli_memo_update_invalid_id() {
     let temp_dir = TempDir::new().unwrap();
 
     memo_cmd_with_dir(&temp_dir)
-        .args(["memo", "update", "invalid-id"])
+        .args(["memo", "update", "invalid*id"]) // Use asterisk which is forbidden
         .arg("--content")
         .arg("New content")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("Invalid memo ID format"));
+        .stderr(predicate::str::contains(
+            "Memo ID contains invalid character",
+        ));
 }
 
 #[test]
@@ -321,10 +325,12 @@ fn test_cli_memo_delete_invalid_id() {
     let temp_dir = TempDir::new().unwrap();
 
     memo_cmd_with_dir(&temp_dir)
-        .args(["memo", "delete", "invalid-id"])
+        .args(["memo", "delete", "invalid?id"]) // Use question mark which is forbidden
         .assert()
         .failure()
-        .stderr(predicate::str::contains("Invalid memo ID format"));
+        .stderr(predicate::str::contains(
+            "Memo ID contains invalid character",
+        ));
 }
 
 #[test]

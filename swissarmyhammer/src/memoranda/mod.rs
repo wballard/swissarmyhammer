@@ -488,11 +488,15 @@ impl MemoId {
         Self(Ulid::new().to_string())
     }
 
-    /// Create a memo ID from a string, validating it's a proper ULID format
+    /// Create a memo ID from a string, supporting both ULID and filename-based formats
+    ///
+    /// This method accepts two types of memo IDs:
+    /// 1. ULID format (26 characters, base32 encoded) - for backward compatibility
+    /// 2. Filename-based format - for markdown storage (derived from sanitized titles)
     ///
     /// # Arguments
     ///
-    /// * `id` - A string that should be a valid ULID
+    /// * `id` - A string that should be either a valid ULID or a valid filename-based ID
     ///
     /// # Returns
     ///
@@ -500,28 +504,61 @@ impl MemoId {
     ///
     /// # Errors
     ///
-    /// Returns an error if the provided string is not a valid ULID format.
+    /// Returns an error if the provided string is:
+    /// - Empty or whitespace-only
+    /// - Longer than 255 characters
+    /// - Contains filesystem-invalid characters (/, \, :, *, ?, ", <, >, |, null)
     ///
     /// # Examples
     ///
     /// ```rust
     /// use swissarmyhammer::memoranda::MemoId;
     ///
-    /// // Valid ULID
-    /// let valid_id = MemoId::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV".to_string())?;
-    /// assert_eq!(valid_id.as_str(), "01ARZ3NDEKTSV4RRFFQ69G5FAV");
+    /// // Valid ULID format
+    /// let ulid_id = MemoId::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV".to_string())?;
+    /// assert_eq!(ulid_id.as_str(), "01ARZ3NDEKTSV4RRFFQ69G5FAV");
     ///
-    /// // Invalid ULID will return an error
-    /// let invalid_result = MemoId::from_string("not-a-ulid".to_string());
+    /// // Valid filename-based format
+    /// let filename_id = MemoId::from_string("Meeting_Notes".to_string())?;
+    /// assert_eq!(filename_id.as_str(), "Meeting_Notes");
+    ///
+    /// // Invalid - empty string
+    /// let invalid_result = MemoId::from_string("".to_string());
     /// assert!(invalid_result.is_err());
     /// # Ok::<(), swissarmyhammer::error::SwissArmyHammerError>(())
     /// ```
     pub fn from_string(id: String) -> Result<Self> {
-        let _ulid = Ulid::from_string(&id).map_err(|_| {
-            SwissArmyHammerError::Other(format!(
-                "Invalid memo ID format: '{id}'. Expected a valid ULID (26 characters, base32 encoded, case-insensitive). Example: 01ARZ3NDEKTSV4RRFFQ69G5FAV"
-            ))
-        })?;
+        // Check if ID is empty
+        if id.trim().is_empty() {
+            return Err(SwissArmyHammerError::Other(
+                "Memo ID cannot be empty".to_string(),
+            ));
+        }
+
+        // Try to parse as ULID first (for backward compatibility)
+        if Ulid::from_string(&id).is_ok() {
+            return Ok(Self(id));
+        }
+
+        // If not a valid ULID, validate as filename-based ID
+        // Basic validation: non-empty, printable ASCII characters, reasonable length
+        if id.len() > 255 {
+            return Err(SwissArmyHammerError::Other(format!(
+                "Memo ID too long: '{id}'. Maximum length is 255 characters."
+            )));
+        }
+
+        // Check for invalid characters that would cause filesystem issues
+        let invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '\0'];
+        for ch in invalid_chars {
+            if id.contains(ch) {
+                return Err(SwissArmyHammerError::Other(format!(
+                    "Memo ID contains invalid character '{ch}': '{id}'"
+                )));
+            }
+        }
+
+        // Accept the ID as a filename-based identifier
         Ok(Self(id))
     }
 
@@ -1012,7 +1049,7 @@ mod tests {
 
     #[test]
     fn test_memo_id_invalid_string() {
-        let result = MemoId::from_string("invalid-ulid".to_string());
+        let result = MemoId::from_string("invalid/ulid*".to_string());
         assert!(result.is_err());
     }
 
@@ -1204,8 +1241,8 @@ mod tests {
         let id = valid_ulid.parse::<MemoId>().unwrap();
         assert_eq!(id.as_str(), valid_ulid);
 
-        let invalid_ulid = "invalid-ulid";
-        let result = invalid_ulid.parse::<MemoId>();
+        let invalid_id = "invalid/ulid*";
+        let result = invalid_id.parse::<MemoId>();
         assert!(result.is_err());
     }
 
@@ -1264,18 +1301,26 @@ mod tests {
 
     #[test]
     fn test_memo_id_invalid_formats() {
-        let invalid_ulids = vec![
-            "",                            // Empty string
-            "short",                       // Too short
-            "TOOLONGTOBEAVALIDULIDSTRING", // Too long
-            "01ARZ3NDEKTSV4RRFFQ69G5FA=",  // Invalid characters
-            "01ARZ3NDEKTSV4RRFFQ69G5FA!",  // Invalid characters
-            "invalid-ulid-format",         // Completely wrong format
+        let long_id = "a".repeat(256);
+        let invalid_ids = vec![
+            "",            // Empty string
+            "   ",         // Whitespace only
+            &long_id,      // Too long (over 255 characters)
+            "invalid/id",  // Contains forbidden character /
+            "invalid\\id", // Contains forbidden character \
+            "invalid:id",  // Contains forbidden character :
+            "invalid*id",  // Contains forbidden character *
+            "invalid?id",  // Contains forbidden character ?
+            "invalid\"id", // Contains forbidden character "
+            "invalid<id",  // Contains forbidden character <
+            "invalid>id",  // Contains forbidden character >
+            "invalid|id",  // Contains forbidden character |
+            "invalid\0id", // Contains null character
         ];
 
-        for invalid_ulid in invalid_ulids {
-            let result = MemoId::from_string(invalid_ulid.to_string());
-            assert!(result.is_err(), "Should fail for: {invalid_ulid}");
+        for invalid_id in invalid_ids {
+            let result = MemoId::from_string(invalid_id.to_string());
+            assert!(result.is_err(), "Should fail for: {invalid_id}");
         }
     }
 

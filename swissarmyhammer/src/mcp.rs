@@ -3,7 +3,7 @@
 use crate::file_watcher::{FileWatcher, FileWatcherCallback};
 use crate::git::GitOperations;
 use crate::issues::{FileSystemIssueStorage, Issue, IssueStorage};
-use crate::memoranda::{FileSystemMemoStorage, MemoStorage};
+use crate::memoranda::{MarkdownMemoStorage, MemoStorage};
 use crate::workflow::{
     FileSystemWorkflowRunStorage, FileSystemWorkflowStorage, WorkflowRunStorageBackend,
     WorkflowStorage, WorkflowStorageBackend,
@@ -148,7 +148,7 @@ impl McpServer {
         })?) as Box<dyn IssueStorage>;
 
         // Initialize memo storage with default location
-        let memo_storage = Box::new(FileSystemMemoStorage::new_default().map_err(|e| {
+        let memo_storage = Box::new(MarkdownMemoStorage::new_default().map_err(|e| {
             tracing::error!("Failed to create memo storage: {}", e);
             SwissArmyHammerError::Other(format!("Failed to create memo storage: {e}"))
         })?) as Box<dyn MemoStorage>;

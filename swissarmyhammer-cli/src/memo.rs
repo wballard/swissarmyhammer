@@ -2,7 +2,7 @@ use crate::cli::MemoCommands;
 use colored::*;
 use std::io::{self, Read};
 use swissarmyhammer::memoranda::{
-    AdvancedMemoSearchEngine, FileSystemMemoStorage, MemoId, MemoStorage, SearchOptions,
+    AdvancedMemoSearchEngine, MarkdownMemoStorage, MemoId, MemoStorage, SearchOptions,
 };
 
 // Configurable preview length constants
@@ -20,7 +20,7 @@ fn format_content_preview(content: &str, max_length: usize) -> String {
 }
 
 pub async fn handle_memo_command(command: MemoCommands) -> Result<(), Box<dyn std::error::Error>> {
-    let storage = FileSystemMemoStorage::new_default()?;
+    let storage = MarkdownMemoStorage::new_default()?;
 
     match command {
         MemoCommands::Create { title, content } => {
@@ -50,7 +50,7 @@ pub async fn handle_memo_command(command: MemoCommands) -> Result<(), Box<dyn st
 }
 
 async fn create_memo(
-    storage: FileSystemMemoStorage,
+    storage: MarkdownMemoStorage,
     title: String,
     content: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -73,7 +73,7 @@ async fn create_memo(
     Ok(())
 }
 
-async fn list_memos(storage: FileSystemMemoStorage) -> Result<(), Box<dyn std::error::Error>> {
+async fn list_memos(storage: MarkdownMemoStorage) -> Result<(), Box<dyn std::error::Error>> {
     let memos = storage.list_memos().await?;
 
     if memos.is_empty() {
@@ -115,7 +115,7 @@ async fn list_memos(storage: FileSystemMemoStorage) -> Result<(), Box<dyn std::e
 }
 
 async fn get_memo(
-    storage: FileSystemMemoStorage,
+    storage: MarkdownMemoStorage,
     id: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let memo_id = MemoId::from_string(id.to_string())?;
@@ -151,7 +151,7 @@ async fn get_memo(
 }
 
 async fn update_memo(
-    storage: FileSystemMemoStorage,
+    storage: MarkdownMemoStorage,
     id: &str,
     content: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -186,7 +186,7 @@ async fn update_memo(
 }
 
 async fn delete_memo(
-    storage: FileSystemMemoStorage,
+    storage: MarkdownMemoStorage,
     id: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let memo_id = MemoId::from_string(id.to_string())?;
@@ -204,7 +204,7 @@ async fn delete_memo(
 }
 
 async fn search_memos(
-    storage: FileSystemMemoStorage,
+    storage: MarkdownMemoStorage,
     query: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Try to use advanced search for better highlighting and relevance scoring
@@ -218,7 +218,7 @@ async fn search_memos(
 }
 
 async fn try_advanced_search(
-    storage: &FileSystemMemoStorage,
+    storage: &MarkdownMemoStorage,
     query: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Handle empty query by returning all memos
@@ -349,7 +349,7 @@ async fn try_advanced_search(
 }
 
 async fn fallback_basic_search(
-    storage: &FileSystemMemoStorage,
+    storage: &MarkdownMemoStorage,
     query: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Handle empty query by returning all memos
@@ -465,7 +465,7 @@ fn replace_case_insensitive(text: &str, pattern: &str, replacement: &str) -> Str
     result
 }
 
-async fn get_context(storage: FileSystemMemoStorage) -> Result<(), Box<dyn std::error::Error>> {
+async fn get_context(storage: MarkdownMemoStorage) -> Result<(), Box<dyn std::error::Error>> {
     let memos = storage.list_memos().await?;
 
     if memos.is_empty() {

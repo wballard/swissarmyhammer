@@ -2331,13 +2331,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_memo_id_format() {
-        let fake_id_result = MemoId::from_string("invalid-id-format".to_string());
+        // Test ID with forbidden filesystem characters
+        let fake_id_result = MemoId::from_string("invalid/id*format".to_string());
         assert!(fake_id_result.is_err());
 
-        let short_id_result = MemoId::from_string("SHORT".to_string());
-        assert!(short_id_result.is_err());
+        // Test empty ID
+        let empty_id_result = MemoId::from_string("".to_string());
+        assert!(empty_id_result.is_err());
 
-        let long_id_result = MemoId::from_string("TOOLONGTOBEVALIDULIDFORMAT".to_string());
+        // Test ID that's too long (over 255 characters)
+        let long_id_result = MemoId::from_string("a".repeat(256));
         assert!(long_id_result.is_err());
     }
 

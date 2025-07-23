@@ -1,14 +1,14 @@
 //! Performance benchmarks for memoranda functionality
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use swissarmyhammer::memoranda::{FileSystemMemoStorage, MemoStorage};
+use swissarmyhammer::memoranda::{MarkdownMemoStorage, MemoStorage};
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
 /// Create a test storage with temporary directory
-fn create_test_storage() -> (FileSystemMemoStorage, TempDir) {
+fn create_test_storage() -> (MarkdownMemoStorage, TempDir) {
     let temp_dir = TempDir::new().unwrap();
-    let storage = FileSystemMemoStorage::new(temp_dir.path().join("memos"));
+    let storage = MarkdownMemoStorage::new(temp_dir.path().join("memos"));
     (storage, temp_dir)
 }
 

@@ -373,7 +373,7 @@ async fn test_mcp_memo_get_invalid_id() {
         1,
         "memo_get",
         json!({
-            "id": "invalid-memo-id"
+            "id": "invalid/memo*id"
         }),
     );
 

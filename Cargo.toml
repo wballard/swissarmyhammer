@@ -30,6 +30,18 @@ fuzzy-matcher = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 notify = "6"
 
+# Semantic Search Dependencies
+# TODO: Enable these dependencies when implementing actual functionality
+# mistralrs = { git = "https://github.com/EricLBuehler/mistral.rs.git" }
+# duckdb = "1.1"
+# tree-sitter = "0.22"
+# tree-sitter-rust = "0.21"
+# tree-sitter-python = "0.21"
+# tree-sitter-typescript = "0.21"
+# tree-sitter-javascript = "0.21"
+# tree-sitter-dart = "0.21"
+md5 = "0.7"
+
 # CLI specific dependencies
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"

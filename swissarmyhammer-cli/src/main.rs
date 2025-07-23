@@ -140,6 +140,10 @@ async fn main() {
             tracing::info!("Running memo command");
             run_memo(subcommand).await
         }
+        Some(Commands::Search { subcommand }) => {
+            tracing::info!("Running search command");
+            run_search(subcommand).await
+        }
         None => {
             // This case is handled early above for performance
             unreachable!()
@@ -284,6 +288,12 @@ async fn run_memo(subcommand: cli::MemoCommands) -> i32 {
             EXIT_WARNING
         }
     }
+}
+
+async fn run_search(subcommand: cli::SearchCommands) -> i32 {
+    use search;
+
+    search::run_search(subcommand).await
 }
 
 /// Runs the validate command to check prompt files and workflows for syntax and best practices.

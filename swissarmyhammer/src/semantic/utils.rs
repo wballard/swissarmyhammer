@@ -1,0 +1,221 @@
+//! Utilities and helpers for semantic search
+
+use crate::error::Result;
+use crate::semantic::types::{Language, SemanticConfig};
+use std::path::{Path, PathBuf};
+
+/// Utility functions for semantic search operations
+pub struct SemanticUtils;
+
+impl SemanticUtils {
+    /// Normalize text content for better embedding quality
+    pub fn normalize_text(content: &str) -> String {
+        // Remove excessive whitespace
+        let normalized = content
+            .lines()
+            .map(|line| line.trim())
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        // Remove comments for code content (basic implementation)
+        Self::remove_basic_comments(&normalized)
+    }
+
+    /// Remove basic single-line and multi-line comments
+    fn remove_basic_comments(content: &str) -> String {
+        let mut result = String::new();
+        let mut in_multiline_comment = false;
+        let lines: Vec<&str> = content.lines().collect();
+
+        for line in lines {
+            let mut processed_line = line.to_string();
+
+            // Handle multi-line comments (/* */)
+            if in_multiline_comment {
+                if let Some(end_pos) = processed_line.find("*/") {
+                    processed_line = processed_line[end_pos + 2..].to_string();
+                    in_multiline_comment = false;
+                } else {
+                    continue; // Skip entire line if still in comment
+                }
+            }
+
+            // Check for start of multi-line comment
+            if let Some(start_pos) = processed_line.find("/*") {
+                if let Some(end_pos) = processed_line[start_pos..].find("*/") {
+                    // Comment starts and ends on same line
+                    let before = &processed_line[..start_pos];
+                    let after = &processed_line[start_pos + end_pos + 2..];
+                    processed_line = format!("{}{}", before, after);
+                } else {
+                    // Comment starts but doesn't end on this line
+                    processed_line = processed_line[..start_pos].to_string();
+                    in_multiline_comment = true;
+                }
+            }
+
+            // Remove single-line comments (//)
+            if let Some(comment_pos) = processed_line.find("//") {
+                processed_line = processed_line[..comment_pos].to_string();
+            }
+
+            let trimmed = processed_line.trim();
+            if !trimmed.is_empty() {
+                result.push_str(trimmed);
+                result.push('\n');
+            }
+        }
+
+        result.trim_end().to_string()
+    }
+
+    /// Calculate cosine similarity between two embedding vectors
+    pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+        if a.len() != b.len() {
+            return 0.0;
+        }
+
+        let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+        let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+        if norm_a == 0.0 || norm_b == 0.0 {
+            0.0
+        } else {
+            dot_product / (norm_a * norm_b)
+        }
+    }
+
+    /// Generate a unique ID for a code chunk
+    pub fn generate_chunk_id(file_path: &Path, start_line: usize, end_line: usize) -> String {
+        format!("{}:{}:{}", file_path.display(), start_line, end_line)
+    }
+
+    /// Get the semantic search database directory
+    pub fn get_database_dir() -> Result<PathBuf> {
+        let home_dir = dirs::home_dir()
+            .ok_or_else(|| crate::error::SwissArmyHammerError::Config(
+                "Could not determine home directory".to_string()
+            ))?;
+
+        Ok(home_dir.join(".swissarmyhammer"))
+    }
+
+    /// Ensure the database directory exists
+    pub fn ensure_database_dir() -> Result<PathBuf> {
+        let db_dir = Self::get_database_dir()?;
+        std::fs::create_dir_all(&db_dir)
+            .map_err(crate::error::SwissArmyHammerError::Io)?;
+        Ok(db_dir)
+    }
+
+    /// Get file extension for language detection
+    pub fn get_file_extensions_for_language(language: &Language) -> Vec<&'static str> {
+        match language {
+            Language::Rust => vec!["rs"],
+            Language::Python => vec!["py", "pyw"],
+            Language::TypeScript => vec!["ts", "tsx"],
+            Language::JavaScript => vec!["js", "jsx"],
+            Language::Dart => vec!["dart"],
+        }
+    }
+
+    /// Check if a file should be indexed based on its path
+    pub fn should_index_file(file_path: &Path) -> bool {
+        // Skip hidden files and directories
+        for component in file_path.components() {
+            if let Some(name) = component.as_os_str().to_str() {
+                if name.starts_with('.') {
+                    return false;
+                }
+            }
+        }
+
+        // Skip common build/dependency directories
+        let path_str = file_path.to_string_lossy();
+        let skip_patterns = [
+            "target/",
+            "node_modules/", 
+            ".git/",
+            "build/",
+            "dist/",
+            "__pycache__/",
+            ".pyc",
+        ];
+
+        for pattern in &skip_patterns {
+            if path_str.contains(pattern) {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_text() {
+        let input = "  fn main() {  \n\n  println!(\"hello\");  \n  }  \n\n";
+        let expected = "fn main() {\nprintln!(\"hello\");\n}";
+        assert_eq!(SemanticUtils::normalize_text(input), expected);
+    }
+
+    #[test]
+    fn test_remove_basic_comments() {
+        let input = "fn main() { // This is a comment\n    println!(\"hello\"); // Another comment\n}";
+        let expected = "fn main() {\nprintln!(\"hello\");\n}";
+        assert_eq!(SemanticUtils::normalize_text(input), expected);
+    }
+
+    #[test]
+    fn test_remove_multiline_comments() {
+        let input = "fn main() {\n    /* This is a\n       multiline comment */\n    println!(\"hello\");\n}";
+        let expected = "fn main() {\nprintln!(\"hello\");\n}";
+        assert_eq!(SemanticUtils::normalize_text(input), expected);
+    }
+
+    #[test]
+    fn test_cosine_similarity() {
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![1.0, 0.0, 0.0];
+        assert!((SemanticUtils::cosine_similarity(&a, &b) - 1.0).abs() < 1e-6);
+
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![0.0, 1.0, 0.0];
+        assert!((SemanticUtils::cosine_similarity(&a, &b) - 0.0).abs() < 1e-6);
+
+        let a = vec![1.0, 1.0, 0.0];
+        let b = vec![1.0, 1.0, 0.0];
+        assert!((SemanticUtils::cosine_similarity(&a, &b) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_generate_chunk_id() {
+        let path = Path::new("src/main.rs");
+        let id = SemanticUtils::generate_chunk_id(path, 10, 20);
+        assert_eq!(id, "src/main.rs:10:20");
+    }
+
+    #[test]
+    fn test_get_file_extensions_for_language() {
+        assert_eq!(SemanticUtils::get_file_extensions_for_language(&Language::Rust), vec!["rs"]);
+        assert_eq!(SemanticUtils::get_file_extensions_for_language(&Language::Python), vec!["py", "pyw"]);
+        assert!(SemanticUtils::get_file_extensions_for_language(&Language::TypeScript).contains(&"ts"));
+    }
+
+    #[test]
+    fn test_should_index_file() {
+        assert!(SemanticUtils::should_index_file(Path::new("src/main.rs")));
+        assert!(SemanticUtils::should_index_file(Path::new("lib/utils.py")));
+        
+        assert!(!SemanticUtils::should_index_file(Path::new(".hidden/file.rs")));
+        assert!(!SemanticUtils::should_index_file(Path::new("target/debug/main")));
+        assert!(!SemanticUtils::should_index_file(Path::new("node_modules/package/index.js")));
+        assert!(!SemanticUtils::should_index_file(Path::new("src/__pycache__/module.pyc")));
+    }
+}

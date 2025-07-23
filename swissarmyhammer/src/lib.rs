@@ -75,6 +75,9 @@ pub mod issues;
 /// Memoranda management and storage system
 pub mod memoranda;
 
+/// Semantic search functionality using vector embeddings
+pub mod semantic;
+
 /// Git operations for issue management
 pub mod git;
 
@@ -171,6 +174,12 @@ pub mod prelude {
     pub use crate::memoranda::{
         CreateMemoRequest, DeleteMemoRequest, GetMemoRequest, ListMemosResponse, Memo, MemoId,
         SearchMemosRequest, SearchMemosResponse, UpdateMemoRequest,
+    };
+
+    // Semantic search types for convenient access
+    pub use crate::semantic::{
+        CodeChunk, EmbeddingService, FileIndexer, IndexingOptions, IndexingStats, Language,
+        SearchOptions, SemanticConfig, SemanticSearcher, SemanticUtils, VectorStorage,
     };
 
     // Common utilities for easy access

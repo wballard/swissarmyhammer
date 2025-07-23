@@ -100,5 +100,18 @@ pub enum SearchCommands {
 - [DuckDB Rust client](https://docs.rs/duckdb/)
 - [TreeSitter Rust bindings](https://docs.rs/tree-sitter/)
 
+## Proposed Solution
+
+I will implement this project setup by:
+
+1. **Dependency Updates**: Add all required semantic search dependencies to the workspace Cargo.toml including mistralrs, duckdb, tree-sitter parsers, and md5
+2. **Git Configuration**: Update .gitignore to exclude the .swissarmyhammer directory
+3. **Module Structure**: Create the semantic module hierarchy with proper exports and placeholder implementations
+4. **CLI Integration**: Add SearchCommands enum and integrate it into the main CLI structure
+5. **Testing**: Create basic tests to verify module structure and CLI parsing work correctly
+6. **Compilation**: Ensure the entire project compiles cleanly with the new dependencies and structure
+
+I'll follow Test Driven Development by writing tests first, then implementing the minimal code to make them pass.
+
 ## Next Steps
 After completion, proceed to TP_000196_core-types to define the core data structures.

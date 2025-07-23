@@ -46,6 +46,18 @@ ulid = { version = "1.1", features = ["serde"] }
 tantivy = { workspace = true }
 fuzzy-matcher = { workspace = true }
 
+# Semantic search dependencies
+# TODO: Enable these dependencies when implementing actual functionality
+# mistralrs = { workspace = true }
+# duckdb = { workspace = true }
+# tree-sitter = { workspace = true }
+# tree-sitter-rust = { workspace = true }
+# tree-sitter-python = { workspace = true }
+# tree-sitter-typescript = { workspace = true }  
+# tree-sitter-javascript = { workspace = true }
+# tree-sitter-dart = { workspace = true }
+md5 = { workspace = true }
+
 # MCP support
 rmcp = { workspace = true }
 schemars = { version = "0.8" }

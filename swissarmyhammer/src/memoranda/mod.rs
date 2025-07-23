@@ -543,6 +543,31 @@ impl MemoId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Create a memo ID from a filename (without .md extension)
+    ///
+    /// This method creates a MemoId directly from a filename, which is used
+    /// in the markdown storage implementation where the filename serves as the ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `filename` - The filename (without .md extension) to use as the ID
+    ///
+    /// # Returns
+    ///
+    /// * `Self` - A memo ID based on the filename
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use swissarmyhammer::memoranda::MemoId;
+    ///
+    /// let id = MemoId::from_filename("meeting_notes");
+    /// assert_eq!(id.as_str(), "meeting_notes");
+    /// ```
+    pub fn from_filename(filename: &str) -> Self {
+        Self(filename.to_string())
+    }
 }
 
 impl Default for MemoId {

@@ -277,16 +277,16 @@ impl McpFormatter {
             let plural_name = if count == 1 {
                 item_name.to_string()
             } else {
-                format!("{}s", item_name)
+                format!("{item_name}s")
             };
-            format!("Found {} {}", count, plural_name)
+            format!("Found {count} {plural_name}")
         } else {
             let plural_name = if total == 1 {
                 item_name.to_string()
             } else {
-                format!("{}s", item_name)
+                format!("{item_name}s")
             };
-            format!("Showing {} of {} {}", count, total, plural_name)
+            format!("Showing {count} of {total} {plural_name}")
         }
     }
 }

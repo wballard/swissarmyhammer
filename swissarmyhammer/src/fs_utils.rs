@@ -123,7 +123,7 @@ impl FileSystem for StdFileSystem {
                 path.display(),
                 permissions
             );
-            return Ok(());
+            Ok(())
         }
 
         #[cfg(not(test))]
@@ -372,6 +372,12 @@ pub mod tests {
     pub struct MockFileSystem {
         files: Mutex<HashMap<PathBuf, String>>,
         dirs: Mutex<std::collections::HashSet<PathBuf>>,
+    }
+
+    impl Default for MockFileSystem {
+        fn default() -> Self {
+            Self::new()
+        }
     }
 
     impl MockFileSystem {

@@ -645,24 +645,33 @@ swissarmyhammer memo search "```rust"
 Memos are stored in:
 ```
 ./.swissarmyhammer/memos/
-├── 01ARZ3NDEKTSV4RRFFQ69G5FAV.json
-├── 01BRZ3NDEKTSV4RRFFQ69G5FAW.json
-└── 01CRZ3NDEKTSV4RRFFQ69G5FAX.json
+├── Meeting Notes.md
+├── Project Planning.md
+└── Technical Documentation.md
 ```
 
 ### File Format
 
-Each memo is stored as a JSON file:
+Each memo is stored as a markdown file with the memo title as the filename:
 
-```json
-{
-  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-  "title": "Meeting Notes",
-  "content": "# Team Meeting 2024-01-15\n\n- Discussed roadmap...",
-  "created_at": "2024-01-15T14:30:25.123456789Z",
-  "updated_at": "2024-01-15T16:45:30.987654321Z"
-}
+**Example: Meeting Notes.md**
+```markdown
+# Team Meeting 2024-01-15
+
+- Discussed roadmap and next quarter priorities
+- Reviewed architectural decisions
+- Action items assigned to team members
+
+## Key Decisions
+- Migrate to new storage format
+- Implement user feedback system
 ```
+
+**File Properties:**
+- **Filename**: Sanitized version of memo title (spaces preserved, special characters removed)
+- **Content**: Pure markdown content without metadata wrapper
+- **Timestamps**: Derived from filesystem metadata (creation and modification times)
+- **ID**: Based on filename for human-readable organization
 
 ### Backup and Restore
 

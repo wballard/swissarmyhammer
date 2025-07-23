@@ -2,7 +2,7 @@ use crate::cli::MemoCommands;
 use colored::*;
 use std::io::{self, Read};
 use swissarmyhammer::memoranda::{
-    AdvancedMemoSearchEngine, FileSystemMemoStorage, MemoId, MemoStorage, SearchOptions,
+    AdvancedMemoSearchEngine, MarkdownMemoStorage, MemoId, MemoStorage, SearchOptions,
 };
 
 // Configurable preview length constants
@@ -20,7 +20,20 @@ fn format_content_preview(content: &str, max_length: usize) -> String {
 }
 
 pub async fn handle_memo_command(command: MemoCommands) -> Result<(), Box<dyn std::error::Error>> {
-    let storage = FileSystemMemoStorage::new_default()?;
+    let storage = MarkdownMemoStorage::new_default()?;
+
+    // Attempt to migrate any existing JSON memos to markdown format
+    match storage.migrate_from_json(true).await {
+        Ok(migrated_count) => {
+            if migrated_count > 0 {
+                println!("Migrated {} JSON memos to markdown format.", migrated_count);
+            }
+        }
+        Err(e) => {
+            eprintln!("Warning: Failed to migrate JSON memos to markdown format: {}", e);
+            // Continue execution - migration failure should not prevent CLI operation
+        }
+    }
 
     match command {
         MemoCommands::Create { title, content } => {
@@ -44,13 +57,16 @@ pub async fn handle_memo_command(command: MemoCommands) -> Result<(), Box<dyn st
         MemoCommands::Context => {
             get_context(storage).await?;
         }
+        MemoCommands::Migrate { remove_json } => {
+            migrate_memos(storage, remove_json).await?;
+        }
     }
 
     Ok(())
 }
 
 async fn create_memo(
-    storage: FileSystemMemoStorage,
+    storage: MarkdownMemoStorage,
     title: String,
     content: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -73,7 +89,7 @@ async fn create_memo(
     Ok(())
 }
 
-async fn list_memos(storage: FileSystemMemoStorage) -> Result<(), Box<dyn std::error::Error>> {
+async fn list_memos(storage: MarkdownMemoStorage) -> Result<(), Box<dyn std::error::Error>> {
     let memos = storage.list_memos().await?;
 
     if memos.is_empty() {
@@ -115,7 +131,7 @@ async fn list_memos(storage: FileSystemMemoStorage) -> Result<(), Box<dyn std::e
 }
 
 async fn get_memo(
-    storage: FileSystemMemoStorage,
+    storage: MarkdownMemoStorage,
     id: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let memo_id = MemoId::from_string(id.to_string())?;
@@ -151,7 +167,7 @@ async fn get_memo(
 }
 
 async fn update_memo(
-    storage: FileSystemMemoStorage,
+    storage: MarkdownMemoStorage,
     id: &str,
     content: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -186,7 +202,7 @@ async fn update_memo(
 }
 
 async fn delete_memo(
-    storage: FileSystemMemoStorage,
+    storage: MarkdownMemoStorage,
     id: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let memo_id = MemoId::from_string(id.to_string())?;
@@ -204,7 +220,7 @@ async fn delete_memo(
 }
 
 async fn search_memos(
-    storage: FileSystemMemoStorage,
+    storage: MarkdownMemoStorage,
     query: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Try to use advanced search for better highlighting and relevance scoring
@@ -218,7 +234,7 @@ async fn search_memos(
 }
 
 async fn try_advanced_search(
-    storage: &FileSystemMemoStorage,
+    storage: &MarkdownMemoStorage,
     query: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Handle empty query by returning all memos
@@ -349,7 +365,7 @@ async fn try_advanced_search(
 }
 
 async fn fallback_basic_search(
-    storage: &FileSystemMemoStorage,
+    storage: &MarkdownMemoStorage,
     query: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Handle empty query by returning all memos
@@ -465,7 +481,7 @@ fn replace_case_insensitive(text: &str, pattern: &str, replacement: &str) -> Str
     result
 }
 
-async fn get_context(storage: FileSystemMemoStorage) -> Result<(), Box<dyn std::error::Error>> {
+async fn get_context(storage: MarkdownMemoStorage) -> Result<(), Box<dyn std::error::Error>> {
     let memos = storage.list_memos().await?;
 
     if memos.is_empty() {
@@ -534,4 +550,40 @@ fn get_content_input(content: Option<String>) -> Result<String, Box<dyn std::err
             Ok(buffer.trim().to_string())
         }
     }
+}
+
+/// Migrate existing JSON memos to markdown format
+async fn migrate_memos(
+    storage: MarkdownMemoStorage,
+    remove_json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    println!("🔄 Starting migration from JSON to markdown format...");
+    
+    match storage.migrate_from_json(remove_json).await {
+        Ok(migrated_count) => {
+            if migrated_count == 0 {
+                println!("✅ No JSON memos found to migrate.");
+            } else {
+                println!(
+                    "✅ Successfully migrated {} memo{} to markdown format.",
+                    migrated_count,
+                    if migrated_count == 1 { "" } else { "s" }
+                );
+                
+                if remove_json {
+                    println!("🗑️  Original JSON files have been removed.");
+                } else {
+                    println!("📁 Original JSON files have been preserved.");
+                    println!("   Use --remove-json flag to delete them after verifying migration.");
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("❌ Migration failed: {}", e);
+            eprintln!("   JSON files have been preserved for safety.");
+            return Err(e.into());
+        }
+    }
+    
+    Ok(())
 }

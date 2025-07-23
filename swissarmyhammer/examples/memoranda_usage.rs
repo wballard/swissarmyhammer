@@ -3,7 +3,7 @@
 //! This example demonstrates how to programmatically interact with the memoranda system
 //! for structured note-taking and knowledge management.
 
-use swissarmyhammer::memoranda::{FileSystemMemoStorage, MemoStorage};
+use swissarmyhammer::memoranda::{MarkdownMemoStorage, MemoStorage};
 use tempfile::TempDir;
 
 #[tokio::main]
@@ -13,7 +13,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize temporary storage for this example
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let storage = FileSystemMemoStorage::new(temp_dir.path().join("memos"));
+    let storage = MarkdownMemoStorage::new(temp_dir.path().join("memos"));
 
     // Example 1: Creating memos
     println!("📝 Example 1: Creating Memos");
@@ -340,7 +340,7 @@ mod tests {
     async fn test_memo_operations() {
         use tempfile::TempDir;
         let temp_dir = TempDir::new().unwrap();
-        let storage = FileSystemMemoStorage::new(temp_dir.path().join("memos"));
+        let storage = MarkdownMemoStorage::new(temp_dir.path().join("memos"));
 
         // Test creating a memo
         let memo = storage

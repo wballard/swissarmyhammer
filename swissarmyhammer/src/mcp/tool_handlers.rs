@@ -645,10 +645,6 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         tracing::debug!("Getting memo with ID: {}", request.id);
 
-        // Validate memo ID format using shared validation
-        McpValidation::validate_ulid(&request.id, "memo ID")
-            .map_err(|e| McpErrorHandler::handle_error(e, "validate memo ID"))?;
-
         let memo_id = match MemoId::from_string(request.id.clone()) {
             Ok(id) => id,
             Err(_) => {
@@ -693,9 +689,7 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         tracing::debug!("Updating memo with ID: {}", request.id);
 
-        // Validate memo ID format and content using shared validation
-        McpValidation::validate_ulid(&request.id, "memo ID")
-            .map_err(|e| McpErrorHandler::handle_error(e, "validate memo ID"))?;
+        // Validate memo content using shared validation
         McpValidation::validate_not_empty(&request.content, "memo content")
             .map_err(|e| McpErrorHandler::handle_error(e, "validate memo content"))?;
 
@@ -741,10 +735,6 @@ impl ToolHandlers {
         request: DeleteMemoRequest,
     ) -> std::result::Result<CallToolResult, McpError> {
         tracing::debug!("Deleting memo with ID: {}", request.id);
-
-        // Validate memo ID format using shared validation
-        McpValidation::validate_ulid(&request.id, "memo ID")
-            .map_err(|e| McpErrorHandler::handle_error(e, "validate memo ID"))?;
 
         let memo_id = match MemoId::from_string(request.id.clone()) {
             Ok(id) => id,

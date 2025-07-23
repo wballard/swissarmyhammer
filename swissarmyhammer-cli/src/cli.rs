@@ -272,7 +272,7 @@ Examples:
     /// Memoranda (memo) management commands
     #[command(long_about = "
 Manage memos with comprehensive CLI commands for creating, updating, and tracking structured text notes.
-Memos are stored as JSON files with unique ULID identifiers and automatic timestamping.
+Memos are stored as markdown files with filename-based identifiers and filesystem-based timestamping.
 
 Basic usage:
   swissarmyhammer memo create <title>           # Create new memo
@@ -783,6 +783,12 @@ pub enum MemoCommands {
     },
     /// Get all memos as context for AI
     Context,
+    /// Migrate existing JSON memos to markdown format
+    Migrate {
+        /// Remove JSON files after successful migration (default: false)
+        #[arg(long, default_value = "false")]
+        remove_json: bool,
+    },
 }
 
 impl Cli {

@@ -400,6 +400,7 @@ mod tests {
             min_chunk_size: 1,
             max_chunk_size: 10000,
             max_chunks_per_file: 1000,
+            max_file_size_bytes: 10 * 1024 * 1024,
         };
         let parser = CodeParser::new(parser_config)?;
         let embedding_service = EmbeddingService::new()?;

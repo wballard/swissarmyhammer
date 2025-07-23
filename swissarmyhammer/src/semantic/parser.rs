@@ -3,6 +3,7 @@
 use crate::semantic::types::{ChunkType, CodeChunk, ContentHash, Language};
 use crate::semantic::utils::FileHasher;
 use crate::semantic::{Result, SemanticError};
+use dashmap::DashMap;
 use std::collections::HashMap;
 use std::path::Path;
 use tree_sitter::{
@@ -88,17 +89,17 @@ fn create_rust_definition() -> LanguageDefinition {
         queries: vec![
             // Functions
             (
-                "(function_item name: (identifier) @name body: (_)) @function",
+                "(function_item name: (identifier) @name) @function",
                 ChunkType::Function,
             ),
             // Impl blocks
             (
-                "(impl_item type: (_) @type body: (declaration_list) @body) @impl",
+                "(impl_item) @impl",
                 ChunkType::Class,
             ),
-            // Methods within impl blocks
+            // Methods within impl blocks - corrected pattern
             (
-                "(impl_item body: (declaration_list (function_item name: (identifier) @method_name) @method)) @impl_methods",
+                "(impl_item (declaration_list (function_item name: (identifier) @method_name) @method))",
                 ChunkType::Function,
             ),
             // Structs
@@ -134,9 +135,9 @@ fn create_python_definition() -> LanguageDefinition {
                 "(class_definition name: (identifier) @name) @class",
                 ChunkType::Class,
             ),
-            // Methods within classes
+            // Methods within classes - corrected pattern
             (
-                "(class_definition body: (block (function_definition name: (identifier) @method_name) @method)) @class_methods",
+                "(class_definition (block (function_definition name: (identifier) @method_name) @method))",
                 ChunkType::Function,
             ),
             // Import statements
@@ -165,9 +166,9 @@ fn create_typescript_definition() -> LanguageDefinition {
                 "(class_declaration name: (type_identifier) @name) @class",
                 ChunkType::Class,
             ),
-            // Methods within classes
+            // Methods within classes - corrected pattern
             (
-                "(class_declaration body: (class_body (method_definition name: (property_identifier) @method_name) @method)) @class_methods",
+                "(class_declaration (class_body (method_definition name: (property_identifier) @method_name) @method))",
                 ChunkType::Function,
             ),
             // Interface definitions
@@ -180,7 +181,7 @@ fn create_typescript_definition() -> LanguageDefinition {
                 "(type_alias_declaration name: (type_identifier) @name) @type_alias",
                 ChunkType::Class,
             ),
-            // Function expressions
+            // Function expressions - corrected patterns
             (
                 "(variable_declarator name: (identifier) @name value: (function_expression)) @function",
                 ChunkType::Function,
@@ -214,12 +215,12 @@ fn create_javascript_definition() -> LanguageDefinition {
                 "(class_declaration name: (identifier) @name) @class",
                 ChunkType::Class,
             ),
-            // Methods within classes
+            // Methods within classes - corrected pattern
             (
-                "(class_declaration body: (class_body (method_definition name: (property_identifier) @method_name) @method)) @class_methods",
+                "(class_declaration (class_body (method_definition name: (property_identifier) @method_name) @method))",
                 ChunkType::Function,
             ),
-            // Function expressions
+            // Function expressions - corrected patterns
             (
                 "(variable_declarator name: (identifier) @name value: (function_expression)) @function",
                 ChunkType::Function,
@@ -258,8 +259,9 @@ fn create_dart_definition() -> LanguageDefinition {
 }
 
 /// TreeSitter-based code parser with extensible language support
+/// Uses DashMap for thread-safe concurrent access to parsers
 pub struct CodeParser {
-    parsers: HashMap<Language, Parser>,
+    parsers: DashMap<Language, Parser>,
     language_registry: LanguageRegistry,
     config: ParserConfig,
 }
@@ -273,15 +275,83 @@ pub struct ParserConfig {
     pub max_chunk_size: usize,
     /// Maximum chunks to extract per file
     pub max_chunks_per_file: usize,
+    /// Maximum file size in bytes to prevent OOM on massive files
+    pub max_file_size_bytes: usize,
+}
+
+impl ParserConfig {
+    /// Create a new ParserConfig with validation
+    ///
+    /// # Arguments
+    /// * `min_chunk_size` - Minimum chunk size in characters
+    /// * `max_chunk_size` - Maximum chunk size in characters  
+    /// * `max_chunks_per_file` - Maximum chunks to extract per file
+    /// * `max_file_size_bytes` - Maximum file size in bytes to prevent OOM
+    ///
+    /// # Returns
+    /// A validated ParserConfig or an error if validation fails
+    ///
+    /// # Errors
+    /// Returns error if:
+    /// - min_chunk_size > max_chunk_size
+    /// - Any size parameter is 0
+    /// - max_file_size_bytes is unreasonably small (< 1KB)
+    pub fn new(
+        min_chunk_size: usize,
+        max_chunk_size: usize,
+        max_chunks_per_file: usize,
+        max_file_size_bytes: usize,
+    ) -> Result<Self> {
+        // Validate chunk size constraints
+        if min_chunk_size > max_chunk_size {
+            return Err(SemanticError::TreeSitter(format!(
+                "Invalid configuration: min_chunk_size ({}) must be <= max_chunk_size ({})",
+                min_chunk_size, max_chunk_size
+            )));
+        }
+
+        // Validate non-zero constraints
+        if min_chunk_size == 0 {
+            return Err(SemanticError::TreeSitter(
+                "Invalid configuration: min_chunk_size must be > 0".to_string(),
+            ));
+        }
+
+        if max_chunk_size == 0 {
+            return Err(SemanticError::TreeSitter(
+                "Invalid configuration: max_chunk_size must be > 0".to_string(),
+            ));
+        }
+
+        if max_chunks_per_file == 0 {
+            return Err(SemanticError::TreeSitter(
+                "Invalid configuration: max_chunks_per_file must be > 0".to_string(),
+            ));
+        }
+
+        // Validate reasonable file size limit (at least 1KB)
+        if max_file_size_bytes < 1024 {
+            return Err(SemanticError::TreeSitter(format!(
+                "Invalid configuration: max_file_size_bytes ({}) must be >= 1024 bytes (1KB)",
+                max_file_size_bytes
+            )));
+        }
+
+        Ok(Self {
+            min_chunk_size,
+            max_chunk_size,
+            max_chunks_per_file,
+            max_file_size_bytes,
+        })
+    }
 }
 
 impl Default for ParserConfig {
     fn default() -> Self {
-        Self {
-            min_chunk_size: 50,
-            max_chunk_size: 2000,
-            max_chunks_per_file: 100,
-        }
+        // Use new() with default values, but since we know these are valid,
+        // we can unwrap safely
+        Self::new(50, 2000, 100, 10 * 1024 * 1024)
+            .expect("Default ParserConfig values should always be valid")
     }
 }
 
@@ -301,10 +371,12 @@ impl CodeParser {
     /// A new `CodeParser` instance or an error if creation fails
     ///
     /// # Errors
-    /// Returns error if any TreeSitter query is invalid or malformed
+    /// Returns error if:
+    /// - Configuration validation fails
+    /// - Any TreeSitter query is invalid or malformed
     pub fn new(config: ParserConfig) -> Result<Self> {
         let language_registry = LanguageRegistry::with_defaults();
-        let mut parsers = HashMap::new();
+        let parsers = DashMap::new();
 
         // Initialize parsers for all registered languages
         for language in language_registry.supported_languages() {
@@ -370,8 +442,17 @@ impl CodeParser {
     }
 
     /// Get appropriate parser for language from the registry
-    fn get_parser_for_language(&mut self, language: &Language) -> Option<&mut Parser> {
-        self.parsers.get_mut(language)
+    /// Check if a parser is available for the given language
+    fn has_parser_for_language(&self, language: &Language) -> bool {
+        self.parsers.contains_key(language)
+    }
+
+    /// Get available language list for error reporting
+    fn get_available_languages(&self) -> Vec<Language> {
+        self.parsers
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect()
     }
 
     /// Get TreeSitter queries for extracting semantic chunks from source code.
@@ -432,9 +513,20 @@ impl CodeParser {
     ///
     /// # Errors
     /// Returns error only if both TreeSitter parsing and plain text fallback fail
-    pub fn parse_file(&mut self, file_path: &Path, content: &str) -> Result<Vec<CodeChunk>> {
+    pub fn parse_file(&self, file_path: &Path, content: &str) -> Result<Vec<CodeChunk>> {
         let start_time = std::time::Instant::now();
         let content_size = content.len();
+
+        // Check file size limit to prevent OOM on massive files
+        if content_size > self.config.max_file_size_bytes {
+            return Err(SemanticError::TreeSitter(format!(
+                "File {} is too large ({} bytes > {} bytes limit). Skipping to prevent OOM.",
+                file_path.display(),
+                content_size,
+                self.config.max_file_size_bytes
+            )));
+        }
+
         let language = self.detect_language(file_path);
 
         let result = match self.parse_with_treesitter(file_path, content, &language) {
@@ -514,20 +606,66 @@ impl CodeParser {
     }
 
     fn parse_with_treesitter(
-        &mut self,
+        &self,
         file_path: &Path,
         content: &str,
         language: &Language,
     ) -> Result<Vec<CodeChunk>> {
-        let parser = self.get_parser_for_language(language).ok_or_else(|| {
-            SemanticError::TreeSitter(format!("No parser available for language: {language:?}"))
-        })?;
+        // Check if parser is available before attempting to borrow
+        if !self.has_parser_for_language(language) {
+            let available_languages = self.get_available_languages();
+            let error_msg = format!(
+                "No TreeSitter parser available for language: {:?} (file: {}). \
+                 Available parsers: {:?}. This could be due to:\
+                 \n1. Language not supported in current configuration\
+                 \n2. Parser initialization failed during startup\
+                 \n3. Missing TreeSitter grammar for this language",
+                language,
+                file_path.display(),
+                available_languages
+            );
+            tracing::error!("{}", error_msg);
+            return Err(SemanticError::TreeSitter(error_msg));
+        }
 
         let tree_parse_start = std::time::Instant::now();
-        let tree = parser
-            .parse(content, None)
-            .ok_or_else(|| SemanticError::TreeSitter("Failed to parse file".to_string()))?;
+
+        // Parse using DashMap's entry API for thread-safe access
+        let tree = {
+            let mut parser_ref = self.parsers.get_mut(language).ok_or_else(|| {
+                SemanticError::TreeSitter(format!(
+                    "Parser disappeared for language: {:?}",
+                    language
+                ))
+            })?;
+
+            parser_ref.parse(content, None)
+                .ok_or_else(|| {
+                    let error_msg = format!(
+                        "TreeSitter parsing failed for {} (language: {:?}, content size: {} bytes). \
+                         This could be due to syntax errors, encoding issues, or language grammar limitations.",
+                        file_path.display(),
+                        language,
+                        content.len()
+                    );
+                    tracing::warn!("{}", error_msg);
+                    SemanticError::TreeSitter(error_msg)
+                })?
+        };
         let tree_parse_duration = tree_parse_start.elapsed();
+
+        // Log additional tree parsing context for debugging
+        let root_node = tree.root_node();
+        if root_node.has_error() {
+            let error_details = format!(
+                "TreeSitter syntax tree contains errors for {} (language: {:?}). \
+                 Tree root: {:?}, Error nodes may affect chunk extraction.",
+                file_path.display(),
+                language,
+                root_node.kind()
+            );
+            tracing::warn!("{}", error_details);
+        }
 
         let mut chunks = Vec::new();
         let content_hash = FileHasher::hash_string(content);
@@ -537,8 +675,20 @@ impl CodeParser {
         let query_start = std::time::Instant::now();
         // Extract semantic chunks using queries
         for (query_str, chunk_type) in queries {
-            let query = Query::new(&tree.language(), query_str)
-                .map_err(|e| SemanticError::TreeSitter(format!("Invalid query: {e}")))?;
+            let query = Query::new(&tree.language(), query_str).map_err(|e| {
+                let error_msg = format!(
+                    "Invalid TreeSitter query for {} (language: {:?}, chunk type: {:?}): {}\
+                         \nQuery pattern: {}\n\
+                         This indicates the query pattern doesn't match the language grammar.",
+                    file_path.display(),
+                    language,
+                    chunk_type,
+                    e,
+                    query_str
+                );
+                tracing::error!("{}", error_msg);
+                SemanticError::TreeSitter(error_msg)
+            })?;
 
             let mut cursor = QueryCursor::new();
             let matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
@@ -790,7 +940,7 @@ impl CodeParser {
                     })?;
             }
 
-            // Register the language and store the parser
+            // Register the language and store the parser in thread-safe map
             let language = definition.language.clone();
             self.parsers.insert(language.clone(), parser);
             // Note: We can't modify the registry here as it's immutable,
@@ -866,8 +1016,9 @@ mod tests {
             min_chunk_size: 1, // Allow small chunks for this test
             max_chunk_size: 2000,
             max_chunks_per_file: 100,
+            max_file_size_bytes: 10 * 1024 * 1024,
         };
-        let mut parser = CodeParser::new(config).unwrap();
+        let parser = CodeParser::new(config).unwrap();
 
         let file_path = Path::new("test.rs");
         let content = "fn main() {\n    println!(\"Hello, world!\");\n}";
@@ -893,7 +1044,7 @@ mod tests {
     #[test]
     fn test_parse_python_class() {
         let config = ParserConfig::default();
-        let mut parser = CodeParser::new(config).unwrap();
+        let parser = CodeParser::new(config).unwrap();
 
         let file_path = Path::new("test.py");
         let content = "class MyClass:\n    def __init__(self):\n        pass";
@@ -918,8 +1069,9 @@ mod tests {
             min_chunk_size: 1, // Allow small chunks for this test
             max_chunk_size: 2000,
             max_chunks_per_file: 100,
+            max_file_size_bytes: 10 * 1024 * 1024,
         };
-        let mut parser = CodeParser::new(config).unwrap();
+        let parser = CodeParser::new(config).unwrap();
 
         let file_path = Path::new("test.txt");
         let content = "This is just plain text, not code.";
@@ -936,7 +1088,7 @@ mod tests {
     #[test]
     fn test_chunk_ids_are_unique() {
         let config = ParserConfig::default();
-        let mut parser = CodeParser::new(config).unwrap();
+        let parser = CodeParser::new(config).unwrap();
 
         let file_path = Path::new("test.rs");
         let content = "fn func1() {}\nfn func2() {}";
@@ -961,7 +1113,7 @@ mod tests {
     #[test]
     fn test_content_hashing() {
         let config = ParserConfig::default();
-        let mut parser = CodeParser::new(config).unwrap();
+        let parser = CodeParser::new(config).unwrap();
 
         let file_path = Path::new("test.rs");
         let content = "fn main() {}";
@@ -982,8 +1134,9 @@ mod tests {
             min_chunk_size: 10,
             max_chunk_size: 50,
             max_chunks_per_file: 100,
+            max_file_size_bytes: 10 * 1024 * 1024,
         };
-        let mut parser = CodeParser::new(config).unwrap();
+        let parser = CodeParser::new(config).unwrap();
 
         let file_path = Path::new("test.rs");
         // Create content with functions of different sizes
@@ -1007,8 +1160,9 @@ mod tests {
             min_chunk_size: 1,
             max_chunk_size: 1000,
             max_chunks_per_file: 2,
+            max_file_size_bytes: 10 * 1024 * 1024,
         };
-        let mut parser = CodeParser::new(config).unwrap();
+        let parser = CodeParser::new(config).unwrap();
 
         let file_path = Path::new("test.rs");
         // Create content with multiple functions
@@ -1030,8 +1184,9 @@ mod tests {
             min_chunk_size: 100, // Large minimum size
             max_chunk_size: 1000,
             max_chunks_per_file: 10,
+            max_file_size_bytes: 10 * 1024 * 1024,
         };
-        let mut parser = CodeParser::new(config).unwrap();
+        let parser = CodeParser::new(config).unwrap();
 
         let file_path = Path::new("test.txt");
         let content = "Short"; // Only 5 characters, below minimum
@@ -1043,5 +1198,152 @@ mod tests {
             chunks.is_empty(),
             "Short content should be filtered out by min_chunk_size"
         );
+    }
+
+    #[test]
+    fn test_file_size_limit() {
+        let config = ParserConfig {
+            min_chunk_size: 1,
+            max_chunk_size: 1000,
+            max_chunks_per_file: 10,
+            max_file_size_bytes: 100, // Very small limit for testing
+        };
+        let parser = CodeParser::new(config).unwrap();
+
+        let file_path = Path::new("test.rs");
+        // Create content larger than the limit
+        let content = "a".repeat(200); // 200 bytes, exceeds 100 byte limit
+
+        let result = parser.parse_file(file_path, &content);
+
+        // Should fail due to file size limit
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("too large"));
+        assert!(error_msg.contains("prevent OOM"));
+    }
+
+    #[test]
+    fn test_enhanced_error_context() {
+        let config = ParserConfig {
+            min_chunk_size: 1, // Allow small chunks
+            max_chunk_size: 1000,
+            max_chunks_per_file: 10,
+            max_file_size_bytes: 10 * 1024 * 1024,
+        };
+        let parser = CodeParser::new(config).unwrap();
+
+        let file_path = Path::new("test.unknownext"); // Unknown extension
+        let content = "some content that should be parsed as plain text with enough characters to pass the minimum size filter";
+
+        let result = parser.parse_file(file_path, content);
+
+        // Should fall back to plain text for unknown language
+        match result {
+            Ok(chunks) => {
+                // Should create plain text chunk for unknown language
+                assert!(
+                    !chunks.is_empty(),
+                    "Should create at least one plain text chunk for unknown language"
+                );
+                assert_eq!(chunks[0].chunk_type, ChunkType::PlainText);
+                assert_eq!(chunks[0].language, Language::Unknown);
+            }
+            Err(e) => {
+                // If it fails, error should contain detailed context
+                let error_msg = e.to_string();
+                assert!(
+                    error_msg.contains("No TreeSitter parser available")
+                        || error_msg.contains("Unknown")
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_concurrent_parsing() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let config = ParserConfig {
+            min_chunk_size: 1,
+            max_chunk_size: 1000,
+            max_chunks_per_file: 10,
+            max_file_size_bytes: 10 * 1024 * 1024,
+        };
+        let parser = Arc::new(CodeParser::new(config).unwrap());
+
+        let handles: Vec<_> = (0..4)
+            .map(|i| {
+                let parser_clone = Arc::clone(&parser);
+                thread::spawn(move || {
+                    let file_name = format!("test{}.rs", i);
+                    let file_path = Path::new(&file_name);
+                    let content = format!("fn test_function_{}() {{ println!(\"test\"); }}", i);
+
+                    // Each thread parses concurrently
+                    let result = parser_clone.parse_file(file_path, &content);
+                    assert!(result.is_ok(), "Concurrent parsing should succeed");
+
+                    let chunks = result.unwrap();
+                    assert!(!chunks.is_empty(), "Should produce chunks");
+                })
+            })
+            .collect();
+
+        // Wait for all threads to complete
+        for handle in handles {
+            handle.join().expect("Thread should complete successfully");
+        }
+    }
+
+    #[test]
+    fn test_config_validation_success() {
+        // Valid configurations should succeed
+        let valid_configs = vec![
+            ParserConfig::new(10, 100, 10, 1024),
+            ParserConfig::new(1, 1, 1, 1024),
+            ParserConfig::new(50, 2000, 100, 10 * 1024 * 1024),
+        ];
+
+        for config in valid_configs {
+            assert!(config.is_ok(), "Valid config should succeed");
+        }
+    }
+
+    #[test]
+    fn test_config_validation_failures() {
+        // Test min_chunk_size > max_chunk_size
+        let result = ParserConfig::new(100, 50, 10, 1024);
+        assert!(
+            result.is_err(),
+            "min_chunk_size > max_chunk_size should fail"
+        );
+
+        // Test min_chunk_size = 0
+        let result = ParserConfig::new(0, 100, 10, 1024);
+        assert!(result.is_err(), "min_chunk_size = 0 should fail");
+
+        // Test max_chunk_size = 0
+        let result = ParserConfig::new(10, 0, 10, 1024);
+        assert!(result.is_err(), "max_chunk_size = 0 should fail");
+
+        // Test max_chunks_per_file = 0
+        let result = ParserConfig::new(10, 100, 0, 1024);
+        assert!(result.is_err(), "max_chunks_per_file = 0 should fail");
+
+        // Test max_file_size_bytes too small
+        let result = ParserConfig::new(10, 100, 10, 500); // Less than 1KB
+        assert!(result.is_err(), "max_file_size_bytes < 1KB should fail");
+    }
+
+    #[test]
+    fn test_default_config_is_valid() {
+        let config = ParserConfig::default();
+        // Should not panic and should have reasonable values
+        assert!(config.min_chunk_size > 0);
+        assert!(config.max_chunk_size > config.min_chunk_size);
+        assert!(config.max_chunks_per_file > 0);
+        assert!(config.max_file_size_bytes >= 1024);
     }
 }

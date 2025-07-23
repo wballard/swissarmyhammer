@@ -159,6 +159,9 @@ impl McpErrorHandler {
             SwissArmyHammerError::Context { message, .. } => {
                 McpError::internal_error(message, None)
             }
+            SwissArmyHammerError::Semantic(err) => {
+                McpError::internal_error(format!("Semantic search error: {err}"), None)
+            }
         }
     }
 

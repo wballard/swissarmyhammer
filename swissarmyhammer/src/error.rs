@@ -110,6 +110,10 @@ pub enum SwissArmyHammerError {
     #[error("Memo validation failed: {0}")]
     MemoValidationFailed(String),
 
+    /// Semantic search error
+    #[error("Semantic search error: {0}")]
+    Semantic(#[from] crate::semantic::SemanticError),
+
     /// Other errors
     #[error("{0}")]
     Other(String),

@@ -39,7 +39,7 @@ impl FileIndexer {
 
     /// Index files matching the given glob pattern
     pub fn index_files(
-        &self,
+        &mut self,
         root_path: &Path,
         options: &IndexingOptions,
     ) -> Result<IndexingStats> {
@@ -102,7 +102,7 @@ impl FileIndexer {
     }
 
     /// Index a single file
-    fn index_single_file(&self, file_path: &Path) -> Result<usize> {
+    fn index_single_file(&mut self, file_path: &Path) -> Result<usize> {
         // Read file content
         let content =
             std::fs::read_to_string(file_path).map_err(crate::error::SwissArmyHammerError::Io)?;
@@ -188,7 +188,7 @@ mod tests {
 
     #[test]
     fn test_index_empty_directory() {
-        let (indexer, temp_dir) = create_test_indexer().unwrap();
+        let (mut indexer, temp_dir) = create_test_indexer().unwrap();
         let options = IndexingOptions::default();
 
         let stats = indexer.index_files(temp_dir.path(), &options);
@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn test_index_single_rust_file() {
-        let (indexer, temp_dir) = create_test_indexer().unwrap();
+        let (mut indexer, temp_dir) = create_test_indexer().unwrap();
 
         // Create a test Rust file
         let test_file = temp_dir.path().join("test.rs");

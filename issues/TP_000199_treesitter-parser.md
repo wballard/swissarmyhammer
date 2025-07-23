@@ -348,5 +348,30 @@ impl CodeParser {
 - Test chunk extraction accuracy with complex code structures
 - Performance testing with large files
 
+## Proposed Solution
+
+Based on my analysis of the existing codebase, I will implement the TreeSitter-based code parser by:
+
+1. **Enable TreeSitter dependencies**: Uncomment the TreeSitter dependencies in both workspace and library Cargo.toml files
+2. **Replace placeholder implementation**: Replace the current placeholder implementation in `semantic/parser.rs` with the full TreeSitter integration as specified in the issue
+3. **Maintain compatibility**: Keep the existing API surface compatible with current usage in the codebase
+4. **Add comprehensive testing**: Write tests for each supported language and edge cases like parsing failures
+5. **Use Test-Driven Development**: Write failing tests first, then implement functionality to make tests pass
+
+### Implementation Steps:
+1. Update CodeParser struct to hold language-specific TreeSitter parsers
+2. Implement language detection and parser selection logic
+3. Add TreeSitter query definitions for semantic chunk extraction
+4. Implement main parsing logic with graceful fallback to plain text
+5. Ensure proper error handling and logging as specified
+6. Validate against all acceptance criteria
+
+### Key Design Decisions:
+- Keep existing `ParserConfig` structure for compatibility
+- Use the existing semantic types (Language, CodeChunk, ChunkType, etc.)
+- Maintain graceful fallback behavior when TreeSitter parsing fails
+- Follow the existing error handling patterns using `Result<T>`
+- Use the existing `FileHasher` utility for content hashing
+
 ## Next Steps
 After completion, proceed to TP_000200_embedding-engine to implement the mistral.rs embedding generation.

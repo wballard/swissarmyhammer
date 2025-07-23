@@ -10,8 +10,11 @@ use std::collections::HashMap;
 /// Standard response format for MCP operations
 #[derive(Debug)]
 pub struct McpResponse {
+    /// Whether the operation was successful
     pub success: bool,
+    /// Human-readable message describing the result
     pub message: String,
+    /// Optional data payload for the response
     pub data: Option<HashMap<String, serde_json::Value>>,
 }
 

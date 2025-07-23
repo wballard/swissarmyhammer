@@ -599,11 +599,7 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         tracing::debug!("Creating memo with title: {}", request.title);
 
-        // Validate memo title and content
-        McpValidation::validate_not_empty(&request.title, "memo title")
-            .map_err(|e| McpErrorHandler::handle_error(e, "validate memo title"))?;
-        McpValidation::validate_not_empty(&request.content, "memo content")
-            .map_err(|e| McpErrorHandler::handle_error(e, "validate memo content"))?;
+        // Note: Both title and content can be empty - storage layer supports this
 
         let memo_storage = self.memo_storage.write().await;
         match memo_storage
@@ -889,10 +885,11 @@ impl ToolHandlers {
                         .collect::<Vec<_>>()
                         .join(&format!("\n\n{}\n\n", "=".repeat(80)));
 
-                    let summary = McpFormatter::format_list_summary("memo", sorted_memos.len(), sorted_memos.len());
+                    let memo_count = sorted_memos.len();
+                    let plural_suffix = if memo_count == 1 { "" } else { "s" };
                     Ok(create_success_response(format!(
-                        "All memo context ({}):\n\n{}",
-                        summary.to_lowercase(),
+                        "All memo context ({} memo{}):\n\n{}",
+                        memo_count, plural_suffix,
                         context
                     )))
                 }

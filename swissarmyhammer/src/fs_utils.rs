@@ -324,6 +324,7 @@ impl Default for FileSystemUtils {
 }
 
 #[cfg(test)]
+/// Test utilities and mock implementations for file system operations
 pub mod tests {
     use super::*;
     use std::collections::HashMap;
@@ -336,6 +337,7 @@ pub mod tests {
     }
 
     impl MockFileSystem {
+        /// Create a new empty mock file system
         pub fn new() -> Self {
             Self {
                 files: Mutex::new(HashMap::new()),

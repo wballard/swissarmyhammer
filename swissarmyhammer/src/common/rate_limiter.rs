@@ -10,7 +10,9 @@ use std::time::{Duration, Instant};
 
 /// Default rate limits for different operation types
 pub const DEFAULT_GLOBAL_RATE_LIMIT: u32 = 100; // requests per minute
+/// Default rate limit per client (requests per minute)
 pub const DEFAULT_PER_CLIENT_RATE_LIMIT: u32 = 10; // requests per minute  
+/// Default rate limit for expensive operations (requests per minute)
 pub const DEFAULT_EXPENSIVE_OPERATION_LIMIT: u32 = 5; // requests per minute
 
 /// Rate limiter using token bucket algorithm
@@ -269,7 +271,6 @@ pub fn init_rate_limiter(config: RateLimiterConfig) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread;
 
     #[test]
     fn test_token_bucket_creation() {

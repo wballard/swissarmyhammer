@@ -6,7 +6,7 @@
 
 use serde_json;
 use std::fs;
-use swissarmyhammer::memoranda::{MemoId, MarkdownMemoStorage, MemoStorage};
+use swissarmyhammer::memoranda::{MarkdownMemoStorage, MemoId, MemoStorage};
 use tempfile::TempDir;
 use tokio;
 
@@ -98,11 +98,7 @@ async fn test_complete_migration_workflow() -> Result<(), Box<dyn std::error::Er
     assert!(!memos_dir.join("01ARZ3NDEKTSV4RRFFQ69G5FAX.json").exists());
 
     // Verify markdown files were created with correct content
-    verify_markdown_memo(
-        &memos_dir,
-        "Simple Memo",
-        "This is a simple memo content.",
-    )?;
+    verify_markdown_memo(&memos_dir, "Simple Memo", "This is a simple memo content.")?;
 
     verify_markdown_memo(
         &memos_dir,
@@ -172,7 +168,11 @@ async fn test_migration_preserves_all_memo_functionality() -> Result<(), Box<dyn
 
     // 3. Search functionality
     let search_results = storage.search_memos("search terms").await?;
-    assert_eq!(search_results.len(), 1, "Should find 1 memo with search terms");
+    assert_eq!(
+        search_results.len(),
+        1,
+        "Should find 1 memo with search terms"
+    );
     assert_eq!(search_results[0].title, "Test Memo 2");
 
     // 4. Create new memo (after migration)
@@ -348,7 +348,10 @@ async fn test_migration_preserves_file_metadata() -> Result<(), Box<dyn std::err
 
     // Verify content is preserved
     assert_eq!(migrated_memo.title, "Timestamp Test");
-    assert_eq!(migrated_memo.content, "Test content for timestamp preservation");
+    assert_eq!(
+        migrated_memo.content,
+        "Test content for timestamp preservation"
+    );
 
     // Note: File-based timestamps will be different from JSON timestamps since
     // MarkdownMemoStorage derives timestamps from filesystem metadata.

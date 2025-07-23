@@ -14,7 +14,16 @@ When using DuckDB, open and close the file on demand -- use DuckDb itself as the
 
 Integrate `search` and `index` as mcp commands.
 
+Use nomic for the model https://huggingface.co/nomic-ai/nomic-embed-code. Quantize this to FP8.
 
 Indexing should be smart with MD5 content hashing to avoid re-embedding files that have not changed.
 
-Use nomic for the model https://huggingface.co/nomic-ai/nomic-embed-code
+Indexing shoudld be smaart and if a file changed -- any indexed chunks of that file in the index need to be replaced too.
+
+Use TreeSitter https://crates.io/crates/tree-sitter to parse source files for supported languages - this way you can index type and function level chunks.
+Support:
+  - rust
+  - python
+  - typescript
+  - javascript
+  - dart

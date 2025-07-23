@@ -438,7 +438,7 @@ use ulid::Ulid;
 
 /// Storage backends for memo persistence and retrieval
 pub mod storage;
-pub use storage::{FileSystemMemoStorage, MemoState, MemoStorage};
+pub use storage::{FileSystemMemoStorage, MarkdownMemoStorage, MemoState, MemoStorage};
 
 /// Mock storage implementation for testing
 #[cfg(test)]

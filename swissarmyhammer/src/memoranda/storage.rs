@@ -1,10 +1,12 @@
 use crate::error::{Result, SwissArmyHammerError};
 use crate::memoranda::{AdvancedMemoSearchEngine, Memo, MemoId, SearchOptions};
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
+
 
 /// State configuration for memo storage
 ///
@@ -2105,5 +2107,443 @@ mod tests {
             .unwrap();
         assert_eq!(results.len(), 1);
         assert!(!results[0].highlights.is_empty());
+    }
+}
+
+/// Markdown-based implementation of memo storage
+///
+/// Stores memos as pure markdown files with titles as filenames,
+/// eliminating the need for JSON wrapping and separate title fields.
+/// Timestamps are derived from filesystem metadata.
+///
+/// # Storage Format
+///
+/// - Each memo is stored as `{title}.md` in the memos directory
+/// - Files contain pure markdown content without metadata
+/// - Timestamps are read from filesystem created/modified times
+/// - ID is computed from the filename (without .md extension)
+///
+/// # Examples
+///
+/// ```rust
+/// use swissarmyhammer::memoranda::MarkdownMemoStorage;
+/// use std::path::PathBuf;
+///
+/// // Use default location (~/.swissarmyhammer/memos)
+/// let storage = MarkdownMemoStorage::new_default()?;
+///
+/// // Use custom location
+/// let custom_storage = MarkdownMemoStorage::new(PathBuf::from("/tmp/memos"));
+/// # Ok::<(), swissarmyhammer::error::SwissArmyHammerError>(())
+/// ```
+pub struct MarkdownMemoStorage {
+    /// Configuration state including storage directory path
+    state: MemoState,
+    /// Mutex to ensure thread-safe memo creation and prevent race conditions
+    creation_lock: Mutex<()>,
+    /// Advanced search engine for full-text search capabilities
+    search_engine: Option<AdvancedMemoSearchEngine>,
+}
+
+impl MarkdownMemoStorage {
+    /// Create a new markdown storage with the default memo directory
+    ///
+    /// Uses the `SWISSARMYHAMMER_MEMOS_DIR` environment variable if set,
+    /// otherwise defaults to `.swissarmyhammer/memos` in the current directory.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self>` - New storage instance or error if directory access fails
+    ///
+    /// # Environment Variables
+    ///
+    /// * `SWISSARMYHAMMER_MEMOS_DIR` - Custom directory for memo storage
+    pub fn new_default() -> Result<Self> {
+        let memos_dir = if let Ok(custom_path) = std::env::var("SWISSARMYHAMMER_MEMOS_DIR") {
+            PathBuf::from(custom_path)
+        } else {
+            std::env::current_dir()?
+                .join(".swissarmyhammer")
+                .join("memos")
+        };
+        Ok(Self::new(memos_dir))
+    }
+
+    /// Create a new markdown storage with a specific memo directory
+    ///
+    /// # Arguments
+    ///
+    /// * `memos_dir` - The directory path where memo files will be stored
+    ///
+    /// # Returns
+    ///
+    /// * `Self` - New storage instance
+    pub fn new(memos_dir: PathBuf) -> Self {
+        Self {
+            state: MemoState { memos_dir },
+            creation_lock: Mutex::new(()),
+            search_engine: None,
+        }
+    }
+
+    /// Sanitize a title to make it safe for use as a filename
+    ///
+    /// Removes or replaces characters that are not safe for filenames
+    /// across different operating systems.
+    ///
+    /// # Arguments
+    ///
+    /// * `title` - The memo title to sanitize
+    ///
+    /// # Returns
+    ///
+    /// * `String` - Sanitized filename-safe version of the title
+    fn sanitize_title_for_filename(title: &str) -> String {
+        // Replace problematic characters with underscores
+        let mut sanitized = title
+            .replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_")
+            .replace(['\n', '\r', '\t'], " ")
+            .trim()
+            .to_string();
+
+        // Handle empty or very long filenames
+        if sanitized.is_empty() {
+            sanitized = "untitled".to_string();
+        }
+
+        // Limit filename length to avoid filesystem issues
+        if sanitized.len() > 200 {
+            sanitized.truncate(200);
+        }
+
+        sanitized
+    }
+
+    /// Get the filesystem path for a memo with the given title
+    ///
+    /// # Arguments
+    ///
+    /// * `title` - The memo title to generate a path for
+    ///
+    /// # Returns
+    ///
+    /// * `PathBuf` - The full path where the memo file should be stored
+    fn get_memo_path_from_title(&self, title: &str) -> PathBuf {
+        let sanitized_title = Self::sanitize_title_for_filename(title);
+        self.state.memos_dir.join(format!("{}.md", sanitized_title))
+    }
+
+
+    /// Load and create a memo from a markdown file
+    ///
+    /// Reads the file content and filesystem metadata to construct a complete Memo object.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The filesystem path to the memo markdown file
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Memo>` - The memo object with content and metadata
+    async fn load_memo_from_markdown_file(&self, path: &PathBuf) -> Result<Memo> {
+        let content = tokio::fs::read_to_string(path).await?;
+        let metadata = tokio::fs::metadata(path).await?;
+
+        // Extract title from filename (remove .md extension)
+        let filename = path
+            .file_stem()
+            .ok_or_else(|| SwissArmyHammerError::Other("Invalid filename".to_string()))?
+            .to_string_lossy()
+            .to_string();
+
+        // Use filename as both ID and title (since title is derived from filename)
+        // For now, we'll use a ULID but in the future this should be derived from the filename
+        let id = MemoId::new();
+
+        // Get timestamps from filesystem
+        let created_at = metadata
+            .created()
+            .or_else(|_| metadata.modified()) // Fall back to modified if created not available
+            .map(|time| DateTime::<Utc>::from(time))
+            .unwrap_or_else(|_| Utc::now());
+
+        let updated_at = metadata
+            .modified()
+            .map(|time| DateTime::<Utc>::from(time))
+            .unwrap_or_else(|_| created_at);
+
+        Ok(Memo {
+            id,
+            title: filename, // Use filename as title
+            content,
+            created_at,
+            updated_at,
+        })
+    }
+
+    /// Save a memo to a markdown file
+    ///
+    /// Creates the directory if it doesn't exist, then writes the memo
+    /// content as pure markdown to the appropriate file.
+    ///
+    /// # Arguments
+    ///
+    /// * `memo` - The memo to save
+    ///
+    /// # Returns
+    ///
+    /// * `Result<()>` - Success or error if file cannot be written
+    async fn save_memo_to_markdown_file(&self, memo: &Memo) -> Result<()> {
+        self.ensure_directory_exists().await?;
+
+        let path = self.get_memo_path_from_title(&memo.title);
+        tokio::fs::write(path, &memo.content).await?;
+        Ok(())
+    }
+
+    /// Ensure the memo directory exists, creating it if necessary
+    async fn ensure_directory_exists(&self) -> Result<()> {
+        if !self.state.memos_dir.exists() {
+            tokio::fs::create_dir_all(&self.state.memos_dir).await?;
+        }
+        Ok(())
+    }
+
+    /// Index a memo in the search engine if available
+    async fn index_memo_if_available(&self, memo: &Memo) -> Result<()> {
+        if let Some(search_engine) = &self.search_engine {
+            search_engine.index_memo(memo).await?;
+        }
+        Ok(())
+    }
+
+    /// Remove a memo from the search engine index if available
+    async fn remove_memo_from_index_if_available(&self, memo_id: &MemoId) -> Result<()> {
+        if let Some(search_engine) = &self.search_engine {
+            search_engine.remove_memo(memo_id).await?;
+        }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl MemoStorage for MarkdownMemoStorage {
+    async fn create_memo(&self, title: String, content: String) -> Result<Memo> {
+        let _lock = self.creation_lock.lock().await;
+
+        // Create a memo with the provided title
+        let memo = Memo::new(title.clone(), content);
+
+        // Check if a file with this title already exists
+        let path = self.get_memo_path_from_title(&title);
+        if path.exists() {
+            return Err(SwissArmyHammerError::MemoAlreadyExists(title));
+        }
+
+        self.save_memo_to_markdown_file(&memo).await?;
+
+        // Index the memo in the search engine if available
+        self.index_memo_if_available(&memo).await?;
+
+        Ok(memo)
+    }
+
+    async fn get_memo(&self, id: &MemoId) -> Result<Memo> {
+        // Since our ID system is different, we need to find the memo by scanning
+        // all .md files. In a more sophisticated implementation, we might maintain
+        // an index of ID to filename mappings.
+        let memos = self.list_memos().await?;
+        memos
+            .into_iter()
+            .find(|memo| memo.id == *id)
+            .ok_or_else(|| SwissArmyHammerError::MemoNotFound(id.as_str().to_string()))
+    }
+
+    async fn update_memo(&self, id: &MemoId, content: String) -> Result<Memo> {
+        let mut memo = self.get_memo(id).await?;
+        memo.update_content(content);
+
+        // Since we're updating content only, the filename stays the same
+        self.save_memo_to_markdown_file(&memo).await?;
+
+        // Update the memo in the search engine if available
+        self.index_memo_if_available(&memo).await?;
+
+        Ok(memo)
+    }
+
+    async fn delete_memo(&self, id: &MemoId) -> Result<()> {
+        let memo = self.get_memo(id).await?;
+        let path = self.get_memo_path_from_title(&memo.title);
+
+        if !path.exists() {
+            return Err(SwissArmyHammerError::MemoNotFound(id.as_str().to_string()));
+        }
+
+        tokio::fs::remove_file(path).await?;
+
+        // Remove the memo from the search engine if available
+        self.remove_memo_from_index_if_available(id).await?;
+
+        Ok(())
+    }
+
+    async fn list_memos(&self) -> Result<Vec<Memo>> {
+        if !self.state.memos_dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut memos = Vec::new();
+        let mut dir_entries = tokio::fs::read_dir(&self.state.memos_dir).await?;
+
+        while let Some(entry) = dir_entries.next_entry().await? {
+            let path = entry.path();
+            if path.extension().is_some_and(|ext| ext == "md") {
+                match self.load_memo_from_markdown_file(&path).await {
+                    Ok(memo) => memos.push(memo),
+                    Err(e) => {
+                        tracing::warn!(
+                            path = %path.display(),
+                            error = %e,
+                            "Failed to load markdown memo file, skipping"
+                        );
+                        continue;
+                    }
+                }
+            }
+        }
+
+        Ok(memos)
+    }
+
+    async fn search_memos(&self, query: &str) -> Result<Vec<Memo>> {
+        let all_memos = self.list_memos().await?;
+        let query_lower = query.to_lowercase();
+
+        let matching_memos: Vec<Memo> = all_memos
+            .into_iter()
+            .filter(|memo| {
+                memo.title.to_lowercase().contains(&query_lower)
+                    || memo.content.to_lowercase().contains(&query_lower)
+            })
+            .collect();
+
+        Ok(matching_memos)
+    }
+
+    async fn search_memos_advanced(
+        &self,
+        query: &str,
+        options: &crate::memoranda::SearchOptions,
+    ) -> Result<Vec<crate::memoranda::SearchResult>> {
+        // Use advanced search engine if available, otherwise fall back to basic search
+        if let Some(search_engine) = &self.search_engine {
+            let all_memos = self.list_memos().await?;
+            let results = search_engine.search(query, options, &all_memos).await?;
+            Ok(results)
+        } else {
+            // Fallback to basic implementation for compatibility
+            let query_to_use = if options.case_sensitive {
+                query.to_string()
+            } else {
+                query.to_lowercase()
+            };
+
+            let all_memos = self.list_memos().await?;
+            let mut results = Vec::new();
+
+            for memo in all_memos {
+                let title_check = if options.case_sensitive {
+                    memo.title.contains(&query_to_use)
+                } else {
+                    memo.title.to_lowercase().contains(&query_to_use)
+                };
+
+                let content_check = if options.case_sensitive {
+                    memo.content.contains(&query_to_use)
+                } else {
+                    memo.content.to_lowercase().contains(&query_to_use)
+                };
+
+                if title_check || content_check {
+                    let mut relevance_score = 50.0; // Base score
+                    let mut match_count = 0;
+
+                    if title_check {
+                        relevance_score += 30.0; // Title matches get higher score
+                        match_count += 1;
+                    }
+                    if content_check {
+                        relevance_score += 20.0; // Content matches get lower score
+                        match_count += 1;
+                    }
+
+                    let highlights = if options.include_highlights {
+                        generate_highlights(&memo, query, options)
+                    } else {
+                        Vec::new()
+                    };
+
+                    results.push(crate::memoranda::SearchResult {
+                        memo,
+                        relevance_score,
+                        highlights,
+                        match_count,
+                    });
+                }
+            }
+
+            // Sort by relevance score (highest first)
+            results.sort_by(|a, b| b.relevance_score.partial_cmp(&a.relevance_score).unwrap());
+
+            // Apply result limit
+            if let Some(max_results) = options.max_results {
+                results.truncate(max_results);
+            }
+
+            Ok(results)
+        }
+    }
+
+    async fn get_all_context(&self, options: &crate::memoranda::ContextOptions) -> Result<String> {
+        let all_memos = self.list_memos().await?;
+
+        if all_memos.is_empty() {
+            return Ok(String::new());
+        }
+
+        let mut context = String::new();
+
+        // Sort memos by creation date (newest first)
+        let mut sorted_memos = all_memos;
+        sorted_memos.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+        for (i, memo) in sorted_memos.iter().enumerate() {
+            if i > 0 {
+                context.push_str(&options.delimiter);
+            }
+
+            if options.include_metadata {
+                context.push_str(&format!(
+                    "# {} ({})\nCreated: {} | Updated: {}\n\n",
+                    memo.title,
+                    memo.id.as_str(),
+                    memo.created_at.format("%Y-%m-%d %H:%M:%S UTC"),
+                    memo.updated_at.format("%Y-%m-%d %H:%M:%S UTC")
+                ));
+            }
+
+            context.push_str(&memo.content);
+
+            // Rough token estimation (4 characters per token)
+            if let Some(max_tokens) = options.max_tokens {
+                let estimated_tokens = context.len() / 4;
+                if estimated_tokens >= max_tokens {
+                    break;
+                }
+            }
+        }
+
+        Ok(context)
     }
 }

@@ -1,7 +1,7 @@
 //! DuckDB vector storage for semantic search
 
 use crate::error::Result;
-use crate::semantic::types::{CodeChunk, SearchResult, SemanticConfig};
+use crate::semantic::types::{CodeChunk, Embedding, SemanticSearchResult, SemanticConfig};
 use std::path::Path;
 
 /// DuckDB-based vector storage for code chunks
@@ -21,14 +21,20 @@ impl VectorStorage {
         Ok(())
     }
 
-    /// Store a code chunk with its embedding
+    /// Store a code chunk
     pub fn store_chunk(&self, _chunk: &CodeChunk) -> Result<()> {
         // TODO: Implement chunk storage
         Ok(())
     }
 
+    /// Store an embedding for a code chunk
+    pub fn store_embedding(&self, _embedding: &Embedding) -> Result<()> {
+        // TODO: Implement embedding storage
+        Ok(())
+    }
+
     /// Search for similar chunks using vector similarity
-    pub fn search_similar(&self, _query_embedding: &[f32], _limit: usize) -> Result<Vec<SearchResult>> {
+    pub fn search_similar(&self, _query_embedding: &[f32], _limit: usize) -> Result<Vec<SemanticSearchResult>> {
         // TODO: Implement vector similarity search
         Ok(vec![])
     }

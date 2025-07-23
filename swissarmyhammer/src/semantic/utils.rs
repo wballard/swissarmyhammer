@@ -1,7 +1,7 @@
 //! Utilities and helpers for semantic search
 
 use crate::error::Result;
-use crate::semantic::types::{Language, SemanticConfig};
+use crate::semantic::types::Language;
 use std::path::{Path, PathBuf};
 
 /// Utility functions for semantic search operations
@@ -118,6 +118,7 @@ impl SemanticUtils {
             Language::TypeScript => vec!["ts", "tsx"],
             Language::JavaScript => vec!["js", "jsx"],
             Language::Dart => vec!["dart"],
+            Language::Unknown => vec![], // No specific extensions for unknown languages
         }
     }
 

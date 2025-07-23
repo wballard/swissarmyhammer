@@ -1,7 +1,7 @@
 //! Query and search logic for semantic search
 
 use crate::error::Result;
-use crate::semantic::{EmbeddingService, SearchResult, VectorStorage};
+use crate::semantic::{EmbeddingService, SemanticSearchResult, VectorStorage};
 
 /// Semantic searcher for querying indexed code
 pub struct SemanticSearcher {
@@ -43,7 +43,7 @@ impl SemanticSearcher {
     }
 
     /// Search for code chunks semantically similar to the query
-    pub fn search(&self, query: &str, options: &SearchOptions) -> Result<Vec<SearchResult>> {
+    pub fn search(&self, query: &str, options: &SearchOptions) -> Result<Vec<SemanticSearchResult>> {
         // Generate embedding for the query
         let query_embedding = self.embedding_service.embed_text(query)?;
 
@@ -54,14 +54,14 @@ impl SemanticSearcher {
         results = self.apply_filters(results, options);
 
         // Sort by score (highest first) and limit results
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| b.similarity_score.partial_cmp(&a.similarity_score).unwrap_or(std::cmp::Ordering::Equal));
         results.truncate(options.limit);
 
         Ok(results)
     }
 
     /// Search for code chunks with multiple query terms
-    pub fn search_multi(&self, queries: &[&str], options: &SearchOptions) -> Result<Vec<SearchResult>> {
+    pub fn search_multi(&self, queries: &[&str], options: &SearchOptions) -> Result<Vec<SemanticSearchResult>> {
         let mut all_results = Vec::new();
 
         for query in queries {
@@ -80,7 +80,7 @@ impl SemanticSearcher {
         }
 
         // Sort and limit
-        merged_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        merged_results.sort_by(|a, b| b.similarity_score.partial_cmp(&a.similarity_score).unwrap_or(std::cmp::Ordering::Equal));
         merged_results.truncate(options.limit);
 
         Ok(merged_results)
@@ -93,9 +93,9 @@ impl SemanticSearcher {
     }
 
     /// Apply filters to search results
-    fn apply_filters(&self, mut results: Vec<SearchResult>, options: &SearchOptions) -> Vec<SearchResult> {
+    fn apply_filters(&self, mut results: Vec<SemanticSearchResult>, options: &SearchOptions) -> Vec<SemanticSearchResult> {
         // Filter by minimum score
-        results.retain(|result| result.score >= options.min_score);
+        results.retain(|result| result.similarity_score >= options.min_score);
 
         // Filter by language
         if let Some(ref language) = options.language_filter {

@@ -1,7 +1,7 @@
 //! TreeSitter integration for parsing source code
 
 use crate::error::Result;
-use crate::semantic::types::{CodeChunk, Language};
+use crate::semantic::types::{ChunkType, CodeChunk, ContentHash, Language};
 use std::path::Path;
 
 /// TreeSitter-based code parser
@@ -45,12 +45,12 @@ impl CodeParser {
         let chunk = CodeChunk {
             id: format!("{}:{}", file_path.display(), 1),
             file_path: file_path.to_path_buf(),
-            content: content.to_string(),
             language,
+            content: content.to_string(),
             start_line: 1,
             end_line: content.lines().count(),
-            content_hash: format!("{:x}", md5::compute(content.as_bytes())),
-            embedding: None,
+            chunk_type: ChunkType::PlainText, // Default for now
+            content_hash: ContentHash(format!("{:x}", md5::compute(content.as_bytes()))),
         };
 
         Ok(vec![chunk])
@@ -60,26 +60,25 @@ impl CodeParser {
     fn detect_language(&self, file_path: &Path) -> Result<Language> {
         let extension = file_path
             .extension()
-            .and_then(|ext| ext.to_str())
-            .ok_or_else(|| crate::error::SwissArmyHammerError::Other(
-                format!("Could not determine file extension for: {}", file_path.display())
-            ))?;
+            .and_then(|ext| ext.to_str());
 
         match extension {
-            "rs" => Ok(Language::Rust),
-            "py" => Ok(Language::Python),
-            "ts" => Ok(Language::TypeScript),
-            "js" => Ok(Language::JavaScript),
-            "dart" => Ok(Language::Dart),
-            _ => Err(crate::error::SwissArmyHammerError::Other(
-                format!("Unsupported file extension: {}", extension)
-            )),
+            Some("rs") => Ok(Language::Rust),
+            Some("py") => Ok(Language::Python),
+            Some("ts") => Ok(Language::TypeScript),
+            Some("js") => Ok(Language::JavaScript),
+            Some("dart") => Ok(Language::Dart),
+            _ => Ok(Language::Unknown),
         }
     }
 
     /// Check if a file is supported for parsing
     pub fn is_supported_file(&self, file_path: &Path) -> bool {
-        self.detect_language(file_path).is_ok()
+        match self.detect_language(file_path) {
+            Ok(Language::Unknown) => false,
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 }
 

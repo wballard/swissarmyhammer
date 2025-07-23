@@ -1,7 +1,7 @@
 //! File indexing logic for semantic search
 
 use crate::error::Result;
-use crate::semantic::{CodeParser, EmbeddingService, ParserConfig, VectorStorage};
+use crate::semantic::{CodeParser, EmbeddingService, Embedding, VectorStorage};
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -111,21 +111,29 @@ impl FileIndexer {
             .map_err(crate::error::SwissArmyHammerError::Io)?;
 
         // Parse into chunks
-        let mut chunks = self.parser.parse_file(file_path, &content)?;
+        let chunks = self.parser.parse_file(file_path, &content)?;
 
         // Generate embeddings for chunks
         let chunk_texts: Vec<&str> = chunks.iter().map(|c| c.content.as_str()).collect();
-        let embeddings = self.embedding_service.embed_batch(&chunk_texts)?;
+        let embedding_vectors = self.embedding_service.embed_batch(&chunk_texts)?;
 
-        // Add embeddings to chunks
-        for (chunk, embedding) in chunks.iter_mut().zip(embeddings.into_iter()) {
-            chunk.embedding = Some(embedding);
-        }
+        // Create embedding objects
+        let embeddings: Vec<Embedding> = chunks.iter()
+            .zip(embedding_vectors.into_iter())
+            .map(|(chunk, vector)| Embedding {
+                chunk_id: chunk.id.clone(),
+                vector,
+            })
+            .collect();
 
-        // Store chunks
+        // Store chunks and embeddings
         let chunk_count = chunks.len();
         for chunk in chunks {
             self.storage.store_chunk(&chunk)?;
+        }
+        
+        for embedding in embeddings {
+            self.storage.store_embedding(&embedding)?;
         }
 
         Ok(chunk_count)

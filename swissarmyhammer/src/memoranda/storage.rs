@@ -26,7 +26,7 @@
 //!     "# Important Meeting\n\nDiscussed new features".to_string()
 //! ).await?;
 //!
-//! // ID is derived from filename: "Meeting Notes"
+//! // ID is derived from sanitized filename: "Meeting_Notes"
 //! println!("Created memo with ID: {}", memo.id);
 //! # Ok(())
 //! # }
@@ -1109,6 +1109,7 @@ impl MarkdownMemoStorage {
     /// Load and create a memo from a markdown file
     ///
     /// Reads the file content and filesystem metadata to construct a complete Memo object.
+    /// As per issue requirements, stores pure markdown without metadata and computes title from filename.
     ///
     /// # Arguments
     ///
@@ -1118,7 +1119,7 @@ impl MarkdownMemoStorage {
     ///
     /// * `Result<Memo>` - The memo object with content and metadata
     async fn load_memo_from_markdown_file(&self, path: &PathBuf) -> Result<Memo> {
-        let raw_content = tokio::fs::read_to_string(path).await?;
+        let content = tokio::fs::read_to_string(path).await?;
         let metadata = tokio::fs::metadata(path).await?;
 
         // Extract title from filename (remove .md extension)
@@ -1128,35 +1129,11 @@ impl MarkdownMemoStorage {
             .to_string_lossy()
             .to_string();
 
-        // Use filename as the ID (as specified in the issue requirements)
+        // Use filename as both ID and title (as specified in the issue requirements)
         let id = MemoId::from_filename(&filename);
 
-        // Parse YAML front matter if present to extract original title and content
-        let (title, content) = if raw_content.starts_with("---\n") {
-            if let Some(front_matter_end) = raw_content.find("\n---\n") {
-                let front_matter = &raw_content[4..front_matter_end]; // Skip initial "---\n"
-                let content_start = front_matter_end + 5; // Skip "\n---\n"
-                let content = raw_content[content_start..].trim_start().to_string(); // Remove leading whitespace
-
-                // Simple YAML parsing for title field
-                if let Some(title_line) =
-                    front_matter.lines().find(|line| line.starts_with("title:"))
-                {
-                    let title_value = title_line.strip_prefix("title:").unwrap_or("").trim();
-                    // Remove quotes if present
-                    let title = title_value.trim_matches('"').trim_matches('\'').to_string();
-                    (title, content)
-                } else {
-                    (filename, content)
-                }
-            } else {
-                // Malformed YAML front matter, use filename and raw content
-                (filename, raw_content)
-            }
-        } else {
-            // No YAML front matter, use filename as title
-            (filename, raw_content)
-        };
+        // Title is computed from filename - no separate storage needed
+        let title = filename;
 
         // Get timestamps from filesystem
         let created_at = metadata
@@ -1327,20 +1304,9 @@ impl MarkdownMemoStorage {
             return Ok(false);
         }
 
-        // Write the content as markdown with YAML front matter to preserve original title
+        // Write the content as pure markdown (no YAML front matter per issue requirements)
         self.ensure_directory_exists().await?;
-        let content_with_metadata =
-            if json_memo.title != Self::sanitize_title_for_filename(&json_memo.title) {
-                // If the title was sanitized, preserve the original in YAML front matter
-                format!(
-                    "---\ntitle: \"{}\"\n---\n\n{}",
-                    json_memo.title, json_memo.content
-                )
-            } else {
-                // If no sanitization occurred, just write the content
-                json_memo.content.clone()
-            };
-        tokio::fs::write(&markdown_path, &content_with_metadata).await?;
+        tokio::fs::write(&markdown_path, &json_memo.content).await?;
 
         // Try to preserve the original timestamps by setting file times
         if let Err(e) = self
@@ -1391,14 +1357,24 @@ impl MemoStorage for MarkdownMemoStorage {
     async fn create_memo(&self, title: String, content: String) -> Result<Memo> {
         let _lock = self.creation_lock.lock().await;
 
-        // Create a memo with the provided title
-        let memo = Memo::new(title.clone(), content);
-
         // Check if a file with this title already exists
         let path = self.get_memo_path_from_title(&title);
         if path.exists() {
             return Err(SwissArmyHammerError::MemoAlreadyExists(title));
         }
+
+        // Create memo with filename-based ID (as specified in issue requirements)
+        let sanitized_title = Self::sanitize_title_for_filename(&title);
+        let id = MemoId::from_filename(&sanitized_title);
+        let now = Utc::now();
+
+        let memo = Memo {
+            id,
+            title,
+            content,
+            created_at: now,
+            updated_at: now,
+        };
 
         self.save_memo_to_markdown_file(&memo).await?;
 
@@ -2962,16 +2938,17 @@ mod tests {
         let raw_file_content =
             std::fs::read_to_string(memos_dir.join("Test_Memo_With_Special_Characters_.md"))
                 .unwrap();
-        // File should contain YAML front matter with the original title
-        assert!(raw_file_content.contains("title: \"Test/Memo:With*Special<Characters>\""));
-        assert!(raw_file_content.contains("Content with special title characters."));
+        // File should contain only pure markdown content (no YAML front matter per issue requirements)
+        assert_eq!(raw_file_content, "Content with special title characters.");
+        assert!(!raw_file_content.contains("title:"));
 
         // Verify memo can be retrieved
         let memo = storage
             .get_memo(&MemoId::from_filename("Test_Memo_With_Special_Characters_"))
             .await
             .unwrap();
-        assert_eq!(memo.title, "Test/Memo:With*Special<Characters>");
+        // Title is now derived from sanitized filename (special characters replaced with underscores)
+        assert_eq!(memo.title, "Test_Memo_With_Special_Characters_");
         assert_eq!(memo.content, "Content with special title characters.");
     }
 
@@ -3055,17 +3032,20 @@ mod tests {
         assert!(memos_dir.join("Unicode Test.md").exists());
 
         let raw_file_content = std::fs::read_to_string(memos_dir.join("Unicode Test.md")).unwrap();
-        // File should contain YAML front matter with the original title (including emoji)
-        assert!(raw_file_content.contains("title: \"Unicode Test 🚀\""));
-        assert!(raw_file_content
-            .contains("Content with émojis 🎉 and special characters: café, naïve, résumé"));
+        // File should contain only pure markdown content (no YAML front matter per issue requirements)
+        assert_eq!(
+            raw_file_content,
+            "Content with émojis 🎉 and special characters: café, naïve, résumé"
+        );
+        assert!(!raw_file_content.contains("title:"));
 
         // Verify memo can be retrieved with proper Unicode handling
         let memo = storage
             .get_memo(&MemoId::from_filename("Unicode Test"))
             .await
             .unwrap();
-        assert_eq!(memo.title, "Unicode Test 🚀");
+        // Title is now derived from sanitized filename (emoji removed during sanitization)
+        assert_eq!(memo.title, "Unicode Test");
         assert_eq!(
             memo.content,
             "Content with émojis 🎉 and special characters: café, naïve, résumé"

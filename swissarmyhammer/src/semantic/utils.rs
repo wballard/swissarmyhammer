@@ -224,7 +224,7 @@ impl FileChangeTracker {
         Ok(match needs_reindexing {
             true => FileChangeStatus::Changed {
                 new_hash: current_hash,
-                exists_in_index: self.storage.is_file_indexed(path)?,
+                exists_in_index: self.storage.file_exists(path)?,
             },
             false => FileChangeStatus::Unchanged { hash: current_hash },
         })

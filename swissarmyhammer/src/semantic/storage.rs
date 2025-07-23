@@ -3,6 +3,10 @@
 //! This module provides a DuckDB-based vector storage implementation for code chunks
 //! and their embeddings. It supports efficient vector similarity search using cosine
 //! similarity and manages the database schema for semantic search operations.
+//!
+//! **Note**: This is currently implemented as an in-memory fallback while DuckDB
+//! integration is being developed. Most storage operations are stubbed with TODO
+//! comments and only basic file metadata is stored in memory.
 
 use crate::error::{Result, SwissArmyHammerError};
 use crate::semantic::{
@@ -15,11 +19,22 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-/// Vector storage for code chunks and embeddings (with in-memory fallback)
+/// Vector storage for code chunks and embeddings
+///
+/// **TEMPORARY IMPLEMENTATION**: This struct currently uses in-memory fallback storage
+/// while DuckDB integration is being developed. Most methods contain TODO comments
+/// for the actual DuckDB implementation. Only basic file metadata operations are
+/// functional using the `indexed_files` HashMap.
+///
+/// Future versions will implement full DuckDB persistence for:
+/// - Code chunk storage
+/// - Vector embeddings
+/// - Similarity search operations
+/// - Proper database schema management
 pub struct VectorStorage {
     db_path: PathBuf,
     _config: SemanticConfig,
-    // In-memory storage for file metadata when DuckDB is not available
+    /// In-memory storage for file metadata (temporary fallback until DuckDB is implemented)
     indexed_files: Mutex<HashMap<PathBuf, (ContentHash, IndexedFile)>>,
 }
 
@@ -211,7 +226,9 @@ impl VectorStorage {
     /// Check if file exists in index
     pub fn file_exists(&self, file_path: &Path) -> Result<bool> {
         let indexed_files = self.indexed_files.lock().map_err(|e| {
-            SwissArmyHammerError::Config(format!("Failed to lock indexed_files: {e}"))
+            SwissArmyHammerError::Config(format!(
+                "Failed to lock indexed_files for file existence check: {e}"
+            ))
         })?;
 
         Ok(indexed_files.contains_key(file_path))
@@ -220,7 +237,9 @@ impl VectorStorage {
     /// Get file hash from index
     pub fn get_file_hash(&self, file_path: &Path) -> Result<Option<ContentHash>> {
         let indexed_files = self.indexed_files.lock().map_err(|e| {
-            SwissArmyHammerError::Config(format!("Failed to lock indexed_files: {e}"))
+            SwissArmyHammerError::Config(format!(
+                "Failed to lock indexed_files for hash retrieval: {e}"
+            ))
         })?;
 
         Ok(indexed_files.get(file_path).map(|(hash, _)| hash.clone()))
@@ -229,7 +248,9 @@ impl VectorStorage {
     /// Get statistics about indexed files
     pub fn get_index_stats(&self) -> Result<IndexStats> {
         let indexed_files = self.indexed_files.lock().map_err(|e| {
-            SwissArmyHammerError::Config(format!("Failed to lock indexed_files: {e}"))
+            SwissArmyHammerError::Config(format!(
+                "Failed to lock indexed_files for statistics retrieval: {e}"
+            ))
         })?;
 
         let file_count = indexed_files.len();
@@ -249,7 +270,9 @@ impl VectorStorage {
     /// Store indexed file (for internal use in testing/development)
     pub fn store_indexed_file_internal(&self, file: &IndexedFile) -> Result<()> {
         let mut indexed_files = self.indexed_files.lock().map_err(|e| {
-            SwissArmyHammerError::Config(format!("Failed to lock indexed_files: {e}"))
+            SwissArmyHammerError::Config(format!(
+                "Failed to lock indexed_files for file storage: {e}"
+            ))
         })?;
 
         indexed_files.insert(file.path.clone(), (file.content_hash.clone(), file.clone()));

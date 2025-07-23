@@ -302,6 +302,33 @@ Examples:
         #[command(subcommand)]
         subcommand: MemoCommands,
     },
+    /// Semantic search commands
+    #[command(long_about = "
+Manage semantic search functionality for indexing and searching source code files using vector embeddings.
+Uses mistral.rs for embeddings, DuckDB for vector storage, and TreeSitter for parsing.
+
+Basic usage:
+  swissarmyhammer search index <glob>           # Index files for semantic search
+  swissarmyhammer search query <query>          # Query indexed files semantically
+
+Indexing:
+  --glob \"**/*.rs\"                            # Glob pattern for files to index
+  --force                                       # Force re-indexing of all files
+
+Querying:
+  --limit 10                                    # Number of results to return
+  --format table                               # Output format (table, json, yaml)
+
+Examples:
+  swissarmyhammer search index \"**/*.rs\"       # Index all Rust files
+  swissarmyhammer search index \"src/**/*.py\" --force  # Force re-index Python files
+  swissarmyhammer search query \"error handling\"       # Search for error handling code
+  swissarmyhammer search query \"async function\" --limit 5 --format json
+")]
+    Search {
+        #[command(subcommand)]
+        subcommand: SearchCommands,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -783,6 +810,30 @@ pub enum MemoCommands {
     },
     /// Get all memos as context for AI
     Context,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SearchCommands {
+    /// Index files for semantic search
+    Index {
+        /// Glob pattern for files to index
+        #[arg(short, long)]
+        glob: String,
+        /// Force re-indexing of all files
+        #[arg(short, long)]
+        force: bool,
+    },
+    /// Query indexed files semantically
+    Query {
+        /// Search query
+        query: String,
+        /// Number of results to return
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "table")]
+        format: OutputFormat,
+    },
 }
 
 impl Cli {

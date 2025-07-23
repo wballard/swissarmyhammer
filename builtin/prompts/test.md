@@ -20,6 +20,8 @@ The goal is to have:
 - Feel free to refactor
 - Do not make any editorial comments about why tests are failing, just fix them already. I can pay humans if I want excuses.
 
+If tests take a 'long time' -- more than 5 minutes, check if any tests are hanging and correct them.
+
 ## Process
 
 - run all tests

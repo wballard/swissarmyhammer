@@ -13,7 +13,7 @@ pub struct CodeParser {
     typescript_parser: Option<Parser>,
     javascript_parser: Option<Parser>,
     dart_parser: Option<Parser>,
-    _config: ParserConfig,
+    config: ParserConfig,
 }
 
 /// Configuration for the code parser
@@ -46,7 +46,7 @@ impl CodeParser {
             typescript_parser: Self::create_typescript_parser(),
             javascript_parser: Self::create_javascript_parser(),
             dart_parser: Self::create_dart_parser(),
-            _config: config,
+            config,
         })
     }
 
@@ -138,8 +138,16 @@ impl CodeParser {
                     "(function_item name: (identifier) @name body: (_)) @function",
                     ChunkType::Function,
                 ),
-                // Impl blocks
-                ("(impl_item type: (_) @type body: (_)) @impl", ChunkType::Class),
+                // Impl blocks (corrected)
+                (
+                    "(impl_item type: (_) @type body: (declaration_list) @body) @impl",
+                    ChunkType::Class,
+                ),
+                // Methods within impl blocks
+                (
+                    "(impl_item body: (declaration_list (function_item name: (identifier) @method_name) @method)) @impl_methods",
+                    ChunkType::Function,
+                ),
                 // Structs
                 (
                     "(struct_item name: (type_identifier) @name) @struct",
@@ -164,11 +172,16 @@ impl CodeParser {
                     "(class_definition name: (identifier) @name) @class",
                     ChunkType::Class,
                 ),
+                // Methods within classes
+                (
+                    "(class_definition body: (block (function_definition name: (identifier) @method_name) @method)) @class_methods",
+                    ChunkType::Function,
+                ),
                 // Import statements
                 ("(import_statement) @import", ChunkType::Import),
                 ("(import_from_statement) @import", ChunkType::Import),
             ],
-            Language::TypeScript | Language::JavaScript => vec![
+            Language::TypeScript => vec![
                 // Functions
                 (
                     "(function_declaration name: (identifier) @name) @function",
@@ -176,27 +189,90 @@ impl CodeParser {
                 ),
                 // Arrow functions
                 ("(arrow_function) @function", ChunkType::Function),
-                // Classes
+                // Classes (TypeScript uses type_identifier)
                 (
                     "(class_declaration name: (type_identifier) @name) @class",
                     ChunkType::Class,
+                ),
+                // Methods within classes
+                (
+                    "(class_declaration body: (class_body (method_definition name: (property_identifier) @method_name) @method)) @class_methods",
+                    ChunkType::Function,
+                ),
+                // Interface definitions
+                (
+                    "(interface_declaration name: (type_identifier) @name) @interface",
+                    ChunkType::Class,
+                ),
+                // Type aliases
+                (
+                    "(type_alias_declaration name: (type_identifier) @name) @type_alias",
+                    ChunkType::Class,
+                ),
+                // Function expressions and assignments
+                (
+                    "(variable_declarator name: (identifier) @name value: (function_expression)) @function",
+                    ChunkType::Function,
+                ),
+                (
+                    "(variable_declarator name: (identifier) @name value: (arrow_function)) @function",
+                    ChunkType::Function,
+                ),
+                // Import statements
+                ("(import_statement) @import", ChunkType::Import),
+            ],
+            Language::JavaScript => vec![
+                // Functions
+                (
+                    "(function_declaration name: (identifier) @name) @function",
+                    ChunkType::Function,
+                ),
+                // Arrow functions
+                ("(arrow_function) @function", ChunkType::Function),
+                // Classes (JavaScript uses identifier)
+                (
+                    "(class_declaration name: (identifier) @name) @class",
+                    ChunkType::Class,
+                ),
+                // Methods within classes
+                (
+                    "(class_declaration body: (class_body (method_definition name: (property_identifier) @method_name) @method)) @class_methods",
+                    ChunkType::Function,
+                ),
+                // Function expressions and assignments
+                (
+                    "(variable_declarator name: (identifier) @name value: (function_expression)) @function",
+                    ChunkType::Function,
+                ),
+                (
+                    "(variable_declarator name: (identifier) @name value: (arrow_function)) @function",
+                    ChunkType::Function,
                 ),
                 // Import statements
                 ("(import_statement) @import", ChunkType::Import),
             ],
             Language::Dart => vec![
-                // Functions
+                // Functions (corrected)
                 (
                     "(function_signature name: (identifier) @name) @function",
                     ChunkType::Function,
                 ),
-                // Classes
                 (
-                    "(class_definition name: (type_identifier) @name) @class",
+                    "(local_function_declaration name: (identifier) @name) @function",
+                    ChunkType::Function,
+                ),
+                // Classes (corrected)
+                (
+                    "(class_definition name: (identifier) @name) @class",
                     ChunkType::Class,
                 ),
-                // Import statements
-                ("(import_or_export) @import", ChunkType::Import),
+                // Methods within classes
+                (
+                    "(class_definition body: (class_body (method_signature name: (identifier) @method_name) @method)) @class_methods",
+                    ChunkType::Function,
+                ),
+                // Import statements (corrected)
+                ("(import_specification) @import", ChunkType::Import),
             ],
             Language::Unknown => vec![],
         }
@@ -238,9 +314,9 @@ impl CodeParser {
             SemanticError::TreeSitter(format!("No parser available for language: {language:?}"))
         })?;
 
-        let tree = parser.parse(content, None).ok_or_else(|| {
-            SemanticError::TreeSitter("Failed to parse file".to_string())
-        })?;
+        let tree = parser
+            .parse(content, None)
+            .ok_or_else(|| SemanticError::TreeSitter("Failed to parse file".to_string()))?;
 
         let mut chunks = Vec::new();
         let content_hash = FileHasher::hash_string(content);
@@ -273,10 +349,33 @@ impl CodeParser {
 
         // If no semantic chunks found, create one chunk for entire file
         if chunks.is_empty() {
-            chunks.push(self.create_full_file_chunk(file_path, content, language, &content_hash)?);
+            chunks.push(self.create_full_file_chunk(
+                file_path,
+                content,
+                language,
+                &content_hash,
+            )?);
         }
 
-        Ok(chunks)
+        // Apply configuration limits
+        let filtered_chunks = self.apply_chunk_limits_strict(chunks);
+        Ok(filtered_chunks)
+    }
+
+    /// Apply chunk size and count limits strictly (no fallback)
+    fn apply_chunk_limits_strict(&self, mut chunks: Vec<CodeChunk>) -> Vec<CodeChunk> {
+        // Filter by chunk size
+        chunks.retain(|chunk| {
+            let size = chunk.content.len();
+            size >= self.config.min_chunk_size && size <= self.config.max_chunk_size
+        });
+
+        // Limit number of chunks per file
+        if chunks.len() > self.config.max_chunks_per_file {
+            chunks.truncate(self.config.max_chunks_per_file);
+        }
+
+        chunks
     }
 
     fn create_chunk_from_node(
@@ -318,7 +417,11 @@ impl CodeParser {
 
         // Create single chunk for entire file
         let chunk = self.create_full_file_chunk(file_path, content, &language, &content_hash)?;
-        Ok(vec![chunk])
+        let chunks = vec![chunk];
+
+        // Apply configuration limits strictly for plain text
+        let filtered_chunks = self.apply_chunk_limits_strict(chunks);
+        Ok(filtered_chunks)
     }
 
     fn create_full_file_chunk(
@@ -400,17 +503,21 @@ mod tests {
 
     #[test]
     fn test_parse_rust_function() {
-        let config = ParserConfig::default();
+        let config = ParserConfig {
+            min_chunk_size: 1, // Allow small chunks for this test
+            max_chunk_size: 2000,
+            max_chunks_per_file: 100,
+        };
         let mut parser = CodeParser::new(config).unwrap();
 
         let file_path = Path::new("test.rs");
         let content = "fn main() {\n    println!(\"Hello, world!\");\n}";
 
         let chunks = parser.parse_file(file_path, content).unwrap();
-        
+
         // Should extract the function as a chunk
         assert!(!chunks.is_empty());
-        
+
         // Find the function chunk
         let function_chunk = chunks.iter().find(|c| c.chunk_type == ChunkType::Function);
         if let Some(chunk) = function_chunk {
@@ -433,29 +540,33 @@ mod tests {
         let content = "class MyClass:\n    def __init__(self):\n        pass";
 
         let chunks = parser.parse_file(file_path, content).unwrap();
-        
+
         // Should extract semantic chunks or fallback to plain text
         assert!(!chunks.is_empty());
-        
+
         // Check if we got class and function chunks or fallback
         let has_class = chunks.iter().any(|c| c.chunk_type == ChunkType::Class);
         let has_function = chunks.iter().any(|c| c.chunk_type == ChunkType::Function);
         let has_plaintext = chunks.iter().any(|c| c.chunk_type == ChunkType::PlainText);
-        
+
         // Should have either semantic chunks or plain text fallback
         assert!(has_class || has_function || has_plaintext);
     }
 
     #[test]
     fn test_fallback_to_plain_text() {
-        let config = ParserConfig::default();
+        let config = ParserConfig {
+            min_chunk_size: 1, // Allow small chunks for this test
+            max_chunk_size: 2000,
+            max_chunks_per_file: 100,
+        };
         let mut parser = CodeParser::new(config).unwrap();
 
         let file_path = Path::new("test.txt");
         let content = "This is just plain text, not code.";
 
         let chunks = parser.parse_file(file_path, content).unwrap();
-        
+
         // Should fallback to plain text
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0].chunk_type, ChunkType::PlainText);
@@ -472,16 +583,20 @@ mod tests {
         let content = "fn func1() {}\nfn func2() {}";
 
         let chunks = parser.parse_file(file_path, content).unwrap();
-        
+
         // Collect all chunk IDs
         let ids: Vec<&String> = chunks.iter().map(|c| &c.id).collect();
-        
+
         // Check that all IDs are unique
         let mut unique_ids = ids.clone();
         unique_ids.sort();
         unique_ids.dedup();
-        
-        assert_eq!(ids.len(), unique_ids.len(), "All chunk IDs should be unique");
+
+        assert_eq!(
+            ids.len(),
+            unique_ids.len(),
+            "All chunk IDs should be unique"
+        );
     }
 
     #[test]
@@ -494,11 +609,80 @@ mod tests {
 
         let chunks1 = parser.parse_file(file_path, content).unwrap();
         let chunks2 = parser.parse_file(file_path, content).unwrap();
-        
+
         // Same content should produce same hashes
         assert_eq!(chunks1.len(), chunks2.len());
         for (c1, c2) in chunks1.iter().zip(chunks2.iter()) {
             assert_eq!(c1.content_hash, c2.content_hash);
         }
+    }
+
+    #[test]
+    fn test_chunk_size_filtering() {
+        let config = ParserConfig {
+            min_chunk_size: 10,
+            max_chunk_size: 50,
+            max_chunks_per_file: 100,
+        };
+        let mut parser = CodeParser::new(config).unwrap();
+
+        let file_path = Path::new("test.rs");
+        // Create content with functions of different sizes
+        let content = "fn small() { /* 5 */ }\nfn medium_sized_function() {\n    println!(\"Hello\");\n    println!(\"World\");\n}\nfn very_long_function_that_should_be_filtered_out_because_it_exceeds_the_maximum_chunk_size_limit() {\n    println!(\"This function is too long\");\n    println!(\"It should be filtered out\");\n    println!(\"Because it exceeds max_chunk_size\");\n    println!(\"And contains way too much code\");\n}";
+
+        let chunks = parser.parse_file(file_path, content).unwrap();
+
+        // Verify chunks are filtered by size
+        for chunk in &chunks {
+            let size = chunk.content.len();
+            assert!(
+                (10..=50).contains(&size),
+                "Chunk size {size} should be between 10 and 50 characters"
+            );
+        }
+    }
+
+    #[test]
+    fn test_max_chunks_per_file_limit() {
+        let config = ParserConfig {
+            min_chunk_size: 1,
+            max_chunk_size: 1000,
+            max_chunks_per_file: 2,
+        };
+        let mut parser = CodeParser::new(config).unwrap();
+
+        let file_path = Path::new("test.rs");
+        // Create content with multiple functions
+        let content = "fn func1() {}\nfn func2() {}\nfn func3() {}\nfn func4() {}";
+
+        let chunks = parser.parse_file(file_path, content).unwrap();
+
+        // Should be limited to max 2 chunks
+        assert!(
+            chunks.len() <= 2,
+            "Should have at most 2 chunks, got {}",
+            chunks.len()
+        );
+    }
+
+    #[test]
+    fn test_plain_text_respects_config() {
+        let config = ParserConfig {
+            min_chunk_size: 100, // Large minimum size
+            max_chunk_size: 1000,
+            max_chunks_per_file: 10,
+        };
+        let mut parser = CodeParser::new(config).unwrap();
+
+        let file_path = Path::new("test.txt");
+        let content = "Short"; // Only 5 characters, below minimum
+
+        let chunks = parser.parse_file(file_path, content).unwrap();
+
+        // Should be filtered out due to size limit
+        assert!(
+            chunks.is_empty(),
+            "Short content should be filtered out by min_chunk_size"
+        );
     }
 }

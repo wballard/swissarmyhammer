@@ -1038,10 +1038,7 @@ mod stress_tests {
             send_request(&mut stdin, create_request).unwrap();
 
             let response = read_response(&mut reader).unwrap();
-            assert!(
-                response.get("error").is_none(),
-                "Failed to create memo {i}"
-            );
+            assert!(response.get("error").is_none(), "Failed to create memo {i}");
 
             let memo_id = extract_memo_id_from_response(
                 response["result"]["content"][0]["text"].as_str().unwrap(),

@@ -148,7 +148,10 @@ impl FileSystemStorage {
 
     /// Create a new file system storage with custom filesystem utils (for testing)
     #[cfg(test)]
-    pub fn new_with_fs_utils(base_path: impl AsRef<Path>, fs_utils: FileSystemUtils) -> Result<Self> {
+    pub fn new_with_fs_utils(
+        base_path: impl AsRef<Path>,
+        fs_utils: FileSystemUtils,
+    ) -> Result<Self> {
         let base_path = base_path.as_ref().to_path_buf();
 
         if !fs_utils.fs().exists(&base_path) {
@@ -746,7 +749,8 @@ mod tests {
 
         let mock_fs = Arc::new(MockFileSystem::new());
         let fs_utils = FileSystemUtils::with_fs(mock_fs.clone());
-        let filesystem_storage = Arc::new(FileSystemStorage::new_with_fs_utils("/test", fs_utils).unwrap());
+        let filesystem_storage =
+            Arc::new(FileSystemStorage::new_with_fs_utils("/test", fs_utils).unwrap());
         let mut storage = PromptStorage::new(filesystem_storage);
         let prompt = create_test_prompt("fs-storage-test", "Template");
 

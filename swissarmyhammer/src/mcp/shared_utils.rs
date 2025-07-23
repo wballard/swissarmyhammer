@@ -1,9 +1,9 @@
 //! Shared utilities for MCP operations
-//! 
+//!
 //! This module provides common functionality used across MCP tool handlers
 //! to reduce code duplication and ensure consistent behavior.
 
-use crate::{SwissArmyHammerError, Result};
+use crate::{Result, SwissArmyHammerError};
 use rmcp::Error as McpError;
 use std::collections::HashMap;
 
@@ -29,7 +29,10 @@ impl McpResponse {
     }
 
     /// Create a success response with data
-    pub fn success_with_data(message: impl Into<String>, data: HashMap<String, serde_json::Value>) -> Self {
+    pub fn success_with_data(
+        message: impl Into<String>,
+        data: HashMap<String, serde_json::Value>,
+    ) -> Self {
         Self {
             success: true,
             message: message.into(),
@@ -59,7 +62,7 @@ impl McpErrorHandler {
     /// - Security/validation errors -> invalid_params
     pub fn handle_error(error: SwissArmyHammerError, operation: &str) -> McpError {
         tracing::error!("MCP operation '{}' failed: {}", operation, error);
-        
+
         match error {
             // User input validation errors
             SwissArmyHammerError::IssueNotFound(name) => {
@@ -93,26 +96,41 @@ impl McpErrorHandler {
                 McpError::invalid_params(format!("Configuration error: {msg}"), None)
             }
             // Security and validation errors
-            SwissArmyHammerError::Template(msg) if msg.contains("too large") || msg.contains("too complex") => {
+            SwissArmyHammerError::Template(msg)
+                if msg.contains("too large") || msg.contains("too complex") =>
+            {
                 McpError::invalid_params(format!("Template validation failed: {msg}"), None)
             }
             // Git operation errors (could be user error or system error)
-            SwissArmyHammerError::GitOperationFailed { operation: git_op, details } => {
+            SwissArmyHammerError::GitOperationFailed {
+                operation: git_op,
+                details,
+            } => {
                 if details.contains("not a git repository") || details.contains("branch") {
                     McpError::invalid_params(format!("Git {git_op} failed: {details}"), None)
                 } else {
                     McpError::internal_error(format!("Git {git_op} failed: {details}"), None)
                 }
             }
-            SwissArmyHammerError::GitCommandFailed { command, exit_code, stderr } => {
-                McpError::internal_error(format!("Git command '{command}' failed with exit code {exit_code}: {stderr}"), None)
-            }
+            SwissArmyHammerError::GitCommandFailed {
+                command,
+                exit_code,
+                stderr,
+            } => McpError::internal_error(
+                format!("Git command '{command}' failed with exit code {exit_code}: {stderr}"),
+                None,
+            ),
             SwissArmyHammerError::GitRepositoryNotFound { path } => {
                 McpError::invalid_params(format!("Git repository not found at: {path}"), None)
             }
-            SwissArmyHammerError::GitBranchOperationFailed { operation: git_op, branch, details } => {
-                McpError::invalid_params(format!("Git {git_op} failed for branch '{branch}': {details}"), None)
-            }
+            SwissArmyHammerError::GitBranchOperationFailed {
+                operation: git_op,
+                branch,
+                details,
+            } => McpError::invalid_params(
+                format!("Git {git_op} failed for branch '{branch}': {details}"),
+                None,
+            ),
             // System errors
             SwissArmyHammerError::Io(err) => {
                 McpError::internal_error(format!("IO error: {err}"), None)
@@ -145,7 +163,10 @@ impl McpErrorHandler {
     }
 
     /// Handle results with consistent error mapping
-    pub fn handle_result<T>(result: Result<T>, operation: &str) -> std::result::Result<T, McpError> {
+    pub fn handle_result<T>(
+        result: Result<T>,
+        operation: &str,
+    ) -> std::result::Result<T, McpError> {
         result.map_err(|e| Self::handle_error(e, operation))
     }
 }
@@ -168,7 +189,9 @@ impl McpValidation {
     /// Validate string is not empty
     pub fn validate_not_empty(value: &str, field: &str) -> Result<()> {
         if value.trim().is_empty() {
-            return Err(SwissArmyHammerError::Other(format!("{field} cannot be empty")));
+            return Err(SwissArmyHammerError::Other(format!(
+                "{field} cannot be empty"
+            )));
         }
         Ok(())
     }
@@ -176,7 +199,9 @@ impl McpValidation {
     /// Validate identifier format (alphanumeric, hyphens, underscores only)
     pub fn validate_identifier(value: &str, field: &str) -> Result<()> {
         if value.is_empty() {
-            return Err(SwissArmyHammerError::Other(format!("{field} cannot be empty")));
+            return Err(SwissArmyHammerError::Other(format!(
+                "{field} cannot be empty"
+            )));
         }
 
         for char in value.chars() {
@@ -249,24 +274,19 @@ impl McpFormatter {
     /// Create a standardized summary for list operations
     pub fn format_list_summary(item_name: &str, count: usize, total: usize) -> String {
         if count == total {
-            let plural_name = if count == 1 { 
-                item_name.to_string() 
-            } else { 
-                format!("{}s", item_name) 
+            let plural_name = if count == 1 {
+                item_name.to_string()
+            } else {
+                format!("{}s", item_name)
             };
             format!("Found {} {}", count, plural_name)
         } else {
-            let plural_name = if total == 1 { 
-                item_name.to_string() 
-            } else { 
-                format!("{}s", item_name) 
+            let plural_name = if total == 1 {
+                item_name.to_string()
+            } else {
+                format!("{}s", item_name)
             };
-            format!(
-                "Showing {} of {} {}",
-                count,
-                total,
-                plural_name
-            )
+            format!("Showing {} of {} {}", count, total, plural_name)
         }
     }
 }
@@ -329,8 +349,17 @@ mod tests {
 
     #[test]
     fn test_formatter_list_summary() {
-        assert_eq!(McpFormatter::format_list_summary("item", 1, 1), "Found 1 item");
-        assert_eq!(McpFormatter::format_list_summary("item", 5, 5), "Found 5 items");
-        assert_eq!(McpFormatter::format_list_summary("item", 3, 10), "Showing 3 of 10 items");
+        assert_eq!(
+            McpFormatter::format_list_summary("item", 1, 1),
+            "Found 1 item"
+        );
+        assert_eq!(
+            McpFormatter::format_list_summary("item", 5, 5),
+            "Found 5 items"
+        );
+        assert_eq!(
+            McpFormatter::format_list_summary("item", 3, 10),
+            "Showing 3 of 10 items"
+        );
     }
 }

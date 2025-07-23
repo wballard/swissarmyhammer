@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 /// Default rate limits for different operation types
 pub const DEFAULT_GLOBAL_RATE_LIMIT: u32 = 100; // requests per minute
 /// Default rate limit per client (requests per minute)
-pub const DEFAULT_PER_CLIENT_RATE_LIMIT: u32 = 10; // requests per minute  
+pub const DEFAULT_PER_CLIENT_RATE_LIMIT: u32 = 10; // requests per minute
 /// Default rate limit for expensive operations (requests per minute)
 pub const DEFAULT_EXPENSIVE_OPERATION_LIMIT: u32 = 5; // requests per minute
 
@@ -20,7 +20,7 @@ pub const DEFAULT_EXPENSIVE_OPERATION_LIMIT: u32 = 5; // requests per minute
 pub struct RateLimiter {
     /// Global rate limits by operation type
     global_limits: DashMap<String, TokenBucket>,
-    /// Per-client rate limits 
+    /// Per-client rate limits
     client_limits: DashMap<String, TokenBucket>,
     /// Configuration for operation limits
     config: RateLimiterConfig,
@@ -78,7 +78,7 @@ impl TokenBucket {
     /// Try to consume a token from the bucket
     fn try_consume(&mut self, tokens: u32) -> bool {
         self.refill();
-        
+
         if self.tokens >= tokens {
             self.tokens -= tokens;
             true
@@ -91,7 +91,7 @@ impl TokenBucket {
     fn refill(&mut self) {
         let now = Instant::now();
         let elapsed = now.duration_since(self.last_refill).as_secs_f64();
-        
+
         if elapsed > 0.0 {
             let tokens_to_add = (elapsed * self.refill_rate) as u32;
             self.tokens = (self.tokens + tokens_to_add).min(self.capacity);
@@ -102,7 +102,7 @@ impl TokenBucket {
     /// Get time until next token is available
     fn time_until_token(&mut self) -> Duration {
         self.refill();
-        
+
         if self.tokens > 0 {
             Duration::from_secs(0)
         } else {
@@ -141,12 +141,10 @@ impl RateLimiter {
     pub fn check_rate_limit(&self, client_id: &str, operation: &str, cost: u32) -> Result<()> {
         // Check global rate limit for this operation type
         let global_key = format!("global:{operation}");
-        let mut global_bucket = self.global_limits
-            .entry(global_key)
-            .or_insert_with(|| {
-                let limit = self.operation_limit(operation);
-                TokenBucket::new(limit, self.config.window_duration)
-            });
+        let mut global_bucket = self.global_limits.entry(global_key).or_insert_with(|| {
+            let limit = self.operation_limit(operation);
+            TokenBucket::new(limit, self.config.window_duration)
+        });
 
         if !global_bucket.try_consume(cost) {
             let wait_time = global_bucket.time_until_token();
@@ -159,11 +157,9 @@ impl RateLimiter {
 
         // Check per-client rate limit
         let client_key = format!("client:{client_id}");
-        let mut client_bucket = self.client_limits
-            .entry(client_key)
-            .or_insert_with(|| {
-                TokenBucket::new(self.config.per_client_limit, self.config.window_duration)
-            });
+        let mut client_bucket = self.client_limits.entry(client_key).or_insert_with(|| {
+            TokenBucket::new(self.config.per_client_limit, self.config.window_duration)
+        });
 
         if !client_bucket.try_consume(cost) {
             let wait_time = client_bucket.time_until_token();
@@ -189,7 +185,8 @@ impl RateLimiter {
 
     /// Get current status of rate limits for monitoring
     pub fn get_rate_limit_status(&self, client_id: &str) -> RateLimitStatus {
-        let global_remaining = self.global_limits
+        let global_remaining = self
+            .global_limits
             .iter()
             .map(|entry| {
                 let mut bucket = entry.value().clone();
@@ -200,7 +197,8 @@ impl RateLimiter {
             .unwrap_or(self.config.global_limit);
 
         let client_key = format!("client:{client_id}");
-        let client_remaining = self.client_limits
+        let client_remaining = self
+            .client_limits
             .get(&client_key)
             .map(|bucket_ref| {
                 let mut bucket = bucket_ref.clone();
@@ -221,14 +219,12 @@ impl RateLimiter {
     /// Clean up old entries to prevent memory leaks
     pub fn cleanup_old_entries(&self) {
         let cutoff = Instant::now() - self.config.window_duration * 2;
-        
-        self.client_limits.retain(|_, bucket| {
-            bucket.last_refill > cutoff
-        });
-        
-        self.global_limits.retain(|_, bucket| {
-            bucket.last_refill > cutoff
-        });
+
+        self.client_limits
+            .retain(|_, bucket| bucket.last_refill > cutoff);
+
+        self.global_limits
+            .retain(|_, bucket| bucket.last_refill > cutoff);
     }
 }
 
@@ -263,7 +259,8 @@ pub fn get_rate_limiter() -> &'static Arc<RateLimiter> {
 
 /// Initialize rate limiter with custom configuration
 pub fn init_rate_limiter(config: RateLimiterConfig) {
-    RATE_LIMITER.set(Arc::new(RateLimiter::with_config(config)))
+    RATE_LIMITER
+        .set(Arc::new(RateLimiter::with_config(config)))
         .map_err(|_| "Rate limiter already initialized")
         .unwrap();
 }
@@ -279,16 +276,16 @@ mod tests {
         assert_eq!(bucket.tokens, 10);
     }
 
-    #[test] 
+    #[test]
     fn test_token_bucket_consume() {
         let mut bucket = TokenBucket::new(5, Duration::from_secs(60));
-        
+
         assert!(bucket.try_consume(3));
         assert_eq!(bucket.tokens, 2);
-        
+
         assert!(bucket.try_consume(2));
         assert_eq!(bucket.tokens, 0);
-        
+
         assert!(!bucket.try_consume(1)); // Should fail
     }
 
@@ -304,10 +301,10 @@ mod tests {
         // Should succeed
         assert!(limiter.check_rate_limit("client1", "test_op", 1).is_ok());
         assert!(limiter.check_rate_limit("client1", "test_op", 1).is_ok());
-        
+
         // Should fail - client limit exceeded
         assert!(limiter.check_rate_limit("client1", "test_op", 1).is_err());
-        
+
         // Different client should still work
         assert!(limiter.check_rate_limit("client2", "test_op", 1).is_ok());
     }
@@ -323,10 +320,10 @@ mod tests {
 
         // First expensive operation should succeed
         assert!(limiter.check_rate_limit("client1", "search", 1).is_ok());
-        
+
         // Second should fail due to expensive operation limit
         assert!(limiter.check_rate_limit("client1", "search", 1).is_err());
-        
+
         // Regular operations should still work
         assert!(limiter.check_rate_limit("client1", "regular_op", 1).is_ok());
     }

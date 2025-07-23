@@ -89,7 +89,6 @@ pub struct MockStorageConfig {
     pub operation_delay_ms: Option<u64>,
 }
 
-
 impl MockMemoStorage {
     /// Create a new mock storage instance with default configuration
     ///

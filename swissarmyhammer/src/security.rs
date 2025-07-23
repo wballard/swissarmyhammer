@@ -192,7 +192,7 @@ pub fn validate_template_security(template_content: &str, is_trusted: bool) -> R
     }
 
     // Strict validation for untrusted templates
-    
+
     // Check template size
     if template_content.len() > MAX_TEMPLATE_SIZE {
         return Err(SwissArmyHammerError::Other(format!(
@@ -211,10 +211,10 @@ pub fn validate_template_security(template_content: &str, is_trusted: bool) -> R
 
     // Check for dangerous patterns that could indicate code injection attempts
     let dangerous_patterns = [
-        "include",      // File inclusion
-        "capture",      // Variable capture (potential data exfiltration)
-        "tablerow",     // Complex loops that could cause DoS
-        "cycle",        // Another potential DoS vector
+        "include",  // File inclusion
+        "capture",  // Variable capture (potential data exfiltration)
+        "tablerow", // Complex loops that could cause DoS
+        "cycle",    // Another potential DoS vector
     ];
 
     for pattern in &dangerous_patterns {
@@ -239,28 +239,28 @@ pub fn validate_template_security(template_content: &str, is_trusted: bool) -> R
 /// Count the number of template variables in a template
 fn count_template_variables(template: &str) -> usize {
     use regex::Regex;
-    
+
     // Match {{ variable }} patterns
     let variable_re = Regex::new(r"\{\{\s*(\w+)").unwrap();
     let mut variables = std::collections::HashSet::new();
-    
+
     for cap in variable_re.captures_iter(template) {
         variables.insert(cap[1].to_string());
     }
-    
+
     variables.len()
 }
 
 /// Check the maximum nesting depth of template control structures
 fn check_template_nesting_depth(template: &str) -> usize {
     use regex::Regex;
-    
+
     let open_re = Regex::new(r"\{%\s*(if|unless|for|capture|tablerow)\b").unwrap();
     let close_re = Regex::new(r"\{%\s*(endif|endunless|endfor|endcapture|endtablerow)\b").unwrap();
-    
+
     let mut max_depth = 0;
     let mut current_depth: i32 = 0;
-    
+
     let mut pos = 0;
     while pos < template.len() {
         if let Some(open_match) = open_re.find_at(template, pos) {
@@ -289,7 +289,7 @@ fn check_template_nesting_depth(template: &str) -> usize {
             break;
         }
     }
-    
+
     max_depth.max(0) as usize
 }
 
@@ -393,7 +393,7 @@ mod tests {
         let large_template = "a".repeat(MAX_TEMPLATE_SIZE + 1000);
         // Trusted templates have higher limits
         assert!(validate_template_security(&large_template, true).is_ok());
-        
+
         let very_large_template = "a".repeat(MAX_TEMPLATE_SIZE * 10 + 1);
         assert!(validate_template_security(&very_large_template, true).is_err());
     }
@@ -406,7 +406,7 @@ mod tests {
         assert!(result.unwrap_err().to_string().contains("too large"));
     }
 
-    #[test] 
+    #[test]
     fn test_validate_template_security_dangerous_patterns() {
         let dangerous_templates = [
             "{% include 'dangerous.liquid' %}",

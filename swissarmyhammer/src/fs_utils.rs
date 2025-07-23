@@ -33,7 +33,7 @@ impl FilePermissions {
             Self::Standard => 0o644,
         }
     }
-    
+
     /// For non-Unix systems, permissions are not directly controllable
     #[cfg(not(unix))]
     pub fn as_mode(self) -> u32 {
@@ -54,7 +54,12 @@ pub trait FileSystem: Send + Sync {
     fn write(&self, path: &Path, content: &str) -> Result<()>;
 
     /// Write string content to a file atomically with specific permissions
-    fn write_with_permissions(&self, path: &Path, content: &str, permissions: FilePermissions) -> Result<()>;
+    fn write_with_permissions(
+        &self,
+        path: &Path,
+        content: &str,
+        permissions: FilePermissions,
+    ) -> Result<()>;
 
     /// Check if a path exists
     fn exists(&self, path: &Path) -> bool;
@@ -69,7 +74,11 @@ pub trait FileSystem: Send + Sync {
     fn create_dir_all(&self, path: &Path) -> Result<()>;
 
     /// Create directories recursively with specific permissions
-    fn create_dir_all_with_permissions(&self, path: &Path, permissions: FilePermissions) -> Result<()>;
+    fn create_dir_all_with_permissions(
+        &self,
+        path: &Path,
+        permissions: FilePermissions,
+    ) -> Result<()>;
 
     /// Read directory entries
     fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>>;
@@ -94,7 +103,12 @@ impl FileSystem for StdFileSystem {
         self.write_with_permissions(path, content, FilePermissions::Standard)
     }
 
-    fn write_with_permissions(&self, path: &Path, content: &str, permissions: FilePermissions) -> Result<()> {
+    fn write_with_permissions(
+        &self,
+        path: &Path,
+        content: &str,
+        permissions: FilePermissions,
+    ) -> Result<()> {
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
             self.create_dir_all(parent)?;
@@ -103,9 +117,12 @@ impl FileSystem for StdFileSystem {
         #[cfg(test)]
         {
             // In test environments, just write directly to avoid temp directory permission issues
-            std::fs::write(path, content)
-                .with_io_context(path, "Failed to write file")?;
-            tracing::debug!("In test mode: wrote file {} with would-be permissions {:?}", path.display(), permissions);
+            std::fs::write(path, content).with_io_context(path, "Failed to write file")?;
+            tracing::debug!(
+                "In test mode: wrote file {} with would-be permissions {:?}",
+                path.display(),
+                permissions
+            );
             return Ok(());
         }
 
@@ -114,8 +131,10 @@ impl FileSystem for StdFileSystem {
             // Write atomically by writing to a temporary file first, then renaming
             let temp_path = {
                 use std::time::{SystemTime, UNIX_EPOCH};
-                let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)
-                    .unwrap_or_default().as_nanos();
+                let timestamp = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos();
                 let temp_name = format!(
                     "{}.{}.tmp",
                     path.file_stem().and_then(|s| s.to_str()).unwrap_or("file"),
@@ -162,7 +181,11 @@ impl FileSystem for StdFileSystem {
         self.create_dir_all_with_permissions(path, FilePermissions::Standard)
     }
 
-    fn create_dir_all_with_permissions(&self, path: &Path, permissions: FilePermissions) -> Result<()> {
+    fn create_dir_all_with_permissions(
+        &self,
+        path: &Path,
+        permissions: FilePermissions,
+    ) -> Result<()> {
         std::fs::create_dir_all(path).with_io_context(path, "Failed to create directory")?;
         self.set_permissions(path, permissions)
     }
@@ -191,12 +214,12 @@ impl FileSystem for StdFileSystem {
         {
             use std::fs::Permissions;
             use std::os::unix::fs::PermissionsExt;
-            
+
             let perms = Permissions::from_mode(permissions.as_mode());
             std::fs::set_permissions(path, perms)
                 .with_io_context(path, "Failed to set file permissions")
         }
-        
+
         #[cfg(not(unix))]
         {
             // On non-Unix systems, we can't set detailed permissions
@@ -261,7 +284,12 @@ impl FileSystemUtils {
     }
 
     /// Write data as YAML to a file with secure permissions
-    pub fn write_yaml_secure<T>(&self, path: &Path, data: &T, permissions: FilePermissions) -> Result<()>
+    pub fn write_yaml_secure<T>(
+        &self,
+        path: &Path,
+        data: &T,
+        permissions: FilePermissions,
+    ) -> Result<()>
     where
         T: serde::Serialize,
     {
@@ -288,7 +316,12 @@ impl FileSystemUtils {
     }
 
     /// Write data as JSON to a file with secure permissions
-    pub fn write_json_secure<T>(&self, path: &Path, data: &T, permissions: FilePermissions) -> Result<()>
+    pub fn write_json_secure<T>(
+        &self,
+        path: &Path,
+        data: &T,
+        permissions: FilePermissions,
+    ) -> Result<()>
     where
         T: serde::Serialize,
     {
@@ -307,7 +340,12 @@ impl FileSystemUtils {
     }
 
     /// Write text to a file with secure permissions
-    pub fn write_text_secure(&self, path: &Path, content: &str, permissions: FilePermissions) -> Result<()> {
+    pub fn write_text_secure(
+        &self,
+        path: &Path,
+        content: &str,
+        permissions: FilePermissions,
+    ) -> Result<()> {
         self.fs.write_with_permissions(path, content, permissions)
     }
 
@@ -369,7 +407,12 @@ pub mod tests {
             Ok(())
         }
 
-        fn write_with_permissions(&self, path: &Path, content: &str, _permissions: FilePermissions) -> Result<()> {
+        fn write_with_permissions(
+            &self,
+            path: &Path,
+            content: &str,
+            _permissions: FilePermissions,
+        ) -> Result<()> {
             // Mock implementation ignores permissions
             self.write(path, content)
         }
@@ -392,7 +435,11 @@ pub mod tests {
             Ok(())
         }
 
-        fn create_dir_all_with_permissions(&self, path: &Path, _permissions: FilePermissions) -> Result<()> {
+        fn create_dir_all_with_permissions(
+            &self,
+            path: &Path,
+            _permissions: FilePermissions,
+        ) -> Result<()> {
             // Mock implementation ignores permissions
             self.create_dir_all(path)
         }
@@ -482,7 +529,9 @@ pub mod tests {
         let content = "sensitive data";
 
         // Test writing with secure permissions
-        utils.write_text_secure(path, content, FilePermissions::OwnerReadWrite).unwrap();
+        utils
+            .write_text_secure(path, content, FilePermissions::OwnerReadWrite)
+            .unwrap();
         let read_content = utils.read_text(path).unwrap();
 
         assert_eq!(content, read_content);

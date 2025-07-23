@@ -80,7 +80,7 @@
 //! ).await?;
 //!
 //! let memo2 = storage.create_memo(
-//!     "Meeting Notes".to_string(), 
+//!     "Meeting Notes".to_string(),
 //!     "Discussed API authentication and security measures...".to_string()
 //! ).await?;
 //!
@@ -104,7 +104,7 @@
 //!
 //! // Display results with relevance scores
 //! for result in search_results {
-//!     println!("Found: {} ({}% relevance)", 
+//!     println!("Found: {} ({}% relevance)",
 //!         result.memo.title, result.relevance_score);
 //!     
 //!     if !result.highlights.is_empty() {
@@ -157,7 +157,7 @@
 //! // Parse ULID from string (validation included)
 //! let id_string = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 //! let parsed_id = MemoId::from_string(id_string.to_string())?;
-//! 
+//!
 //! // IDs are naturally ordered chronologically
 //! let id1 = MemoId::new();
 //! std::thread::sleep(std::time::Duration::from_millis(1));
@@ -305,7 +305,7 @@
 //! use swissarmyhammer::memoranda::SearchOptions;
 //! // Use more specific search terms
 //! let results = storage.search_memos("specific keyword").await?;
-//! 
+//!
 //! // For advanced search, limit results
 //! let search_options = SearchOptions {
 //!     max_results: Some(20),
@@ -345,7 +345,7 @@
 //! # async fn example(storage: &impl swissarmyhammer::memoranda::MemoStorage, title: String, content: String) -> Result<(), Box<dyn std::error::Error>> {
 //! use std::time::Duration;
 //! use tokio::time::sleep;
-//! 
+//!
 //! let mut retries = 3;
 //! while retries > 0 {
 //!     match storage.create_memo(title.clone(), content.clone()).await {
@@ -407,7 +407,7 @@
 //! ```rust
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! use std::fs;
-//! 
+//!
 //! // Verify storage directory exists and is accessible
 //! let memo_dir = std::path::Path::new(".swissarmyhammer/memos");
 //! if !memo_dir.exists() {
@@ -420,7 +420,7 @@
 //!         println!("Directory permissions: {:o}", metadata.permissions().mode());
 //!     }
 //! }
-//! 
+//!
 //! // Count memo files
 //! let entries = fs::read_dir(memo_dir)?;
 //! let memo_count = entries.filter_map(|e| e.ok()).filter(|entry| {

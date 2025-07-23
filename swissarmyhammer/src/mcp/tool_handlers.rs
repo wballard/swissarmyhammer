@@ -84,13 +84,24 @@ impl ToolHandlers {
     /// # Returns
     ///
     /// * `Result<(), McpError>` - Ok if operation is allowed, error if rate limited
-    fn check_rate_limit(&self, operation: &str, cost: u32, client_id: Option<&str>) -> std::result::Result<(), McpError> {
+    fn check_rate_limit(
+        &self,
+        operation: &str,
+        cost: u32,
+        client_id: Option<&str>,
+    ) -> std::result::Result<(), McpError> {
         let client = client_id.unwrap_or("unknown");
         let rate_limiter = get_rate_limiter();
-        
-        rate_limiter.check_rate_limit(client, operation, cost)
+
+        rate_limiter
+            .check_rate_limit(client, operation, cost)
             .map_err(|e| {
-                tracing::warn!("Rate limit exceeded for client '{}', operation '{}': {}", client, operation, e);
+                tracing::warn!(
+                    "Rate limit exceeded for client '{}', operation '{}': {}",
+                    client,
+                    operation,
+                    e
+                );
                 McpError::invalid_params(e.to_string(), None)
             })
     }
@@ -129,7 +140,7 @@ impl ToolHandlers {
     ) -> std::result::Result<CallToolResult, McpError> {
         // Apply rate limiting for issue creation
         self.check_rate_limit("issue_create", 1, None)?;
-        
+
         tracing::debug!("Creating issue: {:?}", request.name);
 
         // Validate issue name using shared validation logic, or use empty string for nameless issues
@@ -155,7 +166,7 @@ impl ToolHandlers {
                 tracing::info!("Created issue {}", issue.name);
                 Ok(create_issue_response(&issue))
             }
-            Err(e) => Err(McpErrorHandler::handle_error(e, "create issue"))
+            Err(e) => Err(McpErrorHandler::handle_error(e, "create issue")),
         }
     }
 
@@ -177,7 +188,7 @@ impl ToolHandlers {
         // Validate issue name is not empty
         McpValidation::validate_not_empty(request.name.as_str(), "issue name")
             .map_err(|e| McpErrorHandler::handle_error(e, "validate issue name"))?;
-            
+
         let issue_storage = self.issue_storage.write().await;
         match issue_storage.mark_complete(request.name.as_str()).await {
             Ok(issue) => Ok(create_mark_complete_response(&issue)),
@@ -350,7 +361,7 @@ impl ToolHandlers {
             .map_err(|e| McpErrorHandler::handle_error(e, "validate issue name"))?;
         McpValidation::validate_not_empty(&request.content, "issue content")
             .map_err(|e| McpErrorHandler::handle_error(e, "validate issue content"))?;
-            
+
         let issue_storage = self.issue_storage.write().await;
         match issue_storage
             .update_issue(request.name.as_str(), request.content)
@@ -654,14 +665,14 @@ impl ToolHandlers {
                 tracing::info!("Retrieved memo {}", memo.id);
                 Ok(create_success_response(format!(
                     "Memo found:\n\nID: {}\nTitle: {}\nCreated: {}\nUpdated: {}\n\nContent:\n{}",
-                    memo.id, 
-                    memo.title, 
+                    memo.id,
+                    memo.title,
                     McpFormatter::format_timestamp(memo.created_at),
                     McpFormatter::format_timestamp(memo.updated_at),
                     memo.content
                 )))
             }
-            Err(e) => Err(McpErrorHandler::handle_error(e, "get memo"))
+            Err(e) => Err(McpErrorHandler::handle_error(e, "get memo")),
         }
     }
 
@@ -704,13 +715,13 @@ impl ToolHandlers {
                 tracing::info!("Updated memo {}", memo.id);
                 Ok(create_success_response(format!(
                     "Successfully updated memo:\n\nID: {}\nTitle: {}\nUpdated: {}\n\nContent:\n{}",
-                    memo.id, 
-                    memo.title, 
-                    McpFormatter::format_timestamp(memo.updated_at), 
+                    memo.id,
+                    memo.title,
+                    McpFormatter::format_timestamp(memo.updated_at),
                     memo.content
                 )))
             }
-            Err(e) => Err(McpErrorHandler::handle_error(e, "update memo"))
+            Err(e) => Err(McpErrorHandler::handle_error(e, "update memo")),
         }
     }
 
@@ -754,7 +765,7 @@ impl ToolHandlers {
                     request.id
                 )))
             }
-            Err(e) => Err(McpErrorHandler::handle_error(e, "delete memo"))
+            Err(e) => Err(McpErrorHandler::handle_error(e, "delete memo")),
         }
     }
 
@@ -784,15 +795,15 @@ impl ToolHandlers {
                         .collect::<Vec<_>>()
                         .join("\n\n");
 
-                    let summary = McpFormatter::format_list_summary("memo", memos.len(), memos.len());
+                    let summary =
+                        McpFormatter::format_list_summary("memo", memos.len(), memos.len());
                     Ok(create_success_response(format!(
                         "{}:\n\n{}",
-                        summary,
-                        memo_list
+                        summary, memo_list
                     )))
                 }
             }
-            Err(e) => Err(McpErrorHandler::handle_error(e, "list memos"))
+            Err(e) => Err(McpErrorHandler::handle_error(e, "list memos")),
         }
     }
 
@@ -842,7 +853,7 @@ impl ToolHandlers {
                     )))
                 }
             }
-            Err(e) => Err(McpErrorHandler::handle_error(e, "search memos"))
+            Err(e) => Err(McpErrorHandler::handle_error(e, "search memos")),
         }
     }
 
@@ -889,12 +900,11 @@ impl ToolHandlers {
                     let plural_suffix = if memo_count == 1 { "" } else { "s" };
                     Ok(create_success_response(format!(
                         "All memo context ({} memo{}):\n\n{}",
-                        memo_count, plural_suffix,
-                        context
+                        memo_count, plural_suffix, context
                     )))
                 }
             }
-            Err(e) => Err(McpErrorHandler::handle_error(e, "get memo context"))
+            Err(e) => Err(McpErrorHandler::handle_error(e, "get memo context")),
         }
     }
 

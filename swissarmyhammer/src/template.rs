@@ -395,7 +395,11 @@ impl Template {
     }
 
     /// Render the template with given arguments and custom timeout
-    pub fn render_with_timeout(&self, args: &HashMap<String, String>, _timeout: Duration) -> Result<String> {
+    pub fn render_with_timeout(
+        &self,
+        args: &HashMap<String, String>,
+        _timeout: Duration,
+    ) -> Result<String> {
         let template = self
             .parser
             .parse(&self.template_str)
@@ -419,14 +423,12 @@ impl Template {
 
         // Render with timeout protection
         let render_result = std::thread::scope(|s| {
-            let handle = s.spawn(|| {
-                template.render(&object)
-            });
+            let handle = s.spawn(|| template.render(&object));
 
             match handle.join() {
                 Ok(result) => result.map_err(|e| SwissArmyHammerError::Template(e.to_string())),
                 Err(_) => Err(SwissArmyHammerError::Template(
-                    "Template rendering panicked".to_string()
+                    "Template rendering panicked".to_string(),
                 )),
             }
         });

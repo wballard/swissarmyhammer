@@ -11,7 +11,6 @@
 //! - **Pure Markdown Storage**: Files stored as `.md` with content only, no metadata wrapper
 //! - **Automatic Timestamps**: Creation and update times derived from filesystem metadata
 //! - **Full-text Search**: Search across memo titles and content
-//! - **Migration Support**: Automatic migration from legacy JSON format
 //! - **Type-safe API**: Strong typing for memo identifiers and validation
 //!
 //! ## Basic Usage

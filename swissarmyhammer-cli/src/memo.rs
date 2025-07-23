@@ -22,18 +22,6 @@ fn format_content_preview(content: &str, max_length: usize) -> String {
 pub async fn handle_memo_command(command: MemoCommands) -> Result<(), Box<dyn std::error::Error>> {
     let storage = MarkdownMemoStorage::new_default()?;
 
-    // Attempt to migrate any existing JSON memos to markdown format
-    match storage.migrate_from_json(true).await {
-        Ok(migrated_count) => {
-            if migrated_count > 0 {
-                println!("Migrated {migrated_count} JSON memos to markdown format.");
-            }
-        }
-        Err(e) => {
-            eprintln!("Warning: Failed to migrate JSON memos to markdown format: {e}");
-            // Continue execution - migration failure should not prevent CLI operation
-        }
-    }
 
     match command {
         MemoCommands::Create { title, content } => {
@@ -56,9 +44,6 @@ pub async fn handle_memo_command(command: MemoCommands) -> Result<(), Box<dyn st
         }
         MemoCommands::Context => {
             get_context(storage).await?;
-        }
-        MemoCommands::Migrate { remove_json } => {
-            migrate_memos(storage, remove_json).await?;
         }
     }
 
@@ -552,38 +537,3 @@ fn get_content_input(content: Option<String>) -> Result<String, Box<dyn std::err
     }
 }
 
-/// Migrate existing JSON memos to markdown format
-async fn migrate_memos(
-    storage: MarkdownMemoStorage,
-    remove_json: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
-    println!("🔄 Starting migration from JSON to markdown format...");
-
-    match storage.migrate_from_json(remove_json).await {
-        Ok(migrated_count) => {
-            if migrated_count == 0 {
-                println!("✅ No JSON memos found to migrate.");
-            } else {
-                println!(
-                    "✅ Successfully migrated {} memo{} to markdown format.",
-                    migrated_count,
-                    if migrated_count == 1 { "" } else { "s" }
-                );
-
-                if remove_json {
-                    println!("🗑️  Original JSON files have been removed.");
-                } else {
-                    println!("📁 Original JSON files have been preserved.");
-                    println!("   Use --remove-json flag to delete them after verifying migration.");
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("❌ Migration failed: {e}");
-            eprintln!("   JSON files have been preserved for safety.");
-            return Err(e.into());
-        }
-    }
-
-    Ok(())
-}

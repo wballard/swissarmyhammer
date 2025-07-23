@@ -783,12 +783,6 @@ pub enum MemoCommands {
     },
     /// Get all memos as context for AI
     Context,
-    /// Migrate existing JSON memos to markdown format
-    Migrate {
-        /// Remove JSON files after successful migration (default: false)
-        #[arg(long, default_value = "false")]
-        remove_json: bool,
-    },
 }
 
 impl Cli {

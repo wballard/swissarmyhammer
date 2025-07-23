@@ -27,3 +27,5 @@ Support:
   - typescript
   - javascript
   - dart
+
+If a file fails to parse with tree sitter, don't error -- just log a warning and treat it as plain text to embed.

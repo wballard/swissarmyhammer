@@ -798,8 +798,7 @@ impl ToolHandlers {
                     let summary =
                         McpFormatter::format_list_summary("memo", memos.len(), memos.len());
                     Ok(create_success_response(format!(
-                        "{}:\n\n{}",
-                        summary, memo_list
+                        "{summary}:\n\n{memo_list}"
                     )))
                 }
             }
@@ -899,8 +898,7 @@ impl ToolHandlers {
                     let memo_count = sorted_memos.len();
                     let plural_suffix = if memo_count == 1 { "" } else { "s" };
                     Ok(create_success_response(format!(
-                        "All memo context ({} memo{}):\n\n{}",
-                        memo_count, plural_suffix, context
+                        "All memo context ({memo_count} memo{plural_suffix}):\n\n{context}"
                     )))
                 }
             }

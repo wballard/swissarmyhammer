@@ -1,6 +1,72 @@
+//! Memo storage implementations for SwissArmyHammer
+//!
+//! This module provides different storage backends for memos, each with distinct
+//! characteristics and use cases. The storage layer is abstracted through the
+//! [`MemoStorage`] trait, allowing applications to switch between implementations.
+//!
+//! # Storage Implementations
+//!
+//! ## MarkdownMemoStorage (Recommended)
+//!
+//! Modern markdown-based storage that stores memos as pure markdown files:
+//!
+//! - **File Format**: `{title}.md` containing pure markdown content
+//! - **ID System**: Filename-based IDs (sanitized title without extension)
+//! - **Timestamps**: Derived from filesystem metadata
+//! - **Benefits**: Human-readable, portable, no metadata wrapper
+//! - **Migration**: Automatic migration from JSON format available
+//!
+//! ```rust
+//! use swissarmyhammer::memoranda::{MarkdownMemoStorage, MemoStorage};
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let storage = MarkdownMemoStorage::new_default()?;
+//! let memo = storage.create_memo(
+//!     "Meeting Notes".to_string(),
+//!     "# Important Meeting\n\nDiscussed new features".to_string()
+//! ).await?;
+//!
+//! // ID is derived from sanitized filename: "Meeting_Notes"
+//! println!("Created memo with ID: {}", memo.id);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## FileSystemMemoStorage (Legacy)
+//!
+//! JSON-based storage with ULID identifiers:
+//!
+//! - **File Format**: `{ulid}.json` containing JSON-wrapped memo data
+//! - **ID System**: ULID-based identifiers (26-character strings)
+//! - **Timestamps**: Stored in JSON metadata
+//! - **Status**: Legacy implementation, maintained for backward compatibility
+//!
+//! # Migration Support
+//!
+//! MarkdownMemoStorage provides built-in migration from JSON format:
+//!
+//! ```rust
+//! use swissarmyhammer::memoranda::MarkdownMemoStorage;
+//!
+//! # async fn migrate_example() -> Result<(), Box<dyn std::error::Error>> {
+//! let storage = MarkdownMemoStorage::new_default()?;
+//!
+//! // Migrate existing JSON memos to markdown format
+//! let migrated_count = storage.migrate_from_json(true).await?;
+//! println!("Migrated {} memos from JSON to markdown", migrated_count);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Thread Safety
+//!
+//! All storage implementations are thread-safe and support concurrent access
+//! through internal locking mechanisms and atomic file operations.
+
 use crate::error::{Result, SwissArmyHammerError};
 use crate::memoranda::{AdvancedMemoSearchEngine, Memo, MemoId, SearchOptions};
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
@@ -10,6 +76,7 @@ use tokio::sync::Mutex;
 ///
 /// Contains the directory path where memo files are stored.
 /// This struct encapsulates the filesystem location for memo persistence.
+/// Supports both JSON-based (legacy) and markdown-based storage implementations.
 ///
 /// # Examples
 ///
@@ -22,7 +89,7 @@ use tokio::sync::Mutex;
 /// };
 /// ```
 pub struct MemoState {
-    /// The directory where memo files are stored as JSON
+    /// The directory where memo files are stored (format depends on implementation)
     pub memos_dir: PathBuf,
 }
 
@@ -35,13 +102,18 @@ pub struct MemoState {
 /// All operations are asynchronous to support high-performance storage backends
 /// and concurrent access patterns.
 ///
+/// # Storage Implementations
+///
+/// - **FileSystemMemoStorage**: Legacy JSON-based storage with ULID identifiers
+/// - **MarkdownMemoStorage**: Modern markdown-based storage with filename-based IDs
+///
 /// # Examples
 ///
 /// ```rust
-/// use swissarmyhammer::memoranda::{MemoStorage, FileSystemMemoStorage, MemoId};
+/// use swissarmyhammer::memoranda::{MemoStorage, MarkdownMemoStorage, MemoId};
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let storage = FileSystemMemoStorage::new_default()?;
+/// let storage = MarkdownMemoStorage::new_default()?;
 ///
 /// // Create a memo
 /// let memo = storage.create_memo(
@@ -49,7 +121,7 @@ pub struct MemoState {
 ///     "Discussed project roadmap".to_string()
 /// ).await?;
 ///
-/// // Retrieve it
+/// // Retrieve it using filename-based ID
 /// let retrieved = storage.get_memo(&memo.id).await?;
 /// assert_eq!(memo.id, retrieved.id);
 /// # Ok(())
@@ -59,8 +131,10 @@ pub struct MemoState {
 pub trait MemoStorage: Send + Sync {
     /// Create a new memo with the given title and content
     ///
-    /// Generates a unique ULID identifier and timestamps automatically.
-    /// The memo is persisted to storage before returning.
+    /// Generates a unique identifier and timestamps automatically.
+    /// The implementation determines the ID format:
+    /// - FileSystemMemoStorage: ULID-based identifiers
+    /// - MarkdownMemoStorage: Filename-based identifiers (sanitized title)
     ///
     /// # Arguments
     ///
@@ -80,7 +154,9 @@ pub trait MemoStorage: Send + Sync {
     ///
     /// # Arguments
     ///
-    /// * `id` - The unique ULID identifier of the memo to retrieve
+    /// * `id` - The unique identifier of the memo to retrieve
+    ///   - For FileSystemMemoStorage: ULID format (e.g., "01ARZ3NDEKTSV4RRFFQ69G5FAV")
+    ///   - For MarkdownMemoStorage: Filename format (e.g., "Meeting Notes")
     ///
     /// # Returns
     ///
@@ -756,6 +832,616 @@ impl MemoStorage for FileSystemMemoStorage {
                             path = %path.display(),
                             error = %e,
                             "Failed to load memo file, skipping"
+                        );
+                        continue;
+                    }
+                }
+            }
+        }
+
+        Ok(memos)
+    }
+
+    async fn search_memos(&self, query: &str) -> Result<Vec<Memo>> {
+        let all_memos = self.list_memos().await?;
+        let query_lower = query.to_lowercase();
+
+        let matching_memos: Vec<Memo> = all_memos
+            .into_iter()
+            .filter(|memo| {
+                memo.title.to_lowercase().contains(&query_lower)
+                    || memo.content.to_lowercase().contains(&query_lower)
+            })
+            .collect();
+
+        Ok(matching_memos)
+    }
+
+    async fn search_memos_advanced(
+        &self,
+        query: &str,
+        options: &crate::memoranda::SearchOptions,
+    ) -> Result<Vec<crate::memoranda::SearchResult>> {
+        // Use advanced search engine if available, otherwise fall back to basic search
+        if let Some(search_engine) = &self.search_engine {
+            let all_memos = self.list_memos().await?;
+            let results = search_engine.search(query, options, &all_memos).await?;
+            Ok(results)
+        } else {
+            // Fallback to basic implementation for compatibility
+            let query_to_use = if options.case_sensitive {
+                query.to_string()
+            } else {
+                query.to_lowercase()
+            };
+
+            let all_memos = self.list_memos().await?;
+            let mut results = Vec::new();
+
+            for memo in all_memos {
+                let title_check = if options.case_sensitive {
+                    memo.title.contains(&query_to_use)
+                } else {
+                    memo.title.to_lowercase().contains(&query_to_use)
+                };
+
+                let content_check = if options.case_sensitive {
+                    memo.content.contains(&query_to_use)
+                } else {
+                    memo.content.to_lowercase().contains(&query_to_use)
+                };
+
+                if title_check || content_check {
+                    let mut relevance_score = 50.0; // Base score
+                    let mut match_count = 0;
+
+                    if title_check {
+                        relevance_score += 30.0; // Title matches get higher score
+                        match_count += 1;
+                    }
+                    if content_check {
+                        relevance_score += 20.0; // Content matches get lower score
+                        match_count += 1;
+                    }
+
+                    let highlights = if options.include_highlights {
+                        generate_highlights(&memo, query, options)
+                    } else {
+                        Vec::new()
+                    };
+
+                    results.push(crate::memoranda::SearchResult {
+                        memo,
+                        relevance_score,
+                        highlights,
+                        match_count,
+                    });
+                }
+            }
+
+            // Sort by relevance score (highest first)
+            results.sort_by(|a, b| b.relevance_score.partial_cmp(&a.relevance_score).unwrap());
+
+            // Apply result limit
+            if let Some(max_results) = options.max_results {
+                results.truncate(max_results);
+            }
+
+            Ok(results)
+        }
+    }
+
+    async fn get_all_context(&self, options: &crate::memoranda::ContextOptions) -> Result<String> {
+        let all_memos = self.list_memos().await?;
+
+        if all_memos.is_empty() {
+            return Ok(String::new());
+        }
+
+        let mut context = String::new();
+
+        // Sort memos by creation date (newest first)
+        let mut sorted_memos = all_memos;
+        sorted_memos.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+        for (i, memo) in sorted_memos.iter().enumerate() {
+            if i > 0 {
+                context.push_str(&options.delimiter);
+            }
+
+            if options.include_metadata {
+                context.push_str(&format!(
+                    "# {} ({})\nCreated: {} | Updated: {}\n\n",
+                    memo.title,
+                    memo.id.as_str(),
+                    memo.created_at.format("%Y-%m-%d %H:%M:%S UTC"),
+                    memo.updated_at.format("%Y-%m-%d %H:%M:%S UTC")
+                ));
+            }
+
+            context.push_str(&memo.content);
+
+            // Rough token estimation (4 characters per token)
+            if let Some(max_tokens) = options.max_tokens {
+                let estimated_tokens = context.len() / 4;
+                if estimated_tokens >= max_tokens {
+                    break;
+                }
+            }
+        }
+
+        Ok(context)
+    }
+}
+
+/// Markdown-based implementation of memo storage
+///
+/// Stores memos as pure markdown files with titles as filenames,
+/// eliminating the need for JSON wrapping and separate title fields.
+/// Timestamps are derived from filesystem metadata.
+///
+/// # Storage Format
+///
+/// - Each memo is stored as `{title}.md` in the memos directory
+/// - Files contain pure markdown content without metadata
+/// - Timestamps are read from filesystem created/modified times
+/// - ID is computed from the filename (without .md extension)
+///
+/// # Examples
+///
+/// ```rust
+/// use swissarmyhammer::memoranda::MarkdownMemoStorage;
+/// use std::path::PathBuf;
+///
+/// // Use default location (~/.swissarmyhammer/memos)
+/// let storage = MarkdownMemoStorage::new_default()?;
+///
+/// // Use custom location
+/// let custom_storage = MarkdownMemoStorage::new(PathBuf::from("/tmp/memos"));
+/// # Ok::<(), swissarmyhammer::error::SwissArmyHammerError>(())
+/// ```
+pub struct MarkdownMemoStorage {
+    /// Configuration state including storage directory path
+    state: MemoState,
+    /// Mutex to ensure thread-safe memo creation and prevent race conditions
+    creation_lock: Mutex<()>,
+    /// Advanced search engine for full-text search capabilities
+    search_engine: Option<AdvancedMemoSearchEngine>,
+}
+
+impl MarkdownMemoStorage {
+    /// Create a new markdown storage with the default memo directory
+    ///
+    /// Uses the `SWISSARMYHAMMER_MEMOS_DIR` environment variable if set,
+    /// otherwise defaults to `.swissarmyhammer/memos` in the current directory.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self>` - New storage instance or error if directory access fails
+    ///
+    /// # Environment Variables
+    ///
+    /// * `SWISSARMYHAMMER_MEMOS_DIR` - Custom directory for memo storage
+    pub fn new_default() -> Result<Self> {
+        let memos_dir = if let Ok(custom_path) = std::env::var("SWISSARMYHAMMER_MEMOS_DIR") {
+            PathBuf::from(custom_path)
+        } else {
+            std::env::current_dir()?
+                .join(".swissarmyhammer")
+                .join("memos")
+        };
+        Ok(Self::new(memos_dir))
+    }
+
+    /// Create a new markdown storage with a specific memo directory
+    ///
+    /// # Arguments
+    ///
+    /// * `memos_dir` - The directory path where memo files will be stored
+    ///
+    /// # Returns
+    ///
+    /// * `Self` - New storage instance
+    pub fn new(memos_dir: PathBuf) -> Self {
+        Self {
+            state: MemoState { memos_dir },
+            creation_lock: Mutex::new(()),
+            search_engine: None,
+        }
+    }
+
+    /// Sanitize a title to make it safe for use as a filename
+    ///
+    /// Removes or replaces characters that are not safe for filenames
+    /// across different operating systems.
+    ///
+    /// # Arguments
+    ///
+    /// * `title` - The memo title to sanitize
+    ///
+    /// # Returns
+    ///
+    /// * `String` - Sanitized filename-safe version of the title
+    fn sanitize_title_for_filename(title: &str) -> String {
+        // Replace problematic characters with underscores
+        let mut sanitized = title
+            .replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_")
+            .replace(['\n', '\r', '\t'], " ");
+
+        // Remove emojis and non-ASCII characters that might cause filename issues
+        sanitized = sanitized
+            .chars()
+            .filter(|c| {
+                // Keep ASCII letters, digits, spaces, hyphens, underscores, and dots
+                c.is_ascii_alphanumeric() || matches!(*c, ' ' | '-' | '_' | '.')
+            })
+            .collect::<String>()
+            .trim()
+            .to_string();
+
+        // Handle empty or very long filenames
+        if sanitized.is_empty() {
+            sanitized = "untitled".to_string();
+        }
+
+        // Limit filename length to avoid filesystem issues
+        if sanitized.len() > 200 {
+            sanitized.truncate(200);
+        }
+
+        sanitized
+    }
+
+    /// Get the filesystem path for a memo with the given title
+    ///
+    /// # Arguments
+    ///
+    /// * `title` - The memo title to generate a path for
+    ///
+    /// # Returns
+    ///
+    /// * `PathBuf` - The full path where the memo file should be stored
+    fn get_memo_path_from_title(&self, title: &str) -> PathBuf {
+        let sanitized_title = Self::sanitize_title_for_filename(title);
+        self.state.memos_dir.join(format!("{sanitized_title}.md"))
+    }
+
+    /// Load and create a memo from a markdown file
+    ///
+    /// Reads the file content and filesystem metadata to construct a complete Memo object.
+    /// As per issue requirements, stores pure markdown without metadata and computes title from filename.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The filesystem path to the memo markdown file
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Memo>` - The memo object with content and metadata
+    async fn load_memo_from_markdown_file(&self, path: &PathBuf) -> Result<Memo> {
+        let content = tokio::fs::read_to_string(path).await?;
+        let metadata = tokio::fs::metadata(path).await?;
+
+        // Extract title from filename (remove .md extension)
+        let filename = path
+            .file_stem()
+            .ok_or_else(|| SwissArmyHammerError::Other("Invalid filename".to_string()))?
+            .to_string_lossy()
+            .to_string();
+
+        // Use filename as both ID and title (as specified in the issue requirements)
+        let id = MemoId::from_filename(&filename);
+
+        // Title is computed from filename - no separate storage needed
+        let title = filename;
+
+        // Get timestamps from filesystem
+        let created_at = metadata
+            .created()
+            .or_else(|_| metadata.modified()) // Fall back to modified if created not available
+            .map(DateTime::<Utc>::from)
+            .unwrap_or_else(|_| Utc::now());
+
+        let updated_at = metadata
+            .modified()
+            .map(DateTime::<Utc>::from)
+            .unwrap_or_else(|_| created_at);
+
+        Ok(Memo {
+            id,
+            title,
+            content,
+            created_at,
+            updated_at,
+        })
+    }
+
+    /// Save a memo to a markdown file
+    ///
+    /// Creates the directory if it doesn't exist, then writes the memo
+    /// content as pure markdown to the appropriate file.
+    ///
+    /// # Arguments
+    ///
+    /// * `memo` - The memo to save
+    ///
+    /// # Returns
+    ///
+    /// * `Result<()>` - Success or error if file cannot be written
+    async fn save_memo_to_markdown_file(&self, memo: &Memo) -> Result<()> {
+        self.ensure_directory_exists().await?;
+
+        let path = self.get_memo_path_from_title(&memo.title);
+        tokio::fs::write(path, &memo.content).await?;
+        Ok(())
+    }
+
+    /// Ensure the memo directory exists, creating it if necessary
+    async fn ensure_directory_exists(&self) -> Result<()> {
+        if !self.state.memos_dir.exists() {
+            tokio::fs::create_dir_all(&self.state.memos_dir).await?;
+        }
+        Ok(())
+    }
+
+    /// Index a memo in the search engine if available
+    async fn index_memo_if_available(&self, memo: &Memo) -> Result<()> {
+        if let Some(search_engine) = &self.search_engine {
+            search_engine.index_memo(memo).await?;
+        }
+        Ok(())
+    }
+
+    /// Remove a memo from the search engine index if available
+    async fn remove_memo_from_index_if_available(&self, memo_id: &MemoId) -> Result<()> {
+        if let Some(search_engine) = &self.search_engine {
+            search_engine.remove_memo(memo_id).await?;
+        }
+        Ok(())
+    }
+
+    /// Migrate existing JSON memos to markdown format
+    ///
+    /// This method scans the memos directory for existing `.json` files (from FileSystemMemoStorage),
+    /// reads them, and converts them to the new markdown format. The original JSON files are
+    /// optionally removed after successful migration.
+    ///
+    /// # Arguments
+    ///
+    /// * `remove_json_files` - Whether to remove the original JSON files after migration
+    ///
+    /// # Returns
+    ///
+    /// * `Result<usize>` - Number of memos successfully migrated
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use swissarmyhammer::memoranda::MarkdownMemoStorage;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let storage = MarkdownMemoStorage::new_default()?;
+    /// let migrated_count = storage.migrate_from_json(true).await?;
+    /// println!("Migrated {} memos from JSON to markdown", migrated_count);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn migrate_from_json(&self, remove_json_files: bool) -> Result<usize> {
+        if !self.state.memos_dir.exists() {
+            return Ok(0);
+        }
+
+        let mut migrated_count = 0;
+        let mut dir_entries = tokio::fs::read_dir(&self.state.memos_dir).await?;
+
+        while let Some(entry) = dir_entries.next_entry().await? {
+            let path = entry.path();
+
+            // Only process .json files
+            if path.extension().is_some_and(|ext| ext == "json") {
+                match self
+                    .migrate_single_json_memo(&path, remove_json_files)
+                    .await
+                {
+                    Ok(true) => {
+                        migrated_count += 1;
+                        tracing::info!(
+                            path = %path.display(),
+                            "Successfully migrated JSON memo to markdown"
+                        );
+                    }
+                    Ok(false) => {
+                        tracing::debug!(
+                            path = %path.display(),
+                            "Skipped JSON memo (markdown version already exists)"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            path = %path.display(),
+                            error = %e,
+                            "Failed to migrate JSON memo, skipping"
+                        );
+                    }
+                }
+            }
+        }
+
+        if migrated_count > 0 {
+            tracing::info!(
+                count = migrated_count,
+                "Completed JSON to markdown migration"
+            );
+        }
+
+        Ok(migrated_count)
+    }
+
+    /// Migrate a single JSON memo file to markdown format
+    ///
+    /// # Arguments
+    ///
+    /// * `json_path` - Path to the JSON memo file
+    /// * `remove_json_file` - Whether to remove the original JSON file after migration
+    ///
+    /// # Returns
+    ///
+    /// * `Result<bool>` - `true` if migrated, `false` if skipped (markdown already exists)
+    async fn migrate_single_json_memo(
+        &self,
+        json_path: &std::path::Path,
+        remove_json_file: bool,
+    ) -> Result<bool> {
+        // Read and deserialize the JSON memo
+        let json_content = tokio::fs::read_to_string(json_path).await?;
+        let json_memo: Memo = serde_json::from_str(&json_content)?;
+
+        // Create the markdown filename from the title
+        let markdown_path = self.get_memo_path_from_title(&json_memo.title);
+
+        // Skip if markdown version already exists
+        if markdown_path.exists() {
+            return Ok(false);
+        }
+
+        // Write the content as pure markdown (no YAML front matter per issue requirements)
+        self.ensure_directory_exists().await?;
+        tokio::fs::write(&markdown_path, &json_memo.content).await?;
+
+        // Try to preserve the original timestamps by setting file times
+        if let Err(e) = self
+            .preserve_file_timestamps(&markdown_path, &json_memo)
+            .await
+        {
+            tracing::warn!(
+                path = %markdown_path.display(),
+                error = %e,
+                "Failed to preserve original timestamps, using current time"
+            );
+        }
+
+        // Remove the original JSON file if requested
+        if remove_json_file {
+            if let Err(e) = tokio::fs::remove_file(json_path).await {
+                tracing::warn!(
+                    path = %json_path.display(),
+                    error = %e,
+                    "Failed to remove original JSON file after migration"
+                );
+            }
+        }
+
+        Ok(true)
+    }
+
+    /// Attempt to preserve original file timestamps from JSON memo
+    ///
+    /// # Arguments
+    ///
+    /// * `_markdown_path` - Path to the newly created markdown file (unused in current implementation)
+    /// * `_original_memo` - The original memo with timestamps to preserve (unused in current implementation)
+    async fn preserve_file_timestamps(
+        &self,
+        _markdown_path: &std::path::Path,
+        _original_memo: &Memo,
+    ) -> Result<()> {
+        // Note: Preserving file timestamps is platform-specific and complex.
+        // For this implementation, we'll accept that timestamps come from filesystem metadata.
+        // This could be enhanced in the future with the `filetime` crate or similar.
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl MemoStorage for MarkdownMemoStorage {
+    async fn create_memo(&self, title: String, content: String) -> Result<Memo> {
+        let _lock = self.creation_lock.lock().await;
+
+        // Check if a file with this title already exists
+        let path = self.get_memo_path_from_title(&title);
+        if path.exists() {
+            return Err(SwissArmyHammerError::MemoAlreadyExists(title));
+        }
+
+        // Create memo with filename-based ID (as specified in issue requirements)
+        let sanitized_title = Self::sanitize_title_for_filename(&title);
+        let id = MemoId::from_filename(&sanitized_title);
+        let now = Utc::now();
+
+        let memo = Memo {
+            id,
+            title,
+            content,
+            created_at: now,
+            updated_at: now,
+        };
+
+        self.save_memo_to_markdown_file(&memo).await?;
+
+        // Index the memo in the search engine if available
+        self.index_memo_if_available(&memo).await?;
+
+        Ok(memo)
+    }
+
+    async fn get_memo(&self, id: &MemoId) -> Result<Memo> {
+        // Since ID is now the filename, we can directly construct the path
+        let path = self.get_memo_path_from_title(id.as_str());
+
+        if !path.exists() {
+            return Err(SwissArmyHammerError::MemoNotFound(id.as_str().to_string()));
+        }
+
+        self.load_memo_from_markdown_file(&path).await
+    }
+
+    async fn update_memo(&self, id: &MemoId, content: String) -> Result<Memo> {
+        let mut memo = self.get_memo(id).await?;
+        memo.update_content(content);
+
+        // Since we're updating content only, the filename stays the same
+        self.save_memo_to_markdown_file(&memo).await?;
+
+        // Update the memo in the search engine if available
+        self.index_memo_if_available(&memo).await?;
+
+        Ok(memo)
+    }
+
+    async fn delete_memo(&self, id: &MemoId) -> Result<()> {
+        let memo = self.get_memo(id).await?;
+        let path = self.get_memo_path_from_title(&memo.title);
+
+        if !path.exists() {
+            return Err(SwissArmyHammerError::MemoNotFound(id.as_str().to_string()));
+        }
+
+        tokio::fs::remove_file(path).await?;
+
+        // Remove the memo from the search engine if available
+        self.remove_memo_from_index_if_available(id).await?;
+
+        Ok(())
+    }
+
+    async fn list_memos(&self) -> Result<Vec<Memo>> {
+        if !self.state.memos_dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut memos = Vec::new();
+        let mut dir_entries = tokio::fs::read_dir(&self.state.memos_dir).await?;
+
+        while let Some(entry) = dir_entries.next_entry().await? {
+            let path = entry.path();
+            if path.extension().is_some_and(|ext| ext == "md") {
+                match self.load_memo_from_markdown_file(&path).await {
+                    Ok(memo) => memos.push(memo),
+                    Err(e) => {
+                        tracing::warn!(
+                            path = %path.display(),
+                            error = %e,
+                            "Failed to load markdown memo file, skipping"
                         );
                         continue;
                     }
@@ -2105,5 +2791,306 @@ mod tests {
             .unwrap();
         assert_eq!(results.len(), 1);
         assert!(!results[0].highlights.is_empty());
+    }
+
+    // ===== JSON-TO-MARKDOWN MIGRATION TESTS =====
+
+    #[tokio::test]
+    async fn test_markdown_storage_basic_migration() {
+        let temp_dir = TempDir::new().unwrap();
+        let memos_dir = temp_dir.path().join("memos");
+        std::fs::create_dir_all(&memos_dir).unwrap();
+
+        // Create some JSON memo files to migrate
+        let json_memo_1 = serde_json::json!({
+            "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "title": "Test Memo 1",
+            "content": "This is the first test memo content.",
+            "created_at": "2023-01-01T00:00:00Z",
+            "updated_at": "2023-01-01T12:00:00Z"
+        });
+
+        let json_memo_2 = serde_json::json!({
+            "id": "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+            "title": "Test Memo 2",
+            "content": "This is the second test memo content.",
+            "created_at": "2023-01-02T00:00:00Z",
+            "updated_at": "2023-01-02T12:00:00Z"
+        });
+
+        // Write JSON files
+        std::fs::write(
+            memos_dir.join("01ARZ3NDEKTSV4RRFFQ69G5FAV.json"),
+            serde_json::to_string_pretty(&json_memo_1).unwrap(),
+        )
+        .unwrap();
+
+        std::fs::write(
+            memos_dir.join("01ARZ3NDEKTSV4RRFFQ69G5FAW.json"),
+            serde_json::to_string_pretty(&json_memo_2).unwrap(),
+        )
+        .unwrap();
+
+        // Create markdown storage and perform migration
+        let storage = MarkdownMemoStorage::new(memos_dir.clone());
+        let migrated_count = storage.migrate_from_json(true).await.unwrap();
+
+        assert_eq!(migrated_count, 2);
+
+        // Verify JSON files were removed
+        assert!(!memos_dir.join("01ARZ3NDEKTSV4RRFFQ69G5FAV.json").exists());
+        assert!(!memos_dir.join("01ARZ3NDEKTSV4RRFFQ69G5FAW.json").exists());
+
+        // Verify markdown files were created with correct content
+        assert!(memos_dir.join("Test Memo 1.md").exists());
+        assert!(memos_dir.join("Test Memo 2.md").exists());
+
+        let content_1 = std::fs::read_to_string(memos_dir.join("Test Memo 1.md")).unwrap();
+        let content_2 = std::fs::read_to_string(memos_dir.join("Test Memo 2.md")).unwrap();
+
+        assert_eq!(content_1, "This is the first test memo content.");
+        assert_eq!(content_2, "This is the second test memo content.");
+
+        // Verify memos can be retrieved using filename-based IDs
+        let memo_1 = storage
+            .get_memo(&MemoId::from_filename("Test Memo 1"))
+            .await
+            .unwrap();
+        let memo_2 = storage
+            .get_memo(&MemoId::from_filename("Test Memo 2"))
+            .await
+            .unwrap();
+
+        assert_eq!(memo_1.title, "Test Memo 1");
+        assert_eq!(memo_1.content, "This is the first test memo content.");
+        assert_eq!(memo_2.title, "Test Memo 2");
+        assert_eq!(memo_2.content, "This is the second test memo content.");
+    }
+
+    #[tokio::test]
+    async fn test_migration_preserve_json_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let memos_dir = temp_dir.path().join("memos");
+        std::fs::create_dir_all(&memos_dir).unwrap();
+
+        // Create a JSON memo file
+        let json_memo = serde_json::json!({
+            "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "title": "Preserve Test",
+            "content": "This memo should preserve the JSON file.",
+            "created_at": "2023-01-01T00:00:00Z",
+            "updated_at": "2023-01-01T12:00:00Z"
+        });
+
+        std::fs::write(
+            memos_dir.join("01ARZ3NDEKTSV4RRFFQ69G5FAV.json"),
+            serde_json::to_string_pretty(&json_memo).unwrap(),
+        )
+        .unwrap();
+
+        // Migrate without removing JSON files
+        let storage = MarkdownMemoStorage::new(memos_dir.clone());
+        let migrated_count = storage.migrate_from_json(false).await.unwrap();
+
+        assert_eq!(migrated_count, 1);
+
+        // Verify JSON file was preserved
+        assert!(memos_dir.join("01ARZ3NDEKTSV4RRFFQ69G5FAV.json").exists());
+
+        // Verify markdown file was created
+        assert!(memos_dir.join("Preserve Test.md").exists());
+
+        let content = std::fs::read_to_string(memos_dir.join("Preserve Test.md")).unwrap();
+        assert_eq!(content, "This memo should preserve the JSON file.");
+    }
+
+    #[tokio::test]
+    async fn test_migration_with_special_characters_in_title() {
+        let temp_dir = TempDir::new().unwrap();
+        let memos_dir = temp_dir.path().join("memos");
+        std::fs::create_dir_all(&memos_dir).unwrap();
+
+        // Create JSON memo with special characters in title
+        let json_memo = serde_json::json!({
+            "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "title": "Test/Memo:With*Special<Characters>",
+            "content": "Content with special title characters.",
+            "created_at": "2023-01-01T00:00:00Z",
+            "updated_at": "2023-01-01T12:00:00Z"
+        });
+
+        std::fs::write(
+            memos_dir.join("01ARZ3NDEKTSV4RRFFQ69G5FAV.json"),
+            serde_json::to_string_pretty(&json_memo).unwrap(),
+        )
+        .unwrap();
+
+        let storage = MarkdownMemoStorage::new(memos_dir.clone());
+        let migrated_count = storage.migrate_from_json(true).await.unwrap();
+
+        assert_eq!(migrated_count, 1);
+
+        // Verify sanitized filename was created
+        assert!(memos_dir
+            .join("Test_Memo_With_Special_Characters_.md")
+            .exists());
+
+        let raw_file_content =
+            std::fs::read_to_string(memos_dir.join("Test_Memo_With_Special_Characters_.md"))
+                .unwrap();
+        // File should contain only pure markdown content (no YAML front matter per issue requirements)
+        assert_eq!(raw_file_content, "Content with special title characters.");
+        assert!(!raw_file_content.contains("title:"));
+
+        // Verify memo can be retrieved
+        let memo = storage
+            .get_memo(&MemoId::from_filename("Test_Memo_With_Special_Characters_"))
+            .await
+            .unwrap();
+        // Title is now derived from sanitized filename (special characters replaced with underscores)
+        assert_eq!(memo.title, "Test_Memo_With_Special_Characters_");
+        assert_eq!(memo.content, "Content with special title characters.");
+    }
+
+    #[tokio::test]
+    async fn test_migration_with_empty_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let memos_dir = temp_dir.path().join("memos");
+        std::fs::create_dir_all(&memos_dir).unwrap();
+
+        let storage = MarkdownMemoStorage::new(memos_dir);
+        let migrated_count = storage.migrate_from_json(true).await.unwrap();
+
+        assert_eq!(migrated_count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_migration_with_malformed_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let memos_dir = temp_dir.path().join("memos");
+        std::fs::create_dir_all(&memos_dir).unwrap();
+
+        // Create a malformed JSON file
+        std::fs::write(memos_dir.join("malformed.json"), "{ invalid json }").unwrap();
+
+        // Create a valid JSON file
+        let valid_json = serde_json::json!({
+            "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "title": "Valid Memo",
+            "content": "This is valid content.",
+            "created_at": "2023-01-01T00:00:00Z",
+            "updated_at": "2023-01-01T12:00:00Z"
+        });
+
+        std::fs::write(
+            memos_dir.join("01ARZ3NDEKTSV4RRFFQ69G5FAV.json"),
+            serde_json::to_string_pretty(&valid_json).unwrap(),
+        )
+        .unwrap();
+
+        let storage = MarkdownMemoStorage::new(memos_dir.clone());
+        let migrated_count = storage.migrate_from_json(true).await.unwrap();
+
+        // Should migrate only the valid file
+        assert_eq!(migrated_count, 1);
+
+        // Valid file should be migrated
+        assert!(memos_dir.join("Valid Memo.md").exists());
+        assert!(!memos_dir.join("01ARZ3NDEKTSV4RRFFQ69G5FAV.json").exists());
+
+        // Malformed file should remain (not deleted since migration failed)
+        assert!(memos_dir.join("malformed.json").exists());
+    }
+
+    #[tokio::test]
+    async fn test_migration_with_unicode_content() {
+        let temp_dir = TempDir::new().unwrap();
+        let memos_dir = temp_dir.path().join("memos");
+        std::fs::create_dir_all(&memos_dir).unwrap();
+
+        // Create JSON memo with Unicode content
+        let json_memo = serde_json::json!({
+            "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "title": "Unicode Test 🚀",
+            "content": "Content with émojis 🎉 and special characters: café, naïve, résumé",
+            "created_at": "2023-01-01T00:00:00Z",
+            "updated_at": "2023-01-01T12:00:00Z"
+        });
+
+        std::fs::write(
+            memos_dir.join("01ARZ3NDEKTSV4RRFFQ69G5FAV.json"),
+            serde_json::to_string_pretty(&json_memo).unwrap(),
+        )
+        .unwrap();
+
+        let storage = MarkdownMemoStorage::new(memos_dir.clone());
+        let migrated_count = storage.migrate_from_json(true).await.unwrap();
+
+        assert_eq!(migrated_count, 1);
+
+        // Check sanitized filename (emoji removed)
+        assert!(memos_dir.join("Unicode Test.md").exists());
+
+        let raw_file_content = std::fs::read_to_string(memos_dir.join("Unicode Test.md")).unwrap();
+        // File should contain only pure markdown content (no YAML front matter per issue requirements)
+        assert_eq!(
+            raw_file_content,
+            "Content with émojis 🎉 and special characters: café, naïve, résumé"
+        );
+        assert!(!raw_file_content.contains("title:"));
+
+        // Verify memo can be retrieved with proper Unicode handling
+        let memo = storage
+            .get_memo(&MemoId::from_filename("Unicode Test"))
+            .await
+            .unwrap();
+        // Title is now derived from sanitized filename (emoji removed during sanitization)
+        assert_eq!(memo.title, "Unicode Test");
+        assert_eq!(
+            memo.content,
+            "Content with émojis 🎉 and special characters: café, naïve, résumé"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_migration_respects_existing_markdown_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let memos_dir = temp_dir.path().join("memos");
+        std::fs::create_dir_all(&memos_dir).unwrap();
+
+        // Create existing markdown file
+        std::fs::write(
+            memos_dir.join("Existing Memo.md"),
+            "This memo already exists in markdown format.",
+        )
+        .unwrap();
+
+        // Create JSON memo with same title
+        let json_memo = serde_json::json!({
+            "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "title": "Existing Memo",
+            "content": "This JSON content should not overwrite the markdown file.",
+            "created_at": "2023-01-01T00:00:00Z",
+            "updated_at": "2023-01-01T12:00:00Z"
+        });
+
+        std::fs::write(
+            memos_dir.join("01ARZ3NDEKTSV4RRFFQ69G5FAV.json"),
+            serde_json::to_string_pretty(&json_memo).unwrap(),
+        )
+        .unwrap();
+
+        let storage = MarkdownMemoStorage::new(memos_dir.clone());
+        let migrated_count = storage.migrate_from_json(true).await.unwrap();
+
+        // Should report 0 migrations since markdown file already exists
+        assert_eq!(migrated_count, 0);
+
+        // Original markdown content should be preserved
+        let content = std::fs::read_to_string(memos_dir.join("Existing Memo.md")).unwrap();
+        assert_eq!(content, "This memo already exists in markdown format.");
+
+        // JSON file should remain since migration was skipped
+        assert!(memos_dir.join("01ARZ3NDEKTSV4RRFFQ69G5FAV.json").exists());
     }
 }

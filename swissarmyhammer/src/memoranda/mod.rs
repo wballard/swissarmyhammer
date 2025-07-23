@@ -1,26 +1,27 @@
 //! Memoranda system for storing and managing structured text memos
 //!
-//! This module provides a comprehensive memo management system that stores memos with
-//! structured metadata, automatic timestamping, and efficient search capabilities.
-//! Memos are identified by ULID (Universally Unique Lexicographically Sortable Identifier)
-//! for both uniqueness and natural ordering.
+//! This module provides a comprehensive memo management system that stores memos as
+//! pure markdown files with filename-based identifiers and automatic timestamping.
+//! The modern MarkdownMemoStorage is the recommended approach, with legacy JSON-based
+//! storage available for backward compatibility.
 //!
 //! ## Features
 //!
-//! - **ULID-based Identifiers**: Unique, sortable identifiers for efficient ordering and retrieval
-//! - **Automatic Timestamps**: Creation and update times tracked automatically
+//! - **Filename-based Identifiers**: IDs derived from sanitized memo titles for human-readable file organization
+//! - **Pure Markdown Storage**: Files stored as `.md` with content only, no metadata wrapper
+//! - **Automatic Timestamps**: Creation and update times derived from filesystem metadata
 //! - **Full-text Search**: Search across memo titles and content
-//! - **Structured Storage**: Filesystem-based storage with atomic operations
+//! - **Migration Support**: Automatic migration from legacy JSON format
 //! - **Type-safe API**: Strong typing for memo identifiers and validation
 //!
 //! ## Basic Usage
 //!
 //! ```rust
-//! use swissarmyhammer::memoranda::{MemoStorage, FileSystemMemoStorage, Memo};
+//! use swissarmyhammer::memoranda::{MemoStorage, MarkdownMemoStorage, Memo};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! // Create a new memo storage
-//! let storage = FileSystemMemoStorage::new_default()?;
+//! // Create a new markdown memo storage (recommended)
+//! let storage = MarkdownMemoStorage::new_default()?;
 //!
 //! // Store the memo
 //! let stored_memo = storage.create_memo(
@@ -39,10 +40,10 @@
 //! ## Memo Management
 //!
 //! ```rust
-//! use swissarmyhammer::memoranda::{MemoStorage, FileSystemMemoStorage, MemoId};
+//! use swissarmyhammer::memoranda::{MemoStorage, MarkdownMemoStorage, MemoId};
 //!
 //! # async fn management_example() -> Result<(), Box<dyn std::error::Error>> {
-//! let storage = FileSystemMemoStorage::new_default()?;
+//! let storage = MarkdownMemoStorage::new_default()?;
 //!
 //! // List all memos (sorted by creation time, newest first)
 //! let all_memos = storage.list_memos().await?;
@@ -66,11 +67,11 @@
 //!
 //! ```rust
 //! use swissarmyhammer::memoranda::{
-//!     FileSystemMemoStorage, MemoStorage, AdvancedMemoSearchEngine, SearchOptions
+//!     MarkdownMemoStorage, MemoStorage, AdvancedMemoSearchEngine, SearchOptions
 //! };
 //!
 //! # async fn search_example() -> Result<(), Box<dyn std::error::Error>> {
-//! let storage = FileSystemMemoStorage::new_default()?;
+//! let storage = MarkdownMemoStorage::new_default()?;
 //! let search_engine = AdvancedMemoSearchEngine::new_in_memory().await?;
 //!
 //! // Create some example memos
@@ -122,16 +123,16 @@
 //! ## Storage Configuration and Custom Paths
 //!
 //! ```rust
-//! use swissarmyhammer::memoranda::{FileSystemMemoStorage, MemoStorage};
+//! use swissarmyhammer::memoranda::{MarkdownMemoStorage, MemoStorage};
 //! use std::path::PathBuf;
 //!
 //! # async fn storage_config_example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Use default storage location (./.swissarmyhammer/memos)
-//! let default_storage = FileSystemMemoStorage::new_default()?;
+//! let default_storage = MarkdownMemoStorage::new_default()?;
 //!
 //! // Use custom storage directory
 //! let custom_path = PathBuf::from("/custom/memo/storage");
-//! let custom_storage = FileSystemMemoStorage::new(custom_path);
+//! let custom_storage = MarkdownMemoStorage::new(custom_path);
 //!
 //! // Create memo in custom storage
 //! let memo = custom_storage.create_memo(
@@ -147,28 +148,27 @@
 //! ## Working with Memo Identifiers
 //!
 //! ```rust
-//! use swissarmyhammer::memoranda::{MemoId, MemoStorage, FileSystemMemoStorage};
+//! use swissarmyhammer::memoranda::{MemoId, MemoStorage, MarkdownMemoStorage};
 //!
 //! # async fn id_example() -> Result<(), Box<dyn std::error::Error>> {
-//! // Generate new ULID
-//! let new_id = MemoId::new();
-//! println!("Generated ID: {}", new_id);
+//! // Generate filename-based ID from title
+//! let id = MemoId::from_filename("Meeting_Notes");
+//! println!("Created ID from filename: {}", id);
 //!
-//! // Parse ULID from string (validation included)
-//! let id_string = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
-//! let parsed_id = MemoId::from_string(id_string.to_string())?;
+//! // Parse ID from string (filename validation included)
+//! let id_string = "Project_Planning_Session";
+//! let parsed_id = MemoId::from_filename(id_string);
 //!
-//! // IDs are naturally ordered chronologically
-//! let id1 = MemoId::new();
-//! std::thread::sleep(std::time::Duration::from_millis(1));
-//! let id2 = MemoId::new();
-//! assert!(id1 < id2); // Earlier ID is "less than" later ID
+//! // IDs are based on filenames for human-readable organization
+//! let id1 = MemoId::from_filename("Alpha_Project");
+//! let id2 = MemoId::from_filename("Beta_Project");
+//! // IDs can be compared lexicographically
 //!
 //! // Use in storage operations
-//! let storage = FileSystemMemoStorage::new_default()?;
+//! let storage = MarkdownMemoStorage::new_default()?;
 //! let memo = storage.create_memo(
 //!     "ID Example".to_string(),
-//!     "Demonstrating ULID usage".to_string()
+//!     "Demonstrating filename-based ID usage".to_string()
 //! ).await?;
 //!
 //! // Retrieve using the generated ID
@@ -181,13 +181,13 @@
 //! ## Error Handling and Validation
 //!
 //! ```rust
-//! use swissarmyhammer::memoranda::{MemoId, MemoStorage, FileSystemMemoStorage};
+//! use swissarmyhammer::memoranda::{MemoId, MemoStorage, MarkdownMemoStorage};
 //! use swissarmyhammer::error::SwissArmyHammerError;
 //!
 //! # async fn error_handling_example() -> Result<(), Box<dyn std::error::Error>> {
-//! let storage = FileSystemMemoStorage::new_default()?;
+//! let storage = MarkdownMemoStorage::new_default()?;
 //!
-//! // Handle invalid ULID formats
+//! // Handle invalid ID formats (can also create from filename)
 //! match MemoId::from_string("invalid-id".to_string()) {
 //!     Ok(id) => println!("Valid ID: {}", id),
 //!     Err(SwissArmyHammerError::Other(msg)) => {
@@ -438,7 +438,7 @@ use ulid::Ulid;
 
 /// Storage backends for memo persistence and retrieval
 pub mod storage;
-pub use storage::{FileSystemMemoStorage, MemoState, MemoStorage};
+pub use storage::{FileSystemMemoStorage, MarkdownMemoStorage, MemoState, MemoStorage};
 
 /// Mock storage implementation for testing
 #[cfg(test)]
@@ -542,6 +542,31 @@ impl MemoId {
     /// ```
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Create a memo ID from a filename (without .md extension)
+    ///
+    /// This method creates a MemoId directly from a filename, which is used
+    /// in the markdown storage implementation where the filename serves as the ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `filename` - The filename (without .md extension) to use as the ID
+    ///
+    /// # Returns
+    ///
+    /// * `Self` - A memo ID based on the filename
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use swissarmyhammer::memoranda::MemoId;
+    ///
+    /// let id = MemoId::from_filename("meeting_notes");
+    /// assert_eq!(id.as_str(), "meeting_notes");
+    /// ```
+    pub fn from_filename(filename: &str) -> Self {
+        Self(filename.to_string())
     }
 }
 

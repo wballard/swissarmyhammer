@@ -143,7 +143,7 @@ mod tests {
 
     async fn create_test_searcher() -> Result<SemanticSearcher> {
         let config = SemanticConfig::default();
-        let embedding_service = EmbeddingEngine::new().await?;
+        let embedding_service = EmbeddingEngine::new_for_testing().await?;
         let storage = VectorStorage::new(config)?;
         Ok(SemanticSearcher::new(embedding_service, storage))
     }

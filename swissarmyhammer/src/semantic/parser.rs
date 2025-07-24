@@ -10,6 +10,15 @@ use tree_sitter::{
     Language as TreeSitterLanguage, Node, Parser, Query, QueryCursor, StreamingIterator,
 };
 
+/// Default minimum chunk size in characters
+pub const DEFAULT_MIN_CHUNK_SIZE: usize = 50;
+/// Default maximum chunk size in characters  
+pub const DEFAULT_MAX_CHUNK_SIZE: usize = 2000;
+/// Default maximum number of chunks to extract per file
+pub const DEFAULT_MAX_CHUNKS_PER_FILE: usize = 100;
+/// Default maximum file size in bytes to prevent OOM on massive files (10MB)
+pub const DEFAULT_MAX_FILE_SIZE_BYTES: usize = 10 * 1024 * 1024;
+
 /// Definition of language support for TreeSitter parsing
 #[derive(Debug, Clone)]
 pub struct LanguageDefinition {
@@ -305,8 +314,7 @@ impl ParserConfig {
         // Validate chunk size constraints
         if min_chunk_size > max_chunk_size {
             return Err(SemanticError::TreeSitter(format!(
-                "Invalid configuration: min_chunk_size ({}) must be <= max_chunk_size ({})",
-                min_chunk_size, max_chunk_size
+                "Invalid configuration: min_chunk_size ({min_chunk_size}) must be <= max_chunk_size ({max_chunk_size})"
             )));
         }
 
@@ -332,8 +340,7 @@ impl ParserConfig {
         // Validate reasonable file size limit (at least 1KB)
         if max_file_size_bytes < 1024 {
             return Err(SemanticError::TreeSitter(format!(
-                "Invalid configuration: max_file_size_bytes ({}) must be >= 1024 bytes (1KB)",
-                max_file_size_bytes
+                "Invalid configuration: max_file_size_bytes ({max_file_size_bytes}) must be >= 1024 bytes (1KB)"
             )));
         }
 
@@ -348,10 +355,14 @@ impl ParserConfig {
 
 impl Default for ParserConfig {
     fn default() -> Self {
-        // Use new() with default values, but since we know these are valid,
-        // we can unwrap safely
-        Self::new(50, 2000, 100, 10 * 1024 * 1024)
-            .expect("Default ParserConfig values should always be valid")
+        // Use new() with default constants, which are guaranteed to be valid
+        Self::new(
+            DEFAULT_MIN_CHUNK_SIZE,
+            DEFAULT_MAX_CHUNK_SIZE,
+            DEFAULT_MAX_CHUNKS_PER_FILE,
+            DEFAULT_MAX_FILE_SIZE_BYTES,
+        )
+        .expect("Default ParserConfig values should always be valid")
     }
 }
 
@@ -520,9 +531,8 @@ impl CodeParser {
         // Check file size limit to prevent OOM on massive files
         if content_size > self.config.max_file_size_bytes {
             return Err(SemanticError::TreeSitter(format!(
-                "File {} is too large ({} bytes > {} bytes limit). Skipping to prevent OOM.",
+                "File {} is too large ({content_size} bytes > {} bytes limit). Skipping to prevent OOM.",
                 file_path.display(),
-                content_size,
                 self.config.max_file_size_bytes
             )));
         }
@@ -633,10 +643,7 @@ impl CodeParser {
         // Parse using DashMap's entry API for thread-safe access
         let tree = {
             let mut parser_ref = self.parsers.get_mut(language).ok_or_else(|| {
-                SemanticError::TreeSitter(format!(
-                    "Parser disappeared for language: {:?}",
-                    language
-                ))
+                SemanticError::TreeSitter(format!("Parser disappeared for language: {language:?}"))
             })?;
 
             parser_ref.parse(content, None)
@@ -1277,9 +1284,9 @@ mod tests {
             .map(|i| {
                 let parser_clone = Arc::clone(&parser);
                 thread::spawn(move || {
-                    let file_name = format!("test{}.rs", i);
+                    let file_name = format!("test{i}.rs");
                     let file_path = Path::new(&file_name);
-                    let content = format!("fn test_function_{}() {{ println!(\"test\"); }}", i);
+                    let content = format!("fn test_function_{i}() {{ println!(\"test\"); }}");
 
                     // Each thread parses concurrently
                     let result = parser_clone.parse_file(file_path, &content);

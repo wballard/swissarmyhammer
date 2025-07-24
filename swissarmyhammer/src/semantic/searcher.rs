@@ -159,9 +159,8 @@ impl SemanticSearcher {
     /// let storage = VectorStorage::new(config.clone())?;
     /// let engine = EmbeddingEngine::new().await?;
     ///
-    /// // Share engine across multiple searchers
-    /// let searcher1 = SemanticSearcher::with_embedding_engine(storage.clone(), engine.clone(), config.clone()).await?;
-    /// let searcher2 = SemanticSearcher::with_embedding_engine(storage, engine, config).await?;
+    /// // Create searcher with embedding engine
+    /// let searcher = SemanticSearcher::with_embedding_engine(storage, engine, config).await?;
     /// # Ok(())
     /// # }
     /// ```
@@ -669,7 +668,7 @@ impl SemanticSearcher {
     /// println!("  Files: {}", stats.total_files);
     /// println!("  Code chunks: {}", stats.total_chunks);
     /// println!("  Embeddings: {}", stats.total_embeddings);
-    /// println!("  Model: {}", stats.model_info.name);
+    /// println!("  Model: {}", stats.model_info.model_id);
     ///
     /// if stats.total_chunks == 0 {
     ///     println!("Warning: No content indexed, searches will return empty results");

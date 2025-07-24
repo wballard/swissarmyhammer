@@ -305,8 +305,7 @@ impl ParserConfig {
         // Validate chunk size constraints
         if min_chunk_size > max_chunk_size {
             return Err(SemanticError::TreeSitter(format!(
-                "Invalid configuration: min_chunk_size ({}) must be <= max_chunk_size ({})",
-                min_chunk_size, max_chunk_size
+                "Invalid configuration: min_chunk_size ({min_chunk_size}) must be <= max_chunk_size ({max_chunk_size})"
             )));
         }
 

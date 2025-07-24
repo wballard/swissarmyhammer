@@ -85,16 +85,13 @@ impl VectorStorage {
         // VALUES (?, ?, ?, ?, ?, ?)
 
         tracing::debug!("Storing indexed file: {}", file.path.display());
-        
         // For now, use in-memory storage
         let mut indexed_files = self.indexed_files.lock().map_err(|e| {
-            SwissArmyHammerError::Config(format!(
-                "Failed to lock indexed_files for storage: {e}"
-            ))
+            SwissArmyHammerError::Config(format!("Failed to lock indexed_files for storage: {e}"))
         })?;
-        
+
         indexed_files.insert(file.path.clone(), (file.content_hash.clone(), file.clone()));
-        
+
         Ok(())
     }
 
@@ -194,8 +191,13 @@ impl VectorStorage {
 
         tracing::debug!("Checking if file is indexed: {}", file_path.display());
 
-        // For now, always return false since we have no persistent storage
-        Ok(false)
+        // Check in-memory storage for now
+        let indexed_files = self.indexed_files.lock().map_err(|e| {
+            SwissArmyHammerError::Config(format!(
+                "Failed to lock indexed_files for file check: {e}"
+            ))
+        })?;
+        Ok(indexed_files.contains_key(file_path))
     }
 
     /// Remove all data for a file (for re-indexing)

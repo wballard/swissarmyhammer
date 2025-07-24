@@ -220,7 +220,7 @@ impl FileChangeTracker {
 
         // Check if file needs re-indexing
         let needs_reindexing = self.storage.needs_reindexing(path, &current_hash)?;
-
+        
         Ok(match needs_reindexing {
             true => FileChangeStatus::Changed {
                 new_hash: current_hash,

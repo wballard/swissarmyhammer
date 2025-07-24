@@ -541,3 +541,48 @@ mod tests {
         assert_eq!(stats.embedding_count, 100);
     }
 }
+
+/// Search statistics for debugging and monitoring
+#[derive(Debug, Clone)]
+pub struct SearchStats {
+    /// Total number of indexed files
+    pub total_files: usize,
+    /// Total number of code chunks
+    pub total_chunks: usize,
+    /// Total number of embeddings
+    pub total_embeddings: usize,
+    /// Information about the embedding model
+    pub model_info: crate::semantic::EmbeddingModelInfo,
+}
+
+/// Detailed explanation of search results for debugging
+#[derive(Debug)]
+pub struct SearchExplanation {
+    /// The original query text
+    pub query_text: String,
+    /// Norm of the query embedding vector
+    pub query_embedding_norm: f32,
+    /// Similarity threshold used
+    pub threshold: f32,
+    /// Total number of candidates evaluated
+    pub total_candidates: usize,
+    /// Detailed information about each result
+    pub results: Vec<ResultExplanation>,
+}
+
+/// Explanation of an individual search result
+#[derive(Debug)]
+pub struct ResultExplanation {
+    /// ID of the chunk
+    pub chunk_id: String,
+    /// Similarity score with the query
+    pub similarity_score: f32,
+    /// Programming language of the chunk
+    pub language: Language,
+    /// Type of the code chunk
+    pub chunk_type: ChunkType,
+    /// Preview of the chunk content (first 100 characters)
+    pub content_preview: String,
+    /// Whether this result was above the similarity threshold
+    pub above_threshold: bool,
+}

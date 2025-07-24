@@ -367,5 +367,37 @@ pub struct ResultExplanation {
 - Performance testing with large indices
 - Edge case testing with empty results, malformed queries
 
+## Proposed Solution
+
+After analyzing the existing codebase, I found there's already a basic `SemanticSearcher` implementation in `swissarmyhammer/src/semantic/searcher.rs`. However, the current implementation has a different API and lacks the advanced features specified in this issue.
+
+### Current State Analysis
+- Existing `SemanticSearcher` uses `SearchOptions` instead of `SearchQuery`
+- Basic search functionality exists but without excerpt generation
+- Missing advanced features like multi-query search, similar code search, and statistics
+- Missing the debugging and explanation features
+- Different API signatures than specified
+
+### Implementation Plan
+1. **Replace existing implementation** with the comprehensive version specified in the issue
+2. **Maintain backward compatibility** where possible by keeping useful existing test infrastructure
+3. **Use Test-Driven Development** to ensure all acceptance criteria are met
+4. **Leverage existing components**: `VectorStorage`, `EmbeddingEngine`, and type definitions are already available
+5. **Add missing types**: `SearchStats`, `SearchExplanation`, `ResultExplanation` need to be added to `types.rs`
+6. **Implement comprehensive error handling** following the existing `SemanticError` patterns
+
+### Key Integration Points
+- Use existing `VectorStorage.search_similar()` method (currently in-memory fallback)
+- Use existing `EmbeddingEngine.embed_text()` for query embedding generation
+- Use existing `SearchQuery` type from `types.rs`
+- Follow existing error handling patterns with `crate::semantic::Result<T>`
+
+### Testing Strategy
+- Replace existing basic tests with comprehensive test coverage
+- Test all search modes: basic, language-filtered, similar code, multi-query
+- Test excerpt generation with various content types
+- Test error conditions and edge cases
+- Use existing test infrastructure (`create_test_searcher`, `create_test_chunk`)
+
 ## Next Steps
 After completion, proceed to TP_000203_cli-integration to implement the command-line interface.

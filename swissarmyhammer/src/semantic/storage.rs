@@ -177,6 +177,44 @@ impl VectorStorage {
         Ok(results)
     }
 
+    /// Search for similar chunks with detailed embedding information for debugging
+    pub fn similarity_search_with_details(
+        &self,
+        query_embedding: &[f32],
+        limit: usize,
+        threshold: f32,
+    ) -> Result<Vec<(String, f32, Vec<f32>)>> {
+        // In-memory similarity search with detailed results (fallback until DuckDB is implemented)
+        tracing::debug!(
+            "Searching for similar embeddings with details: query_dim={}, limit={}, threshold={}",
+            query_embedding.len(),
+            limit,
+            threshold
+        );
+
+        let embeddings = self.embeddings.lock().map_err(|_| {
+            SwissArmyHammerError::Storage("Failed to acquire embeddings lock".to_string())
+        })?;
+
+        let mut results = Vec::new();
+
+        // Calculate similarity for each embedding
+        for (chunk_id, embedding) in embeddings.iter() {
+            let similarity = SemanticUtils::cosine_similarity(query_embedding, &embedding.vector);
+
+            if similarity >= threshold {
+                results.push((chunk_id.clone(), similarity, embedding.vector.clone()));
+            }
+        }
+
+        // Sort by similarity (descending) and limit results
+        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        results.truncate(limit);
+
+        tracing::debug!("Found {} similar chunks with details", results.len());
+        Ok(results)
+    }
+
     /// Get chunk by ID
     pub fn get_chunk(&self, chunk_id: &str) -> Result<Option<CodeChunk>> {
         // TODO: Implement DuckDB chunk retrieval

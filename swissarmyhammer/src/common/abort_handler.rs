@@ -8,17 +8,22 @@ use crate::workflow::ActionError;
 /// Pattern to match for abort errors in output text
 pub const ABORT_ERROR_PATTERN: &str = "ABORT ERROR";
 
+/// Pattern to match for Claude execution failures that should be treated as abort errors
+pub const CLAUDE_EXECUTION_FAILED_PATTERN: &str =
+    "Failed: Claude command failed: Claude execution failed";
+
 /// Check if output contains an abort error pattern
 ///
-/// Scans the given text for "ABORT ERROR" (case-sensitive) and returns
-/// an ActionError::AbortError if found.
+/// Scans the given text for "ABORT ERROR" (case-sensitive) and the specific
+/// Claude execution failure pattern "Failed: Claude command failed: Claude execution failed".
+/// Returns an ActionError::AbortError if either pattern is found.
 ///
 /// # Arguments
 /// * `output` - The text to scan for abort errors
 ///
 /// # Returns
 /// * `Ok(())` if no abort error is found
-/// * `Err(ActionError::AbortError)` if "ABORT ERROR" is found in the output
+/// * `Err(ActionError::AbortError)` if "ABORT ERROR" or Claude execution failure is found in the output
 pub fn check_for_abort_error(output: &str) -> Result<(), ActionError> {
     if output.contains(ABORT_ERROR_PATTERN) {
         tracing::error!("Detected ABORT ERROR in output, triggering immediate shutdown");
@@ -28,18 +33,27 @@ pub fn check_for_abort_error(output: &str) -> Result<(), ActionError> {
             extract_abort_context(output)
         )));
     }
+
+    if output.contains(CLAUDE_EXECUTION_FAILED_PATTERN) {
+        tracing::error!("Detected Claude execution failure, triggering immediate shutdown");
+        return Err(ActionError::AbortError(format!(
+            "Claude execution failed - treating as ABORT ERROR: {}",
+            extract_abort_context(output)
+        )));
+    }
+
     Ok(())
 }
 
 /// Extract context around the abort error for better error reporting
 ///
 /// Returns the line containing the abort error plus some surrounding context
-/// to help with debugging.
+/// to help with debugging. Handles both ABORT ERROR and Claude execution failure patterns.
 fn extract_abort_context(output: &str) -> String {
     let lines: Vec<&str> = output.lines().collect();
 
     for (i, line) in lines.iter().enumerate() {
-        if line.contains(ABORT_ERROR_PATTERN) {
+        if line.contains(ABORT_ERROR_PATTERN) || line.contains(CLAUDE_EXECUTION_FAILED_PATTERN) {
             // Get up to 2 lines before and after for context
             let start = i.saturating_sub(2);
             let end = if i + 3 < lines.len() {
@@ -139,5 +153,51 @@ mod tests {
         assert!(context.contains("ABORT ERROR"));
         // Context should include surrounding lines but may not be shorter than original
         // if the abort error is at the end (which includes some long lines)
+    }
+
+    #[test]
+    fn test_claude_execution_failed_pattern() {
+        let output = "Failed: Claude command failed: Claude execution failed";
+        let result = check_for_abort_error(output);
+        assert!(result.is_err());
+
+        if let Err(ActionError::AbortError(msg)) = result {
+            assert!(msg.contains("Claude execution failed"));
+        } else {
+            panic!("Expected AbortError for Claude execution failure");
+        }
+    }
+
+    #[test]
+    fn test_claude_execution_failed_pattern_in_context() {
+        let output = "Starting workflow\nProcessing request\nFailed: Claude command failed: Claude execution failed\nShutting down";
+        let result = check_for_abort_error(output);
+        assert!(result.is_err());
+
+        if let Err(ActionError::AbortError(msg)) = result {
+            assert!(msg.contains("Claude execution failed"));
+            assert!(msg.contains("Processing request"));
+        } else {
+            panic!("Expected AbortError for Claude execution failure");
+        }
+    }
+
+    #[test]
+    fn test_similar_but_different_claude_errors() {
+        // These should NOT trigger abort error
+        let similar_errors = vec![
+            "Failed: Claude command failed: Connection timeout",
+            "Error: Claude command failed: Invalid API key",
+            "Failed: Claude execution timeout",
+            "Claude command failed: Rate limit exceeded",
+        ];
+
+        for error_output in similar_errors {
+            let result = check_for_abort_error(error_output);
+            assert!(
+                result.is_ok(),
+                "Should not trigger abort for: {error_output}"
+            );
+        }
     }
 }

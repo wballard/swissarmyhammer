@@ -235,9 +235,10 @@ impl EmbeddingEngine {
         }
 
         // Parse response
-        let embedding_response: EmbeddingResponse = response.json().await.map_err(|e| {
-            SemanticError::Embedding(format!("Failed to parse API response: {e}"))
-        })?;
+        let embedding_response: EmbeddingResponse = response
+            .json()
+            .await
+            .map_err(|e| SemanticError::Embedding(format!("Failed to parse API response: {e}")))?;
 
         // Extract the embedding vector
         let embedding = embedding_response

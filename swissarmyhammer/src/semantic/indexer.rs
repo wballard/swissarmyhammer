@@ -1,7 +1,7 @@
 //! File indexing logic for semantic search
 
 use crate::semantic::{
-    CodeChunk, CodeParser, EmbeddingEngine, FileHasher, FileId, IndexedFile,
+    CodeChunk, CodeParser, EmbeddingEngine, FileChangeTracker, FileHasher, FileId, IndexedFile,
     ParserConfig, Result, SemanticError, VectorStorage,
 };
 use chrono::Utc;
@@ -14,6 +14,7 @@ pub struct FileIndexer {
     storage: VectorStorage,
     embedding_engine: EmbeddingEngine,
     parser: CodeParser,
+    change_tracker: FileChangeTracker,
 }
 
 /// Options for indexing operations
@@ -38,11 +39,13 @@ impl FileIndexer {
     pub async fn new(storage: VectorStorage) -> Result<Self> {
         let embedding_engine = EmbeddingEngine::new().await?;
         let parser = CodeParser::new(Default::default())?;
+        let change_tracker = FileChangeTracker::new(storage.clone());
 
         Ok(Self {
             storage,
             embedding_engine,
             parser,
+            change_tracker,
         })
     }
 
@@ -59,11 +62,13 @@ impl FileIndexer {
         embedding_engine: EmbeddingEngine,
     ) -> Result<Self> {
         let parser = CodeParser::new(Default::default())?;
+        let change_tracker = FileChangeTracker::new(storage.clone());
 
         Ok(Self {
             storage,
             embedding_engine,
             parser,
+            change_tracker,
         })
     }
 
@@ -82,11 +87,13 @@ impl FileIndexer {
         parser_config: ParserConfig,
     ) -> Result<Self> {
         let parser = CodeParser::new(parser_config)?;
+        let change_tracker = FileChangeTracker::new(storage.clone());
 
         Ok(Self {
             storage,
             embedding_engine,
             parser,
+            change_tracker,
         })
     }
 
@@ -128,9 +135,9 @@ impl FileIndexer {
     fn expand_glob_pattern(&self, pattern: &str) -> Result<Vec<PathBuf>> {
         let mut paths = Vec::new();
 
-        for entry in glob(pattern).map_err(|e| {
-            SemanticError::Config(format!("Invalid glob pattern '{pattern}': {e}"))
-        })? {
+        for entry in glob(pattern)
+            .map_err(|e| SemanticError::Config(format!("Invalid glob pattern '{pattern}': {e}")))?
+        {
             match entry {
                 Ok(path) if path.is_file() => {
                     // Filter supported file types
@@ -157,24 +164,25 @@ impl FileIndexer {
 
     /// Filter files based on change detection
     async fn filter_changed_files(&self, paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
-        // Check files for changes directly using main storage to avoid clone issues
-        let mut files_needing_indexing = Vec::new();
-        
-        for path in paths {
-            // Calculate current hash
-            let current_hash = FileHasher::hash_file(&path)
-                .map_err(|e| SemanticError::Index(e.to_string()))?;
-            
-            // Check if file needs re-indexing using main storage
-            let needs_reindexing = self.storage.needs_reindexing(&path, &current_hash)
-                .map_err(|e| SemanticError::Index(e.to_string()))?;
-            
-            if needs_reindexing {
-                files_needing_indexing.push(path);
-            }
+        // Use the dedicated change tracker to check for file changes
+        let change_report = self
+            .change_tracker
+            .check_files_for_changes(paths)
+            .map_err(|e| SemanticError::Index(e.to_string()))?;
+
+        // Get files that need indexing (changed + new files)
+        let files_needing_indexing: Vec<PathBuf> =
+            change_report.files_needing_indexing().cloned().collect();
+
+        tracing::info!(
+            "Found {} files needing indexing",
+            files_needing_indexing.len()
+        );
+
+        // Log any errors encountered during change detection
+        for (path, error) in &change_report.errors {
+            tracing::warn!("Error checking file {}: {}", path.display(), error);
         }
-        
-        tracing::info!("Found {} files needing indexing", files_needing_indexing.len());
 
         Ok(files_needing_indexing)
     }
@@ -344,7 +352,6 @@ impl FileIndexer {
     pub async fn full_reindex(&mut self, pattern: &str) -> Result<IndexingReport> {
         self.index_glob(pattern, true).await
     }
-
 }
 
 /// Statistics from an indexing operation
@@ -526,7 +533,6 @@ mod tests {
         assert_eq!(report.files_processed, 1);
         assert_eq!(report.total_chunks, 1);
     }
-
 
     #[tokio::test]
     async fn test_new_index_glob_api() {

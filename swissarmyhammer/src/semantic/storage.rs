@@ -13,11 +13,12 @@ use crate::semantic::{
     types::{
         CodeChunk, ContentHash, Embedding, IndexStats, IndexedFile, Language, SemanticSearchResult,
     },
+    utils::SemanticUtils,
     SemanticConfig,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 /// Vector storage for code chunks and embeddings
 ///
@@ -35,16 +36,21 @@ pub struct VectorStorage {
     db_path: PathBuf,
     _config: SemanticConfig,
     /// In-memory storage for file metadata (temporary fallback until DuckDB is implemented)
-    indexed_files: Mutex<HashMap<PathBuf, (ContentHash, IndexedFile)>>,
+    indexed_files: Arc<Mutex<HashMap<PathBuf, (ContentHash, IndexedFile)>>>,
+    /// In-memory storage for code chunks (temporary fallback until DuckDB is implemented)
+    chunks: Arc<Mutex<HashMap<String, CodeChunk>>>,
+    /// In-memory storage for embeddings (temporary fallback until DuckDB is implemented)
+    embeddings: Arc<Mutex<HashMap<String, Embedding>>>,
 }
 
 impl Clone for VectorStorage {
     fn clone(&self) -> Self {
-        let indexed_files = self.indexed_files.lock().unwrap().clone();
         Self {
             db_path: self.db_path.clone(),
             _config: self._config.clone(),
-            indexed_files: Mutex::new(indexed_files),
+            indexed_files: Arc::clone(&self.indexed_files),
+            chunks: Arc::clone(&self.chunks),
+            embeddings: Arc::clone(&self.embeddings),
         }
     }
 }
@@ -62,7 +68,9 @@ impl VectorStorage {
         Ok(Self {
             db_path,
             _config: config,
-            indexed_files: Mutex::new(HashMap::new()),
+            indexed_files: Arc::new(Mutex::new(HashMap::new())),
+            chunks: Arc::new(Mutex::new(HashMap::new())),
+            embeddings: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -97,21 +105,25 @@ impl VectorStorage {
 
     /// Store a code chunk
     pub fn store_chunk(&self, chunk: &CodeChunk) -> Result<()> {
-        // TODO: Implement DuckDB chunk storage
-        // INSERT OR REPLACE INTO code_chunks
-        // (chunk_id, file_id, content, start_line, end_line, chunk_type, language, content_hash)
-        // VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        // Store chunk in in-memory storage (fallback until DuckDB is implemented)
+        let mut chunks = self.chunks.lock().map_err(|_| {
+            SwissArmyHammerError::Storage("Failed to acquire chunks lock".to_string())
+        })?;
 
-        tracing::debug!("Storing chunk: {}", chunk.id);
+        chunks.insert(chunk.id.clone(), chunk.clone());
+        tracing::debug!("Stored chunk: {}", chunk.id);
         Ok(())
     }
 
     /// Store an embedding for a code chunk
     pub fn store_embedding(&self, embedding: &Embedding) -> Result<()> {
-        // TODO: Implement DuckDB embedding storage
-        // INSERT OR REPLACE INTO embeddings (chunk_id, embedding) VALUES (?, ?)
+        // Store embedding in in-memory storage (fallback until DuckDB is implemented)
+        let mut embeddings = self.embeddings.lock().map_err(|_| {
+            SwissArmyHammerError::Storage("Failed to acquire embeddings lock".to_string())
+        })?;
 
-        tracing::debug!("Storing embedding for chunk: {}", embedding.chunk_id);
+        embeddings.insert(embedding.chunk_id.clone(), embedding.clone());
+        tracing::debug!("Stored embedding for chunk: {}", embedding.chunk_id);
         Ok(())
     }
 
@@ -122,13 +134,7 @@ impl VectorStorage {
         limit: usize,
         threshold: f32,
     ) -> Result<Vec<SemanticSearchResult>> {
-        // TODO: Implement DuckDB vector similarity search
-        // SELECT e.chunk_id, array_cosine_similarity(e.embedding, ?) as similarity
-        // FROM embeddings e
-        // WHERE array_cosine_similarity(e.embedding, ?) >= ?
-        // ORDER BY similarity DESC
-        // LIMIT ?
-
+        // In-memory similarity search using cosine similarity (fallback until DuckDB is implemented)
         tracing::debug!(
             "Searching for similar embeddings: query_dim={}, limit={}, threshold={}",
             query_embedding.len(),
@@ -136,8 +142,41 @@ impl VectorStorage {
             threshold
         );
 
-        // Return empty results for now
-        Ok(vec![])
+        let embeddings = self.embeddings.lock().map_err(|_| {
+            SwissArmyHammerError::Storage("Failed to acquire embeddings lock".to_string())
+        })?;
+
+        let chunks = self.chunks.lock().map_err(|_| {
+            SwissArmyHammerError::Storage("Failed to acquire chunks lock".to_string())
+        })?;
+
+        let mut results = Vec::new();
+
+        // Calculate similarity for each embedding
+        for (chunk_id, embedding) in embeddings.iter() {
+            let similarity = SemanticUtils::cosine_similarity(query_embedding, &embedding.vector);
+
+            if similarity >= threshold {
+                if let Some(chunk) = chunks.get(chunk_id) {
+                    results.push(SemanticSearchResult {
+                        chunk: chunk.clone(),
+                        similarity_score: similarity,
+                        excerpt: chunk.content.clone(),
+                    });
+                }
+            }
+        }
+
+        // Sort by similarity (descending) and limit results
+        results.sort_by(|a, b| {
+            b.similarity_score
+                .partial_cmp(&a.similarity_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        results.truncate(limit);
+
+        tracing::debug!("Found {} similar chunks", results.len());
+        Ok(results)
     }
 
     /// Get chunk by ID
@@ -152,12 +191,23 @@ impl VectorStorage {
 
     /// Get all chunks for a file
     pub fn get_file_chunks(&self, file_path: &Path) -> Result<Vec<CodeChunk>> {
-        // TODO: Implement DuckDB file chunks retrieval
-        // SELECT chunk_id, file_id, content, start_line, end_line, chunk_type, language, content_hash
-        // FROM code_chunks WHERE file_id = ?
+        // Get chunks from in-memory storage (fallback until DuckDB is implemented)
+        let chunks = self.chunks.lock().map_err(|_| {
+            SwissArmyHammerError::Storage("Failed to acquire chunks lock".to_string())
+        })?;
 
-        tracing::debug!("Getting chunks for file: {}", file_path.display());
-        Ok(vec![])
+        let file_chunks: Vec<CodeChunk> = chunks
+            .values()
+            .filter(|chunk| chunk.file_path == file_path)
+            .cloned()
+            .collect();
+
+        tracing::debug!(
+            "Found {} chunks for file: {}",
+            file_chunks.len(),
+            file_path.display()
+        );
+        Ok(file_chunks)
     }
 
     /// Check if file needs re-indexing based on content hash
@@ -202,13 +252,58 @@ impl VectorStorage {
 
     /// Remove all data for a file (for re-indexing)
     pub fn remove_file(&self, file_path: &Path) -> Result<()> {
-        // TODO: Implement DuckDB file removal
-        // DELETE FROM embeddings WHERE chunk_id IN
-        // (SELECT chunk_id FROM code_chunks WHERE file_id = ?)
-        // DELETE FROM code_chunks WHERE file_id = ?
-        // DELETE FROM indexed_files WHERE path = ?
-
+        // Remove from in-memory storage (fallback until DuckDB is implemented)
         tracing::debug!("Removing file: {}", file_path.display());
+
+        // Get chunks for this file to find chunk IDs
+        let chunks_to_remove: Vec<String> = {
+            let chunks = self.chunks.lock().map_err(|_| {
+                SwissArmyHammerError::Storage("Failed to acquire chunks lock".to_string())
+            })?;
+
+            chunks
+                .values()
+                .filter(|chunk| chunk.file_path == file_path)
+                .map(|chunk| chunk.id.clone())
+                .collect()
+        };
+
+        // Remove embeddings for these chunks
+        {
+            let mut embeddings = self.embeddings.lock().map_err(|_| {
+                SwissArmyHammerError::Storage("Failed to acquire embeddings lock".to_string())
+            })?;
+
+            for chunk_id in &chunks_to_remove {
+                embeddings.remove(chunk_id);
+            }
+        }
+
+        // Remove chunks for this file
+        {
+            let mut chunks = self.chunks.lock().map_err(|_| {
+                SwissArmyHammerError::Storage("Failed to acquire chunks lock".to_string())
+            })?;
+
+            for chunk_id in &chunks_to_remove {
+                chunks.remove(chunk_id);
+            }
+        }
+
+        // Remove indexed file metadata
+        {
+            let mut indexed_files = self.indexed_files.lock().map_err(|_| {
+                SwissArmyHammerError::Storage("Failed to acquire indexed_files lock".to_string())
+            })?;
+
+            indexed_files.remove(file_path);
+        }
+
+        tracing::debug!(
+            "Removed {} chunks for file: {}",
+            chunks_to_remove.len(),
+            file_path.display()
+        );
         Ok(())
     }
 

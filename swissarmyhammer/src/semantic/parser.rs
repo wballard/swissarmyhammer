@@ -331,8 +331,7 @@ impl ParserConfig {
         // Validate reasonable file size limit (at least 1KB)
         if max_file_size_bytes < 1024 {
             return Err(SemanticError::TreeSitter(format!(
-                "Invalid configuration: max_file_size_bytes ({}) must be >= 1024 bytes (1KB)",
-                max_file_size_bytes
+                "Invalid configuration: max_file_size_bytes ({max_file_size_bytes}) must be >= 1024 bytes (1KB)"
             )));
         }
 
@@ -519,9 +518,8 @@ impl CodeParser {
         // Check file size limit to prevent OOM on massive files
         if content_size > self.config.max_file_size_bytes {
             return Err(SemanticError::TreeSitter(format!(
-                "File {} is too large ({} bytes > {} bytes limit). Skipping to prevent OOM.",
+                "File {} is too large ({content_size} bytes > {} bytes limit). Skipping to prevent OOM.",
                 file_path.display(),
-                content_size,
                 self.config.max_file_size_bytes
             )));
         }
@@ -632,10 +630,7 @@ impl CodeParser {
         // Parse using DashMap's entry API for thread-safe access
         let tree = {
             let mut parser_ref = self.parsers.get_mut(language).ok_or_else(|| {
-                SemanticError::TreeSitter(format!(
-                    "Parser disappeared for language: {:?}",
-                    language
-                ))
+                SemanticError::TreeSitter(format!("Parser disappeared for language: {language:?}"))
             })?;
 
             parser_ref.parse(content, None)
@@ -1276,9 +1271,9 @@ mod tests {
             .map(|i| {
                 let parser_clone = Arc::clone(&parser);
                 thread::spawn(move || {
-                    let file_name = format!("test{}.rs", i);
+                    let file_name = format!("test{i}.rs");
                     let file_path = Path::new(&file_name);
-                    let content = format!("fn test_function_{}() {{ println!(\"test\"); }}", i);
+                    let content = format!("fn test_function_{i}() {{ println!(\"test\"); }}");
 
                     // Each thread parses concurrently
                     let result = parser_clone.parse_file(file_path, &content);

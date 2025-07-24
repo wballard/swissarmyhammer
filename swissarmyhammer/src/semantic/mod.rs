@@ -45,6 +45,10 @@ pub enum SemanticError {
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
 
+    /// ONNX Runtime error
+    #[error("ONNX Runtime error: {0}")]
+    OnnxRuntime(#[from] ort::Error),
+
     /// Index operation failed
     #[error("Index error: {0}")]
     Index(String),

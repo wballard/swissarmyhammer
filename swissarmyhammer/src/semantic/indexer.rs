@@ -1,7 +1,7 @@
 //! File indexing logic for semantic search
 
 use crate::error::Result;
-use crate::semantic::{CodeParser, Embedding, EmbeddingService, VectorStorage};
+use crate::semantic::{CodeParser, Embedding, EmbeddingEngine, VectorStorage};
 use regex::Regex;
 use std::path::Path;
 use walkdir::WalkDir;
@@ -9,7 +9,7 @@ use walkdir::WalkDir;
 /// File indexer that processes source files for semantic search
 pub struct FileIndexer {
     parser: CodeParser,
-    embedding_service: EmbeddingService,
+    embedding_service: EmbeddingEngine,
     storage: VectorStorage,
 }
 
@@ -44,7 +44,7 @@ impl FileIndexer {
     /// A new `FileIndexer` ready to process source files
     pub fn new(
         parser: CodeParser,
-        embedding_service: EmbeddingService,
+        embedding_service: EmbeddingEngine,
         storage: VectorStorage,
     ) -> Self {
         Self {
@@ -94,7 +94,7 @@ impl FileIndexer {
     ///
     /// # Errors
     /// Returns error only if directory walking fails or database operations fail
-    pub fn index_files(
+    pub async fn index_files(
         &mut self,
         root_path: &Path,
         options: &IndexingOptions,
@@ -142,7 +142,7 @@ impl FileIndexer {
             }
 
             // Process the file
-            match self.index_single_file(path) {
+            match self.index_single_file(path).await {
                 Ok(chunk_count) => {
                     stats.processed_files += 1;
                     stats.total_chunks += chunk_count;
@@ -160,7 +160,7 @@ impl FileIndexer {
     /// Index a single file with performance metrics.
     ///
     /// Tracks timing for file reading, parsing, embedding generation, and storage operations.
-    fn index_single_file(&mut self, file_path: &Path) -> Result<usize> {
+    async fn index_single_file(&mut self, file_path: &Path) -> Result<usize> {
         let total_start = std::time::Instant::now();
 
         // Read file content
@@ -178,7 +178,7 @@ impl FileIndexer {
         // Generate embeddings for chunks
         let embed_start = std::time::Instant::now();
         let chunk_texts: Vec<&str> = chunks.iter().map(|c| c.content.as_str()).collect();
-        let embedding_vectors = self.embedding_service.embed_batch(&chunk_texts)?;
+        let embedding_vectors = self.embedding_service.embed_batch(&chunk_texts).await?;
         let embed_duration = embed_start.elapsed();
 
         // Create embedding objects
@@ -387,7 +387,7 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
-    fn create_test_indexer() -> Result<(FileIndexer, TempDir)> {
+    async fn create_test_indexer() -> Result<(FileIndexer, TempDir)> {
         let temp_dir = TempDir::new().map_err(crate::error::SwissArmyHammerError::Io)?;
         let db_name = format!("test_{}.db", std::process::id());
         let config = SemanticConfig {
@@ -403,25 +403,25 @@ mod tests {
             max_file_size_bytes: 10 * 1024 * 1024,
         };
         let parser = CodeParser::new(parser_config)?;
-        let embedding_service = EmbeddingService::new()?;
+        let embedding_service = EmbeddingEngine::new().await?;
         let storage = VectorStorage::new(config)?;
 
         let indexer = FileIndexer::new(parser, embedding_service, storage);
         Ok((indexer, temp_dir))
     }
 
-    #[test]
-    fn test_indexer_creation() {
-        let result = create_test_indexer();
+    #[tokio::test]
+    async fn test_indexer_creation() {
+        let result = create_test_indexer().await;
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_index_empty_directory() {
-        let (mut indexer, temp_dir) = create_test_indexer().unwrap();
+    #[tokio::test]
+    async fn test_index_empty_directory() {
+        let (mut indexer, temp_dir) = create_test_indexer().await.unwrap();
         let options = IndexingOptions::default();
 
-        let stats = indexer.index_files(temp_dir.path(), &options);
+        let stats = indexer.index_files(temp_dir.path(), &options).await;
         assert!(stats.is_ok());
 
         let stats = stats.unwrap();
@@ -430,16 +430,16 @@ mod tests {
         assert_eq!(stats.failed_files, 0);
     }
 
-    #[test]
-    fn test_index_single_rust_file() {
-        let (mut indexer, temp_dir) = create_test_indexer().unwrap();
+    #[tokio::test]
+    async fn test_index_single_rust_file() {
+        let (mut indexer, temp_dir) = create_test_indexer().await.unwrap();
 
         // Create a test Rust file
         let test_file = temp_dir.path().join("test.rs");
         fs::write(&test_file, "fn main() { println!(\"Hello, world!\"); }").unwrap();
 
         let options = IndexingOptions::default();
-        let stats = indexer.index_files(temp_dir.path(), &options);
+        let stats = indexer.index_files(temp_dir.path(), &options).await;
         assert!(stats.is_ok());
 
         let stats = stats.unwrap();
@@ -447,9 +447,9 @@ mod tests {
         assert_eq!(stats.total_chunks, 1);
     }
 
-    #[test]
-    fn test_glob_matching() {
-        let (indexer, _temp_dir) = create_test_indexer().unwrap();
+    #[tokio::test]
+    async fn test_glob_matching() {
+        let (indexer, _temp_dir) = create_test_indexer().await.unwrap();
 
         // Test basic wildcard matching
         assert!(indexer.matches_glob(Path::new("test.rs"), "*.rs"));
@@ -486,9 +486,9 @@ mod tests {
         assert!(!indexer.matches_glob(Path::new("testx.rs"), "test\\*.rs"));
     }
 
-    #[test]
-    fn test_index_with_glob_pattern() {
-        let (mut indexer, temp_dir) = create_test_indexer().unwrap();
+    #[tokio::test]
+    async fn test_index_with_glob_pattern() {
+        let (mut indexer, temp_dir) = create_test_indexer().await.unwrap();
 
         // Create test files
         fs::write(temp_dir.path().join("test.rs"), "fn main() {}").unwrap();
@@ -501,11 +501,11 @@ mod tests {
             ..Default::default()
         };
 
-        let stats = indexer.index_files(temp_dir.path(), &options).unwrap();
+        let stats = indexer.index_files(temp_dir.path(), &options).await.unwrap();
         assert_eq!(stats.processed_files, 1); // Only test.rs should be processed
 
         // Create a fresh indexer for the second test to avoid "already indexed" issues
-        let (mut indexer2, _) = create_test_indexer().unwrap();
+        let (mut indexer2, _) = create_test_indexer().await.unwrap();
 
         // Index only Python files (JS files are not supported by parser)
         let options = IndexingOptions {
@@ -513,7 +513,7 @@ mod tests {
             ..Default::default()
         };
 
-        let stats = indexer2.index_files(temp_dir.path(), &options).unwrap();
+        let stats = indexer2.index_files(temp_dir.path(), &options).await.unwrap();
         assert_eq!(stats.processed_files, 1); // Only test.py should be processed
     }
 }

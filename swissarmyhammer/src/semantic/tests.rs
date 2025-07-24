@@ -68,12 +68,17 @@ mod integration_tests {
     }
 
     #[test]
-    fn test_search_options_default() {
-        let options = SearchOptions::default();
-        assert_eq!(options.limit, 10);
-        assert_eq!(options.min_score, 0.0);
-        assert!(options.language_filter.is_none());
-        assert!(options.file_filter.is_none());
+    fn test_search_query_creation() {
+        let query = SearchQuery {
+            text: "function test".to_string(),
+            limit: 10,
+            similarity_threshold: 0.8,
+            language_filter: Some(Language::Rust),
+        };
+        assert_eq!(query.text, "function test");
+        assert_eq!(query.limit, 10);
+        assert_eq!(query.similarity_threshold, 0.8);
+        assert_eq!(query.language_filter, Some(Language::Rust));
     }
 
     #[test]

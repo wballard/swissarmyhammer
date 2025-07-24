@@ -128,6 +128,16 @@ pub struct SemanticConfig {
     pub chunk_overlap: usize,
     /// Minimum similarity threshold for search results
     pub similarity_threshold: f32,
+    /// Maximum excerpt length for search results
+    pub excerpt_length: usize,
+    /// Number of context lines to include in excerpts
+    pub context_lines: usize,
+    /// Similarity threshold for simple search methods
+    pub simple_search_threshold: f32,
+    /// Similarity threshold for code similarity search
+    pub code_similarity_threshold: f32,
+    /// Number of characters for content preview in explanations
+    pub content_preview_length: usize,
 }
 
 /// Status of a file's change detection
@@ -245,6 +255,11 @@ impl Default for SemanticConfig {
             chunk_size: 512,
             chunk_overlap: 64,
             similarity_threshold: 0.7,
+            excerpt_length: 200,
+            context_lines: 2,
+            simple_search_threshold: 0.5,
+            code_similarity_threshold: 0.7,
+            content_preview_length: 100,
         }
     }
 }
@@ -352,6 +367,11 @@ mod tests {
         assert_eq!(config.chunk_size, 512);
         assert_eq!(config.chunk_overlap, 64);
         assert_eq!(config.similarity_threshold, 0.7);
+        assert_eq!(config.excerpt_length, 200);
+        assert_eq!(config.context_lines, 2);
+        assert_eq!(config.simple_search_threshold, 0.5);
+        assert_eq!(config.code_similarity_threshold, 0.7);
+        assert_eq!(config.content_preview_length, 100);
     }
 
     #[test]
@@ -540,4 +560,49 @@ mod tests {
         assert_eq!(stats.chunk_count, 100);
         assert_eq!(stats.embedding_count, 100);
     }
+}
+
+/// Search statistics for debugging and monitoring
+#[derive(Debug, Clone)]
+pub struct SearchStats {
+    /// Total number of indexed files
+    pub total_files: usize,
+    /// Total number of code chunks
+    pub total_chunks: usize,
+    /// Total number of embeddings
+    pub total_embeddings: usize,
+    /// Information about the embedding model
+    pub model_info: crate::semantic::EmbeddingModelInfo,
+}
+
+/// Detailed explanation of search results for debugging
+#[derive(Debug)]
+pub struct SearchExplanation {
+    /// The original query text
+    pub query_text: String,
+    /// Norm of the query embedding vector
+    pub query_embedding_norm: f32,
+    /// Similarity threshold used
+    pub threshold: f32,
+    /// Total number of candidates evaluated
+    pub total_candidates: usize,
+    /// Detailed information about each result
+    pub results: Vec<ResultExplanation>,
+}
+
+/// Explanation of an individual search result
+#[derive(Debug)]
+pub struct ResultExplanation {
+    /// ID of the chunk
+    pub chunk_id: String,
+    /// Similarity score with the query
+    pub similarity_score: f32,
+    /// Programming language of the chunk
+    pub language: Language,
+    /// Type of the code chunk
+    pub chunk_type: ChunkType,
+    /// Preview of the chunk content (first 100 characters)
+    pub content_preview: String,
+    /// Whether this result was above the similarity threshold
+    pub above_threshold: bool,
 }

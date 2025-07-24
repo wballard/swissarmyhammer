@@ -25,6 +25,16 @@ pub enum SemanticError {
     #[error("Database error: {0}")]
     Database(String),
 
+    /// Vector storage operation failed
+    #[error("Vector storage operation failed: {operation}")]
+    VectorStorage {
+        /// The operation that failed
+        operation: String,
+        /// The underlying storage error
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
     /// Embedding generation failed
     #[error("Embedding error: {0}")]
     Embedding(String),
@@ -53,13 +63,35 @@ pub enum SemanticError {
     #[error("Index error: {0}")]
     Index(String),
 
-    /// Search operation failed
+    /// Search operation failed with context
+    #[error("Search failed during {operation}: {message}")]
+    SearchOperation {
+        /// The search operation that failed
+        operation: String,
+        /// Descriptive error message
+        message: String,
+        /// The underlying error if available
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
+
+    /// Generic search error (deprecated - use SearchOperation instead)
     #[error("Search error: {0}")]
     Search(String),
 }
 
 /// Result type for semantic search operations
 pub type Result<T> = std::result::Result<T, SemanticError>;
+
+impl From<crate::error::SwissArmyHammerError> for SemanticError {
+    fn from(err: crate::error::SwissArmyHammerError) -> Self {
+        SemanticError::SearchOperation {
+            operation: "conversion".to_string(),
+            message: format!("SwissArmyHammer error: {err}"),
+            source: Some(Box::new(err)),
+        }
+    }
+}
 
 pub use embedding::*;
 pub use indexer::*;

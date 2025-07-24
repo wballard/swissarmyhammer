@@ -179,7 +179,7 @@ pub mod prelude {
     // Semantic search types for convenient access
     pub use crate::semantic::{
         CodeChunk, EmbeddingEngine, FileIndexer, IndexingOptions, IndexingStats, Language,
-        SearchOptions, SemanticConfig, SemanticSearcher, SemanticUtils, VectorStorage,
+        SemanticConfig, SemanticSearcher, SemanticUtils, VectorStorage,
     };
 
     // Common utilities for easy access

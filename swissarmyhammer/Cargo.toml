@@ -47,8 +47,11 @@ tantivy = { workspace = true }
 fuzzy-matcher = { workspace = true }
 
 # Semantic search dependencies
-# TODO: Enable these dependencies when implementing actual functionality
-# mistralrs = { workspace = true }
+# mistralrs = { workspace = true } # Disabled - doesn't support embeddings
+ort = { workspace = true }
+tokenizers = { workspace = true }
+hf-hub = { workspace = true }
+ndarray = { workspace = true }
 # duckdb = { workspace = true }
 tree-sitter = { workspace = true }
 tree-sitter-rust = { workspace = true }
@@ -82,6 +85,9 @@ which = "8.0.0"
 
 # Syntax highlighting
 syntect = { workspace = true }
+
+# HTTP client for API calls
+reqwest = { workspace = true }
 
 
 [dev-dependencies]

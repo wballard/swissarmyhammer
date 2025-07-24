@@ -1,11 +1,11 @@
 //! Query and search logic for semantic search
 
 use crate::error::Result;
-use crate::semantic::{EmbeddingService, SemanticSearchResult, VectorStorage};
+use crate::semantic::{EmbeddingEngine, SemanticSearchResult, VectorStorage};
 
 /// Semantic searcher for querying indexed code
 pub struct SemanticSearcher {
-    embedding_service: EmbeddingService,
+    embedding_service: EmbeddingEngine,
     storage: VectorStorage,
 }
 
@@ -35,7 +35,7 @@ impl Default for SearchOptions {
 
 impl SemanticSearcher {
     /// Create a new semantic searcher
-    pub fn new(embedding_service: EmbeddingService, storage: VectorStorage) -> Self {
+    pub fn new(embedding_service: EmbeddingEngine, storage: VectorStorage) -> Self {
         Self {
             embedding_service,
             storage,
@@ -43,13 +43,13 @@ impl SemanticSearcher {
     }
 
     /// Search for code chunks semantically similar to the query
-    pub fn search(
+    pub async fn search(
         &self,
         query: &str,
         options: &SearchOptions,
     ) -> Result<Vec<SemanticSearchResult>> {
         // Generate embedding for the query
-        let query_embedding = self.embedding_service.embed_text(query)?;
+        let query_embedding = self.embedding_service.embed_text(query).await?;
 
         // Search for similar chunks in storage
         let mut results =
@@ -71,7 +71,7 @@ impl SemanticSearcher {
     }
 
     /// Search for code chunks with multiple query terms
-    pub fn search_multi(
+    pub async fn search_multi(
         &self,
         queries: &[&str],
         options: &SearchOptions,
@@ -79,7 +79,7 @@ impl SemanticSearcher {
         let mut all_results = Vec::new();
 
         for query in queries {
-            let results = self.search(query, options)?;
+            let results = self.search(query, options).await?;
             all_results.extend(results);
         }
 
@@ -141,9 +141,9 @@ mod tests {
     };
     use std::path::PathBuf;
 
-    fn create_test_searcher() -> Result<SemanticSearcher> {
+    async fn create_test_searcher() -> Result<SemanticSearcher> {
         let config = SemanticConfig::default();
-        let embedding_service = EmbeddingService::new()?;
+        let embedding_service = EmbeddingEngine::new().await?;
         let storage = VectorStorage::new(config)?;
         Ok(SemanticSearcher::new(embedding_service, storage))
     }
@@ -161,18 +161,18 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_searcher_creation() {
-        let searcher = create_test_searcher();
+    #[tokio::test]
+    async fn test_searcher_creation() {
+        let searcher = create_test_searcher().await;
         assert!(searcher.is_ok());
     }
 
-    #[test]
-    fn test_search_empty_results() {
-        let searcher = create_test_searcher().unwrap();
+    #[tokio::test]
+    async fn test_search_empty_results() {
+        let searcher = create_test_searcher().await.unwrap();
         let options = SearchOptions::default();
 
-        let results = searcher.search("fn main", &options);
+        let results = searcher.search("fn main", &options).await;
         assert!(results.is_ok());
         assert_eq!(results.unwrap().len(), 0);
     }
@@ -186,9 +186,9 @@ mod tests {
         assert!(options.file_filter.is_none());
     }
 
-    #[test]
-    fn test_apply_filters_min_score() {
-        let searcher = create_test_searcher().unwrap();
+    #[tokio::test]
+    async fn test_apply_filters_min_score() {
+        let searcher = create_test_searcher().await.unwrap();
         let chunk = create_test_chunk();
 
         let results = vec![
@@ -219,9 +219,9 @@ mod tests {
         assert_eq!(filtered[0].similarity_score, 0.8);
     }
 
-    #[test]
-    fn test_apply_filters_language() {
-        let searcher = create_test_searcher().unwrap();
+    #[tokio::test]
+    async fn test_apply_filters_language() {
+        let searcher = create_test_searcher().await.unwrap();
         let mut rust_chunk = create_test_chunk();
         rust_chunk.language = Language::Rust;
 

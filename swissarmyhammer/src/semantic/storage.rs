@@ -126,7 +126,7 @@ impl VectorStorage {
     }
 
     /// Search for similar chunks using vector similarity
-    pub fn search_similar(
+    pub fn similarity_search(
         &self,
         query_embedding: &[f32],
         limit: usize,
@@ -222,7 +222,13 @@ impl VectorStorage {
         // FROM code_chunks WHERE chunk_id = ?
 
         tracing::debug!("Getting chunk: {}", chunk_id);
-        Ok(None)
+
+        // Use in-memory storage (fallback until DuckDB is implemented)
+        let chunks = self.chunks.lock().map_err(|_| {
+            SwissArmyHammerError::Storage("Failed to acquire chunks lock".to_string())
+        })?;
+
+        Ok(chunks.get(chunk_id).cloned())
     }
 
     /// Get all chunks for a file
@@ -407,12 +413,21 @@ impl VectorStorage {
             ))
         })?;
 
-        let file_count = indexed_files.len();
+        let chunks = self.chunks.lock().map_err(|e| {
+            SwissArmyHammerError::Config(format!(
+                "Failed to lock chunks for statistics retrieval: {e}"
+            ))
+        })?;
 
-        // For now, assume each file has 1 chunk and 1 embedding
-        // In a real implementation, these would be separate collections
-        let chunk_count = file_count;
-        let embedding_count = file_count;
+        let embeddings = self.embeddings.lock().map_err(|e| {
+            SwissArmyHammerError::Config(format!(
+                "Failed to lock embeddings for statistics retrieval: {e}"
+            ))
+        })?;
+
+        let file_count = indexed_files.len();
+        let chunk_count = chunks.len();
+        let embedding_count = embeddings.len();
 
         Ok(IndexStats {
             file_count,
@@ -460,6 +475,11 @@ mod tests {
             chunk_size: 512,
             chunk_overlap: 64,
             similarity_threshold: 0.7,
+            excerpt_length: 200,
+            context_lines: 2,
+            simple_search_threshold: 0.5,
+            code_similarity_threshold: 0.7,
+            content_preview_length: 100,
         }
     }
 
@@ -542,7 +562,7 @@ mod tests {
         let config = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
         let query = vec![0.1; 384]; // 384-dimensional query vector
-        let results = storage.search_similar(&query, 10, 0.5);
+        let results = storage.similarity_search(&query, 10, 0.5);
         assert!(results.is_ok());
         assert_eq!(results.unwrap().len(), 0);
     }

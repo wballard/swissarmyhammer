@@ -128,6 +128,16 @@ pub struct SemanticConfig {
     pub chunk_overlap: usize,
     /// Minimum similarity threshold for search results
     pub similarity_threshold: f32,
+    /// Maximum excerpt length for search results
+    pub excerpt_length: usize,
+    /// Number of context lines to include in excerpts
+    pub context_lines: usize,
+    /// Similarity threshold for simple search methods
+    pub simple_search_threshold: f32,
+    /// Similarity threshold for code similarity search
+    pub code_similarity_threshold: f32,
+    /// Number of characters for content preview in explanations
+    pub content_preview_length: usize,
 }
 
 /// Status of a file's change detection
@@ -245,6 +255,11 @@ impl Default for SemanticConfig {
             chunk_size: 512,
             chunk_overlap: 64,
             similarity_threshold: 0.7,
+            excerpt_length: 200,
+            context_lines: 2,
+            simple_search_threshold: 0.5,
+            code_similarity_threshold: 0.7,
+            content_preview_length: 100,
         }
     }
 }
@@ -352,6 +367,11 @@ mod tests {
         assert_eq!(config.chunk_size, 512);
         assert_eq!(config.chunk_overlap, 64);
         assert_eq!(config.similarity_threshold, 0.7);
+        assert_eq!(config.excerpt_length, 200);
+        assert_eq!(config.context_lines, 2);
+        assert_eq!(config.simple_search_threshold, 0.5);
+        assert_eq!(config.code_similarity_threshold, 0.7);
+        assert_eq!(config.content_preview_length, 100);
     }
 
     #[test]

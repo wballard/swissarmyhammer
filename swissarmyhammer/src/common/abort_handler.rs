@@ -196,8 +196,7 @@ mod tests {
             let result = check_for_abort_error(error_output);
             assert!(
                 result.is_ok(),
-                "Should not trigger abort for: {}",
-                error_output
+                "Should not trigger abort for: {error_output}"
             );
         }
     }

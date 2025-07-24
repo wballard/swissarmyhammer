@@ -10,6 +10,7 @@ use tabled::{
 use crate::cli::{OutputFormat, PromptSource, PromptSourceArg, SearchCommands};
 use swissarmyhammer::{
     prelude::{AdvancedSearchEngine, AdvancedSearchOptions},
+    semantic::{FileIndexer, SearchQuery, SemanticConfig, SemanticSearcher, VectorStorage},
     PromptFilter, PromptLibrary, PromptResolver,
 };
 
@@ -266,32 +267,142 @@ pub fn generate_excerpt_with_long_text(content: &str, query: &str, max_length: u
 
 /// Run semantic search commands
 pub async fn run_search(subcommand: SearchCommands) -> i32 {
-    use crate::exit_codes::EXIT_SUCCESS;
+    use crate::exit_codes::{EXIT_ERROR, EXIT_SUCCESS};
 
     match subcommand {
-        SearchCommands::Index { glob, force } => {
-            println!("🚧 Semantic search indexing is not yet implemented.");
-            println!("Would index files matching: {glob}");
-            if force {
-                println!("Force re-indexing: enabled");
+        SearchCommands::Index { glob, force } => match run_semantic_index(&glob, force).await {
+            Ok(()) => EXIT_SUCCESS,
+            Err(e) => {
+                eprintln!("{}", format!("❌ Indexing failed: {e}").red());
+                EXIT_ERROR
             }
-            // TODO: Implement semantic search indexing
-            // For now, return success to allow CLI compilation
-            EXIT_SUCCESS
-        }
+        },
         SearchCommands::Query {
             query,
             limit,
             format: _format,
-        } => {
-            println!("🚧 Semantic search querying is not yet implemented.");
-            println!("Would search for: {query}");
-            println!("Result limit: {limit}");
-            // TODO: Implement semantic search querying
-            // For now, return success to allow CLI compilation
-            EXIT_SUCCESS
+        } => match run_semantic_query(&query, limit).await {
+            Ok(()) => EXIT_SUCCESS,
+            Err(e) => {
+                eprintln!("{}", format!("❌ Search failed: {e}").red());
+                EXIT_ERROR
+            }
+        },
+    }
+}
+
+/// Run semantic indexing for the given glob pattern
+async fn run_semantic_index(glob: &str, force: bool) -> Result<()> {
+    println!("{}", "🔍 Starting semantic search indexing...".cyan());
+    println!("Indexing files matching: {}", glob.bright_yellow());
+    if force {
+        println!("{}", "Force re-indexing: enabled".yellow());
+    }
+
+    // Initialize semantic search components
+    let config = SemanticConfig::default();
+    let storage = VectorStorage::new(config.clone())?;
+    storage.initialize()?;
+
+    let mut indexer = FileIndexer::new(storage).await?;
+
+    // Perform indexing
+    let start_time = std::time::Instant::now();
+    let report = indexer.index_glob(glob, force).await?;
+    let duration = start_time.elapsed();
+
+    // Display results
+    println!("\n{}", "✅ Indexing completed!".green().bold());
+    println!("Duration: {:.2}s", duration.as_secs_f32());
+    println!("{}", report.summary().bright_cyan());
+
+    if !report.errors.is_empty() {
+        println!(
+            "\n{}",
+            format!("⚠️  {} errors occurred:", report.errors.len()).yellow()
+        );
+        for (path, error) in &report.errors {
+            println!(
+                "  {} {}",
+                "•".red(),
+                format!("{}: {}", path.display(), error).dimmed()
+            );
         }
     }
+
+    Ok(())
+}
+
+/// Run semantic query search
+async fn run_semantic_query(query: &str, limit: usize) -> Result<()> {
+    println!("{}", "🔍 Starting semantic search query...".cyan());
+    println!("Searching for: {}", query.bright_yellow());
+    println!("Result limit: {}", limit.to_string().bright_yellow());
+
+    // Initialize semantic search components
+    let config = SemanticConfig::default();
+    let storage = VectorStorage::new(config.clone())?;
+    storage.initialize()?;
+
+    let searcher = SemanticSearcher::new(storage, config).await?;
+
+    // Perform search
+    let search_query = SearchQuery {
+        text: query.to_string(),
+        limit,
+        similarity_threshold: 0.5, // Use lower threshold for more results
+        language_filter: None,
+    };
+
+    let start_time = std::time::Instant::now();
+    let results = searcher.search(&search_query).await?;
+    let duration = start_time.elapsed();
+
+    // Display results
+    if results.is_empty() {
+        println!("\n{}", "No matches found.".yellow());
+    } else {
+        println!(
+            "\n{}",
+            format!("✅ Found {} results!", results.len())
+                .green()
+                .bold()
+        );
+        println!("Search duration: {:.2}s", duration.as_secs_f32());
+        println!();
+
+        for (i, result) in results.iter().enumerate() {
+            let score_color = if result.similarity_score > 0.8 {
+                "green"
+            } else if result.similarity_score > 0.6 {
+                "yellow"
+            } else {
+                "white"
+            };
+
+            println!(
+                "{}",
+                format!(
+                    "{}. {} (score: {:.3})",
+                    i + 1,
+                    result.chunk.file_path.display(),
+                    result.similarity_score
+                )
+                .color(score_color)
+            );
+
+            // Show excerpt with syntax highlighting context
+            let excerpt = result.excerpt.trim();
+            if !excerpt.is_empty() {
+                for line in excerpt.lines() {
+                    println!("   {}", line.dimmed());
+                }
+            }
+            println!();
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

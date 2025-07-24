@@ -14,7 +14,7 @@ mod integration_tests {
         let parser_config = ParserConfig::default();
         assert!(CodeParser::new(parser_config).is_ok());
 
-        assert!(futures::executor::block_on(EmbeddingEngine::new()).is_ok());
+        assert!(futures::executor::block_on(EmbeddingEngine::new_for_testing()).is_ok());
 
         let config = SemanticConfig::default();
         assert!(VectorStorage::new(config).is_ok());

@@ -38,6 +38,17 @@ pub struct VectorStorage {
     indexed_files: Mutex<HashMap<PathBuf, (ContentHash, IndexedFile)>>,
 }
 
+impl Clone for VectorStorage {
+    fn clone(&self) -> Self {
+        let indexed_files = self.indexed_files.lock().unwrap().clone();
+        Self {
+            db_path: self.db_path.clone(),
+            _config: self._config.clone(),
+            indexed_files: Mutex::new(indexed_files),
+        }
+    }
+}
+
 impl VectorStorage {
     /// Create a new vector storage instance
     pub fn new(config: SemanticConfig) -> Result<Self> {
@@ -74,6 +85,16 @@ impl VectorStorage {
         // VALUES (?, ?, ?, ?, ?, ?)
 
         tracing::debug!("Storing indexed file: {}", file.path.display());
+        
+        // For now, use in-memory storage
+        let mut indexed_files = self.indexed_files.lock().map_err(|e| {
+            SwissArmyHammerError::Config(format!(
+                "Failed to lock indexed_files for storage: {e}"
+            ))
+        })?;
+        
+        indexed_files.insert(file.path.clone(), (file.content_hash.clone(), file.clone()));
+        
         Ok(())
     }
 

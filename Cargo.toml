@@ -29,6 +29,7 @@ tantivy = "0.22"
 fuzzy-matcher = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 notify = "6"
+glob = "0.3"
 
 # Semantic Search Dependencies
 # mistralrs = { git = "https://github.com/EricLBuehler/mistral.rs.git" } # Disabled - doesn't support embeddings

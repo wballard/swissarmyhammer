@@ -35,6 +35,7 @@ liquid-core = { version = "0.26" }
 # File system
 walkdir = { workspace = true }
 notify = { workspace = true }
+glob = { workspace = true }
 
 # Data structures
 dashmap = { workspace = true }
@@ -88,6 +89,9 @@ syntect = { workspace = true }
 
 # HTTP client for API calls
 reqwest = { workspace = true }
+
+# Progress bars and user interface
+indicatif = { workspace = true }
 
 
 [dev-dependencies]

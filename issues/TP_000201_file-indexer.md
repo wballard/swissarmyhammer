@@ -388,3 +388,44 @@ impl FileIndexer {
 
 ## Next Steps
 After completion, proceed to TP_000202_semantic-searcher to implement the query/search functionality.
+
+## Proposed Solution
+
+After analyzing the current codebase, I found that most of the FileIndexer functionality is already implemented! The existing `semantic/indexer.rs` contains:
+
+✅ **Already Implemented:**
+- FileIndexer struct with storage, embedding_engine, parser, change_tracker
+- `new()` and `with_custom_embedding_engine()` constructors  
+- `index_glob()` method with glob pattern expansion
+- `expand_glob_pattern()` and `is_supported_file()` methods
+- Change detection via `filter_changed_files()` 
+- `index_files_with_report()` with progress bars
+- `index_single_file_with_report()` with comprehensive reporting
+- `create_file_metadata()` with proper IndexedFile creation
+- `index_files_in_batches()` for memory management
+- `incremental_index()` and `full_reindex()` convenience methods
+- IndexingReport and SingleFileReport structures with all required fields and methods
+- Comprehensive test coverage
+
+✅ **Supporting Components Available:**
+- FileHasher in utils.rs with hash_file() method
+- FileChangeTracker in utils.rs with check_files_for_changes() method  
+- VectorStorage with store_chunk(), store_embedding(), store_indexed_file() methods
+- EmbeddingEngine with embed_chunks_batch() method
+- CodeParser with parse_file() and detect_language() methods
+
+🔍 **Missing Components to Complete Issue:**
+1. Update constructor to match exact issue specification (async `new()` method)
+2. Add missing `embed_chunks_batch()` method to EmbeddingEngine
+3. Ensure SemanticError is properly aliased to Error  
+4. Add any missing storage methods (remove_file, etc.)
+5. Run tests to verify everything works correctly
+
+**Implementation Plan:**
+1. Check and update EmbeddingEngine to support `embed_chunks_batch()` method
+2. Ensure VectorStorage has all required methods (remove_file, etc.)
+3. Update constructor signatures to match issue specification exactly  
+4. Add comprehensive testing to verify the complete pipeline works
+5. Test with real files and glob patterns to ensure integration works
+
+The architecture is sound and most code is implemented correctly following the coding standards. Main focus will be on ensuring API compatibility and testing the complete pipeline.

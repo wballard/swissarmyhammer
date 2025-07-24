@@ -312,7 +312,7 @@ Basic usage:
   swissarmyhammer search query <query>          # Query indexed files semantically
 
 Indexing:
-  --glob \"**/*.rs\"                            # Glob pattern for files to index
+  <glob>                                        # Glob pattern for files to index (required)
   --force                                       # Force re-indexing of all files
 
 Querying:
@@ -817,7 +817,6 @@ pub enum SearchCommands {
     /// Index files for semantic search
     Index {
         /// Glob pattern for files to index
-        #[arg(short, long)]
         glob: String,
         /// Force re-indexing of all files
         #[arg(short, long)]

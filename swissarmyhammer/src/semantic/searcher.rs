@@ -576,7 +576,7 @@ impl SemanticSearcher {
         let excerpt = &content[start..end];
 
         // Clean up excerpt to avoid breaking in middle of words
-        self.clean_excerpt(excerpt, start > 0, end < content.len())
+        self.truncate_with_ellipsis(excerpt, max_length, start > 0, end < content.len())
     }
 
     fn create_excerpt_from_start(
@@ -633,20 +633,6 @@ impl SemanticSearcher {
         };
 
         if add_prefix_ellipsis {
-            result = format!("...{result}");
-        }
-
-        result
-    }
-
-    fn clean_excerpt(&self, excerpt: &str, has_prefix: bool, has_suffix: bool) -> String {
-        let trimmed = excerpt.trim();
-        let mut result = trimmed.to_string();
-
-        if has_suffix {
-            result = format!("{result}...");
-        }
-        if has_prefix {
             result = format!("...{result}");
         }
 
@@ -942,18 +928,6 @@ mod tests {
     }
 
     #[test]
-    fn test_clean_excerpt() {
-        let searcher = futures::executor::block_on(create_test_searcher()).unwrap();
-        let excerpt = "  some content  ";
-
-        let cleaned = searcher.clean_excerpt(excerpt, true, true);
-        assert_eq!(cleaned, "...some content...");
-
-        let cleaned = searcher.clean_excerpt(excerpt, false, false);
-        assert_eq!(cleaned, "some content");
-    }
-
-    #[test]
     fn test_truncate_with_ellipsis() {
         let searcher = futures::executor::block_on(create_test_searcher()).unwrap();
 
@@ -1024,11 +998,13 @@ mod tests {
 
     /// Helper to create a searcher with actual test data
     async fn create_test_searcher_with_data() -> Result<SemanticSearcher> {
-        let mut config = SemanticConfig::default();
         // Lower thresholds for better test results with mock embeddings
-        config.similarity_threshold = 0.3;
-        config.simple_search_threshold = 0.3;
-        config.code_similarity_threshold = 0.3;
+        let config = SemanticConfig {
+            similarity_threshold: 0.3,
+            simple_search_threshold: 0.3,
+            code_similarity_threshold: 0.3,
+            ..Default::default()
+        };
         let embedding_engine = EmbeddingEngine::new_for_testing().await?;
         let storage = VectorStorage::new(config.clone()).map_err(|e| {
             crate::semantic::SemanticError::SearchOperation {

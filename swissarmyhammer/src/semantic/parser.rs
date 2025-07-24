@@ -10,6 +10,15 @@ use tree_sitter::{
     Language as TreeSitterLanguage, Node, Parser, Query, QueryCursor, StreamingIterator,
 };
 
+/// Default minimum chunk size in characters
+pub const DEFAULT_MIN_CHUNK_SIZE: usize = 50;
+/// Default maximum chunk size in characters  
+pub const DEFAULT_MAX_CHUNK_SIZE: usize = 2000;
+/// Default maximum number of chunks to extract per file
+pub const DEFAULT_MAX_CHUNKS_PER_FILE: usize = 100;
+/// Default maximum file size in bytes to prevent OOM on massive files (10MB)
+pub const DEFAULT_MAX_FILE_SIZE_BYTES: usize = 10 * 1024 * 1024;
+
 /// Definition of language support for TreeSitter parsing
 #[derive(Debug, Clone)]
 pub struct LanguageDefinition {
@@ -346,10 +355,14 @@ impl ParserConfig {
 
 impl Default for ParserConfig {
     fn default() -> Self {
-        // Use new() with default values, but since we know these are valid,
-        // we can unwrap safely
-        Self::new(50, 2000, 100, 10 * 1024 * 1024)
-            .expect("Default ParserConfig values should always be valid")
+        // Use new() with default constants, which are guaranteed to be valid
+        Self::new(
+            DEFAULT_MIN_CHUNK_SIZE,
+            DEFAULT_MAX_CHUNK_SIZE,
+            DEFAULT_MAX_CHUNKS_PER_FILE,
+            DEFAULT_MAX_FILE_SIZE_BYTES,
+        )
+        .expect("Default ParserConfig values should always be valid")
     }
 }
 

@@ -22,16 +22,14 @@ use std::sync::{Arc, Mutex};
 
 /// Vector storage for code chunks and embeddings
 ///
-/// **TEMPORARY IMPLEMENTATION**: This struct currently uses in-memory fallback storage
-/// while DuckDB integration is being developed. Most methods contain TODO comments
-/// for the actual DuckDB implementation. Only basic file metadata operations are
-/// functional using the `indexed_files` HashMap.
+/// **CURRENT STATUS**: Using in-memory HashMap fallback
+/// **ROADMAP**: Full DuckDB implementation planned
+/// **LIMITATIONS**: No persistence, limited search capabilities
 ///
-/// Future versions will implement full DuckDB persistence for:
-/// - Code chunk storage
-/// - Vector embeddings
-/// - Similarity search operations
-/// - Proper database schema management
+/// This implementation provides basic storage operations using in-memory data structures
+/// while DuckDB integration is being developed. Most methods contain TODO comments marking
+/// where DuckDB operations will be implemented. Only file metadata tracking and basic
+/// similarity search are fully functional.
 pub struct VectorStorage {
     db_path: PathBuf,
     _config: SemanticConfig,

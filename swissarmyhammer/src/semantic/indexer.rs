@@ -168,7 +168,7 @@ impl FileIndexer {
         let change_report = self
             .change_tracker
             .check_files_for_changes(paths)
-            .map_err(|e| SemanticError::Index(e.to_string()))?;
+            .map_err(|e| SemanticError::Index(format!("Failed to check files for changes: {e}")))?;
 
         // Get files that need indexing (changed + new files)
         let files_needing_indexing: Vec<PathBuf> =
@@ -236,18 +236,70 @@ impl FileIndexer {
         file_path: &Path,
         force_reindex: bool,
     ) -> Result<SingleFileReport> {
+        let start_time = std::time::Instant::now();
         let mut report = SingleFileReport::new(file_path.to_path_buf());
 
         // Remove existing data if force re-indexing
-        if force_reindex {
-            self.storage
-                .remove_file(file_path)
-                .map_err(|e| SemanticError::Index(e.to_string()))?;
+        let cleanup_duration = if force_reindex {
+            let cleanup_start = std::time::Instant::now();
+            self.storage.remove_file(file_path).map_err(|e| {
+                SemanticError::Index(format!(
+                    "Failed to remove existing data for file {}: {e}",
+                    file_path.display()
+                ))
+            })?;
+            let duration = cleanup_start.elapsed();
+            tracing::debug!(
+                "Cleanup time for {}: {:.2}ms",
+                file_path.display(),
+                duration.as_secs_f64() * 1000.0
+            );
+            duration
+        } else {
+            std::time::Duration::from_secs(0)
+        };
+
+        // Check file size before reading to prevent OOM on large files
+        let metadata_start = std::time::Instant::now();
+        let file_metadata = std::fs::metadata(file_path).map_err(|e| {
+            SemanticError::FileSystem(std::io::Error::new(
+                e.kind(),
+                format!(
+                    "Failed to read metadata for file {}: {e}",
+                    file_path.display()
+                ),
+            ))
+        })?;
+        let file_size = file_metadata.len();
+        let metadata_duration = metadata_start.elapsed();
+
+        // Import the constant from parser for consistency
+        use crate::semantic::parser::DEFAULT_MAX_FILE_SIZE_BYTES;
+        if file_size > DEFAULT_MAX_FILE_SIZE_BYTES as u64 {
+            return Err(SemanticError::Index(format!(
+                "File {} is too large ({} bytes > {} bytes limit). Skipping to prevent OOM.",
+                file_path.display(),
+                file_size,
+                DEFAULT_MAX_FILE_SIZE_BYTES
+            )));
         }
 
-        // Parse file into chunks
-        let content = std::fs::read_to_string(file_path).map_err(SemanticError::FileSystem)?;
+        // Parse file into chunks with timing
+        let read_start = std::time::Instant::now();
+        let content = std::fs::read_to_string(file_path).map_err(|e| {
+            SemanticError::FileSystem(std::io::Error::new(
+                e.kind(),
+                format!(
+                    "Failed to read content from file {}: {e}",
+                    file_path.display()
+                ),
+            ))
+        })?;
+        let read_duration = read_start.elapsed();
+
+        let parse_start = std::time::Instant::now();
         let chunks = self.parser.parse_file(file_path, &content)?;
+        let parse_duration = parse_start.elapsed();
         report.chunks_parsed = chunks.len();
 
         if chunks.is_empty() {
@@ -256,28 +308,78 @@ impl FileIndexer {
             return Ok(report);
         }
 
-        // Generate embeddings for chunks
+        // Generate embeddings for chunks with timing
+        let embedding_start = std::time::Instant::now();
         let embeddings = self.embedding_engine.embed_chunks_batch(&chunks).await?;
+        let embedding_duration = embedding_start.elapsed();
         report.embeddings_generated = embeddings.len();
 
-        // Store chunks and embeddings
+        // Store chunks and embeddings with timing
+        let storage_start = std::time::Instant::now();
         for chunk in &chunks {
-            self.storage
-                .store_chunk(chunk)
-                .map_err(|e| SemanticError::Index(e.to_string()))?;
+            self.storage.store_chunk(chunk).map_err(|e| {
+                SemanticError::Index(format!(
+                    "Failed to store chunk {} from file {}: {e}",
+                    chunk.id,
+                    file_path.display()
+                ))
+            })?;
         }
 
         for embedding in &embeddings {
-            self.storage
-                .store_embedding(embedding)
-                .map_err(|e| SemanticError::Index(e.to_string()))?;
+            self.storage.store_embedding(embedding).map_err(|e| {
+                SemanticError::Index(format!(
+                    "Failed to store embedding for chunk {} from file {}: {e}",
+                    embedding.chunk_id,
+                    file_path.display()
+                ))
+            })?;
         }
 
         // Store file metadata
         let file_metadata = self.create_file_metadata(file_path, &chunks)?;
         self.storage
             .store_indexed_file(&file_metadata)
-            .map_err(|e| SemanticError::Index(e.to_string()))?;
+            .map_err(|e| {
+                SemanticError::Index(format!(
+                    "Failed to store file metadata for {}: {e}",
+                    file_path.display()
+                ))
+            })?;
+        let storage_duration = storage_start.elapsed();
+
+        let total_duration = start_time.elapsed();
+
+        // Calculate throughput metrics
+        let bytes_per_sec = if total_duration.as_secs_f64() > 0.0 {
+            file_size as f64 / total_duration.as_secs_f64()
+        } else {
+            file_size as f64
+        };
+
+        let chunks_per_sec = if total_duration.as_secs_f64() > 0.0 {
+            chunks.len() as f64 / total_duration.as_secs_f64()
+        } else {
+            chunks.len() as f64
+        };
+
+        // Log detailed performance metrics
+        tracing::info!(
+            "File indexing metrics: {} | {} bytes | {} chunks | {} embeddings | cleanup: {:.2}ms | metadata: {:.2}ms | read: {:.2}ms | parse: {:.2}ms | embed: {:.2}ms | store: {:.2}ms | total: {:.2}ms | {:.0} bytes/sec | {:.1} chunks/sec",
+            file_path.display(),
+            file_size,
+            chunks.len(),
+            embeddings.len(),
+            cleanup_duration.as_secs_f64() * 1000.0,
+            metadata_duration.as_secs_f64() * 1000.0,
+            read_duration.as_secs_f64() * 1000.0,
+            parse_duration.as_secs_f64() * 1000.0,
+            embedding_duration.as_secs_f64() * 1000.0,
+            storage_duration.as_secs_f64() * 1000.0,
+            total_duration.as_secs_f64() * 1000.0,
+            bytes_per_sec,
+            chunks_per_sec
+        );
 
         report.success = true;
         Ok(report)

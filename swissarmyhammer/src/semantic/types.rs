@@ -251,7 +251,33 @@ impl Default for SemanticConfig {
     fn default() -> Self {
         // Use absolute path in user's home directory to ensure consistency
         let database_path = if let Some(home_dir) = dirs::home_dir() {
-            home_dir.join(".swissarmyhammer").join("semantic.db")
+            let swissarmyhammer_dir = home_dir.join(".swissarmyhammer");
+
+            // Validate that the home directory path is writable
+            if let Ok(metadata) = std::fs::metadata(&home_dir) {
+                if metadata.permissions().readonly() {
+                    // Home directory is read-only, fallback to current directory
+                    tracing::warn!(
+                        "Home directory is read-only, using current directory for database"
+                    );
+                    PathBuf::from(".swissarmyhammer/semantic.db")
+                } else {
+                    // Try to create the .swissarmyhammer directory to test writability
+                    match std::fs::create_dir_all(&swissarmyhammer_dir) {
+                        Ok(_) => swissarmyhammer_dir.join("semantic.db"),
+                        Err(_) => {
+                            tracing::warn!("Cannot create .swissarmyhammer directory in home, using current directory");
+                            PathBuf::from(".swissarmyhammer/semantic.db")
+                        }
+                    }
+                }
+            } else {
+                // Cannot get metadata for home directory, use fallback
+                tracing::warn!(
+                    "Cannot access home directory metadata, using current directory for database"
+                );
+                PathBuf::from(".swissarmyhammer/semantic.db")
+            }
         } else {
             // Fallback to current directory if home directory is not available
             PathBuf::from(".swissarmyhammer/semantic.db")

@@ -13,6 +13,7 @@ use crate::semantic::{
     SemanticConfig,
 };
 use duckdb::{Connection, ToSql};
+use serde_json;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -38,6 +39,48 @@ impl Clone for VectorStorage {
 }
 
 impl VectorStorage {
+    // SQL schema constants
+    const CREATE_INDEXED_FILES_TABLE: &'static str = r#"
+        CREATE TABLE IF NOT EXISTS indexed_files (
+            file_id TEXT PRIMARY KEY,
+            path TEXT NOT NULL UNIQUE,
+            language TEXT NOT NULL,
+            content_hash TEXT NOT NULL,
+            chunk_count INTEGER NOT NULL,
+            indexed_at TIMESTAMP NOT NULL
+        )
+    "#;
+
+    const CREATE_CODE_CHUNKS_TABLE: &'static str = r#"
+        CREATE TABLE IF NOT EXISTS code_chunks (
+            chunk_id TEXT PRIMARY KEY,
+            file_path TEXT NOT NULL,
+            language TEXT NOT NULL,
+            content TEXT NOT NULL,
+            start_line INTEGER NOT NULL,
+            end_line INTEGER NOT NULL,
+            chunk_type TEXT NOT NULL,
+            content_hash TEXT NOT NULL
+        )
+    "#;
+
+    const CREATE_EMBEDDINGS_TABLE: &'static str = r#"
+        CREATE TABLE IF NOT EXISTS embeddings (
+            chunk_id TEXT PRIMARY KEY,
+            vector TEXT NOT NULL,
+            FOREIGN KEY (chunk_id) REFERENCES code_chunks(chunk_id)
+        )
+    "#;
+
+    const CREATE_FILE_PATH_INDEX: &'static str =
+        "CREATE INDEX IF NOT EXISTS idx_chunks_file_path ON code_chunks(file_path)";
+
+    const CREATE_LANGUAGE_INDEX: &'static str =
+        "CREATE INDEX IF NOT EXISTS idx_chunks_language ON code_chunks(language)";
+
+    const CREATE_PATH_INDEX: &'static str =
+        "CREATE INDEX IF NOT EXISTS idx_files_path ON indexed_files(path)";
+
     /// Create a new vector storage instance
     pub fn new(config: SemanticConfig) -> Result<Self> {
         let db_path = config.database_path.clone();
@@ -71,80 +114,36 @@ impl VectorStorage {
         })?;
 
         // Create indexed_files table
-        conn.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS indexed_files (
-                file_id TEXT PRIMARY KEY,
-                path TEXT NOT NULL UNIQUE,
-                language TEXT NOT NULL,
-                content_hash TEXT NOT NULL,
-                chunk_count INTEGER NOT NULL,
-                indexed_at TIMESTAMP NOT NULL
-            )
-            "#,
-            [],
-        )
-        .map_err(|e| {
-            SwissArmyHammerError::Storage(format!("Failed to create indexed_files table: {e}"))
-        })?;
+        conn.execute(Self::CREATE_INDEXED_FILES_TABLE, [])
+            .map_err(|e| {
+                SwissArmyHammerError::Storage(format!("Failed to create indexed_files table: {e}"))
+            })?;
 
         // Create code_chunks table
-        conn.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS code_chunks (
-                chunk_id TEXT PRIMARY KEY,
-                file_path TEXT NOT NULL,
-                language TEXT NOT NULL,
-                content TEXT NOT NULL,
-                start_line INTEGER NOT NULL,
-                end_line INTEGER NOT NULL,
-                chunk_type TEXT NOT NULL,
-                content_hash TEXT NOT NULL
-            )
-            "#,
-            [],
-        )
-        .map_err(|e| {
-            SwissArmyHammerError::Storage(format!("Failed to create code_chunks table: {e}"))
-        })?;
+        conn.execute(Self::CREATE_CODE_CHUNKS_TABLE, [])
+            .map_err(|e| {
+                SwissArmyHammerError::Storage(format!("Failed to create code_chunks table: {e}"))
+            })?;
 
         // Create embeddings table
-        conn.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS embeddings (
-                chunk_id TEXT PRIMARY KEY,
-                vector TEXT NOT NULL,
-                FOREIGN KEY (chunk_id) REFERENCES code_chunks(chunk_id)
-            )
-            "#,
-            [],
-        )
-        .map_err(|e| {
-            SwissArmyHammerError::Storage(format!("Failed to create embeddings table: {e}"))
-        })?;
+        conn.execute(Self::CREATE_EMBEDDINGS_TABLE, [])
+            .map_err(|e| {
+                SwissArmyHammerError::Storage(format!("Failed to create embeddings table: {e}"))
+            })?;
 
         // Create indexes for better performance
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_chunks_file_path ON code_chunks(file_path)",
-            [],
-        )
-        .map_err(|e| {
-            SwissArmyHammerError::Storage(format!("Failed to create file_path index: {e}"))
-        })?;
+        conn.execute(Self::CREATE_FILE_PATH_INDEX, [])
+            .map_err(|e| {
+                SwissArmyHammerError::Storage(format!("Failed to create file_path index: {e}"))
+            })?;
 
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_chunks_language ON code_chunks(language)",
-            [],
-        )
-        .map_err(|e| {
+        conn.execute(Self::CREATE_LANGUAGE_INDEX, []).map_err(|e| {
             SwissArmyHammerError::Storage(format!("Failed to create language index: {e}"))
         })?;
 
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_files_path ON indexed_files(path)",
-            [],
-        )
-        .map_err(|e| SwissArmyHammerError::Storage(format!("Failed to create path index: {e}")))?;
+        conn.execute(Self::CREATE_PATH_INDEX, []).map_err(|e| {
+            SwissArmyHammerError::Storage(format!("Failed to create path index: {e}"))
+        })?;
 
         tracing::info!("Database schema initialized successfully");
         Ok(())
@@ -223,13 +222,10 @@ impl VectorStorage {
             SwissArmyHammerError::Storage(format!("Failed to acquire connection lock: {e}"))
         })?;
 
-        // Convert vector to a comma-separated string for storage
-        let vector_str = embedding
-            .vector
-            .iter()
-            .map(|v| v.to_string())
-            .collect::<Vec<_>>()
-            .join(",");
+        // Convert vector to JSON for storage
+        let vector_str = serde_json::to_string(&embedding.vector).map_err(|e| {
+            SwissArmyHammerError::Storage(format!("Failed to serialize vector: {e}"))
+        })?;
 
         conn.execute(
             "INSERT OR REPLACE INTO embeddings (chunk_id, vector) VALUES (?, ?)",
@@ -287,11 +283,9 @@ impl VectorStorage {
                 let chunk_type_str: String = row.get(7)?;
                 let content_hash: String = row.get(8)?;
 
-                // Parse vector from comma-separated string
-                let vector: std::result::Result<Vec<f32>, _> = vector_str
-                    .split(',')
-                    .map(|s| s.trim().parse::<f32>())
-                    .collect();
+                // Parse vector from JSON
+                let vector: std::result::Result<Vec<f32>, _> = serde_json::from_str(&vector_str)
+                    .map_err(|e| format!("Failed to deserialize vector: {e}"));
 
                 let vector = vector.map_err(|e| {
                     duckdb::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
@@ -301,22 +295,8 @@ impl VectorStorage {
                 })?;
 
                 // Parse language and chunk type
-                let language = match language_str.as_str() {
-                    "Rust" => Language::Rust,
-                    "Python" => Language::Python,
-                    "TypeScript" => Language::TypeScript,
-                    "JavaScript" => Language::JavaScript,
-                    "Dart" => Language::Dart,
-                    _ => Language::Unknown,
-                };
-
-                let chunk_type = match chunk_type_str.as_str() {
-                    "Function" => crate::semantic::types::ChunkType::Function,
-                    "Class" => crate::semantic::types::ChunkType::Class,
-                    "Module" => crate::semantic::types::ChunkType::Module,
-                    "Import" => crate::semantic::types::ChunkType::Import,
-                    _ => crate::semantic::types::ChunkType::PlainText,
-                };
+                let language = Self::parse_language(&language_str);
+                let chunk_type = Self::parse_chunk_type(&chunk_type_str);
 
                 Ok((
                     chunk_id,
@@ -419,11 +399,9 @@ impl VectorStorage {
                 let chunk_id: String = row.get(0)?;
                 let vector_str: String = row.get(1)?;
 
-                // Parse vector from comma-separated string
-                let vector: std::result::Result<Vec<f32>, _> = vector_str
-                    .split(',')
-                    .map(|s| s.trim().parse::<f32>())
-                    .collect();
+                // Parse vector from JSON
+                let vector: std::result::Result<Vec<f32>, _> = serde_json::from_str(&vector_str)
+                    .map_err(|e| format!("Failed to deserialize vector: {e}"));
 
                 let vector = vector.map_err(|e| {
                     duckdb::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
@@ -489,22 +467,8 @@ impl VectorStorage {
                 let content_hash: String = row.get(7)?;
 
                 // Parse language and chunk type
-                let language = match language_str.as_str() {
-                    "Rust" => Language::Rust,
-                    "Python" => Language::Python,
-                    "TypeScript" => Language::TypeScript,
-                    "JavaScript" => Language::JavaScript,
-                    "Dart" => Language::Dart,
-                    _ => Language::Unknown,
-                };
-
-                let chunk_type = match chunk_type_str.as_str() {
-                    "Function" => crate::semantic::types::ChunkType::Function,
-                    "Class" => crate::semantic::types::ChunkType::Class,
-                    "Module" => crate::semantic::types::ChunkType::Module,
-                    "Import" => crate::semantic::types::ChunkType::Import,
-                    _ => crate::semantic::types::ChunkType::PlainText,
-                };
+                let language = Self::parse_language(&language_str);
+                let chunk_type = Self::parse_chunk_type(&chunk_type_str);
 
                 Ok(CodeChunk {
                     id: chunk_id,
@@ -555,22 +519,8 @@ impl VectorStorage {
                 let content_hash: String = row.get(7)?;
 
                 // Parse language and chunk type
-                let language = match language_str.as_str() {
-                    "Rust" => Language::Rust,
-                    "Python" => Language::Python,
-                    "TypeScript" => Language::TypeScript,
-                    "JavaScript" => Language::JavaScript,
-                    "Dart" => Language::Dart,
-                    _ => Language::Unknown,
-                };
-
-                let chunk_type = match chunk_type_str.as_str() {
-                    "Function" => crate::semantic::types::ChunkType::Function,
-                    "Class" => crate::semantic::types::ChunkType::Class,
-                    "Module" => crate::semantic::types::ChunkType::Module,
-                    "Import" => crate::semantic::types::ChunkType::Import,
-                    _ => crate::semantic::types::ChunkType::PlainText,
-                };
+                let language = Self::parse_language(&language_str);
+                let chunk_type = Self::parse_chunk_type(&chunk_type_str);
 
                 Ok((
                     chunk_id.clone(),
@@ -628,22 +578,8 @@ impl VectorStorage {
                 let content_hash: String = row.get(7)?;
 
                 // Parse language and chunk type
-                let language = match language_str.as_str() {
-                    "Rust" => Language::Rust,
-                    "Python" => Language::Python,
-                    "TypeScript" => Language::TypeScript,
-                    "JavaScript" => Language::JavaScript,
-                    "Dart" => Language::Dart,
-                    _ => Language::Unknown,
-                };
-
-                let chunk_type = match chunk_type_str.as_str() {
-                    "Function" => crate::semantic::types::ChunkType::Function,
-                    "Class" => crate::semantic::types::ChunkType::Class,
-                    "Module" => crate::semantic::types::ChunkType::Module,
-                    "Import" => crate::semantic::types::ChunkType::Import,
-                    _ => crate::semantic::types::ChunkType::PlainText,
-                };
+                let language = Self::parse_language(&language_str);
+                let chunk_type = Self::parse_chunk_type(&chunk_type_str);
 
                 Ok(CodeChunk {
                     id: chunk_id,
@@ -891,6 +827,173 @@ impl VectorStorage {
     pub fn store_indexed_file_internal(&self, file: &IndexedFile) -> Result<()> {
         // This is the same as store_indexed_file, so just call that method
         self.store_indexed_file(file)
+    }
+
+    /// Store multiple chunks and embeddings in a single transaction
+    pub fn store_chunks_and_embeddings_transaction(
+        &self,
+        chunks: &[CodeChunk],
+        embeddings: &[Embedding],
+    ) -> Result<()> {
+        tracing::debug!(
+            "Storing {} chunks and {} embeddings in transaction",
+            chunks.len(),
+            embeddings.len()
+        );
+
+        let conn = self.connection.lock().map_err(|e| {
+            SwissArmyHammerError::Storage(format!("Failed to acquire connection lock: {e}"))
+        })?;
+
+        // Begin transaction
+        conn.execute("BEGIN TRANSACTION", []).map_err(|e| {
+            SwissArmyHammerError::Storage(format!("Failed to begin transaction: {e}"))
+        })?;
+
+        // Store chunks
+        for chunk in chunks {
+            if let Err(e) = conn.execute(
+                r#"
+                INSERT OR REPLACE INTO code_chunks 
+                (chunk_id, file_path, language, content, start_line, end_line, chunk_type, content_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                "#,
+                [
+                    &chunk.id as &dyn ToSql,
+                    &chunk.file_path.to_string_lossy(),
+                    &format!("{:?}", chunk.language),
+                    &chunk.content,
+                    &chunk.start_line as &dyn ToSql,
+                    &chunk.end_line as &dyn ToSql,
+                    &format!("{:?}", chunk.chunk_type),
+                    &chunk.content_hash.0,
+                ],
+            ) {
+                // Rollback on error
+                let _ = conn.execute("ROLLBACK", []);
+                return Err(SwissArmyHammerError::Storage(format!(
+                    "Failed to store chunk in transaction: {e}"
+                )));
+            }
+        }
+
+        // Store embeddings
+        for embedding in embeddings {
+            let vector_str = serde_json::to_string(&embedding.vector).map_err(|e| {
+                // Rollback on error
+                let _ = conn.execute("ROLLBACK", []);
+                SwissArmyHammerError::Storage(format!("Failed to serialize vector: {e}"))
+            })?;
+
+            if let Err(e) = conn.execute(
+                "INSERT OR REPLACE INTO embeddings (chunk_id, vector) VALUES (?, ?)",
+                [&embedding.chunk_id as &dyn ToSql, &vector_str],
+            ) {
+                // Rollback on error
+                let _ = conn.execute("ROLLBACK", []);
+                return Err(SwissArmyHammerError::Storage(format!(
+                    "Failed to store embedding in transaction: {e}"
+                )));
+            }
+        }
+
+        // Commit transaction
+        conn.execute("COMMIT", []).map_err(|e| {
+            // Try to rollback on commit failure
+            let _ = conn.execute("ROLLBACK", []);
+            SwissArmyHammerError::Storage(format!("Failed to commit transaction: {e}"))
+        })?;
+
+        tracing::debug!(
+            "Successfully stored {} chunks and {} embeddings in transaction",
+            chunks.len(),
+            embeddings.len()
+        );
+        Ok(())
+    }
+
+    /// Remove file data in a transaction
+    pub fn remove_file_transaction(&self, file_path: &Path) -> Result<()> {
+        tracing::debug!("Removing file in transaction: {}", file_path.display());
+
+        let conn = self.connection.lock().map_err(|e| {
+            SwissArmyHammerError::Storage(format!("Failed to acquire connection lock: {e}"))
+        })?;
+
+        let file_path_str = file_path.to_string_lossy();
+
+        // Begin transaction
+        conn.execute("BEGIN TRANSACTION", []).map_err(|e| {
+            SwissArmyHammerError::Storage(format!("Failed to begin transaction: {e}"))
+        })?;
+
+        // Remove embeddings for chunks in this file
+        if let Err(e) = conn.execute(
+            "DELETE FROM embeddings WHERE chunk_id IN (SELECT chunk_id FROM code_chunks WHERE file_path = ?)",
+            [&file_path_str as &dyn ToSql],
+        ) {
+            let _ = conn.execute("ROLLBACK", []);
+            return Err(SwissArmyHammerError::Storage(format!(
+                "Failed to remove embeddings for file in transaction: {e}"
+            )));
+        }
+
+        // Remove chunks for this file
+        if let Err(e) = conn.execute(
+            "DELETE FROM code_chunks WHERE file_path = ?",
+            [&file_path_str as &dyn ToSql],
+        ) {
+            let _ = conn.execute("ROLLBACK", []);
+            return Err(SwissArmyHammerError::Storage(format!(
+                "Failed to remove chunks for file in transaction: {e}"
+            )));
+        }
+
+        // Remove indexed file metadata
+        if let Err(e) = conn.execute(
+            "DELETE FROM indexed_files WHERE path = ?",
+            [&file_path_str as &dyn ToSql],
+        ) {
+            let _ = conn.execute("ROLLBACK", []);
+            return Err(SwissArmyHammerError::Storage(format!(
+                "Failed to remove indexed file metadata in transaction: {e}"
+            )));
+        }
+
+        // Commit transaction
+        conn.execute("COMMIT", []).map_err(|e| {
+            let _ = conn.execute("ROLLBACK", []);
+            SwissArmyHammerError::Storage(format!("Failed to commit transaction: {e}"))
+        })?;
+
+        tracing::debug!(
+            "Successfully removed file in transaction: {}",
+            file_path.display()
+        );
+        Ok(())
+    }
+
+    /// Parse Language enum from string representation
+    fn parse_language(s: &str) -> Language {
+        match s {
+            "Rust" => Language::Rust,
+            "Python" => Language::Python,
+            "TypeScript" => Language::TypeScript,
+            "JavaScript" => Language::JavaScript,
+            "Dart" => Language::Dart,
+            _ => Language::Unknown,
+        }
+    }
+
+    /// Parse ChunkType enum from string representation
+    fn parse_chunk_type(s: &str) -> crate::semantic::types::ChunkType {
+        match s {
+            "Function" => crate::semantic::types::ChunkType::Function,
+            "Class" => crate::semantic::types::ChunkType::Class,
+            "Module" => crate::semantic::types::ChunkType::Module,
+            "Import" => crate::semantic::types::ChunkType::Import,
+            _ => crate::semantic::types::ChunkType::PlainText,
+        }
     }
 }
 

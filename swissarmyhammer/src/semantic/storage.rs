@@ -231,6 +231,16 @@ impl VectorStorage {
         Ok(chunks.get(chunk_id).cloned())
     }
 
+    /// Get all chunks for testing purposes
+    #[cfg(test)]
+    pub fn get_all_chunks(&self) -> Result<std::collections::HashMap<String, CodeChunk>> {
+        let chunks = self.chunks.lock().map_err(|_| {
+            SwissArmyHammerError::Storage("Failed to acquire chunks lock".to_string())
+        })?;
+
+        Ok(chunks.clone())
+    }
+
     /// Get all chunks for a file
     pub fn get_file_chunks(&self, file_path: &Path) -> Result<Vec<CodeChunk>> {
         // Get chunks from in-memory storage (fallback until DuckDB is implemented)

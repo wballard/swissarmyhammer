@@ -495,15 +495,13 @@ mod tests {
     #[tokio::test]
     async fn test_run_semantic_index_single_pattern() {
         let patterns = vec!["test_pattern.rs".to_string()];
-        // This test would require mocking the FileIndexer and VectorStorage
-        // For now, we'll just verify the function accepts the correct input format
-        // In a full implementation, you'd mock the dependencies
-
-        // The function should not panic with single pattern
-        // We expect it to fail with initialization errors since we don't have real storage setup
+        
+        // With local embeddings implementation, semantic indexing now works
+        // The function should succeed even with non-existent patterns (0 files processed)
         let result = run_semantic_index(&patterns, false).await;
-        // Just verify it doesn't panic and has the expected error handling
-        assert!(result.is_err());
+        
+        // Should succeed as local embedding engine initializes successfully
+        assert!(result.is_ok(), "Semantic indexing should succeed with local embeddings");
     }
 
     #[tokio::test]
@@ -514,12 +512,11 @@ mod tests {
             "benches/**/*.rs".to_string(),
         ];
 
-        // This test would require mocking the FileIndexer and VectorStorage
-        // For now, we'll just verify the function accepts the correct input format
-
-        // The function should not panic with multiple patterns
+        // With local embeddings implementation, semantic indexing now works
+        // The function should succeed and process real files in the project
         let result = run_semantic_index(&patterns, false).await;
-        // Just verify it doesn't panic and has the expected error handling
-        assert!(result.is_err());
+        
+        // Should succeed as local embedding engine works and will find real files
+        assert!(result.is_ok(), "Semantic indexing should succeed with local embeddings and real patterns");
     }
 }

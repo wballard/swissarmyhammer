@@ -110,3 +110,47 @@ pub fn setup_mcp_test_env() -> Result<(TempDir, PathBuf)> {
 
     Ok((temp_dir, prompts_dir))
 }
+
+/// Guard that manages test environment variables for semantic search tests
+///
+/// This sets up a controlled API key environment for testing semantic search
+/// functionality without requiring real API credentials.
+pub struct SemanticTestGuard {
+    _home_guard: TestHomeGuard,
+    original_api_key: Option<String>,
+}
+
+impl SemanticTestGuard {
+    /// Create a new semantic test guard with isolated environment
+    pub fn new() -> Self {
+        let home_guard = create_test_home_guard();
+        let original_api_key = std::env::var("NOMIC_API_KEY").ok();
+        
+        // Set a test API key that allows the command to start but will fail gracefully
+        std::env::set_var("NOMIC_API_KEY", "test-key-for-cli-integration-testing");
+        
+        Self {
+            _home_guard: home_guard,
+            original_api_key,
+        }
+    }
+}
+
+impl Drop for SemanticTestGuard {
+    fn drop(&mut self) {
+        // Restore original API key environment variable
+        match &self.original_api_key {
+            Some(key) => std::env::set_var("NOMIC_API_KEY", key),
+            None => std::env::remove_var("NOMIC_API_KEY"),
+        }
+    }
+}
+
+/// Create a semantic test environment guard
+///
+/// This provides isolated environment setup for semantic search tests
+/// with proper cleanup and restoration of environment variables.
+#[allow(dead_code)]
+pub fn create_semantic_test_guard() -> SemanticTestGuard {
+    SemanticTestGuard::new()
+}

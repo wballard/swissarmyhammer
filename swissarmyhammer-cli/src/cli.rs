@@ -1799,12 +1799,7 @@ mod tests {
 
     #[test]
     fn test_search_index_single_pattern() {
-        let result = Cli::try_parse_from_args([
-            "swissarmyhammer",
-            "search",
-            "index", 
-            "**/*.rs"
-        ]);
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "search", "index", "**/*.rs"]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
@@ -1827,19 +1822,22 @@ mod tests {
             "search",
             "index",
             "src/**/*.rs",
-            "tests/**/*.rs", 
-            "benches/**/*.rs"
+            "tests/**/*.rs",
+            "benches/**/*.rs",
         ]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
         if let Some(Commands::Search { subcommand }) = cli.command {
             if let SearchCommands::Index { patterns, force } = subcommand {
-                assert_eq!(patterns, vec![
-                    "src/**/*.rs".to_string(),
-                    "tests/**/*.rs".to_string(),
-                    "benches/**/*.rs".to_string()
-                ]);
+                assert_eq!(
+                    patterns,
+                    vec![
+                        "src/**/*.rs".to_string(),
+                        "tests/**/*.rs".to_string(),
+                        "benches/**/*.rs".to_string()
+                    ]
+                );
                 assert!(!force);
             } else {
                 panic!("Expected Index subcommand");
@@ -1851,13 +1849,8 @@ mod tests {
 
     #[test]
     fn test_search_index_with_force_flag() {
-        let result = Cli::try_parse_from_args([
-            "swissarmyhammer",
-            "search",
-            "index",
-            "**/*.rs",
-            "--force"
-        ]);
+        let result =
+            Cli::try_parse_from_args(["swissarmyhammer", "search", "index", "**/*.rs", "--force"]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
@@ -1873,7 +1866,7 @@ mod tests {
         }
     }
 
-    #[test] 
+    #[test]
     fn test_search_query_command() {
         let result = Cli::try_parse_from_args([
             "swissarmyhammer",
@@ -1883,13 +1876,18 @@ mod tests {
             "--limit",
             "5",
             "--format",
-            "json"
+            "json",
         ]);
         assert!(result.is_ok());
 
         let cli = result.unwrap();
         if let Some(Commands::Search { subcommand }) = cli.command {
-            if let SearchCommands::Query { query, limit, format } = subcommand {
+            if let SearchCommands::Query {
+                query,
+                limit,
+                format,
+            } = subcommand
+            {
                 assert_eq!(query, "error handling");
                 assert_eq!(limit, 5);
                 assert!(matches!(format, OutputFormat::Json));

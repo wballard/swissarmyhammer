@@ -666,6 +666,9 @@ mod tests {
         let embedding_service = EmbeddingEngine::new_for_testing().await?;
         let storage =
             VectorStorage::new(config).map_err(|e| SemanticError::Index(e.to_string()))?;
+        storage
+            .initialize()
+            .map_err(|e| SemanticError::Index(e.to_string()))?;
 
         let indexer =
             FileIndexer::with_custom_config(storage, embedding_service, parser_config).await?;

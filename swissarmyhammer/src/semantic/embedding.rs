@@ -133,7 +133,8 @@ impl EmbeddingEngine {
             SemanticError::Embedding(format!("Failed to get model dimensions: {e}"))
         })?;
 
-        let dimensions = test_embedding.first()
+        let dimensions = test_embedding
+            .first()
             .ok_or_else(|| SemanticError::Embedding("No test embedding generated".to_string()))?
             .len();
 
@@ -563,5 +564,4 @@ mod tests {
         assert_eq!(config.max_text_length, 8000);
         assert_eq!(config.batch_delay_ms, 10);
     }
-
 }

@@ -249,8 +249,16 @@ impl Default for FileChangeReport {
 
 impl Default for SemanticConfig {
     fn default() -> Self {
+        // Use absolute path in user's home directory to ensure consistency
+        let database_path = if let Some(home_dir) = dirs::home_dir() {
+            home_dir.join(".swissarmyhammer").join("semantic.db")
+        } else {
+            // Fallback to current directory if home directory is not available
+            PathBuf::from(".swissarmyhammer/semantic.db")
+        };
+
         Self {
-            database_path: PathBuf::from(".swissarmyhammer/semantic.db"),
+            database_path,
             embedding_model: "nomic-ai/nomic-embed-code".to_string(),
             chunk_size: 512,
             chunk_overlap: 64,
@@ -359,10 +367,15 @@ mod tests {
     #[test]
     fn test_semantic_config_default() {
         let config = SemanticConfig::default();
-        assert_eq!(
-            config.database_path,
-            PathBuf::from(".swissarmyhammer/semantic.db")
+        // The database path should now be absolute (in home directory)
+        assert!(
+            config.database_path.is_absolute()
+                || config.database_path.starts_with(".swissarmyhammer")
         );
+        assert!(config
+            .database_path
+            .to_string_lossy()
+            .contains("semantic.db"));
         assert_eq!(config.embedding_model, "nomic-ai/nomic-embed-code");
         assert_eq!(config.chunk_size, 512);
         assert_eq!(config.chunk_overlap, 64);

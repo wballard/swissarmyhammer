@@ -131,10 +131,10 @@ fn test_search_index_help() -> Result<()> {
     assert!(output.status.success(), "search index help should succeed");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // After our changes, this should show positional argument syntax
+    // After our changes, this should show positional patterns argument syntax
     assert!(
-        stdout.contains("<GLOB>") || stdout.contains("glob"),
-        "help should show glob pattern parameter"
+        stdout.contains("PATTERNS") || stdout.contains("patterns") || stdout.contains("glob"),
+        "help should show patterns parameter: {stdout}"
     );
 
     Ok(())

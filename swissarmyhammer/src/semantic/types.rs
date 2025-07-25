@@ -138,6 +138,14 @@ pub struct SemanticConfig {
     pub code_similarity_threshold: f32,
     /// Number of characters for content preview in explanations
     pub content_preview_length: usize,
+    /// Minimum chunk size in characters for parsing
+    pub min_chunk_size: usize,
+    /// Maximum chunk size in characters for parsing
+    pub max_chunk_size: usize,
+    /// Maximum chunks to extract per file
+    pub max_chunks_per_file: usize,
+    /// Maximum file size in bytes to prevent OOM on massive files
+    pub max_file_size_bytes: usize,
 }
 
 /// Status of a file's change detection
@@ -294,7 +302,88 @@ impl Default for SemanticConfig {
             simple_search_threshold: 0.5,
             code_similarity_threshold: 0.7,
             content_preview_length: 100,
+            min_chunk_size: 50,
+            max_chunk_size: 2000,
+            max_chunks_per_file: 100,
+            max_file_size_bytes: 10 * 1024 * 1024, // 10MB
         }
+    }
+}
+
+impl SemanticConfig {
+    /// Create a ParserConfig from this SemanticConfig
+    pub fn to_parser_config(&self) -> crate::Result<crate::semantic::parser::ParserConfig> {
+        crate::semantic::parser::ParserConfig::new(
+            self.min_chunk_size,
+            self.max_chunk_size,
+            self.max_chunks_per_file,
+            self.max_file_size_bytes,
+        )
+        .map_err(|e| crate::error::SwissArmyHammerError::Config(e.to_string()))
+    }
+
+    /// Validate all configuration parameters
+    pub fn validate(&self) -> crate::Result<()> {
+        // Validate chunk size parameters
+        if self.chunk_size == 0 {
+            return Err(crate::error::SwissArmyHammerError::Config(
+                "chunk_size must be greater than 0".to_string(),
+            ));
+        }
+
+        if self.chunk_overlap >= self.chunk_size {
+            return Err(crate::error::SwissArmyHammerError::Config(format!(
+                "chunk_overlap ({}) must be less than chunk_size ({})",
+                self.chunk_overlap, self.chunk_size
+            )));
+        }
+
+        // Validate similarity thresholds (must be between 0.0 and 1.0)
+        if !(0.0..=1.0).contains(&self.similarity_threshold) {
+            return Err(crate::error::SwissArmyHammerError::Config(format!(
+                "similarity_threshold ({}) must be between 0.0 and 1.0",
+                self.similarity_threshold
+            )));
+        }
+
+        if !(0.0..=1.0).contains(&self.simple_search_threshold) {
+            return Err(crate::error::SwissArmyHammerError::Config(format!(
+                "simple_search_threshold ({}) must be between 0.0 and 1.0",
+                self.simple_search_threshold
+            )));
+        }
+
+        if !(0.0..=1.0).contains(&self.code_similarity_threshold) {
+            return Err(crate::error::SwissArmyHammerError::Config(format!(
+                "code_similarity_threshold ({}) must be between 0.0 and 1.0",
+                self.code_similarity_threshold
+            )));
+        }
+
+        // Validate length parameters
+        if self.excerpt_length == 0 {
+            return Err(crate::error::SwissArmyHammerError::Config(
+                "excerpt_length must be greater than 0".to_string(),
+            ));
+        }
+
+        if self.content_preview_length == 0 {
+            return Err(crate::error::SwissArmyHammerError::Config(
+                "content_preview_length must be greater than 0".to_string(),
+            ));
+        }
+
+        // Validate embedding model is not empty
+        if self.embedding_model.trim().is_empty() {
+            return Err(crate::error::SwissArmyHammerError::Config(
+                "embedding_model cannot be empty".to_string(),
+            ));
+        }
+
+        // Validate parser config parameters using the existing validation
+        self.to_parser_config()?;
+
+        Ok(())
     }
 }
 
@@ -411,6 +500,10 @@ mod tests {
         assert_eq!(config.simple_search_threshold, 0.5);
         assert_eq!(config.code_similarity_threshold, 0.7);
         assert_eq!(config.content_preview_length, 100);
+        assert_eq!(config.min_chunk_size, 50);
+        assert_eq!(config.max_chunk_size, 2000);
+        assert_eq!(config.max_chunks_per_file, 100);
+        assert_eq!(config.max_file_size_bytes, 10 * 1024 * 1024);
     }
 
     #[test]
@@ -420,6 +513,175 @@ mod tests {
         let deserialized: SemanticConfig = serde_json::from_str(&serialized).unwrap();
         assert_eq!(config.embedding_model, deserialized.embedding_model);
         assert_eq!(config.chunk_size, deserialized.chunk_size);
+        assert_eq!(config.min_chunk_size, deserialized.min_chunk_size);
+        assert_eq!(config.max_chunk_size, deserialized.max_chunk_size);
+        assert_eq!(config.max_chunks_per_file, deserialized.max_chunks_per_file);
+        assert_eq!(config.max_file_size_bytes, deserialized.max_file_size_bytes);
+    }
+
+    #[test]
+    fn test_to_parser_config() {
+        let config = SemanticConfig::default();
+        let parser_config = config.to_parser_config().unwrap();
+        assert_eq!(parser_config.min_chunk_size, config.min_chunk_size);
+        assert_eq!(parser_config.max_chunk_size, config.max_chunk_size);
+        assert_eq!(
+            parser_config.max_chunks_per_file,
+            config.max_chunks_per_file
+        );
+        assert_eq!(
+            parser_config.max_file_size_bytes,
+            config.max_file_size_bytes
+        );
+    }
+
+    #[test]
+    fn test_config_validation_default() {
+        let config = SemanticConfig::default();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_config_validation_chunk_size_zero() {
+        let config = SemanticConfig {
+            chunk_size: 0,
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("chunk_size must be greater than 0"));
+    }
+
+    #[test]
+    fn test_config_validation_chunk_overlap_too_large() {
+        let mut config = SemanticConfig::default();
+        config.chunk_overlap = config.chunk_size; // Equal to chunk_size, should fail
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("chunk_overlap"));
+    }
+
+    #[test]
+    fn test_config_validation_similarity_threshold_invalid() {
+        let config = SemanticConfig {
+            similarity_threshold: 1.5, // Greater than 1.0
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("similarity_threshold"));
+
+        let config = SemanticConfig {
+            similarity_threshold: -0.1, // Less than 0.0
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("similarity_threshold"));
+    }
+
+    #[test]
+    fn test_config_validation_simple_search_threshold_invalid() {
+        let config = SemanticConfig {
+            simple_search_threshold: 2.0, // Greater than 1.0
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("simple_search_threshold"));
+    }
+
+    #[test]
+    fn test_config_validation_code_similarity_threshold_invalid() {
+        let config = SemanticConfig {
+            code_similarity_threshold: -1.0, // Less than 0.0
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("code_similarity_threshold"));
+    }
+
+    #[test]
+    fn test_config_validation_excerpt_length_zero() {
+        let config = SemanticConfig {
+            excerpt_length: 0,
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("excerpt_length must be greater than 0"));
+    }
+
+    #[test]
+    fn test_config_validation_content_preview_length_zero() {
+        let config = SemanticConfig {
+            content_preview_length: 0,
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("content_preview_length must be greater than 0"));
+    }
+
+    #[test]
+    fn test_config_validation_embedding_model_empty() {
+        let config = SemanticConfig {
+            embedding_model: "".to_string(),
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("embedding_model cannot be empty"));
+
+        let config = SemanticConfig {
+            embedding_model: "   ".to_string(), // Only whitespace
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("embedding_model cannot be empty"));
+    }
+
+    #[test]
+    fn test_config_validation_parser_config_invalid() {
+        let config = SemanticConfig {
+            min_chunk_size: 0, // This will make ParserConfig::new fail
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("min_chunk_size must be > 0"));
     }
 
     #[test]

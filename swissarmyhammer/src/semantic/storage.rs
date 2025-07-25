@@ -713,35 +713,152 @@ impl VectorStorage {
 
     /// Get statistics about the stored data
     pub fn get_stats(&self) -> Result<StorageStats> {
-        // TODO: Implement DuckDB statistics gathering
-        // SELECT COUNT(*) FROM code_chunks;
-        // SELECT COUNT(DISTINCT file_id) FROM code_chunks;
+        tracing::debug!("Getting storage statistics");
+
+        let conn = self.connection.lock().map_err(|e| {
+            SwissArmyHammerError::Storage(format!("Failed to acquire connection lock: {e}"))
+        })?;
+
+        // Get total chunks count
+        let total_chunks: usize = conn
+            .query_row("SELECT COUNT(*) FROM code_chunks", [], |row| {
+                let count: i64 = row.get(0)?;
+                Ok(count as usize)
+            })
+            .map_err(|e| {
+                SwissArmyHammerError::Storage(format!("Failed to get chunk count: {e}"))
+            })?;
+
+        // Get total files count
+        let total_files: usize = conn
+            .query_row("SELECT COUNT(*) FROM indexed_files", [], |row| {
+                let count: i64 = row.get(0)?;
+                Ok(count as usize)
+            })
+            .map_err(|e| SwissArmyHammerError::Storage(format!("Failed to get file count: {e}")))?;
+
+        // Get total embeddings count
+        let total_embeddings: usize = conn
+            .query_row("SELECT COUNT(*) FROM embeddings", [], |row| {
+                let count: i64 = row.get(0)?;
+                Ok(count as usize)
+            })
+            .map_err(|e| {
+                SwissArmyHammerError::Storage(format!("Failed to get embedding count: {e}"))
+            })?;
+
+        // Get database file size
+        let database_size_bytes = std::fs::metadata(&self.db_path)
+            .map(|metadata| metadata.len())
+            .unwrap_or(0);
+
+        tracing::debug!(
+            "Storage stats: {} chunks, {} files, {} embeddings, {} bytes",
+            total_chunks,
+            total_files,
+            total_embeddings,
+            database_size_bytes
+        );
 
         Ok(StorageStats {
-            total_chunks: 0,
-            total_files: 0,
-            total_embeddings: 0,
-            database_size_bytes: 0,
+            total_chunks,
+            total_files,
+            total_embeddings,
+            database_size_bytes,
         })
     }
 
     /// Get chunks by language
     pub fn get_chunks_by_language(&self, language: &Language) -> Result<Vec<CodeChunk>> {
-        // TODO: Implement DuckDB language filtering
-        // SELECT chunk_id, file_id, content, start_line, end_line, chunk_type, language, content_hash
-        // FROM code_chunks WHERE language = ?
-
         tracing::debug!("Getting chunks by language: {:?}", language);
-        Ok(vec![])
+
+        let conn = self.connection.lock().map_err(|e| {
+            SwissArmyHammerError::Storage(format!("Failed to acquire connection lock: {e}"))
+        })?;
+
+        let language_str = format!("{language:?}");
+        let mut stmt = conn.prepare(
+            "SELECT chunk_id, file_path, language, content, start_line, end_line, chunk_type, content_hash FROM code_chunks WHERE language = ?"
+        ).map_err(|e| {
+            SwissArmyHammerError::Storage(format!("Failed to prepare get_chunks_by_language query: {e}"))
+        })?;
+
+        let rows = stmt
+            .query_map([&language_str as &dyn ToSql], |row| {
+                let chunk_id: String = row.get(0)?;
+                let file_path: String = row.get(1)?;
+                let language_str: String = row.get(2)?;
+                let content: String = row.get(3)?;
+                let start_line: i64 = row.get(4)?;
+                let end_line: i64 = row.get(5)?;
+                let chunk_type_str: String = row.get(6)?;
+                let content_hash: String = row.get(7)?;
+
+                // Parse language and chunk type
+                let language = Self::parse_language(&language_str);
+                let chunk_type = Self::parse_chunk_type(&chunk_type_str);
+
+                Ok(CodeChunk {
+                    id: chunk_id,
+                    file_path: PathBuf::from(file_path),
+                    language,
+                    content,
+                    start_line: start_line as usize,
+                    end_line: end_line as usize,
+                    chunk_type,
+                    content_hash: ContentHash(content_hash),
+                })
+            })
+            .map_err(|e| {
+                SwissArmyHammerError::Storage(format!(
+                    "Failed to execute get_chunks_by_language query: {e}"
+                ))
+            })?;
+
+        let mut language_chunks = Vec::new();
+        for row_result in rows {
+            let chunk = row_result.map_err(|e| {
+                SwissArmyHammerError::Storage(format!("Failed to parse chunk by language: {e}"))
+            })?;
+            language_chunks.push(chunk);
+        }
+
+        tracing::debug!(
+            "Found {} chunks for language: {:?}",
+            language_chunks.len(),
+            language
+        );
+        Ok(language_chunks)
     }
 
     /// Perform database maintenance (vacuum, analyze, etc.)
     pub fn maintenance(&self) -> Result<()> {
-        // TODO: Implement DuckDB maintenance
-        // VACUUM;
-        // ANALYZE;
-
         tracing::info!("Performing database maintenance");
+
+        let conn = self.connection.lock().map_err(|e| {
+            SwissArmyHammerError::Storage(format!("Failed to acquire connection lock: {e}"))
+        })?;
+
+        // Perform VACUUM to reclaim space and optimize storage
+        tracing::debug!("Running VACUUM operation");
+        conn.execute("VACUUM", [])
+            .map_err(|e| SwissArmyHammerError::Storage(format!("Failed to run VACUUM: {e}")))?;
+
+        // Perform ANALYZE to update table statistics for query optimization
+        tracing::debug!("Running ANALYZE operation");
+        conn.execute("ANALYZE", [])
+            .map_err(|e| SwissArmyHammerError::Storage(format!("Failed to run ANALYZE: {e}")))?;
+
+        // Also analyze specific tables for better statistics
+        for table in &["indexed_files", "code_chunks", "embeddings"] {
+            tracing::debug!("Running ANALYZE on table: {}", table);
+            let analyze_sql = format!("ANALYZE {table}");
+            conn.execute(&analyze_sql, []).map_err(|e| {
+                SwissArmyHammerError::Storage(format!("Failed to analyze table {table}: {e}"))
+            })?;
+        }
+
+        tracing::info!("Database maintenance completed successfully");
         Ok(())
     }
 
@@ -1035,6 +1152,10 @@ mod tests {
             simple_search_threshold: 0.5,
             code_similarity_threshold: 0.7,
             content_preview_length: 100,
+            min_chunk_size: 50,
+            max_chunk_size: 2000,
+            max_chunks_per_file: 100,
+            max_file_size_bytes: 10 * 1024 * 1024,
         }
     }
 
@@ -1176,6 +1297,7 @@ mod tests {
     fn test_get_stats() {
         let config = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
+        storage.initialize().unwrap();
         let stats = storage.get_stats();
         assert!(stats.is_ok());
         let stats = stats.unwrap();
@@ -1188,6 +1310,7 @@ mod tests {
     fn test_get_chunks_by_language() {
         let config = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
+        storage.initialize().unwrap();
         let chunks = storage.get_chunks_by_language(&Language::Rust);
         assert!(chunks.is_ok());
         assert_eq!(chunks.unwrap().len(), 0);
@@ -1197,6 +1320,7 @@ mod tests {
     fn test_maintenance() {
         let config = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
+        storage.initialize().unwrap();
         assert!(storage.maintenance().is_ok());
     }
 

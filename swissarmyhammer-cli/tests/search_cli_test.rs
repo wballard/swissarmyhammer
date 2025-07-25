@@ -33,7 +33,7 @@ fn test_search_index_old_glob_flag_rejected() -> Result<()> {
 #[test]
 fn test_search_index_positional_glob() -> Result<()> {
     let _guard = create_semantic_test_guard();
-    
+
     let output = Command::cargo_bin("swissarmyhammer")
         .unwrap()
         .args(["search", "index", "**/*.rs"])
@@ -57,7 +57,7 @@ fn test_search_index_positional_glob() -> Result<()> {
 #[test]
 fn test_search_index_with_force() -> Result<()> {
     let _guard = create_semantic_test_guard();
-    
+
     let output = Command::cargo_bin("swissarmyhammer")
         .unwrap()
         .args(["search", "index", "**/*.py", "--force"])
@@ -85,7 +85,7 @@ fn test_search_index_with_force() -> Result<()> {
 #[test]
 fn test_search_query() -> Result<()> {
     let _guard = create_semantic_test_guard();
-    
+
     let output = Command::cargo_bin("swissarmyhammer")
         .unwrap()
         .args(["search", "query", "error handling"])

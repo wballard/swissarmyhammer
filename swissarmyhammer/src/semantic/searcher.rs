@@ -997,11 +997,11 @@ mod tests {
 
     /// Helper to create a searcher with actual test data
     async fn create_test_searcher_with_data() -> Result<SemanticSearcher> {
-        // Lower thresholds for better test results with mock embeddings
+        // Much lower thresholds for local embedding engine with deterministic results
         let config = SemanticConfig {
-            similarity_threshold: 0.3,
-            simple_search_threshold: 0.3,
-            code_similarity_threshold: 0.3,
+            similarity_threshold: 0.01, // Very low threshold for local embeddings
+            simple_search_threshold: 0.01,
+            code_similarity_threshold: 0.01,
             ..Default::default()
         };
         let embedding_engine = EmbeddingEngine::new_for_testing().await?;
@@ -1073,7 +1073,7 @@ mod tests {
         let query = SearchQuery {
             text: "hello world function".to_string(),
             limit: 10,
-            similarity_threshold: 0.3,
+            similarity_threshold: 0.01, // Lower threshold for local embeddings
             language_filter: None,
         };
 

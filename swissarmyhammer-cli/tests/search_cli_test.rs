@@ -43,9 +43,7 @@ fn test_search_index_positional_glob() -> Result<()> {
     assert!(
         stdout.contains("Indexing files matching: **/*.rs")
             || stderr.contains("Indexing files matching:"),
-        "should show glob pattern in output: stdout={}, stderr={}",
-        stdout,
-        stderr
+        "should show glob pattern in output: stdout={stdout}, stderr={stderr}"
     );
 
     Ok(())
@@ -67,16 +65,12 @@ fn test_search_index_with_force() -> Result<()> {
     assert!(
         stdout.contains("Indexing files matching: **/*.py")
             || stderr.contains("Indexing files matching:"),
-        "should show glob pattern in output: stdout={}, stderr={}",
-        stdout,
-        stderr
+        "should show glob pattern in output: stdout={stdout}, stderr={stderr}"
     );
     assert!(
         stdout.contains("Force re-indexing: enabled")
             || stderr.contains("Force re-indexing: enabled"),
-        "should show force flag is enabled: stdout={}, stderr={}",
-        stdout,
-        stderr
+        "should show force flag is enabled: stdout={stdout}, stderr={stderr}"
     );
 
     Ok(())
@@ -97,9 +91,7 @@ fn test_search_query() -> Result<()> {
     // Should show that it's starting search with the correct query
     assert!(
         stdout.contains("Searching for: error handling") || stderr.contains("Searching for:"),
-        "should show search query in output: stdout={}, stderr={}",
-        stdout,
-        stderr
+        "should show search query in output: stdout={stdout}, stderr={stderr}"
     );
 
     Ok(())

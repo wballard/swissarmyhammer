@@ -1,1 +1,0 @@
-search index globbing needs to honor .gitignore. the ignore crate is the ticket

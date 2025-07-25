@@ -14,6 +14,9 @@ use swissarmyhammer::{
     PromptFilter, PromptLibrary, PromptResolver,
 };
 
+// UI constants
+const PROCESSING_PATTERN_MESSAGE: &str = "Processing pattern:";
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SearchResult {
     pub name: String,
@@ -270,13 +273,15 @@ pub async fn run_search(subcommand: SearchCommands) -> i32 {
     use crate::exit_codes::{EXIT_ERROR, EXIT_SUCCESS};
 
     match subcommand {
-        SearchCommands::Index { glob, force } => match run_semantic_index(&glob, force).await {
-            Ok(()) => EXIT_SUCCESS,
-            Err(e) => {
-                eprintln!("{}", format!("❌ Indexing failed: {e}").red());
-                EXIT_ERROR
+        SearchCommands::Index { patterns, force } => {
+            match run_semantic_index(&patterns, force).await {
+                Ok(()) => EXIT_SUCCESS,
+                Err(e) => {
+                    eprintln!("{}", format!("❌ Indexing failed: {e}").red());
+                    EXIT_ERROR
+                }
             }
-        },
+        }
         SearchCommands::Query {
             query,
             limit,
@@ -291,10 +296,25 @@ pub async fn run_search(subcommand: SearchCommands) -> i32 {
     }
 }
 
-/// Run semantic indexing for the given glob pattern
-async fn run_semantic_index(glob: &str, force: bool) -> Result<()> {
+/// Run semantic indexing for the given patterns (globs or individual files)
+async fn run_semantic_index(patterns: &[String], force: bool) -> Result<()> {
     println!("{}", "🔍 Starting semantic search indexing...".cyan());
-    println!("Indexing files matching: {}", glob.bright_yellow());
+
+    if patterns.is_empty() {
+        return Err(anyhow::anyhow!(
+            "No patterns or files provided for indexing. Please specify one or more glob patterns (like '**/*.rs') or file paths."
+        ));
+    }
+
+    // For backward compatibility with tests, show different message based on pattern count
+    if patterns.len() == 1 {
+        println!("Indexing files matching: {}", patterns[0].bright_yellow());
+    } else {
+        println!(
+            "Indexing patterns/files: {}",
+            patterns.join(", ").bright_yellow()
+        );
+    }
     if force {
         println!("{}", "Force re-indexing: enabled".yellow());
     }
@@ -306,9 +326,25 @@ async fn run_semantic_index(glob: &str, force: bool) -> Result<()> {
 
     let mut indexer = FileIndexer::new(storage).await?;
 
-    // Perform indexing
+    // Perform indexing for all patterns
     let start_time = std::time::Instant::now();
-    let report = indexer.index_glob(glob, force).await?;
+    let mut combined_report = None;
+
+    for pattern in patterns {
+        println!("{} {}", PROCESSING_PATTERN_MESSAGE, pattern.bright_cyan());
+        let report = indexer.index_glob(pattern, force).await?;
+
+        match combined_report {
+            None => combined_report = Some(report),
+            Some(mut existing_report) => {
+                // Merge reports (combine all statistics and errors)
+                existing_report.merge_report(report);
+                combined_report = Some(existing_report);
+            }
+        }
+    }
+
+    let report = combined_report.expect("Should have at least one report");
     let duration = start_time.elapsed();
 
     // Display results
@@ -443,5 +479,47 @@ mod tests {
 
         assert_eq!(result.name, "test-prompt");
         assert_eq!(result.score, 100.0);
+    }
+
+    #[tokio::test]
+    async fn test_run_semantic_index_empty_patterns() {
+        let patterns: Vec<String> = vec![];
+        let result = run_semantic_index(&patterns, false).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No patterns or files provided"));
+    }
+
+    #[tokio::test]
+    async fn test_run_semantic_index_single_pattern() {
+        let patterns = vec!["test_pattern.rs".to_string()];
+        // This test would require mocking the FileIndexer and VectorStorage
+        // For now, we'll just verify the function accepts the correct input format
+        // In a full implementation, you'd mock the dependencies
+
+        // The function should not panic with single pattern
+        // We expect it to fail with initialization errors since we don't have real storage setup
+        let result = run_semantic_index(&patterns, false).await;
+        // Just verify it doesn't panic and has the expected error handling
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_run_semantic_index_multiple_patterns() {
+        let patterns = vec![
+            "src/**/*.rs".to_string(),
+            "tests/**/*.rs".to_string(),
+            "benches/**/*.rs".to_string(),
+        ];
+
+        // This test would require mocking the FileIndexer and VectorStorage
+        // For now, we'll just verify the function accepts the correct input format
+
+        // The function should not panic with multiple patterns
+        let result = run_semantic_index(&patterns, false).await;
+        // Just verify it doesn't panic and has the expected error handling
+        assert!(result.is_err());
     }
 }

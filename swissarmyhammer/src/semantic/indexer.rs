@@ -212,9 +212,8 @@ impl FileIndexer {
     /// Check if a file path matches a glob pattern
     fn matches_glob_pattern(&self, path: &Path, pattern: &str) -> Result<bool> {
         // Use the glob crate to compile the pattern and test the path
-        let glob_pattern = glob::Pattern::new(pattern).map_err(|e| {
-            SemanticError::Config(format!("Invalid glob pattern '{pattern}': {e}"))
-        })?;
+        let glob_pattern = glob::Pattern::new(pattern)
+            .map_err(|e| SemanticError::Config(format!("Invalid glob pattern '{pattern}': {e}")))?;
 
         // Extract the relative path from the base for matching
         let path_str = path.to_string_lossy();
@@ -588,6 +587,17 @@ impl IndexingReport {
         self.files_processed += 1;
         self.files_failed += 1;
         self.errors.push((file_path, error));
+    }
+
+    /// Merge another IndexingReport into this report
+    pub fn merge_report(&mut self, other: IndexingReport) {
+        self.files_processed += other.files_processed;
+        self.files_successful += other.files_successful;
+        self.files_failed += other.files_failed;
+        self.total_chunks += other.total_chunks;
+        self.total_embeddings += other.total_embeddings;
+        self.errors.extend(other.errors);
+        self.duration += other.duration;
     }
 
     /// Get a summary string of the indexing results

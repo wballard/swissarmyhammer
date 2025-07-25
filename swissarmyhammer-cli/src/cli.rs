@@ -308,11 +308,11 @@ Manage semantic search functionality for indexing and searching source code file
 Uses mistral.rs for embeddings, DuckDB for vector storage, and TreeSitter for parsing.
 
 Basic usage:
-  swissarmyhammer search index <glob>           # Index files for semantic search
+  swissarmyhammer search index <patterns...>   # Index files for semantic search
   swissarmyhammer search query <query>          # Query indexed files semantically
 
 Indexing:
-  <glob>                                        # Glob pattern for files to index (required)
+  <patterns...>                                 # Glob patterns or files to index (supports multiple)
   --force                                       # Force re-indexing of all files
 
 Querying:
@@ -320,8 +320,10 @@ Querying:
   --format table                               # Output format (table, json, yaml)
 
 Examples:
-  swissarmyhammer search index \"**/*.rs\"       # Index all Rust files
+  swissarmyhammer search index \"**/*.rs\"       # Index all Rust files (quoted glob)
+  swissarmyhammer search index **/*.rs          # Index all Rust files (shell-expanded)
   swissarmyhammer search index \"src/**/*.py\" --force  # Force re-index Python files
+  swissarmyhammer search index file1.rs file2.rs file3.rs  # Index specific files
   swissarmyhammer search query \"error handling\"       # Search for error handling code
   swissarmyhammer search query \"async function\" --limit 5 --format json
 ")]
@@ -816,8 +818,8 @@ pub enum MemoCommands {
 pub enum SearchCommands {
     /// Index files for semantic search
     Index {
-        /// Glob pattern for files to index
-        glob: String,
+        /// Glob patterns or files to index (supports both "**/*.rs" and expanded file lists)
+        patterns: Vec<String>,
         /// Force re-indexing of all files
         #[arg(short, long)]
         force: bool,
@@ -1792,6 +1794,108 @@ mod tests {
             }
         } else {
             panic!("Expected Memo command");
+        }
+    }
+
+    #[test]
+    fn test_search_index_single_pattern() {
+        let result = Cli::try_parse_from_args(["swissarmyhammer", "search", "index", "**/*.rs"]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Search { subcommand }) = cli.command {
+            if let SearchCommands::Index { patterns, force } = subcommand {
+                assert_eq!(patterns, vec!["**/*.rs".to_string()]);
+                assert!(!force);
+            } else {
+                panic!("Expected Index subcommand");
+            }
+        } else {
+            panic!("Expected Search command");
+        }
+    }
+
+    #[test]
+    fn test_search_index_multiple_patterns() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer",
+            "search",
+            "index",
+            "src/**/*.rs",
+            "tests/**/*.rs",
+            "benches/**/*.rs",
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Search { subcommand }) = cli.command {
+            if let SearchCommands::Index { patterns, force } = subcommand {
+                assert_eq!(
+                    patterns,
+                    vec![
+                        "src/**/*.rs".to_string(),
+                        "tests/**/*.rs".to_string(),
+                        "benches/**/*.rs".to_string()
+                    ]
+                );
+                assert!(!force);
+            } else {
+                panic!("Expected Index subcommand");
+            }
+        } else {
+            panic!("Expected Search command");
+        }
+    }
+
+    #[test]
+    fn test_search_index_with_force_flag() {
+        let result =
+            Cli::try_parse_from_args(["swissarmyhammer", "search", "index", "**/*.rs", "--force"]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Search { subcommand }) = cli.command {
+            if let SearchCommands::Index { patterns, force } = subcommand {
+                assert_eq!(patterns, vec!["**/*.rs".to_string()]);
+                assert!(force);
+            } else {
+                panic!("Expected Index subcommand");
+            }
+        } else {
+            panic!("Expected Search command");
+        }
+    }
+
+    #[test]
+    fn test_search_query_command() {
+        let result = Cli::try_parse_from_args([
+            "swissarmyhammer",
+            "search",
+            "query",
+            "error handling",
+            "--limit",
+            "5",
+            "--format",
+            "json",
+        ]);
+        assert!(result.is_ok());
+
+        let cli = result.unwrap();
+        if let Some(Commands::Search { subcommand }) = cli.command {
+            if let SearchCommands::Query {
+                query,
+                limit,
+                format,
+            } = subcommand
+            {
+                assert_eq!(query, "error handling");
+                assert_eq!(limit, 5);
+                assert!(matches!(format, OutputFormat::Json));
+            } else {
+                panic!("Expected Query subcommand");
+            }
+        } else {
+            panic!("Expected Search command");
         }
     }
 }

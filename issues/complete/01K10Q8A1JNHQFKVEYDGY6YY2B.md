@@ -16,3 +16,47 @@ That folder name 'search' and 'index' should not be in the glob match for starte
 
 And -- we cannot index from the cli.
 
+
+
+## Proposed Solution
+
+The issue is that the CLI `search index` command expects a single `glob: String` parameter, but when the shell expands `**/*.rs`, it becomes multiple individual file arguments. The current CLI definition in `swissarmyhammer-cli/src/cli.rs:815-836` has:
+
+```rust
+Index {
+    /// Glob pattern for files to index
+    glob: String,  // This only accepts ONE argument
+    /// Force re-indexing of all files
+    #[arg(short, long)]
+    force: bool,
+},
+```
+
+But the command `cargo run search index **/*.rs` gets shell-expanded to:
+`cargo run search index file1.rs file2.rs file3.rs ...` (many arguments)
+
+### Fix Steps:
+
+1. **Change CLI definition** - Update `SearchCommands::Index` to accept multiple file patterns:
+   ```rust
+   Index {
+       /// Glob patterns or files to index
+       patterns: Vec<String>,  // Accept multiple patterns/files
+       /// Force re-indexing of all files
+       #[arg(short, long)]
+       force: bool,
+   },
+   ```
+
+2. **Update search.rs** - Modify `run_semantic_index` to handle multiple patterns:
+   - Process each pattern/file in the list
+   - Support both glob patterns (when quoted) and expanded file lists
+   - Aggregate indexing results from all patterns
+
+3. **Update CLI help text** - Clarify that both single patterns and multiple files are supported
+
+4. **Add tests** - Verify both usage patterns work:
+   - `swissarmyhammer search index "**/*.rs"` (quoted glob)
+   - `swissarmyhammer search index file1.rs file2.rs file3.rs` (expanded files)
+
+This solution maintains backwards compatibility while fixing the shell expansion issue.

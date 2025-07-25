@@ -3,6 +3,9 @@
 use anyhow::Result;
 use assert_cmd::Command;
 
+mod test_utils;
+use test_utils::create_semantic_test_guard;
+
 /// Test that the old --glob flag version no longer works (breaking change)
 #[test]
 fn test_search_index_old_glob_flag_rejected() -> Result<()> {
@@ -29,9 +32,10 @@ fn test_search_index_old_glob_flag_rejected() -> Result<()> {
 /// Test that the new positional glob argument version works
 #[test]
 fn test_search_index_positional_glob() -> Result<()> {
+    let _guard = create_semantic_test_guard();
+    
     let output = Command::cargo_bin("swissarmyhammer")
         .unwrap()
-        .env("NOMIC_API_KEY", "test-key-for-testing")
         .args(["search", "index", "**/*.rs"])
         .output()?;
 
@@ -52,9 +56,10 @@ fn test_search_index_positional_glob() -> Result<()> {
 /// Test search index with force flag
 #[test]
 fn test_search_index_with_force() -> Result<()> {
+    let _guard = create_semantic_test_guard();
+    
     let output = Command::cargo_bin("swissarmyhammer")
         .unwrap()
-        .env("NOMIC_API_KEY", "test-key-for-testing")
         .args(["search", "index", "**/*.py", "--force"])
         .output()?;
 
@@ -79,9 +84,10 @@ fn test_search_index_with_force() -> Result<()> {
 /// Test search query functionality
 #[test]
 fn test_search_query() -> Result<()> {
+    let _guard = create_semantic_test_guard();
+    
     let output = Command::cargo_bin("swissarmyhammer")
         .unwrap()
-        .env("NOMIC_API_KEY", "test-key-for-testing")
         .args(["search", "query", "error handling"])
         .output()?;
 
@@ -131,10 +137,10 @@ fn test_search_index_help() -> Result<()> {
     assert!(output.status.success(), "search index help should succeed");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // After our changes, this should show positional argument syntax
+    // After our changes, this should show positional patterns argument syntax
     assert!(
-        stdout.contains("<GLOB>") || stdout.contains("glob"),
-        "help should show glob pattern parameter"
+        stdout.contains("PATTERNS") || stdout.contains("patterns") || stdout.contains("glob"),
+        "help should show patterns parameter: {stdout}"
     );
 
     Ok(())

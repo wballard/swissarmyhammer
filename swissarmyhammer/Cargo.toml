@@ -36,6 +36,7 @@ liquid-core = { version = "0.26" }
 walkdir = { workspace = true }
 notify = { workspace = true }
 glob = { workspace = true }
+ignore = { workspace = true }
 
 # Data structures
 dashmap = { workspace = true }

@@ -5,7 +5,7 @@ use crate::semantic::{
     ParserConfig, Result, SemanticError, VectorStorage,
 };
 use chrono::Utc;
-use glob::glob;
+use ignore::WalkBuilder;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::{Path, PathBuf};
 
@@ -131,30 +131,89 @@ impl FileIndexer {
         self.index_files(files_to_process, force_reindex).await
     }
 
-    /// Expand glob pattern to list of file paths
+    /// Expand glob pattern to list of file paths while respecting .gitignore
     fn expand_glob_pattern(&self, pattern: &str) -> Result<Vec<PathBuf>> {
         let mut paths = Vec::new();
 
-        for entry in glob(pattern)
-            .map_err(|e| SemanticError::Config(format!("Invalid glob pattern '{pattern}': {e}")))?
-        {
+        // Parse the pattern to extract base directory and file pattern
+        let (base_dir, file_pattern) = self.parse_glob_pattern(pattern)?;
+
+        // Create a walker that respects .gitignore files
+        let walker = WalkBuilder::new(&base_dir)
+            .git_ignore(true)       // Respect .gitignore files
+            .git_global(true)       // Respect global gitignore
+            .git_exclude(true)      // Respect .git/info/exclude
+            .hidden(false)          // Include hidden files (let gitignore decide)
+            .parents(true)          // Check parent directories for .gitignore
+            .build();
+
+        // Walk the directory structure and collect matching files
+        for entry in walker {
             match entry {
-                Ok(path) if path.is_file() => {
-                    // Filter supported file types
-                    if self.is_supported_file(&path) {
-                        paths.push(path);
+                Ok(dir_entry) => {
+                    let path = dir_entry.path();
+                    if path.is_file() {
+                        // Check if the file matches the glob pattern
+                        if self.matches_glob_pattern(path, &file_pattern)? {
+                            // Filter supported file types
+                            if self.is_supported_file(path) {
+                                paths.push(path.to_path_buf());
+                            }
+                        }
                     }
                 }
-                Ok(_) => {
-                    // Skip directories
-                }
                 Err(e) => {
-                    tracing::warn!("Error processing glob entry: {}", e);
+                    tracing::warn!("Error processing directory entry: {}", e);
                 }
             }
         }
 
         Ok(paths)
+    }
+
+    /// Parse a glob pattern to extract base directory and file pattern
+    fn parse_glob_pattern(&self, pattern: &str) -> Result<(PathBuf, String)> {
+        let path = Path::new(pattern);
+        
+        // Find the first component with glob characters
+        let mut base_components = Vec::new();
+        let mut pattern_components = Vec::new();
+        let mut found_glob = false;
+
+        for component in path.components() {
+            let component_str = component.as_os_str().to_string_lossy();
+            if !found_glob && !component_str.contains('*') && !component_str.contains('?') && !component_str.contains('[') {
+                base_components.push(component);
+            } else {
+                found_glob = true;
+                pattern_components.push(component_str.to_string());
+            }
+        }
+
+        let base_dir = if base_components.is_empty() {
+            PathBuf::from(".")
+        } else {
+            base_components.iter().collect()
+        };
+
+        let file_pattern = if pattern_components.is_empty() {
+            "*".to_string()
+        } else {
+            pattern_components.join("/")
+        };
+
+        Ok((base_dir, file_pattern))
+    }
+
+    /// Check if a file path matches a glob pattern
+    fn matches_glob_pattern(&self, path: &Path, pattern: &str) -> Result<bool> {
+        // Use the glob crate to compile the pattern and test the path
+        let glob_pattern = glob::Pattern::new(pattern)
+            .map_err(|e| SemanticError::Config(format!("Invalid glob pattern '{}': {}", pattern, e)))?;
+        
+        // Extract the relative path from the base for matching
+        let path_str = path.to_string_lossy();
+        Ok(glob_pattern.matches(&path_str))
     }
 
     /// Check if a file is supported for indexing
@@ -700,5 +759,147 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(report.files_processed, 1); // Only test.py should be processed
+    }
+
+    #[tokio::test]
+    async fn test_gitignore_exclusion() {
+        let (mut indexer, temp_dir) = create_test_indexer().await.unwrap();
+
+        // Initialize as a git repository (required for ignore crate to work properly)
+        fs::create_dir_all(temp_dir.path().join(".git")).unwrap();
+        
+        // Create a .gitignore file
+        let gitignore_content = "*.tmp\ntarget/\nnode_modules/\n";
+        fs::write(temp_dir.path().join(".gitignore"), gitignore_content).unwrap();
+
+        // Create test files - some should be ignored, some should not
+        fs::write(temp_dir.path().join("included.rs"), "fn main() {}").unwrap();
+        fs::write(temp_dir.path().join("ignored.tmp"), "temporary file").unwrap();
+        
+        // Create target directory and file (should be ignored)
+        fs::create_dir_all(temp_dir.path().join("target")).unwrap();
+        fs::write(temp_dir.path().join("target/build.rs"), "fn main() {}").unwrap();
+
+        // Create node_modules directory and file (should be ignored)
+        fs::create_dir_all(temp_dir.path().join("node_modules")).unwrap();
+        fs::write(temp_dir.path().join("node_modules/lib.js"), "console.log('test')").unwrap();
+
+        // Index with glob pattern
+        let pattern = format!("{}/**/*", temp_dir.path().display());
+        let report = indexer.index_glob(&pattern, false).await.unwrap();
+
+        // Only included.rs should be processed (not ignored files)
+        assert_eq!(report.files_successful, 1, "Should only process included.rs");
+        assert_eq!(report.files_failed, 0);
+        assert!(report.total_chunks > 0);
+    }
+
+    #[tokio::test]  
+    async fn test_nested_gitignore() {
+        let (mut indexer, temp_dir) = create_test_indexer().await.unwrap();
+
+        // Initialize as a git repository (required for ignore crate to work properly)
+        fs::create_dir_all(temp_dir.path().join(".git")).unwrap();
+        
+        // Create root .gitignore
+        fs::write(temp_dir.path().join(".gitignore"), "*.log\n").unwrap();
+
+        // Create subdirectory with its own .gitignore
+        let subdir = temp_dir.path().join("subdir");
+        fs::create_dir_all(&subdir).unwrap();
+        fs::write(subdir.join(".gitignore"), "*.bak\n").unwrap();
+
+        // Create test files
+        fs::write(temp_dir.path().join("root.rs"), "fn main() {}").unwrap();
+        fs::write(temp_dir.path().join("root.log"), "log content").unwrap(); // Should be ignored by root .gitignore
+        fs::write(subdir.join("sub.rs"), "fn sub() {}").unwrap();
+        fs::write(subdir.join("sub.bak"), "backup content").unwrap(); // Should be ignored by subdir .gitignore
+
+        // Index with recursive glob pattern
+        let pattern = format!("{}/**/*", temp_dir.path().display());
+        let report = indexer.index_glob(&pattern, false).await.unwrap();
+
+        // Only root.rs and sub.rs should be processed
+        assert_eq!(report.files_successful, 2);
+        assert_eq!(report.files_failed, 0);
+    }
+
+    #[tokio::test]
+    async fn test_no_gitignore_file() {
+        let (mut indexer, temp_dir) = create_test_indexer().await.unwrap();
+
+        // Create test files without any .gitignore
+        fs::write(temp_dir.path().join("file1.rs"), "fn main() {}").unwrap();
+        fs::write(temp_dir.path().join("file2.py"), "def main(): pass").unwrap();
+
+        // Index with glob pattern
+        let pattern = format!("{}/*", temp_dir.path().display());
+        let report = indexer.index_glob(&pattern, false).await.unwrap();
+
+        // Both files should be processed when no gitignore is present
+        assert_eq!(report.files_successful, 2);
+        assert_eq!(report.files_failed, 0);
+    }
+
+    #[tokio::test]
+    async fn test_empty_gitignore() {
+        let (mut indexer, temp_dir) = create_test_indexer().await.unwrap();
+
+        // Create empty .gitignore file
+        fs::write(temp_dir.path().join(".gitignore"), "").unwrap();
+
+        // Create test files
+        fs::write(temp_dir.path().join("file1.rs"), "fn main() {}").unwrap();
+        fs::write(temp_dir.path().join("file2.py"), "def main(): pass").unwrap();
+
+        // Index with glob pattern
+        let pattern = format!("{}/*", temp_dir.path().display());
+        let report = indexer.index_glob(&pattern, false).await.unwrap();
+
+        // Both files should be processed when gitignore is empty
+        assert_eq!(report.files_successful, 2);
+        assert_eq!(report.files_failed, 0);
+    }
+
+    #[tokio::test]
+    async fn test_glob_pattern_parsing() {
+        let (indexer, _temp_dir) = create_test_indexer().await.unwrap();
+
+        // Test simple patterns
+        let (base, pattern) = indexer.parse_glob_pattern("*.rs").unwrap();
+        assert_eq!(base, PathBuf::from("."));
+        assert_eq!(pattern, "*.rs");
+
+        // Test directory with pattern
+        let (base, pattern) = indexer.parse_glob_pattern("src/*.rs").unwrap();
+        assert_eq!(base, PathBuf::from("src"));
+        assert_eq!(pattern, "*.rs");
+
+        // Test nested directory with pattern
+        let (base, pattern) = indexer.parse_glob_pattern("src/main/**/*.rs").unwrap();
+        assert_eq!(base, PathBuf::from("src/main"));
+        assert_eq!(pattern, "**/*.rs");
+
+        // Test absolute path
+        let (base, pattern) = indexer.parse_glob_pattern("/usr/local/*.rs").unwrap();
+        assert_eq!(base, PathBuf::from("/usr/local"));
+        assert_eq!(pattern, "*.rs");
+    }
+
+    #[tokio::test]
+    async fn test_pattern_matching() {
+        let (indexer, _temp_dir) = create_test_indexer().await.unwrap();
+
+        // Test simple glob patterns
+        assert!(indexer.matches_glob_pattern(Path::new("test.rs"), "*.rs").unwrap());
+        assert!(!indexer.matches_glob_pattern(Path::new("test.py"), "*.rs").unwrap());
+
+        // Test directory patterns  
+        assert!(indexer.matches_glob_pattern(Path::new("src/main.rs"), "src/*.rs").unwrap());
+        assert!(!indexer.matches_glob_pattern(Path::new("lib/main.rs"), "src/*.rs").unwrap());
+
+        // Test recursive patterns
+        assert!(indexer.matches_glob_pattern(Path::new("src/deep/main.rs"), "**/*.rs").unwrap());
+        assert!(indexer.matches_glob_pattern(Path::new("main.rs"), "**/*.rs").unwrap());
     }
 }

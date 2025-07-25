@@ -27,6 +27,8 @@ DO NOT code now, the goal is just to create `./CODE_REVIEW.md` todo items.
 - Append any improvements to do to ./CODE_REVIEW.md
 - Run a language appropriate lint
   - Append any lint warnings or errors to do to ./CODE_REVIEW.md
+- Look for any TODO comments, stubs or placeholders
+  - If you find any, we need to add actually DOING them to ./CODE_REVIEW.md
 - Report your progress
 
 {% render "review_format" %}

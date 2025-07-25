@@ -822,7 +822,17 @@ mod tests {
     use std::path::PathBuf;
 
     async fn create_test_searcher() -> Result<SemanticSearcher> {
-        let config = SemanticConfig::default();
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let db_path = format!("/tmp/test_semantic_{timestamp}.db");
+
+        let config = SemanticConfig {
+            database_path: std::path::PathBuf::from(db_path),
+            ..SemanticConfig::default()
+        };
         let embedding_engine = EmbeddingEngine::new_for_testing().await?;
         let storage = VectorStorage::new(config.clone()).map_err(|e| {
             crate::semantic::SemanticError::SearchOperation {
@@ -831,6 +841,13 @@ mod tests {
                 source: Some(Box::new(e)),
             }
         })?;
+        storage
+            .initialize()
+            .map_err(|e| crate::semantic::SemanticError::SearchOperation {
+                operation: "test storage initialization".to_string(),
+                message: "Failed to initialize test vector storage".to_string(),
+                source: Some(Box::new(e)),
+            })?;
         SemanticSearcher::with_embedding_engine(storage, embedding_engine, config).await
     }
 
@@ -997,8 +1014,16 @@ mod tests {
 
     /// Helper to create a searcher with actual test data
     async fn create_test_searcher_with_data() -> Result<SemanticSearcher> {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let db_path = format!("/tmp/test_semantic_{timestamp}.db");
+
         // Much lower thresholds for local embedding engine with deterministic results
         let config = SemanticConfig {
+            database_path: std::path::PathBuf::from(db_path),
             similarity_threshold: 0.01, // Very low threshold for local embeddings
             simple_search_threshold: 0.01,
             code_similarity_threshold: 0.01,
@@ -1012,6 +1037,13 @@ mod tests {
                 source: Some(Box::new(e)),
             }
         })?;
+        storage
+            .initialize()
+            .map_err(|e| crate::semantic::SemanticError::SearchOperation {
+                operation: "test storage initialization".to_string(),
+                message: "Failed to initialize test vector storage".to_string(),
+                source: Some(Box::new(e)),
+            })?;
 
         // Add test chunks and embeddings
         let chunk1 = CodeChunk {

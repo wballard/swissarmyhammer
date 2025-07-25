@@ -96,33 +96,16 @@ fn create_rust_definition() -> LanguageDefinition {
         extensions: vec!["rs"],
         tree_sitter_language: || tree_sitter_rust::LANGUAGE.into(),
         queries: vec![
-            // Functions
-            (
-                "(function_item name: (identifier) @name) @function",
-                ChunkType::Function,
-            ),
+            // Functions - try the format used in tree-sitter examples
+            (r"(function_item) @function", ChunkType::Function),
             // Impl blocks
-            (
-                "(impl_item) @impl",
-                ChunkType::Class,
-            ),
-            // Methods within impl blocks - corrected pattern
-            (
-                "(impl_item (declaration_list (function_item name: (identifier) @method_name) @method))",
-                ChunkType::Function,
-            ),
+            (r"(impl_item) @impl", ChunkType::Class),
             // Structs
-            (
-                "(struct_item name: (type_identifier) @name) @struct",
-                ChunkType::Class,
-            ),
+            (r"(struct_item) @struct", ChunkType::Class),
             // Enums
-            (
-                "(enum_item name: (type_identifier) @name) @enum",
-                ChunkType::Class,
-            ),
-            // Use statements
-            ("(use_declaration) @import", ChunkType::Import),
+            (r"(enum_item) @enum", ChunkType::Class),
+            // Use statements - simplest working pattern
+            (r"(use_declaration) @import", ChunkType::Import),
         ],
     }
 }
@@ -698,11 +681,10 @@ impl CodeParser {
             })?;
 
             let mut cursor = QueryCursor::new();
-            let matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
+            let mut matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
 
             let mut query_matches = 0;
-            let mut matches = matches;
-            while let Some(query_match) = matches.get() {
+            while let Some(query_match) = matches.next() {
                 for capture in query_match.captures {
                     let node = capture.node;
                     let chunk = self.create_chunk_from_node(
@@ -716,7 +698,6 @@ impl CodeParser {
                     chunks.push(chunk);
                     query_matches += 1;
                 }
-                matches.advance();
             }
 
             if query_matches > 0 {
@@ -1352,5 +1333,416 @@ mod tests {
         assert!(config.max_chunk_size > config.min_chunk_size);
         assert!(config.max_chunks_per_file > 0);
         assert!(config.max_file_size_bytes >= 1024);
+    }
+
+    #[test]
+    fn test_treesitter_extracts_chunks_from_real_rust_code() {
+        // Issue: TreeSitter parser reports success but extracts 0 chunks from real Rust files
+        // This test ensures we get actual chunks from realistic Rust code
+        let config = ParserConfig {
+            min_chunk_size: 1, // Allow small chunks to catch all structures
+            max_chunk_size: 5000,
+            max_chunks_per_file: 100,
+            max_file_size_bytes: 10 * 1024 * 1024,
+        };
+        let parser = CodeParser::new(config).unwrap();
+
+        let file_path = Path::new("test_real_content.rs");
+        let content = r#"//! Workflow execution visualization
+
+use crate::workflow::{RunMetrics, StateId, Workflow, WorkflowRun, WorkflowRunStatus};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::fmt;
+use std::time::Duration;
+
+/// Maximum path length for full visualization
+pub const MAX_PATH_LENGTH_FULL: usize = 1000;
+
+/// Execution visualization generator
+#[derive(Debug, Clone)]
+pub struct ExecutionVisualizer {
+    /// Include timing information in visualization
+    pub include_timing: bool,
+    /// Include execution counts in visualization
+    pub include_counts: bool,
+}
+
+/// Visualization output format
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum VisualizationFormat {
+    /// Mermaid state diagram
+    Mermaid,
+    /// DOT graph format
+    Dot,
+    /// JSON execution trace
+    Json,
+}
+
+impl ExecutionVisualizer {
+    /// Create a new execution visualizer
+    pub fn new() -> Self {
+        Self {
+            include_timing: true,
+            include_counts: true,
+        }
+    }
+
+    /// Generate visualization
+    pub fn generate(&self, workflow: &Workflow) -> String {
+        "mermaid diagram".to_string()
+    }
+}
+
+pub fn format_content_preview(content: &str, max_length: usize) -> String {
+    let preview = if content.len() > max_length {
+        format!("{}...", &content[..max_length])
+    } else {
+        content.to_string()
+    };
+    preview.replace('\n', " ")
+}
+"#;
+
+        let chunks = parser.parse_file(file_path, content).unwrap();
+
+        // This test should fail with the current broken implementation
+        assert!(
+            !chunks.is_empty(),
+            "TreeSitter should extract chunks from real Rust code, but got 0 chunks"
+        );
+
+        // Count specific types of chunks we expect
+        let use_chunks = chunks
+            .iter()
+            .filter(|c| c.chunk_type == ChunkType::Import)
+            .count();
+        let struct_chunks = chunks
+            .iter()
+            .filter(|c| c.chunk_type == ChunkType::Class)
+            .count();
+        let function_chunks = chunks
+            .iter()
+            .filter(|c| c.chunk_type == ChunkType::Function)
+            .count();
+
+        // We should get multiple types of chunks from this realistic Rust code
+        let semantic_chunks = use_chunks + struct_chunks + function_chunks;
+        assert!(semantic_chunks > 0, 
+            "Expected semantic chunks (use statements: {}, structs/enums: {}, functions: {}), but got plain text only", 
+            use_chunks, struct_chunks, function_chunks);
+
+        // Verify we got some meaningful content
+        let has_meaningful_content = chunks.iter().any(|chunk| {
+            chunk.content.contains("ExecutionVisualizer")
+                || chunk.content.contains("VisualizationFormat")
+                || chunk.content.contains("fn new()")
+                || chunk.content.contains("use crate::workflow")
+        });
+        assert!(
+            has_meaningful_content,
+            "Chunks should contain meaningful Rust constructs"
+        );
+
+        // Log the chunks for debugging
+        println!("Extracted {} chunks:", chunks.len());
+        for (i, chunk) in chunks.iter().enumerate() {
+            println!(
+                "  Chunk {}: {:?} - '{}...'",
+                i,
+                chunk.chunk_type,
+                chunk.content.chars().take(50).collect::<String>()
+            );
+        }
+    }
+
+    #[test]
+    #[ignore] // Debug test - can be run manually if needed
+    fn test_manual_tree_walk() {
+        // Try manual tree walking to see all node types
+        let content = "fn main() {\n    println!(\"Hello, world!\");\n}";
+
+        let tree_sitter_language = tree_sitter_rust::LANGUAGE.into();
+        let mut tree_parser = tree_sitter::Parser::new();
+        tree_parser.set_language(&tree_sitter_language).unwrap();
+
+        let tree = tree_parser.parse(content, None).unwrap();
+        let root_node = tree.root_node();
+
+        // Walk all nodes and print them
+        println!("Walking all nodes:");
+        walk_all_nodes(&root_node, content, 0);
+
+        // Try the simplest possible query - first without captures
+        let simple_query = "(function_item)";
+        println!("\nTesting query without capture: '{}'", simple_query);
+
+        match tree_sitter::Query::new(&tree_sitter_language, simple_query) {
+            Ok(query) => {
+                let mut cursor = tree_sitter::QueryCursor::new();
+                let mut matches = cursor.matches(&query, root_node, content.as_bytes());
+
+                let mut match_count = 0;
+                while let Some(query_match) = matches.get() {
+                    match_count += 1;
+                    println!(
+                        "  Match {}: {} captures",
+                        match_count,
+                        query_match.captures.len()
+                    );
+                    matches.advance();
+                }
+
+                if match_count == 0 {
+                    println!("  No matches found!");
+                } else {
+                    println!("  SUCCESS: Found {} matches", match_count);
+                }
+            }
+            Err(e) => {
+                println!("  Query compilation failed: {}", e);
+            }
+        }
+
+        // Now try with captures
+        let simple_query = "(function_item) @func";
+        println!("\nTesting query with capture: '{}'", simple_query);
+
+        match tree_sitter::Query::new(&tree_sitter_language, simple_query) {
+            Ok(query) => {
+                let mut cursor = tree_sitter::QueryCursor::new();
+                let mut matches = cursor.matches(&query, root_node, content.as_bytes());
+
+                let mut match_count = 0;
+                while let Some(query_match) = matches.get() {
+                    match_count += 1;
+                    println!(
+                        "  Match {}: {} captures",
+                        match_count,
+                        query_match.captures.len()
+                    );
+                    for capture in query_match.captures {
+                        let node = capture.node;
+                        let text = &content[node.start_byte()..node.end_byte()];
+                        println!(
+                            "    Capture: '{}' ({})",
+                            text.chars().take(20).collect::<String>(),
+                            node.kind()
+                        );
+                    }
+                    matches.advance();
+                }
+
+                if match_count == 0 {
+                    println!("  No matches found with capture!");
+                } else {
+                    println!("  SUCCESS: Found {} matches", match_count);
+                }
+            }
+            Err(e) => {
+                println!("  Query compilation failed: {}", e);
+            }
+        }
+    }
+
+    fn walk_all_nodes(node: &tree_sitter::Node, content: &str, depth: usize) {
+        let indent = "  ".repeat(depth);
+        println!(
+            "{}Node: {} (named: {})",
+            indent,
+            node.kind(),
+            node.is_named()
+        );
+
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                walk_all_nodes(&child, content, depth + 1);
+            }
+        }
+    }
+
+    #[test]
+    #[ignore] // Debug test - can be run manually if needed  
+    fn test_minimal_treesitter_working() {
+        // Minimal test to isolate TreeSitter query issue
+        let content = "fn main() {}";
+
+        // Create parser and parse
+        let mut parser = tree_sitter::Parser::new();
+        let language = tree_sitter_rust::LANGUAGE.into();
+        parser.set_language(&language).unwrap();
+        let tree = parser.parse(content, None).unwrap();
+
+        // Create a very simple query
+        let query = tree_sitter::Query::new(&language, "(function_item) @fn").unwrap();
+
+        // Execute query
+        let mut cursor = tree_sitter::QueryCursor::new();
+        let mut matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
+
+        println!("Testing minimal TreeSitter setup:");
+        println!("Content: '{}'", content);
+        println!("Query: '(function_item) @fn'");
+
+        let mut found = false;
+        while let Some(m) = matches.next() {
+            found = true;
+            println!("Found match with {} captures", m.captures.len());
+            for capture in m.captures {
+                let text = &content[capture.node.start_byte()..capture.node.end_byte()];
+                println!("  Capture: '{}'", text);
+            }
+        }
+
+        if !found {
+            println!("No matches found - TreeSitter queries definitely broken");
+
+            // Try manually finding function_item nodes
+            let mut cursor = tree.root_node().walk();
+
+            fn find_function_items(cursor: &mut tree_sitter::TreeCursor, content: &str) -> bool {
+                let node = cursor.node();
+                println!("Checking node: {}", node.kind());
+
+                if node.kind() == "function_item" {
+                    let text = &content[node.start_byte()..node.end_byte()];
+                    println!("Found function_item manually: '{}'", text);
+                    return true;
+                }
+
+                if cursor.goto_first_child() {
+                    loop {
+                        if find_function_items(cursor, content) {
+                            return true;
+                        }
+                        if !cursor.goto_next_sibling() {
+                            break;
+                        }
+                    }
+                    cursor.goto_parent();
+                }
+                false
+            }
+
+            let found_function_item = find_function_items(&mut cursor, content);
+
+            if found_function_item {
+                println!("SUCCESS: Found function_item manually, so query system is broken");
+            } else {
+                println!("ERROR: Can't even find function_item manually");
+            }
+        } else {
+            println!("SUCCESS: TreeSitter queries work!");
+        }
+
+        // This test documents the current state - we expect it to fail
+        // assert!(found, "TreeSitter queries should work but currently don't");
+    }
+
+    #[test]
+    fn test_debug_treesitter_query_execution() {
+        // Debug test to understand why TreeSitter queries aren't matching
+        let config = ParserConfig {
+            min_chunk_size: 1,
+            max_chunk_size: 5000,
+            max_chunks_per_file: 100,
+            max_file_size_bytes: 10 * 1024 * 1024,
+        };
+        let parser = CodeParser::new(config).unwrap();
+
+        // Simple Rust function that should definitely match
+        let content = "fn main() {\n    println!(\"Hello, world!\");\n}";
+        let file_path = Path::new("debug.rs");
+
+        // Get TreeSitter language and parser directly
+        let language = parser.detect_language(file_path);
+        println!("Detected language: {:?}", language);
+
+        let queries = parser.get_queries_for_language(&language);
+        println!("Found {} queries for {:?}", queries.len(), language);
+
+        for (i, (query_str, chunk_type)) in queries.iter().enumerate() {
+            println!("Query {}: {:?} - '{}'", i, chunk_type, query_str);
+        }
+
+        // Try parsing with TreeSitter directly
+        let tree_sitter_language = tree_sitter_rust::LANGUAGE.into();
+        let mut tree_parser = tree_sitter::Parser::new();
+        tree_parser.set_language(&tree_sitter_language).unwrap();
+
+        let tree = tree_parser.parse(content, None).unwrap();
+        let root_node = tree.root_node();
+
+        println!(
+            "TreeSitter parse success. Root node: {:?}",
+            root_node.kind()
+        );
+        println!("Has error: {}", root_node.has_error());
+        println!("Node count: {}", root_node.named_child_count());
+
+        // Print the tree structure
+        print_tree(&root_node, content, 0);
+
+        // Test each query manually
+        for (query_str, chunk_type) in queries {
+            println!("\nTesting query: {:?} - '{}'", chunk_type, query_str);
+
+            match tree_sitter::Query::new(&tree_sitter_language, query_str) {
+                Ok(query) => {
+                    let mut cursor = tree_sitter::QueryCursor::new();
+                    let matches = cursor.matches(&query, root_node, content.as_bytes());
+
+                    let mut match_count = 0;
+                    let mut matches = matches;
+                    while let Some(query_match) = matches.get() {
+                        match_count += 1;
+                        println!(
+                            "  Match {}: {} captures",
+                            match_count,
+                            query_match.captures.len()
+                        );
+                        for capture in query_match.captures {
+                            let node = capture.node;
+                            let text = &content[node.start_byte()..node.end_byte()];
+                            println!(
+                                "    Capture: '{}' ({})",
+                                text.chars().take(30).collect::<String>(),
+                                node.kind()
+                            );
+                        }
+                        matches.advance();
+                    }
+
+                    if match_count == 0 {
+                        println!("  No matches found for this query!");
+                    }
+                }
+                Err(e) => {
+                    println!("  Query compilation failed: {}", e);
+                }
+            }
+        }
+    }
+
+    fn print_tree(node: &tree_sitter::Node, content: &str, depth: usize) {
+        let indent = "  ".repeat(depth);
+        let node_text = if node.child_count() == 0 {
+            let text = &content[node.start_byte()..node.end_byte()];
+            format!(" \"{}\"", text.chars().take(20).collect::<String>())
+        } else {
+            String::new()
+        };
+
+        println!("{}{}:{}", indent, node.kind(), node_text);
+
+        if depth < 3 {
+            // Limit depth to avoid too much output
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    print_tree(&child, content, depth + 1);
+                }
+            }
+        }
     }
 }

@@ -1,0 +1,1 @@
+cargo run search index **/*.rs is matching target/debug/swissarmyhammer search index benches/benchmarks.rs, which is in incorrect glob match -- matching a folder not exactly matching the pattern

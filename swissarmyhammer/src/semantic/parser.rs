@@ -1429,9 +1429,8 @@ pub fn format_content_preview(content: &str, max_length: usize) -> String {
 
         // We should get multiple types of chunks from this realistic Rust code
         let semantic_chunks = use_chunks + struct_chunks + function_chunks;
-        assert!(semantic_chunks > 0, 
-            "Expected semantic chunks (use statements: {}, structs/enums: {}, functions: {}), but got plain text only", 
-            use_chunks, struct_chunks, function_chunks);
+        assert!(semantic_chunks > 0,
+            "Expected semantic chunks (use statements: {use_chunks}, structs/enums: {struct_chunks}, functions: {function_chunks}), but got plain text only");
 
         // Verify we got some meaningful content
         let has_meaningful_content = chunks.iter().any(|chunk| {
@@ -1476,7 +1475,7 @@ pub fn format_content_preview(content: &str, max_length: usize) -> String {
 
         // Try the simplest possible query - first without captures
         let simple_query = "(function_item)";
-        println!("\nTesting query without capture: '{}'", simple_query);
+        println!("\nTesting query without capture: '{simple_query}'");
 
         match tree_sitter::Query::new(&tree_sitter_language, simple_query) {
             Ok(query) => {
@@ -1497,17 +1496,17 @@ pub fn format_content_preview(content: &str, max_length: usize) -> String {
                 if match_count == 0 {
                     println!("  No matches found!");
                 } else {
-                    println!("  SUCCESS: Found {} matches", match_count);
+                    println!("  SUCCESS: Found {match_count} matches");
                 }
             }
             Err(e) => {
-                println!("  Query compilation failed: {}", e);
+                println!("  Query compilation failed: {e}");
             }
         }
 
         // Now try with captures
         let simple_query = "(function_item) @func";
-        println!("\nTesting query with capture: '{}'", simple_query);
+        println!("\nTesting query with capture: '{simple_query}'");
 
         match tree_sitter::Query::new(&tree_sitter_language, simple_query) {
             Ok(query) => {
@@ -1537,16 +1536,16 @@ pub fn format_content_preview(content: &str, max_length: usize) -> String {
                 if match_count == 0 {
                     println!("  No matches found with capture!");
                 } else {
-                    println!("  SUCCESS: Found {} matches", match_count);
+                    println!("  SUCCESS: Found {match_count} matches");
                 }
             }
             Err(e) => {
-                println!("  Query compilation failed: {}", e);
+                println!("  Query compilation failed: {e}");
             }
         }
     }
 
-    fn walk_all_nodes(node: &tree_sitter::Node, content: &str, depth: usize) {
+    fn walk_all_nodes(node: &tree_sitter::Node, _content: &str, depth: usize) {
         let indent = "  ".repeat(depth);
         println!(
             "{}Node: {} (named: {})",
@@ -1557,13 +1556,13 @@ pub fn format_content_preview(content: &str, max_length: usize) -> String {
 
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
-                walk_all_nodes(&child, content, depth + 1);
+                walk_all_nodes(&child, _content, depth + 1);
             }
         }
     }
 
     #[test]
-    #[ignore] // Debug test - can be run manually if needed  
+    #[ignore] // Debug test - can be run manually if needed
     fn test_minimal_treesitter_working() {
         // Minimal test to isolate TreeSitter query issue
         let content = "fn main() {}";
@@ -1582,7 +1581,7 @@ pub fn format_content_preview(content: &str, max_length: usize) -> String {
         let mut matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
 
         println!("Testing minimal TreeSitter setup:");
-        println!("Content: '{}'", content);
+        println!("Content: '{content}'");
         println!("Query: '(function_item) @fn'");
 
         let mut found = false;
@@ -1591,7 +1590,7 @@ pub fn format_content_preview(content: &str, max_length: usize) -> String {
             println!("Found match with {} captures", m.captures.len());
             for capture in m.captures {
                 let text = &content[capture.node.start_byte()..capture.node.end_byte()];
-                println!("  Capture: '{}'", text);
+                println!("  Capture: '{text}'");
             }
         }
 
@@ -1607,7 +1606,7 @@ pub fn format_content_preview(content: &str, max_length: usize) -> String {
 
                 if node.kind() == "function_item" {
                     let text = &content[node.start_byte()..node.end_byte()];
-                    println!("Found function_item manually: '{}'", text);
+                    println!("Found function_item manually: '{text}'");
                     return true;
                 }
 
@@ -1657,13 +1656,13 @@ pub fn format_content_preview(content: &str, max_length: usize) -> String {
 
         // Get TreeSitter language and parser directly
         let language = parser.detect_language(file_path);
-        println!("Detected language: {:?}", language);
+        println!("Detected language: {language:?}");
 
         let queries = parser.get_queries_for_language(&language);
         println!("Found {} queries for {:?}", queries.len(), language);
 
         for (i, (query_str, chunk_type)) in queries.iter().enumerate() {
-            println!("Query {}: {:?} - '{}'", i, chunk_type, query_str);
+            println!("Query {i}: {chunk_type:?} - '{query_str}'");
         }
 
         // Try parsing with TreeSitter directly
@@ -1686,7 +1685,7 @@ pub fn format_content_preview(content: &str, max_length: usize) -> String {
 
         // Test each query manually
         for (query_str, chunk_type) in queries {
-            println!("\nTesting query: {:?} - '{}'", chunk_type, query_str);
+            println!("\nTesting query: {chunk_type:?} - '{query_str}'");
 
             match tree_sitter::Query::new(&tree_sitter_language, query_str) {
                 Ok(query) => {
@@ -1719,7 +1718,7 @@ pub fn format_content_preview(content: &str, max_length: usize) -> String {
                     }
                 }
                 Err(e) => {
-                    println!("  Query compilation failed: {}", e);
+                    println!("  Query compilation failed: {e}");
                 }
             }
         }

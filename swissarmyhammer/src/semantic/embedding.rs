@@ -351,14 +351,11 @@ impl EmbeddingEngine {
     }
 
     #[cfg(test)]
-    /// Create embedding engine for testing with mock embeddings
+    /// Create embedding engine for testing - will fail gracefully if model not available
     pub async fn new_for_testing() -> Result<Self> {
-        // For testing, we need to handle the case where embedding models aren't available
-        // Try to create the real embedding engine, but return a clear error if it fails
-        Self::new().await.map_err(|_| {
+        Self::new().await.map_err(|e| {
             SemanticError::Embedding(
-                "Embedding model not available for testing. This test requires the fastembed model to be downloaded. \
-                Run with SKIP_EMBEDDING_TESTS=1 to skip these tests.".to_string()
+                format!("Embedding model not available for testing (this is expected in CI/test environments without downloaded models): {}", e)
             )
         })
     }

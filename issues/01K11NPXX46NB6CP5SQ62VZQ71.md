@@ -1,0 +1,1 @@
+you Added  environment variable handling to semantic indexer tests to gracefully skip when embedding models aren't available . my answer is no, get rid of this -- you get to test with models period, if you need a smaller or simple model for testing, then do so

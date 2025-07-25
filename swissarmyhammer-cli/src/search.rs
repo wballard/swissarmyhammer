@@ -495,13 +495,16 @@ mod tests {
     #[tokio::test]
     async fn test_run_semantic_index_single_pattern() {
         let patterns = vec!["test_pattern.rs".to_string()];
-        
+
         // With local embeddings implementation, semantic indexing now works
         // The function should succeed even with non-existent patterns (0 files processed)
         let result = run_semantic_index(&patterns, false).await;
-        
+
         // Should succeed as local embedding engine initializes successfully
-        assert!(result.is_ok(), "Semantic indexing should succeed with local embeddings");
+        assert!(
+            result.is_ok(),
+            "Semantic indexing should succeed with local embeddings"
+        );
     }
 
     #[tokio::test]
@@ -515,8 +518,11 @@ mod tests {
         // With local embeddings implementation, semantic indexing now works
         // The function should succeed and process real files in the project
         let result = run_semantic_index(&patterns, false).await;
-        
+
         // Should succeed as local embedding engine works and will find real files
-        assert!(result.is_ok(), "Semantic indexing should succeed with local embeddings and real patterns");
+        assert!(
+            result.is_ok(),
+            "Semantic indexing should succeed with local embeddings and real patterns"
+        );
     }
 }

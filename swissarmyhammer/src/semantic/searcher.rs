@@ -999,7 +999,7 @@ mod tests {
     async fn create_test_searcher_with_data() -> Result<SemanticSearcher> {
         // Much lower thresholds for local embedding engine with deterministic results
         let config = SemanticConfig {
-            similarity_threshold: 0.01,  // Very low threshold for local embeddings
+            similarity_threshold: 0.01, // Very low threshold for local embeddings
             simple_search_threshold: 0.01,
             code_similarity_threshold: 0.01,
             ..Default::default()
@@ -1073,7 +1073,7 @@ mod tests {
         let query = SearchQuery {
             text: "hello world function".to_string(),
             limit: 10,
-            similarity_threshold: 0.01,  // Lower threshold for local embeddings
+            similarity_threshold: 0.01, // Lower threshold for local embeddings
             language_filter: None,
         };
 

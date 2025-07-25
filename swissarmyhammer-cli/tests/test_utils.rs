@@ -125,14 +125,20 @@ impl SemanticTestGuard {
     pub fn new() -> Self {
         let home_guard = create_test_home_guard();
         let original_api_key = std::env::var("NOMIC_API_KEY").ok();
-        
+
         // Set a test API key that allows the command to start but will fail gracefully
         std::env::set_var("NOMIC_API_KEY", "test-key-for-cli-integration-testing");
-        
+
         Self {
             _home_guard: home_guard,
             original_api_key,
         }
+    }
+}
+
+impl Default for SemanticTestGuard {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

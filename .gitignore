@@ -37,3 +37,6 @@ swissarmyhammer/issues/
 
 # PropTest regression files
 proptest-regressions/
+
+# FastEmbed cache
+.fastembed_cache/

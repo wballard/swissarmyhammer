@@ -1,0 +1,1 @@
+update the documentation, focus on the index and search features

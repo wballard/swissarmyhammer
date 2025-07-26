@@ -1,6 +1,6 @@
 The tools processing is getting to be way too large of a source file.
 
-Let's start with tool_handlers.rs -- seems like lots of duplication with mcp.rs and I cannot find where these tools are used.
+
 
 ## MCP Root
 
@@ -20,7 +20,9 @@ We need to separate into a module for each related group of tools.
 
 - ./mcp/tools/memoranda
 - ./mcp/tools/issues
-- ./mcp/tools/semantic
+- ./mcp/tools/search
+
+right now 'search' is called 'semantic' -- but we call it search in the CLI currently and that is a more sensible name to users
 
 and get the code that implements each of these tools into those folders to improve the organization
 
@@ -69,7 +71,13 @@ Refactor toward the tools
 
 ## Missing tools
 
-These tools appear to be missing
+These tools appear to be missing as tools, but are present in the CLI
 
-semantic/semantic_index
-semantic/semantic_query
+search_index
+search_query
+
+## tool_handlers
+
+tool_handlers.rs -- seems like lots of duplication with mcp.rs and I cannot find where these tools are used.
+
+We need to delete tool_handlers, and if any code in here is actually used, it needs ot be moved into the ./mcp

@@ -32,8 +32,8 @@ pub struct EmbeddingConfig {
 impl Default for EmbeddingConfig {
     fn default() -> Self {
         Self {
-            model_id: "all-MiniLM-L6-v2".to_string(), // Popular lightweight model
-            embedding_model: EmbeddingModel::AllMiniLML6V2,
+            model_id: "nomic-embed-text-v1.5".to_string(), // Modern, high-quality embedding model
+            embedding_model: EmbeddingModel::NomicEmbedTextV15,
             batch_size: 32, // Reasonable batch size for neural models
             max_text_length: 8000,
             batch_delay_ms: 10, // Small delay for neural processing
@@ -422,22 +422,22 @@ impl EmbeddingEngine {
 
         let config = EmbeddingConfig {
             model_id: "mock-test-model".to_string(),
-            embedding_model: EmbeddingModel::AllMiniLML6V2, // Not used for mock
+            embedding_model: EmbeddingModel::NomicEmbedTextV15, // Not used for mock
             batch_size: 1,
             max_text_length: 1000,
             batch_delay_ms: 0,
             show_download_progress: false,
-            dimensions: Some(384), // Standard dimension for testing
+            dimensions: Some(768), // Standard dimension for NomicEmbedTextV15
             max_sequence_length: 256,
             quantization: "FP32".to_string(),
         };
 
-        info!("Creating mock embedding engine with 384 dimensions");
+        info!("Creating mock embedding engine with 768 dimensions");
 
         // Create a mock model info without initializing the actual fastembed model
         let model_info = EmbeddingModelInfo {
             model_id: config.model_id.clone(),
-            dimensions: 384, // Standard embedding dimension for testing
+            dimensions: 768, // Standard embedding dimension for NomicEmbedTextV15
             max_sequence_length: config.max_sequence_length,
             quantization: config.quantization.clone(),
         };
@@ -506,7 +506,7 @@ mod tests {
 
         assert!(embedding.is_ok());
         let embedding = embedding.unwrap();
-        assert_eq!(embedding.len(), 384);
+        assert_eq!(embedding.len(), 768);
 
         // Check that embedding values are normalized (typical for embeddings)
         let magnitude: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -543,7 +543,7 @@ mod tests {
 
         let embedding = embedding.unwrap();
         assert_eq!(embedding.chunk_id, "test_chunk");
-        assert_eq!(embedding.vector.len(), 384);
+        assert_eq!(embedding.vector.len(), 768);
     }
 
     #[tokio::test]
@@ -556,8 +556,8 @@ mod tests {
         assert!(embeddings.is_ok());
         let embeddings = embeddings.unwrap();
         assert_eq!(embeddings.len(), 2);
-        assert_eq!(embeddings[0].len(), 384);
-        assert_eq!(embeddings[1].len(), 384);
+        assert_eq!(embeddings[0].len(), 768);
+        assert_eq!(embeddings[1].len(), 768);
     }
 
     #[tokio::test]
@@ -592,8 +592,8 @@ mod tests {
         let engine = engine_result.unwrap();
 
         let info = engine.model_info();
-        assert_eq!(info.model_id, "all-MiniLM-L6-v2");
-        assert_eq!(info.dimensions, 384);
+        assert_eq!(info.model_id, "nomic-embed-text-v1.5");
+        assert_eq!(info.dimensions, 768);
         assert_eq!(info.max_sequence_length, 512);
         assert_eq!(info.quantization, "FP32");
     }
@@ -657,7 +657,7 @@ mod tests {
     #[test]
     fn test_embedding_config_default() {
         let config = EmbeddingConfig::default();
-        assert_eq!(config.model_id, "all-MiniLM-L6-v2");
+        assert_eq!(config.model_id, "nomic-embed-text-v1.5");
         assert_eq!(config.batch_size, 32);
         assert_eq!(config.max_text_length, 8000);
         assert_eq!(config.batch_delay_ms, 10);

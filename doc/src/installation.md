@@ -58,8 +58,6 @@ swissarmyhammer doctor
 # Show help
 swissarmyhammer --help
 
-# List available commands
-swissarmyhammer list
 ```
 
 The `doctor` command will check your installation and provide helpful diagnostics if anything needs attention.

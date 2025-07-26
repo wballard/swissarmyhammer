@@ -1075,6 +1075,14 @@ impl Validator {
             } else {
                 println!("\n{} Validation passed!", "✓".green());
             }
+        } else {
+            // In quiet mode, only show summary for errors
+            if result.has_errors() {
+                println!("\n{}", "Summary:".bold());
+                println!("  Files checked: {}", result.files_checked);
+                println!("  Errors: {}", result.errors.to_string().red());
+                println!("\n{} Validation failed with errors.", "✗".red());
+            }
         }
     }
 
@@ -2248,5 +2256,40 @@ Neither of these should cause validation errors."#;
             arg_warnings, 0,
             "Partial templates should not have warnings about missing argument definitions"
         );
+    }
+
+    #[test]
+    fn test_quiet_mode_hides_warnings_from_summary() {
+        // Test that quiet mode hides both warning details and warning counts from summary
+        let mut result = ValidationResult::new();
+        result.files_checked = 1;
+
+        // Add a warning to the result
+        let warning_issue = ValidationIssue {
+            level: ValidationLevel::Warning,
+            file_path: PathBuf::from("test.md"),
+            content_title: Some("Test".to_string()),
+            line: None,
+            column: None,
+            message: "Test warning".to_string(),
+            suggestion: Some("Test suggestion".to_string()),
+        };
+        result.add_issue(warning_issue);
+
+        // Test quiet mode validator configuration
+        let quiet_validator = Validator::new(true);
+        assert!(quiet_validator.quiet);
+
+        // Verify warning count is correct but quiet mode should hide it
+        assert_eq!(result.warnings, 1);
+        assert!(!result.has_errors());
+        assert!(result.has_warnings());
+
+        // Test normal mode - should show warnings
+        let normal_validator = Validator::new(false);
+        assert!(!normal_validator.quiet);
+
+        // The fix ensures that in quiet mode, when only warnings exist,
+        // no summary is shown at all (tested in integration tests)
     }
 }

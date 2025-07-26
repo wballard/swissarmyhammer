@@ -64,7 +64,7 @@ pub struct EmbeddingModelInfo {
 pub struct EmbeddingEngine {
     config: EmbeddingConfig,
     model_info: EmbeddingModelInfo,
-    model: Arc<Mutex<TextEmbedding>>,
+    model: Arc<Mutex<Option<TextEmbedding>>>,
 }
 
 impl EmbeddingEngine {
@@ -155,7 +155,7 @@ impl EmbeddingEngine {
         Ok(Self {
             config,
             model_info,
-            model: Arc::new(Mutex::new(model)),
+            model: Arc::new(Mutex::new(Some(model))),
         })
     }
 
@@ -256,7 +256,12 @@ impl EmbeddingEngine {
         }
 
         // Use fastembed to generate high-quality neural embeddings
-        let mut model = self.model.lock().await;
+        let mut model_option = self.model.lock().await;
+        let model = model_option.as_mut().ok_or_else(|| {
+            SemanticError::Embedding(
+                "Model not initialized - only available in non-test mode".to_string(),
+            )
+        })?;
 
         // Format text appropriately for embedding (code context)
         let formatted_text = format!("passage: {text}");
@@ -324,7 +329,12 @@ impl EmbeddingEngine {
             .collect();
 
         // Use fastembed's native batch processing
-        let mut model = self.model.lock().await;
+        let mut model_option = self.model.lock().await;
+        let model = model_option.as_mut().ok_or_else(|| {
+            SemanticError::Embedding(
+                "Model not initialized - only available in non-test mode".to_string(),
+            )
+        })?;
 
         debug!("Processing batch of {} texts", texts.len());
 
@@ -421,21 +431,8 @@ impl EmbeddingEngine {
         // Since we can't create one without network access, we'll use a different strategy
         // We'll create a minimal engine that uses the mock path in create_neural_embedding
 
-        // Try to create a minimal TextEmbedding - this should use cached data if available
-        // but not require network access for the mock case
-        let init_options =
-            InitOptions::new(EmbeddingModel::AllMiniLML6V2).with_show_download_progress(false);
-
-        // Since the mock will intercept all calls, we can fall back to an error
-        // that suggests running with network access first to set up the cache
-        let dummy_model = TextEmbedding::try_new(init_options).map_err(|e| {
-            SemanticError::Embedding(format!(
-                "Mock embedding engine requires fastembed model cache to be present. \
-                 Run tests with internet connection once to download model cache, \
-                 or set up offline testing. Original error: {}",
-                e
-            ))
-        })?;
+        // For testing, we don't need a real model since the mock path will handle embeddings
+        let dummy_model = None;
 
         info!("Mock embedding engine created successfully");
         Ok(Self {

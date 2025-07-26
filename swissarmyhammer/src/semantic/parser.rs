@@ -1473,7 +1473,6 @@ pub fn format_content_preview(content: &str, max_length: usize) -> String {
         test_rust_content_parsing(config, content, file_path, expected_patterns);
     }
 
-
     #[test]
     fn test_treesitter_with_default_config_reproduces_issue() {
         // This test reproduces the issue: using default config results in 0 chunks

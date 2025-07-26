@@ -650,13 +650,13 @@ mod tests {
 
     async fn create_test_indexer() -> Result<(FileIndexer, TempDir)> {
         let temp_dir = TempDir::new().map_err(SemanticError::FileSystem)?;
-        
+
         // Use thread ID and random number for better uniqueness and avoid race conditions
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
         let thread_id = std::thread::current().id();
-        
+
         let db_name = format!("test_{:?}_{}.db", thread_id, counter);
         let config = SemanticConfig {
             database_path: temp_dir.path().join(db_name),

@@ -54,7 +54,7 @@ mod integration_tests {
     #[test]
     fn test_parser_config_default() {
         let config = ParserConfig::default();
-        assert_eq!(config.min_chunk_size, 50);
+        assert_eq!(config.min_chunk_size, 10);
         assert_eq!(config.max_chunk_size, 2000);
         assert_eq!(config.max_chunks_per_file, 100);
     }

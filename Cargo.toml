@@ -84,24 +84,45 @@ criterion = "0.5"
 serial_test = "3.0"
 
 [profile.release]
-# Enable Link Time Optimization for smaller binaries
-lto = "thin" # Use thin LTO for faster builds and startup
-# Strip debug symbols
-strip = true
-# Optimize for speed over size for faster startup
+# Optimize for speed over size
 opt-level = 3
-# More codegen units for faster compilation and startup
-codegen-units = 16
+# Disable LTO for faster builds
+lto = false
+# More codegen units for faster compilation
+codegen-units = 256
 # Abort on panic for smaller binary size
 panic = "abort"
+# Enable incremental compilation for faster rebuilds
+incremental = true
+
+[profile.dev]
+# No LTO for fastest debug builds
+lto = false
+# Maximum parallelization for debug builds
+codegen-units = 256
+# No optimization for fastest compilation
+opt-level = 0
+# Enable incremental compilation
+incremental = true
+# Minimal debug info for faster builds
+debug = 1
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
 
-# Additional profile for startup optimization
-[profile.release-fast]
-inherits = "release"
-# Optimize specifically for startup time
-lto = false         # Disable LTO for faster startup
-codegen-units = 256 # Maximum parallelization
+# Fast dev profile for quick iterations
+[profile.dev-fast]
+inherits = "dev"
+opt-level = 0       # No optimization for fastest builds
+debug = 0           # No debug info for fastest builds
 incremental = true
+codegen-units = 256
+split-debuginfo = "off"
+
+# Optimized dev profile with some performance
+[profile.dev-opt]
+inherits = "dev"
+opt-level = 1       # Slight optimization
+debug = 1           # Minimal debug info
+incremental = true
+codegen-units = 256

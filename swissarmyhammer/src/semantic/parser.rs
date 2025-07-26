@@ -1679,7 +1679,7 @@ impl ExecutionVisualizer {
 
             // Debug: Let's also check what language is detected
             let detected_language = parser.detect_language(file_path);
-            println!("Detected language: {:?}", detected_language);
+            println!("Detected language: {detected_language:?}");
 
             // Check if file is supported
             let is_supported = parser.is_supported_file(file_path);
@@ -1878,10 +1878,7 @@ pub fn helper_function(data: &[u8]) -> String {
                     .filter(|c| c.chunk_type == ChunkType::Function)
                     .count();
 
-                println!(
-                    "  Use: {}, Struct/Enum/Impl: {}, Function: {}",
-                    use_chunks, struct_chunks, function_chunks
-                );
+                println!("  Use: {use_chunks}, Struct/Enum/Impl: {struct_chunks}, Function: {function_chunks}");
 
                 // We should get at least one semantic chunk (not just fallback to plain text)
                 let semantic_chunks = use_chunks + struct_chunks + function_chunks;
@@ -2103,7 +2100,7 @@ pub fn helper_function(data: &[u8]) -> String {
         ];
 
         for (query_str, description) in test_queries {
-            println!("\nTesting query: {} - '{}'", description, query_str);
+            println!("\nTesting query: {description} - '{query_str}'");
 
             match tree_sitter::Query::new(&language, query_str) {
                 Ok(query) => {
@@ -2144,11 +2141,11 @@ pub fn helper_function(data: &[u8]) -> String {
                     if match_count == 0 {
                         println!("  ❌ No matches found for this query!");
                     } else {
-                        println!("  ✅ Found {} matches", match_count);
+                        println!("  ✅ Found {match_count} matches");
                     }
                 }
                 Err(e) => {
-                    println!("  ❌ Query compilation failed: {}", e);
+                    println!("  ❌ Query compilation failed: {e}");
                 }
             }
         }
@@ -2162,7 +2159,7 @@ pub fn helper_function(data: &[u8]) -> String {
         let mut found_with_next = 0;
         while let Some(query_match) = matches.next() {
             found_with_next += 1;
-            println!("Found match {} with next() pattern", found_with_next);
+            println!("Found match {found_with_next} with next() pattern");
             for capture in query_match.captures {
                 let text = &content[capture.node.start_byte()..capture.node.end_byte()];
                 println!(
@@ -2178,7 +2175,7 @@ pub fn helper_function(data: &[u8]) -> String {
         if found_with_next == 0 {
             println!("❌ No matches found with next() pattern - this is the bug!");
         } else {
-            println!("✅ Found {} matches with next() pattern", found_with_next);
+            println!("✅ Found {found_with_next} matches with next() pattern");
         }
     }
 

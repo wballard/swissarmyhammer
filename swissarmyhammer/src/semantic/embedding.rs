@@ -61,7 +61,7 @@ pub struct EmbeddingModelInfo {
 /// Embedding model backend type
 enum EmbeddingBackend {
     /// Production model using fastembed neural embeddings
-    Neural(TextEmbedding),
+    Neural(Box<TextEmbedding>),
     /// Mock model for testing (deterministic embeddings)
     #[allow(dead_code)] // Only used in test code
     Mock,
@@ -164,7 +164,7 @@ impl EmbeddingEngine {
         Ok(Self {
             config,
             model_info,
-            backend: Arc::new(Mutex::new(EmbeddingBackend::Neural(model))),
+            backend: Arc::new(Mutex::new(EmbeddingBackend::Neural(Box::new(model)))),
         })
     }
 
@@ -267,7 +267,7 @@ impl EmbeddingEngine {
         // Use fastembed to generate high-quality neural embeddings
         let mut backend = self.backend.lock().await;
         let model = match &mut *backend {
-            EmbeddingBackend::Neural(model) => model,
+            EmbeddingBackend::Neural(model) => model.as_mut(),
             EmbeddingBackend::Mock => {
                 return Err(SemanticError::Embedding(
                     "Neural model not available in test mode".to_string(),
@@ -343,7 +343,7 @@ impl EmbeddingEngine {
         // Use fastembed's native batch processing
         let mut backend = self.backend.lock().await;
         let model = match &mut *backend {
-            EmbeddingBackend::Neural(model) => model,
+            EmbeddingBackend::Neural(model) => model.as_mut(),
             EmbeddingBackend::Mock => {
                 return Err(SemanticError::Embedding(
                     "Neural batch processing not available in test mode".to_string(),

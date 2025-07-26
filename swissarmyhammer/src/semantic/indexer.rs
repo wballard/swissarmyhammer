@@ -657,7 +657,7 @@ mod tests {
         let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
         let thread_id = std::thread::current().id();
 
-        let db_name = format!("test_{:?}_{}.db", thread_id, counter);
+        let db_name = format!("test_{thread_id:?}_{counter}.db");
         let config = SemanticConfig {
             database_path: temp_dir.path().join(db_name),
             ..Default::default()
@@ -691,7 +691,7 @@ mod tests {
     async fn test_indexer_creation() {
         let result = create_test_indexer().await;
         if let Err(e) = result {
-            panic!("Failed to create test indexer: {}", e);
+            panic!("Failed to create test indexer: {e}");
         }
     }
 

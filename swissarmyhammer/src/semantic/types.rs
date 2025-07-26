@@ -289,12 +289,13 @@ impl SemanticConfig {
     fn find_semantic_database_path() -> PathBuf {
         // Try to find local .swissarmyhammer directories first
         if let Ok(current_dir) = std::env::current_dir() {
-            let local_dirs = crate::directory_utils::find_swissarmyhammer_dirs_upward(&current_dir, true);
-            
+            let local_dirs =
+                crate::directory_utils::find_swissarmyhammer_dirs_upward(&current_dir, true);
+
             // Use the most specific (deepest) local directory if available
             if let Some(local_dir) = local_dirs.last() {
                 let semantic_db_path = local_dir.join("semantic.db");
-                
+
                 // Ensure the directory exists and is writable
                 if let Err(e) = std::fs::create_dir_all(local_dir) {
                     tracing::warn!(
@@ -311,11 +312,11 @@ impl SemanticConfig {
                 }
             }
         }
-        
+
         // Fallback to user home directory
         if let Some(home_dir) = dirs::home_dir() {
             let swissarmyhammer_dir = home_dir.join(".swissarmyhammer");
-            
+
             // Try to create the .swissarmyhammer directory
             if let Err(e) = std::fs::create_dir_all(&swissarmyhammer_dir) {
                 tracing::warn!(
@@ -325,7 +326,7 @@ impl SemanticConfig {
                 );
                 return PathBuf::from(".swissarmyhammer/semantic.db");
             }
-            
+
             let semantic_db_path = swissarmyhammer_dir.join("semantic.db");
             tracing::debug!(
                 "Using home directory semantic database at: {}",
@@ -333,7 +334,7 @@ impl SemanticConfig {
             );
             return semantic_db_path;
         }
-        
+
         // Final fallback to relative path in current directory
         tracing::warn!("No home directory available, using relative path for semantic database");
         PathBuf::from(".swissarmyhammer/semantic.db")
@@ -518,8 +519,14 @@ mod tests {
             .contains("semantic.db"));
         // The path should end with either .swissarmyhammer/semantic.db or semantic.db
         assert!(
-            config.database_path.to_string_lossy().ends_with(".swissarmyhammer/semantic.db")
-                || config.database_path.to_string_lossy().ends_with("semantic.db")
+            config
+                .database_path
+                .to_string_lossy()
+                .ends_with(".swissarmyhammer/semantic.db")
+                || config
+                    .database_path
+                    .to_string_lossy()
+                    .ends_with("semantic.db")
         );
         assert_eq!(config.embedding_model, "nomic-ai/nomic-embed-code");
         assert_eq!(config.chunk_size, 512);
@@ -911,21 +918,29 @@ mod tests {
         std::env::set_current_dir(original_dir).unwrap();
 
         // Should use a path that contains semantic.db
-        assert!(config.database_path.to_string_lossy().contains("semantic.db"));
-        
+        assert!(config
+            .database_path
+            .to_string_lossy()
+            .contains("semantic.db"));
+
         // The path should either be absolute or relative, but should be pointing to the
         // correct .swissarmyhammer directory (which we know exists because we created it)
         let path_str = config.database_path.to_string_lossy();
-        
+
         // Either the path is absolute and points to our temp directory,
         // or it's the relative fallback path
-        let is_local_path = config.database_path.is_absolute() && 
-                           config.database_path.ancestors().any(|p| p == temp_dir.path());
-        let is_fallback_path = path_str.ends_with(".swissarmyhammer/semantic.db") ||
-                              path_str.ends_with("semantic.db");
-        
-        assert!(is_local_path || is_fallback_path, 
-                "Expected either local path or fallback, got: {}", path_str);
+        let is_local_path = config.database_path.is_absolute()
+            && config
+                .database_path
+                .ancestors()
+                .any(|p| p == temp_dir.path());
+        let is_fallback_path =
+            path_str.ends_with(".swissarmyhammer/semantic.db") || path_str.ends_with("semantic.db");
+
+        assert!(
+            is_local_path || is_fallback_path,
+            "Expected either local path or fallback, got: {path_str}"
+        );
     }
 
     #[test]
@@ -934,7 +949,7 @@ mod tests {
 
         // Create a temporary directory that doesn't have .swissarmyhammer
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Change to a directory without .swissarmyhammer
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
@@ -945,13 +960,15 @@ mod tests {
         std::env::set_current_dir(original_dir).unwrap();
 
         // Should fallback to home directory or relative path
-        assert!(config.database_path.to_string_lossy().contains("semantic.db"));
-        
+        assert!(config
+            .database_path
+            .to_string_lossy()
+            .contains("semantic.db"));
+
         // Should either be absolute (home) or relative (.swissarmyhammer/semantic.db)
         let path_str = config.database_path.to_string_lossy();
         assert!(
-            path_str.ends_with(".swissarmyhammer/semantic.db") || 
-            path_str.ends_with("semantic.db")
+            path_str.ends_with(".swissarmyhammer/semantic.db") || path_str.ends_with("semantic.db")
         );
     }
 }

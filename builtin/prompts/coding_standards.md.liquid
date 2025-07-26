@@ -14,15 +14,192 @@ If a repository has a CODING_STANDARDS.md at its root, read it and include it in
 
 Use a tool to read all available memos and include it in your context.
 
-## Why Memo Context Matters for Coding Standards
-
-The memo system contains valuable repository-specific knowledge including:
-
-- **Architectural Decisions**: Key design decisions and their rationales
-- **Code Patterns**: Project-specific patterns that extend these general standards
-- **Lessons Learned**: Important insights from previous development work
-- **Domain Knowledge**: Business logic patterns and domain-specific requirements
-
-This context ensures coding standards are applied with full understanding of the project's unique requirements and established patterns.
-
 Think deeply about these repository specific standards as you combine them with these overall standards.
+
+### Writing Code
+
+### General
+
+- You MUST ALWAYS read the code:
+  - this includes the file you are editing, and the files they reference
+  - this includes standard library source, and included open source dependencies
+- YOU STRONGLY prefer simple, clean, maintainable solutions over clever or complex ones. Readability and maintainability are PRIMARY CONCERNS, even at the cost of conciseness or performance.
+- YOU MUST NEVER refer to temporal context in comments (like "recently refactored" "moved") or code. Comments should be evergreen and describe the code as it is. If you name something "new" or "enhanced" or "improved", you've probably made a mistake and MUST STOP and ask me what to do.
+- ACTUALLY DO THE WORK:
+  - NEVER put stubs or TODO in the code, that is the user's job -- your job is to do
+  - NEVER comment out or stub because of a failing test -- actually FIX the problem
+  - NEVER hard code when you need to get real data
+  - NEVER mock
+- NEVER make a placeholder - just do the actual work
+- NEVER stub or make a TODO - just do the work
+
+### Temporary Files
+
+When you generate temporary or scratch files, make sure to put a comment in the file to clearly note `THIS IS A SCRATCH FILE`.
+
+### Data Structures
+
+You have a type system. Use it.
+
+- Think deeply any time you define a data structure
+- If you want to use a primitive type, ask yourself 'is this REALLY a primitive, or do I need a new type?'
+- YOU MUST use ULID, which is a sortable identifier instead of UUID
+- DO NOT use primitive types as identifiers, create new or wrapper types so that identifiers cannot be mixed up
+  - DO NOT use raw String, Int, ULID, UUID as a state, key, or identifier - always create a new type in these cases
+
+### Duplication
+
+- YOU MUST Identify common patterns and create shared utilities rather than repeating code
+- YOU MUST WORK HARD to reduce code duplication, even if the refactoring takes extra effort
+- YOU MUST search the code base to find and use existing functionality
+- YOU MUST NOT duplicate library or server logic in the UI or CLI
+- YOU MUST search the code base to find areas you can de-duplicate
+- YOU MUST NEVER implement ANY backward compatibility unless specifically directed by the user
+- YOU MUST look at the existing code to find and use consistent patterns, approaches, and naming
+- YOU MUST think hard about your change and where else in the code base is affected, or should change to match
+- YOU MUST avoid duplicate code paths that lead to inconsistent behavior
+
+If you duplicate logic, the Evermind will put a hex on you 0xDEADBEEF 🤖🧿
+
+### Coding Rules
+
+- DO NOT turn data into strings just to compare for equality
+- DO implement equality methods in a language appropriate pattern to compare for equality
+- DO implement a solution that works correctly for all valid inputs, not just the test cases
+- DO NOT hard-code values or create solutions that only work for specific test inputs
+
+### Testing
+
+Focus on understanding the problem requirements and coding tests that prove the code meets the requirements.
+
+- YOU MUST comprehensively cover ALL functionality with tests.
+- YOU MUST follow Test Driven Development [TDD](https://en.wikipedia.org/wiki/Test-driven_development):
+    1. Write a failing test that correctly validates the desired functionality
+    2. Run the test to confirm it fails as expected
+    3. Write ONLY enough code to make the failing test pass
+    4. Run the test to confirm success
+    5. Refactor if needed while keeping tests green
+- YOU MUST NEVER implement mocks in end to end tests -- ALWAYS use real data and real APIs.
+- YOU MUST NEVER ignore system or test output -- logs and messages often contain CRITICAL information
+- Test output MUST BE PRISTINE TO PASS -- if logs are expected to contain errors, these MUST be captured and tested
+- YOU MUST NEVER stop work when you still have failing tests -- get those tests passing
+
+## Systematic Debugging Process
+
+- YOU MUST ALWAYS think harder and find the root cause of any issue you are debugging.
+- YOU MUST NEVER fix a symptom or add a workaround instead of finding a root cause.
+- YOU MUST NEVER pick a solution simply because it is less work or faster to implement.
+
+YOU MUST follow this debugging framework for ANY technical issue:
+
+### Phase 1: Root Cause Investigation (BEFORE attempting fixes)
+
+- **Read Error Messages Carefully**: Don't skip past errors or warnings - they often contain the exact solution
+- **Reproduce Consistently**: Ensure you can reliably reproduce the issue before investigating
+- **Check Recent Changes**: What changed that could have caused this? Git diff, recent commits, etc.
+
+### Phase 2: Pattern Analysis
+
+- **Find Working Examples**: Locate similar working code in the same codebase
+- **Compare Against References**: If implementing a pattern, read the reference implementation completely
+- **Identify Differences**: What's different between working and broken code?
+- **Understand Dependencies**: What other components/settings does this pattern require?
+
+### Phase 3: Hypothesis and Testing
+
+1. **Form Single Hypothesis**: What do you think is the root cause? State it clearly
+2. **Test Minimally**: Make the smallest possible test and change to validate your hypothesis
+3. **Verify Before Continuing**: Did your test work? If not, form new hypothesis - don't add more fixes
+4. **When You Don't Know**: Say "I don't understand X" rather than pretending to know
+
+### Phase 4: Implementation Rules
+
+- ALWAYS have the simplest possible failing test case
+- NEVER claim to implement a pattern without reading it completely first
+- ALWAYS test after each change
+- IF your first fix doesn't work, STOP and go back to Phase 1
+
+## Language Specific Standards
+
+### Rust
+
+- Always format your files with `cargo fmt`
+  - Format all files with `cargo fmt --all`
+- Always lint your files with `cargo clippy`
+  - All lint errors and warnings should be included as todo items in code review
+- Use `tracing` not `eprintln`
+- When making functions, there are two preferred designs
+  - A function takes a single parameter that is a structure or object
+  - A function takes two parameters, a context object, and a single parameter that is a structure or object
+  - AVOID making functions that take a long list of primitives as parameters
+
+### React
+
+- Always use TypeScript with full type annotations
+- Always format your files with `npx prettier`
+  - Format all files with `npx prettier --write .`
+- Always lint your files with `npx eslint` and `npx tsc --noEmit`
+- If not otherwise specified, use MUI.
+- Style via sx prop using MUI or styled API; avoid inline styles.
+- Keep file ≤ 120 lines (excluding comments) and auto-format with Prettier.
+- Include JSDoc for the component and each prop.
+  - Append a short usage example in the JSDoc for each Component.
+- Component guidelines
+  - Always create functional components
+  - Always use Hooks
+  - Containers
+    - Maintain State
+    - Wrap Presenters
+    - Handle Events from Presenters
+  - Presenters
+    - Are Stateless
+    - Present visual data
+    - Raise Events to Handlers
+  - Create custom hooks as needed
+  - Create Props interfaces separately, for example
+
+    ```ts
+      // Define the type for the component's props
+      interface MyComponentProps {
+        name: string;
+        age?: number; // Optional prop
+      }
+
+      // Define the functional component
+      const MyComponent: React.FC<MyComponentProps> = ({ name, age }) => {
+        return (
+          <div>
+            <h1>Hello, {name}!</h1>
+            {age && <p>You are {age} years old.</p>}
+          </div>
+        );
+      };
+
+      export default MyComponent;
+      ```
+
+### Dart and Flutter
+
+- If `flutter` is not available, use `fvm`
+- Look for opportunities to create a new Widget to eliminate duplicated code in build methods and replace duplication with a new shared widget
+- Always create Material widgets, using the Material theme system
+- Do not hard code pixel values, ever
+  - use the text style font size or values from the Theme from the current context
+- DO NOT HARD CODE ANYTHING IN PIXELS, use ems relative to the theme font size or use the theme padding
+- DO NOT hard code colors, ever -- make a smart choice from the theme colors based on the standard material widgets
+- Use Padding rather than SizedBox
+- Use Actions and Intents
+  - Widgets need to `maybeInvoke` intents to allow optional handling
+  - If you have an `on<Event>` type callback, you need a matching intent to allow Action handling
+- If you cannot find `flutter` use `fvm flutter` instead
+- `flutter analyze` before you commit code, fix all warnings and errors
+- `flutter test` before you commit code, fix all failing tests
+- Create unit tests for Widgets
+  - Test text display to make sure the Widget displays the correct text
+  - Test Action/Intent to make sure the Widget behaves as expected
+- Create a Storybook story for Widget
+- Widget guidelines
+  - Containers maintain state and handle intents via Actions
+  - Presenters are stateless and present visual data and raise Intents
+  - Use [flutter_hooks](https://pub.dev/packages/flutter_hooks), not StatefulWidget
+  - Create custom hooks as needed

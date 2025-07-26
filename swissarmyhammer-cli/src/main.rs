@@ -33,6 +33,7 @@ async fn main() {
 
     // Only initialize heavy dependencies when actually needed
     use tracing::Level;
+    use tracing_subscriber::{EnvFilter, fmt, prelude::*, registry};
 
     // Configure logging based on verbosity flags and MCP mode detection
     use is_terminal::IsTerminal;
@@ -49,6 +50,17 @@ async fn main() {
         Level::TRACE
     } else {
         Level::INFO
+    };
+
+    // Helper function to create EnvFilter since it doesn't implement Clone
+    let create_filter = || {
+        if cli.debug {
+            // When --debug is used, all crates including ORT get debug level
+            EnvFilter::new(format!("{}", log_level))
+        } else {
+            // Otherwise, set ORT to WARN and everything else to the requested level
+            EnvFilter::new(format!("ort=warn,{}", log_level))
+        }
     };
 
     if is_mcp_mode {
@@ -78,28 +90,31 @@ async fn main() {
                 use std::sync::{Arc, Mutex};
                 let shared_file = Arc::new(Mutex::new(file));
 
-                tracing_subscriber::fmt()
-                    .with_writer(move || {
-                        let file = shared_file.clone();
-                        Box::new(FileWriterGuard::new(file)) as Box<dyn std::io::Write>
-                    })
-                    .with_max_level(log_level)
-                    .with_ansi(false) // No color codes in file
+                registry()
+                    .with(create_filter())
+                    .with(
+                        fmt::layer()
+                            .with_writer(move || {
+                                let file = shared_file.clone();
+                                Box::new(FileWriterGuard::new(file)) as Box<dyn std::io::Write>
+                            })
+                            .with_ansi(false) // No color codes in file
+                    )
                     .init();
             }
             Err(e) => {
                 // Fallback to stderr if file logging fails
                 tracing::warn!("Failed to open log file, using stderr: {}", e);
-                tracing_subscriber::fmt()
-                    .with_writer(std::io::stderr)
-                    .with_max_level(log_level)
+                registry()
+                    .with(create_filter())
+                    .with(fmt::layer().with_writer(std::io::stderr))
                     .init();
             }
         }
     } else {
-        tracing_subscriber::fmt()
-            .with_writer(std::io::stderr)
-            .with_max_level(log_level)
+        registry()
+            .with(create_filter())
+            .with(fmt::layer().with_writer(std::io::stderr))
             .init();
     }
 

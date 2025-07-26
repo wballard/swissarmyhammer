@@ -494,6 +494,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // Requires embedding models to be downloaded/available - run manually when models are set up
     async fn test_run_semantic_index_single_pattern() {
         let patterns = vec!["test_pattern.rs".to_string()];
 
@@ -506,6 +507,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // Requires embedding models to be downloaded/available - run manually when models are set up
     async fn test_run_semantic_index_multiple_patterns() {
         let patterns = vec![
             "src/**/*.rs".to_string(),

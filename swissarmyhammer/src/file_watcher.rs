@@ -202,25 +202,26 @@ impl FileWatcher {
 
         // Wait for the task to complete (with timeout to avoid hanging)
         if let Some(handle) = self.watcher_handle.take() {
-            // Use block_on with a timeout to avoid hanging in drop
-            let timeout_duration = std::time::Duration::from_millis(500);
-            let runtime_handle = tokio::runtime::Handle::try_current();
+            // Just abort the task to avoid hanging in synchronous contexts
+            handle.abort();
+            tracing::debug!("📁 File watcher task aborted");
+        }
+    }
 
-            match runtime_handle {
-                Ok(handle_rt) => {
-                    // We're in an async context, spawn a task to wait
-                    std::mem::drop(handle_rt.spawn(async move {
-                        match tokio::time::timeout(timeout_duration, handle).await {
-                            Ok(_) => tracing::debug!("📁 File watcher task completed successfully"),
-                            Err(_) => {
-                                tracing::warn!("📁 File watcher task did not complete within timeout, aborting");
-                            }
-                        }
-                    }));
-                }
+    /// Stop file watching asynchronously with proper cleanup
+    pub async fn stop_watching_async(&mut self) {
+        // Send shutdown signal if available
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            let _ = shutdown_tx.send(()); // Ignore error if receiver is dropped
+        }
+
+        // Wait for the task to complete with timeout
+        if let Some(handle) = self.watcher_handle.take() {
+            let timeout_duration = std::time::Duration::from_millis(100);
+            match tokio::time::timeout(timeout_duration, handle).await {
+                Ok(_) => tracing::debug!("📁 File watcher task completed successfully"),
                 Err(_) => {
-                    // Not in async context, just abort (fallback for drop scenarios)
-                    handle.abort();
+                    tracing::debug!("📁 File watcher task did not complete within timeout");
                 }
             }
         }
@@ -308,7 +309,7 @@ mod tests {
         assert!(watcher.watcher_handle.is_some());
 
         // Stop watching
-        watcher.stop_watching();
+        watcher.stop_watching_async().await;
         assert!(watcher.watcher_handle.is_none());
 
         // Restore original directory
@@ -458,7 +459,7 @@ mod tests {
         assert!(result2.is_ok());
         assert!(watcher.watcher_handle.is_some());
 
-        watcher.stop_watching();
+        watcher.stop_watching_async().await;
     }
 
     #[derive(Clone)]

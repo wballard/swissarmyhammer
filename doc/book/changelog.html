@@ -143,7 +143,7 @@
                         <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/docs/src/src/changelog.md" title="Suggest an edit" aria-label="Suggest an edit">
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/changelog.md" title="Suggest an edit" aria-label="Suggest an edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -188,9 +188,11 @@ and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semant
 </ul>
 <h3 id="changed"><a class="header" href="#changed">Changed</a></h3>
 <ul>
+<li><strong>BREAKING</strong>: The <code>validate</code> command no longer accepts custom workflow directories via <code>--workflow-dir</code>. Workflows are now only loaded from standard locations (builtin, user <code>~/.swissarmyhammer/workflows</code>, and local <code>./.swissarmyhammer/workflows</code>)</li>
 <li>Improved template rendering performance</li>
 <li>Better error handling in MCP server</li>
 <li>Enhanced file watching efficiency</li>
+<li>Validation error paths for workflows now include source location (e.g., <code>workflow:builtin:example</code> instead of <code>workflow:example</code>)</li>
 </ul>
 <h3 id="fixed"><a class="header" href="#fixed">Fixed</a></h3>
 <ul>

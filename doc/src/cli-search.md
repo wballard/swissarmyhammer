@@ -21,6 +21,9 @@ Search through your prompt collection using fuzzy matching, regular expressions,
 ### Search Strategy
 - `--case-sensitive, -c` - Enable case-sensitive matching
 - `--regex, -r` - Use regular expressions instead of fuzzy matching
+- `--fuzzy` - Use fuzzy string matching (default for simple queries)
+- `--semantic` - Use AI-powered semantic search with embeddings
+- `--hybrid` - Combine fuzzy, full-text, and semantic search results
 - `--full, -f` - Show full prompt content in results
 
 ### Field Targeting
@@ -34,6 +37,14 @@ Search through your prompt collection using fuzzy matching, regular expressions,
 - `--source SOURCE` - Filter by prompt source (builtin, user, local)
 - `--has-arg ARG` - Show prompts that have a specific argument
 - `--no-args` - Show prompts with no arguments
+- `--language LANG` - Filter by programming language (for semantic search)
+
+### Semantic Search Options
+- `--threshold FLOAT` - Similarity threshold for semantic search (0.0-1.0)
+- `--model MODEL` - Embedding model to use for semantic search
+- `--include-structure` - Include code structure in semantic analysis
+- `--include-docs` - Include documentation and comments in search
+- `--code-only` - Search only code content, exclude comments
 
 ### Output Control
 - `--limit, -l N` - Limit results to N prompts (default: 20)
@@ -96,6 +107,27 @@ swissarmyhammer search --limit 5 test
 
 # Get JSON output for scripting
 swissarmyhammer search --json "data analysis"
+```
+
+### Semantic Search Examples
+```bash
+# Basic semantic search
+swissarmyhammer search --semantic "error handling patterns"
+
+# Language-specific semantic search
+swissarmyhammer search --semantic "async functions" --language rust
+
+# High-precision semantic search
+swissarmyhammer search --semantic "database connection" --threshold 0.8
+
+# Hybrid search combining all strategies
+swissarmyhammer search --hybrid "authentication middleware"
+
+# Semantic search with specific model
+swissarmyhammer search --semantic "testing patterns" --model all-mpnet-base-v2
+
+# Code-only semantic search
+swissarmyhammer search --semantic "sorting algorithm" --code-only
 ```
 
 ## Output Format
@@ -175,3 +207,5 @@ swissarmyhammer search debug --limit 5 | \
 - [`test`](./cli-test.md) - Test prompts found through search
 - [`export`](./cli-export.md) - Export specific prompts
 - [Search Guide](./search-guide.md) - Advanced search strategies
+- [Search Architecture](./search-architecture.md) - Technical architecture details
+- [Index Management](./index-management.md) - Managing search indices

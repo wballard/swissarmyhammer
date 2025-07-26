@@ -41,6 +41,8 @@
   - [Workflow Examples](./workflow-examples.md)
   - [Workflow Patterns](./workflow-patterns.md)
 - [Search and Discovery](./search-guide.md)
+- [Search Architecture](./search-architecture.md)
+- [Index Management](./index-management.md)
 - [Testing and Debugging](./testing-guide.md)
 - [Sharing and Collaboration](./sharing-guide.md)
 - [MCP Protocol](./mcp-protocol.md)

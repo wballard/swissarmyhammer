@@ -143,7 +143,7 @@
                         <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/docs/src/src/workflow-examples.md" title="Suggest an edit" aria-label="Suggest an edit">
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/workflow-examples.md" title="Suggest an edit" aria-label="Suggest an edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -175,10 +175,9 @@
                         <h1 id="workflow-examples"><a class="header" href="#workflow-examples">Workflow Examples</a></h1>
 <p>This guide showcases practical workflow examples demonstrating various features and patterns available in SwissArmyHammer’s workflow system.</p>
 <h2 id="example-workflows"><a class="header" href="#example-workflows">Example Workflows</a></h2>
-<p>Example workflows are located in both:</p>
+<p>Example workflows are located in:</p>
 <ul>
-<li><code>builtin/workflows/</code> - Basic example workflows</li>
-<li><code>builtin/prompts/workflows/</code> - Advanced workflow patterns</li>
+<li><code>builtin/workflows/</code> - Example workflows demonstrating various features and patterns</li>
 </ul>
 <p>All workflows can be run directly or used as templates for your own workflows.</p>
 <h3 id="basic-examples"><a class="header" href="#basic-examples">Basic Examples</a></h3>
@@ -207,112 +206,24 @@
 <li>Variable substitution</li>
 <li>Sub-workflow execution</li>
 </ul>
-<h3 id="1-code-review-workflow"><a class="header" href="#1-code-review-workflow">1. Code Review Workflow</a></h3>
-<p><strong>File</strong>: <code>prompts/builtin/workflows/code-review.md</code><br />
-<strong>Type</strong>: Linear workflow</p>
-<p>A straightforward sequential workflow for automated code review:</p>
-<pre><code class="language-bash">swissarmyhammer flow run code-review --var code_path=src/main
+<h3 id="greeting-workflow"><a class="header" href="#greeting-workflow">Greeting Workflow</a></h3>
+<p><strong>File</strong>: <code>builtin/workflows/greeting.md</code><br />
+<strong>Type</strong>: Template variable demonstration</p>
+<p>A simple workflow that demonstrates using template variables in workflows:</p>
+<pre><code class="language-bash">swissarmyhammer flow run greeting --set name=John --set language=English
 </code></pre>
 <p><strong>Features demonstrated</strong>:</p>
 <ul>
+<li>Template variables with <code>--set</code> parameters</li>
+<li>Variable defaults with liquid templates</li>
 <li>Linear state progression</li>
-<li>State variables</li>
-<li>Conditional transitions based on quality checks</li>
-<li>Feedback loops for addressing issues</li>
+<li>Prompt execution with variable substitution</li>
 </ul>
 <p><strong>Use cases</strong>:</p>
 <ul>
-<li>Automated code quality checks</li>
-<li>Pre-commit validations</li>
-<li>Continuous integration pipelines</li>
-</ul>
-<h3 id="2-deployment-pipeline"><a class="header" href="#2-deployment-pipeline">2. Deployment Pipeline</a></h3>
-<p><strong>File</strong>: <code>prompts/builtin/workflows/deployment-pipeline.md</code><br />
-<strong>Type</strong>: Interactive workflow with choices</p>
-<p>An interactive deployment workflow with environment selection and rollback options:</p>
-<pre><code class="language-bash">swissarmyhammer flow run deployment-pipeline --var app_name=myservice
-</code></pre>
-<p><strong>Features demonstrated</strong>:</p>
-<ul>
-<li>User choice actions for environment selection</li>
-<li>Conditional transitions based on build/test results</li>
-<li>Rollback mechanisms</li>
-<li>Different deployment paths for different environments</li>
-<li>Auto-rollback configuration</li>
-</ul>
-<p><strong>Use cases</strong>:</p>
-<ul>
-<li>Application deployments</li>
-<li>Infrastructure provisioning</li>
-<li>Release management</li>
-</ul>
-<h3 id="3-data-processing-pipeline"><a class="header" href="#3-data-processing-pipeline">3. Data Processing Pipeline</a></h3>
-<p><strong>File</strong>: <code>prompts/builtin/workflows/data-processing-pipeline.md</code><br />
-<strong>Type</strong>: Parallel execution workflow</p>
-<p>A high-performance data processing workflow that handles multiple data sources concurrently:</p>
-<pre><code class="language-bash">swissarmyhammer flow run data-processing-pipeline \
-  --var data_sources=logs,metrics,events
-</code></pre>
-<p><strong>Features demonstrated</strong>:</p>
-<ul>
-<li>Parallel state execution</li>
-<li>Synchronization points with <code>wait_for_parallel</code></li>
-<li>Parallel actions within states</li>
-<li>Timeout management for long-running tasks</li>
-<li>Aggregation of parallel results</li>
-</ul>
-<p><strong>Use cases</strong>:</p>
-<ul>
-<li>ETL pipelines</li>
-<li>Data analysis workflows</li>
-<li>Batch processing systems</li>
-<li>Report generation</li>
-</ul>
-<h3 id="4-database-migration"><a class="header" href="#4-database-migration">4. Database Migration</a></h3>
-<p><strong>File</strong>: <code>prompts/builtin/workflows/database-migration.md</code><br />
-<strong>Type</strong>: Error handling workflow</p>
-<p>A robust database migration workflow with comprehensive error handling:</p>
-<pre><code class="language-bash">swissarmyhammer flow run database-migration --var target_version=v2.0
-</code></pre>
-<p><strong>Features demonstrated</strong>:</p>
-<ul>
-<li>Multiple error states for different failure types</li>
-<li>Retry logic with configurable attempts</li>
-<li>Multi-level rollback (migration rollback, backup restore)</li>
-<li>Emergency mode for critical failures</li>
-<li>Validation at every step</li>
-<li>Graceful degradation</li>
-</ul>
-<p><strong>Use cases</strong>:</p>
-<ul>
-<li>Database schema updates</li>
-<li>Data migrations</li>
-<li>System upgrades</li>
-<li>Critical operations requiring rollback capability</li>
-</ul>
-<h3 id="5-multi-step-refactoring"><a class="header" href="#5-multi-step-refactoring">5. Multi-Step Refactoring</a></h3>
-<p><strong>File</strong>: <code>prompts/builtin/workflows/multi-step-refactoring.md</code><br />
-<strong>Type</strong>: Nested workflow orchestration</p>
-<p>A complex refactoring workflow that coordinates multiple sub-workflows:</p>
-<pre><code class="language-bash">swissarmyhammer flow run multi-step-refactoring \
-  --var project_path=src/core \
-  --var refactoring_scope=full
-</code></pre>
-<p><strong>Features demonstrated</strong>:</p>
-<ul>
-<li>Single workflow execution with <code>run_workflow</code></li>
-<li>Sequential workflow execution</li>
-<li>Parallel workflow execution</li>
-<li>Conditional workflow execution</li>
-<li>Data passing between workflows</li>
-<li>Complex orchestration patterns</li>
-</ul>
-<p><strong>Use cases</strong>:</p>
-<ul>
-<li>Large-scale refactoring projects</li>
-<li>Multi-phase deployments</li>
-<li>Complex automation pipelines</li>
-<li>Orchestrating microservices</li>
+<li>Learning template variable usage</li>
+<li>Building parameterized workflows</li>
+<li>Dynamic workflow customization</li>
 </ul>
 <h2 id="running-example-workflows"><a class="header" href="#running-example-workflows">Running Example Workflows</a></h2>
 <h3 id="basic-execution"><a class="header" href="#basic-execution">Basic Execution</a></h3>
@@ -320,14 +231,14 @@
 <pre><code class="language-bash">swissarmyhammer flow run &lt;workflow-name&gt;
 </code></pre>
 <h3 id="with-custom-variables"><a class="header" href="#with-custom-variables">With Custom Variables</a></h3>
-<p>Override default variables:</p>
-<pre><code class="language-bash">swissarmyhammer flow run code-review \
-  --var code_path=lib/ \
-  --var review_depth=security-focused
+<p>Customize workflows with variables:</p>
+<pre><code class="language-bash">swissarmyhammer flow run greeting \
+  --set name="Your Name" \
+  --set language="French"
 </code></pre>
 <h3 id="resume-from-failure"><a class="header" href="#resume-from-failure">Resume from Failure</a></h3>
 <p>If a workflow fails, you can resume from where it left off:</p>
-<pre><code class="language-bash">swissarmyhammer flow run database-migration --resume &lt;run_id&gt;
+<pre><code class="language-bash">swissarmyhammer flow run example-actions --resume &lt;run_id&gt;
 </code></pre>
 <h3 id="list-available-workflows"><a class="header" href="#list-available-workflows">List Available Workflows</a></h3>
 <p>See all available workflows:</p>
@@ -352,43 +263,29 @@
 <li>Test incrementally with <code>--dry-run</code></li>
 </ol>
 <h3 id="common-modifications"><a class="header" href="#common-modifications">Common Modifications</a></h3>
-<p><strong>Adding error handling</strong> to the code review workflow:</p>
+<p><strong>Adding error handling</strong> to workflows:</p>
 <pre><code class="language-markdown">## Actions
 
-- AnalyzeCode: Execute prompt "analyze-codebase" with path="${code_path}"
-- HandleError: Log error "Code analysis failed: ${error}"
-- Continue: Log "Continuing with partial results"
+- ProcessData: Execute prompt "process-data" with path="${data_path}"
+- HandleError: Log error "Data processing failed: ${error}"
+- Retry: Log "Retrying with different parameters"
 </code></pre>
 <p>And add retry logic in the Mermaid diagram:</p>
-<pre><code class="language-mermaid">AnalyzeCode --&gt; HandleError: OnFailure
-HandleError --&gt; RetryWait
-RetryWait --&gt; AnalyzeCode
+<pre><code class="language-mermaid">ProcessData --&gt; HandleError: OnFailure
+HandleError --&gt; Retry
+Retry --&gt; ProcessData
 </code></pre>
-<p><strong>Making deployment pipeline fully automated</strong>:</p>
-<p>Pass variables when running the workflow:</p>
-<pre><code class="language-bash">swissarmyhammer flow run deployment-pipeline \
-  --var auto_deploy=true \
-  --var target_env=staging \
-  --var skip_confirmations=true
+<p><strong>Adding template variables</strong> to customize workflows:</p>
+<p>Pass variables when running any workflow:</p>
+<pre><code class="language-bash">swissarmyhammer flow run greeting \
+  --set name="Your Name" \
+  --set language="French"
 </code></pre>
-<p><strong>Adding notifications</strong> to data processing:</p>
+<p><strong>Adding notifications</strong> to workflows:</p>
 <pre><code class="language-markdown">## Actions
 
-- PublishResults: Execute prompt "send-notification" with channel="#data-team" message="Pipeline completed: ${result_count} records processed"
-</code></pre>
-<p>Or for multiple notifications:</p>
-<pre><code class="language-mermaid">stateDiagram-v2
-    ProcessData --&gt; NotifyStart
-    
-    state NotifyStart &lt;&lt;fork&gt;&gt;
-    NotifyStart --&gt; NotifySlack
-    NotifyStart --&gt; NotifyEmail
-    NotifyStart --&gt; LogMetrics
-    
-    state NotifyEnd &lt;&lt;join&gt;&gt;
-    NotifySlack --&gt; NotifyEnd
-    NotifyEmail --&gt; NotifyEnd
-    LogMetrics --&gt; NotifyEnd
+- CompleteTask: Log "Task completed successfully"
+- NotifyUser: Execute prompt "send-notification" with message="Workflow completed: ${result}"
 </code></pre>
 <h2 id="best-practices-from-examples"><a class="header" href="#best-practices-from-examples">Best Practices from Examples</a></h2>
 <h3 id="1-state-naming"><a class="header" href="#1-state-naming">1. State Naming</a></h3>
@@ -477,7 +374,7 @@ stateDiagram-v2
 <ol start="2">
 <li>
 <p><strong>Variable errors</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer flow show code-review  # View workflow details
+<pre><code class="language-bash">swissarmyhammer flow show greeting  # View workflow details
 </code></pre>
 </li>
 <li>
@@ -501,19 +398,19 @@ stateDiagram-v2
 <ol>
 <li>
 <p>Use verbose output:</p>
-<pre><code class="language-bash">swissarmyhammer workflow run deployment-pipeline -v
+<pre><code class="language-bash">swissarmyhammer workflow run example-actions -v
 </code></pre>
 </li>
 <li>
 <p>Enable debug mode:</p>
-<pre><code class="language-bash">swissarmyhammer workflow run data-processing-pipeline --debug
+<pre><code class="language-bash">swissarmyhammer workflow run greeting --debug
 </code></pre>
 </li>
 <li>
-<p>Test with minimal data:</p>
-<pre><code class="language-bash">swissarmyhammer workflow run data-processing-pipeline \
-  --set data_sources=logs \
-  --set processing_mode=sequential
+<p>Test with custom variables:</p>
+<pre><code class="language-bash">swissarmyhammer workflow run greeting \
+  --set name="Test User" \
+  --set language="Spanish"
 </code></pre>
 </li>
 </ol>

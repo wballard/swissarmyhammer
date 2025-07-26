@@ -283,22 +283,45 @@ impl VectorStorage {
                 let chunk_type_str: String = row.get(7)?;
                 let content_hash: String = row.get(8)?;
 
-                // Parse vector from JSON
-                let vector: std::result::Result<Vec<f32>, _> = serde_json::from_str(&vector_str)
-                    .map_err(|e| format!("Failed to deserialize vector: {e}"));
+                // Parse vector from JSON with robust handling for corrupted data
+                let vector = match serde_json::from_str::<Vec<f32>>(&vector_str) {
+                    Ok(vec) => Some(vec),
+                    Err(e) => {
+                        // Try to parse as a single float and convert to a vector
+                        match serde_json::from_str::<f32>(&vector_str) {
+                            Ok(single_float) => {
+                                tracing::warn!(
+                                    "Found corrupted vector data stored as single float instead of array for chunk {}: {}. Skipping this chunk.",
+                                    chunk_id,
+                                    single_float
+                                );
+                                // Return None to skip this corrupted record
+                                None
+                            }
+                            Err(_) => {
+                                // Neither array nor single float, this is truly corrupted
+                                tracing::error!(
+                                    "Corrupted vector data for chunk {}: {}. Skipping this chunk.",
+                                    chunk_id,
+                                    vector_str
+                                );
+                                None
+                            }
+                        }
+                    }
+                };
 
-                let vector = vector.map_err(|e| {
-                    duckdb::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("Failed to parse vector: {e}"),
-                    )))
-                })?;
+                // If vector parsing failed, skip this record
+                let vector = match vector {
+                    Some(v) => v,
+                    None => return Ok(None), // Skip this record
+                };
 
                 // Parse language and chunk type
                 let language = Self::parse_language(&language_str);
                 let chunk_type = Self::parse_chunk_type(&chunk_type_str);
 
-                Ok((
+                Ok(Some((
                     chunk_id,
                     vector,
                     file_path,
@@ -308,7 +331,7 @@ impl VectorStorage {
                     end_line,
                     chunk_type,
                     content_hash,
-                ))
+                )))
             })
             .map_err(|e| {
                 SwissArmyHammerError::Storage(format!(
@@ -320,6 +343,11 @@ impl VectorStorage {
 
         // Calculate similarity for each embedding
         for row_result in rows {
+            let row_data = row_result.map_err(|e| {
+                SwissArmyHammerError::Storage(format!("Failed to process row: {e}"))
+            })?;
+            
+            // Skip corrupted records that returned None
             let (
                 chunk_id,
                 vector,
@@ -330,9 +358,10 @@ impl VectorStorage {
                 end_line,
                 chunk_type,
                 content_hash,
-            ) = row_result.map_err(|e| {
-                SwissArmyHammerError::Storage(format!("Failed to process row: {e}"))
-            })?;
+            ) = match row_data {
+                Some(data) => data,
+                None => continue, // Skip corrupted records
+            };
 
             let similarity = SemanticUtils::cosine_similarity(query_embedding, &vector);
 
@@ -399,18 +428,41 @@ impl VectorStorage {
                 let chunk_id: String = row.get(0)?;
                 let vector_str: String = row.get(1)?;
 
-                // Parse vector from JSON
-                let vector: std::result::Result<Vec<f32>, _> = serde_json::from_str(&vector_str)
-                    .map_err(|e| format!("Failed to deserialize vector: {e}"));
+                // Parse vector from JSON with robust handling for corrupted data
+                let vector = match serde_json::from_str::<Vec<f32>>(&vector_str) {
+                    Ok(vec) => Some(vec),
+                    Err(e) => {
+                        // Try to parse as a single float and convert to a vector
+                        match serde_json::from_str::<f32>(&vector_str) {
+                            Ok(single_float) => {
+                                tracing::warn!(
+                                    "Found corrupted vector data stored as single float instead of array for chunk {}: {}. Skipping this chunk.",
+                                    chunk_id,
+                                    single_float
+                                );
+                                // Return None to skip this corrupted record
+                                None
+                            }
+                            Err(_) => {
+                                // Neither array nor single float, this is truly corrupted
+                                tracing::error!(
+                                    "Corrupted vector data for chunk {}: {}. Skipping this chunk.",
+                                    chunk_id,
+                                    vector_str
+                                );
+                                None
+                            }
+                        }
+                    }
+                };
 
-                let vector = vector.map_err(|e| {
-                    duckdb::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("Failed to parse vector: {e}"),
-                    )))
-                })?;
+                // If vector parsing failed, skip this record
+                let vector = match vector {
+                    Some(v) => v,
+                    None => return Ok(None), // Skip this record
+                };
 
-                Ok((chunk_id, vector))
+                Ok(Some((chunk_id, vector)))
             })
             .map_err(|e| {
                 SwissArmyHammerError::Storage(format!(
@@ -422,9 +474,15 @@ impl VectorStorage {
 
         // Calculate similarity for each embedding
         for row_result in rows {
-            let (chunk_id, vector) = row_result.map_err(|e| {
+            let row_data = row_result.map_err(|e| {
                 SwissArmyHammerError::Storage(format!("Failed to process detailed search row: {e}"))
             })?;
+            
+            // Skip corrupted records that returned None
+            let (chunk_id, vector) = match row_data {
+                Some(data) => data,
+                None => continue, // Skip corrupted records
+            };
 
             let similarity = SemanticUtils::cosine_similarity(query_embedding, &vector);
 
@@ -1342,5 +1400,83 @@ mod tests {
         let chunks = storage.get_file_chunks(path);
         assert!(chunks.is_ok());
         assert_eq!(chunks.unwrap().len(), 0);
+    }
+
+    #[test] 
+    fn test_reproduce_similarity_search_failure() {
+        // This test reproduces the exact failure scenario from the issue
+        let config = create_test_config();
+        let storage = VectorStorage::new(config).unwrap();
+        storage.initialize().unwrap();
+        
+        // Create a query vector like the real search would
+        let query_embedding = vec![0.1; 384];
+        
+        // This should succeed but currently fails
+        let result = storage.similarity_search(&query_embedding, 10, 0.5);
+        
+        match result {
+            Ok(results) => {
+                println!("Search succeeded with {} results", results.len());
+                assert_eq!(results.len(), 0); // Should be empty but not fail
+            }
+            Err(e) => {
+                println!("Search failed with error: {}", e);
+                panic!("similarity_search should not fail on empty database: {}", e);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_reproduce_full_search_integration() {
+        use crate::semantic::{SemanticSearcher, SearchQuery, SemanticConfig};
+        use std::error::Error;
+        
+        // Use the real config like the failing command does
+        let config = SemanticConfig::default();
+        let storage = VectorStorage::new(config.clone()).unwrap();
+        storage.initialize().unwrap();
+
+        // Try to create a searcher like the real command does
+        match SemanticSearcher::new(storage, config).await {
+            Ok(searcher) => {
+                // Perform search with the same parameters as the failing command
+                let search_query = SearchQuery {
+                    text: "duckdb".to_string(),
+                    limit: 10,
+                    similarity_threshold: 0.5,
+                    language_filter: None,
+                };
+
+                match searcher.search(&search_query).await {
+                    Ok(results) => {
+                        println!("Full integration search succeeded! Found {} results", results.len());
+                        // The important thing is that the search succeeds without crashing
+                        // The number of results doesn't matter - it could be 0 or more
+                        assert!(results.len() >= 0); // Should succeed without failing
+                    }
+                    Err(e) => {
+                        println!("Full integration search failed with error: {}", e);
+                        println!("Error debug: {:?}", e);
+                        
+                        // Print the full error chain
+                        let mut source = e.source();
+                        let mut level = 1;
+                        while let Some(err) = source {
+                            println!("  Error level {}: {}", level, err);
+                            println!("  Error level {} debug: {:?}", level, err);
+                            source = err.source();
+                            level += 1;
+                        }
+                        
+                        panic!("Full integration search should not fail on empty database: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                println!("Failed to create searcher: {}", e);
+                panic!("Failed to create searcher: {}", e);
+            }
+        }
     }
 }

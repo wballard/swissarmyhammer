@@ -507,9 +507,10 @@ mod tests {
             }
             Err(e) => {
                 let error_msg = e.to_string();
-                if error_msg.contains("Failed to initialize fastembed model") 
-                    || error_msg.contains("I/O error") 
-                    || error_msg.contains("No such file or directory") {
+                if error_msg.contains("Failed to initialize fastembed model")
+                    || error_msg.contains("I/O error")
+                    || error_msg.contains("No such file or directory")
+                {
                     println!("⚠️  Semantic indexing skipped - model initialization failed in test environment: {}", error_msg);
                     println!("   This is expected when fastembed models cannot be downloaded (offline/restricted environment)");
                 } else {
@@ -537,9 +538,10 @@ mod tests {
             }
             Err(e) => {
                 let error_msg = e.to_string();
-                if error_msg.contains("Failed to initialize fastembed model") 
-                    || error_msg.contains("I/O error") 
-                    || error_msg.contains("No such file or directory") {
+                if error_msg.contains("Failed to initialize fastembed model")
+                    || error_msg.contains("I/O error")
+                    || error_msg.contains("No such file or directory")
+                {
                     println!("⚠️  Semantic indexing skipped - model initialization failed in test environment: {}", error_msg);
                     println!("   This is expected when fastembed models cannot be downloaded (offline/restricted environment)");
                 } else {

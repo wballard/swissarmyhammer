@@ -430,6 +430,7 @@
 //! # }
 //! ```
 
+use crate::common::generate_monotonic_ulid;
 use crate::error::{Result, SwissArmyHammerError};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -485,7 +486,7 @@ impl MemoId {
     /// assert!(!id.as_str().is_empty());
     /// ```
     pub fn new() -> Self {
-        Self(Ulid::new().to_string())
+        Self(generate_monotonic_ulid().to_string())
     }
 
     /// Create a memo ID from a string, supporting both ULID and filename-based formats
@@ -1040,7 +1041,7 @@ mod tests {
 
     #[test]
     fn test_memo_id_from_string() {
-        let ulid = Ulid::new();
+        let ulid = generate_monotonic_ulid();
         let ulid_string = ulid.to_string();
 
         let memo_id = MemoId::from_string(ulid_string.clone()).unwrap();
@@ -1525,6 +1526,23 @@ mod tests {
         let created_str = memo.created_at.to_rfc3339();
         assert!(created_str.len() >= 20); // ISO 8601 format should be at least 20 chars
         assert!(created_str.contains('T')); // Should contain date/time separator
+    }
+
+    #[test]
+    fn test_memo_id_monotonic_generation() {
+        let id1 = MemoId::new();
+        let id2 = MemoId::new();
+        let id3 = MemoId::new();
+
+        // Test that IDs are monotonic
+        assert!(id1 < id2);
+        assert!(id2 < id3);
+        assert!(id1 < id3);
+
+        // Test that string representation also maintains ordering
+        assert!(id1.as_str() < id2.as_str());
+        assert!(id2.as_str() < id3.as_str());
+        assert!(id1.as_str() < id3.as_str());
     }
 }
 

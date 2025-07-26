@@ -24,6 +24,9 @@ pub mod validation_builders;
 /// Rate limiting utilities for API operations
 pub mod rate_limiter;
 
+/// Monotonic ULID generator utility
+pub mod ulid_generator;
+
 // Re-export commonly used items
 pub use abort_handler::{check_for_abort_error, ABORT_ERROR_PATTERN};
 pub use env_loader::{load_env_optional, load_env_parsed, load_env_string, EnvLoader};
@@ -35,4 +38,5 @@ pub use mcp_errors::{mcp, McpResultExt, ToSwissArmyHammerError};
 pub use rate_limiter::{
     get_rate_limiter, init_rate_limiter, RateLimitStatus, RateLimiter, RateLimiterConfig,
 };
+pub use ulid_generator::{generate_monotonic_ulid, generate_monotonic_ulid_string};
 pub use validation_builders::{quick, ValidationChain, ValidationErrorBuilder, ValidationResult};

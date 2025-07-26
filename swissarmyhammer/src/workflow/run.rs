@@ -1,18 +1,19 @@
 //! Workflow runtime execution types
 
+use crate::common::generate_monotonic_ulid;
 use crate::workflow::{StateId, Workflow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use ulid::Ulid;
 
 /// Unique identifier for workflow runs
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct WorkflowRunId(Ulid);
 
 impl WorkflowRunId {
     /// Create a new random workflow run ID
     pub fn new() -> Self {
-        Self(Ulid::new())
+        Self(generate_monotonic_ulid())
     }
 
     /// Parse a WorkflowRunId from a string representation
@@ -145,7 +146,7 @@ mod tests {
     #[test]
     fn test_workflow_run_id_parse_valid_ulid() {
         // Generate a valid ULID string
-        let ulid = Ulid::new();
+        let ulid = generate_monotonic_ulid();
         let ulid_str = ulid.to_string();
 
         let parsed_id = WorkflowRunId::parse(&ulid_str).unwrap();
@@ -192,5 +193,22 @@ mod tests {
 
         assert_eq!(run.status, WorkflowRunStatus::Completed);
         assert!(run.completed_at.is_some());
+    }
+
+    #[test]
+    fn test_workflow_run_id_monotonic_generation() {
+        let id1 = WorkflowRunId::new();
+        let id2 = WorkflowRunId::new();
+        let id3 = WorkflowRunId::new();
+
+        // Test that IDs are monotonic
+        assert!(id1 < id2);
+        assert!(id2 < id3);
+        assert!(id1 < id3);
+
+        // Test that string representation also maintains ordering
+        assert!(id1.to_string() < id2.to_string());
+        assert!(id2.to_string() < id3.to_string());
+        assert!(id1.to_string() < id3.to_string());
     }
 }

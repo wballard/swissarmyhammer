@@ -1429,16 +1429,29 @@ mod tests {
 
     #[tokio::test]
     async fn test_reproduce_full_search_integration() {
-        use crate::semantic::{SearchQuery, SemanticConfig, SemanticSearcher};
+        use crate::semantic::{EmbeddingEngine, SearchQuery, SemanticConfig, SemanticSearcher};
         use std::error::Error;
+        use std::time::{SystemTime, UNIX_EPOCH};
 
-        // Use the real config like the failing command does
-        let config = SemanticConfig::default();
+        // Use test config to avoid trying to download real embedding models
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let db_path = format!("/tmp/test_semantic_integration_{timestamp}.db");
+        let config = SemanticConfig {
+            database_path: std::path::PathBuf::from(db_path),
+            ..SemanticConfig::default()
+        };
+
         let storage = VectorStorage::new(config.clone()).unwrap();
         storage.initialize().unwrap();
 
-        // Try to create a searcher like the real command does
-        match SemanticSearcher::new(storage, config).await {
+        // Use test embedding engine instead of real one
+        let embedding_engine = EmbeddingEngine::new_for_testing().await.unwrap();
+
+        // Try to create a searcher using the test embedding engine
+        match SemanticSearcher::with_embedding_engine(storage, embedding_engine, config).await {
             Ok(searcher) => {
                 // Perform search with the same parameters as the failing command
                 let search_query = SearchQuery {

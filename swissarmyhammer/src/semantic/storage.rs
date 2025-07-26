@@ -1443,10 +1443,10 @@ mod tests {
             database_path: std::path::PathBuf::from(db_path),
             ..SemanticConfig::default()
         };
-        
+
         let storage = VectorStorage::new(config.clone()).unwrap();
         storage.initialize().unwrap();
-        
+
         // Use test embedding engine instead of real one
         let embedding_engine = EmbeddingEngine::new_for_testing().await.unwrap();
 

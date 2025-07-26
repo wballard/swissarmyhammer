@@ -137,7 +137,7 @@ mod tests {
 
         // Check monotonic ordering
         for i in 1..ids.len() {
-            assert!(ids[i - 1] < ids[i], "IDs not monotonic at index {}", i);
+            assert!(ids[i - 1] < ids[i], "IDs not monotonic at index {i}");
         }
     }
 
@@ -189,9 +189,8 @@ mod tests {
         // Should only contain valid base32 characters
         for c in ulid_str.chars() {
             assert!(
-                c.is_ascii_alphanumeric() && c.is_ascii_uppercase() || "0123456789".contains(c),
-                "Invalid character '{}' in ULID",
-                c
+                (c.is_ascii_alphanumeric() && c.is_ascii_uppercase()) || "0123456789".contains(c),
+                "Invalid character '{c}' in ULID"
             );
         }
     }

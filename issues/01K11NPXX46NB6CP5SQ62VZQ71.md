@@ -22,3 +22,33 @@ you Added  environment variable handling to semantic indexer tests to gracefully
 All tests now use `create_test_indexer().await.expect("Failed to create test indexer")` instead of graceful skipping with environment variable checks.
 
 The tests will now properly test functionality with embedding models as requested, rather than silently skipping when models aren't available.
+
+### Additional Changes Made (July 26, 2025):
+
+Found and removed remaining graceful skipping patterns in `swissarmyhammer-cli/src/search.rs:496,528`:
+
+**Tests Fixed:**
+- `test_run_semantic_index_single_pattern()` - Removed graceful skip behavior, now uses `.expect()`
+- `test_run_semantic_index_multiple_patterns()` - Removed graceful skip behavior, now uses `.expect()`
+
+**Before:**
+```rust
+match result {
+    Ok(_) => { println!("✅ Semantic indexing succeeded as expected"); }
+    Err(e) => {
+        if error_msg.contains("Failed to initialize fastembed model") {
+            println!("⚠️ Skipping test: fastembed model files not available");
+            return; // Skip test when model files aren't available
+        }
+        panic!("...");
+    }
+}
+```
+
+**After:**
+```rust
+run_semantic_index(&patterns, false).await
+    .expect("Failed to run semantic index - embedding models must be available for testing");
+```
+
+✅ **ALL graceful skipping behavior has now been completely removed from semantic indexer tests.**

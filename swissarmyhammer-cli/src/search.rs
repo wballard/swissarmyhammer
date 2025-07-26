@@ -498,30 +498,10 @@ mod tests {
 
         // With local embeddings implementation, semantic indexing now works
         // The function should succeed even with non-existent patterns (0 files processed)
-        let result = run_semantic_index(&patterns, false).await;
-
-        // Should succeed as local embedding engine initializes successfully
-        // However, if fastembed model files are not available (common in CI), skip the test
-        match result {
-            Ok(_) => {
-                println!("✅ Semantic indexing succeeded as expected");
-            }
-            Err(e) => {
-                let error_msg = e.to_string();
-                if error_msg.contains("Failed to initialize fastembed model")
-                    || error_msg.contains("No such file or directory")
-                {
-                    println!(
-                        "⚠️ Skipping test: fastembed model files not available in test environment"
-                    );
-                    return; // Skip test when model files aren't available
-                }
-                println!("❌ Semantic indexing failed: {e}");
-                panic!(
-                    "Semantic indexing should succeed with local embeddings, but got unexpected error: {e}"
-                );
-            }
-        }
+        run_semantic_index(&patterns, false).await
+            .expect("Failed to run semantic index with single pattern - embedding models must be available for testing");
+        
+        println!("✅ Semantic indexing succeeded as expected");
     }
 
     #[tokio::test]
@@ -534,27 +514,9 @@ mod tests {
 
         // With local embeddings implementation, semantic indexing now works
         // The function should succeed and process real files in the project
-        let result = run_semantic_index(&patterns, false).await;
-
-        // Should succeed as local embedding engine works and will find real files
-        // However, if fastembed model files are not available (common in CI), skip the test
-        match result {
-            Ok(_) => {
-                println!("✅ Semantic indexing succeeded as expected");
-            }
-            Err(e) => {
-                let error_msg = e.to_string();
-                if error_msg.contains("Failed to initialize fastembed model")
-                    || error_msg.contains("No such file or directory")
-                {
-                    println!(
-                        "⚠️ Skipping test: fastembed model files not available in test environment"
-                    );
-                    return; // Skip test when model files aren't available
-                }
-                println!("❌ Semantic indexing failed: {e}");
-                panic!("Semantic indexing should succeed with local embeddings and real patterns, but got unexpected error: {e}");
-            }
-        }
+        run_semantic_index(&patterns, false).await
+            .expect("Failed to run semantic index with multiple patterns - embedding models must be available for testing");
+        
+        println!("✅ Semantic indexing succeeded as expected");
     }
 }

@@ -649,18 +649,15 @@ mod tests {
     use tempfile::TempDir;
 
     async fn create_test_indexer() -> Result<(FileIndexer, TempDir)> {
-        // Set environment variable to use clean cache for testing to avoid cache corruption issues
-        std::env::set_var("HUGGINGFACE_HUB_CACHE", "/tmp");
-
         let temp_dir = TempDir::new().map_err(SemanticError::FileSystem)?;
-        let db_name = format!(
-            "test_{}_{}.db",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        );
+        
+        // Use thread ID and random number for better uniqueness and avoid race conditions
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let thread_id = std::thread::current().id();
+        
+        let db_name = format!("test_{:?}_{}.db", thread_id, counter);
         let config = SemanticConfig {
             database_path: temp_dir.path().join(db_name),
             ..Default::default()

@@ -324,7 +324,7 @@ async fn test_concurrent_action_context_consistency() {
             // Write incremented value
             ctx.insert(key.clone(), Value::Number((current + 1).into()));
 
-            println!("Action {} updated counter to {}", i, current + 1);
+            println!("Action {i} updated counter to {}", current + 1);
         });
 
         handles.push(handle);

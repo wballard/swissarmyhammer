@@ -277,83 +277,25 @@ impl EmbeddingEngine {
     }
 
     #[cfg(test)]
-    /// Generate a deterministic mock embedding based on text content
-    /// This creates embeddings that have some semantic similarity for testing
+    /// Generate a simple deterministic mock embedding for testing
+    /// Creates consistent embeddings without complex semantic modeling
     fn generate_deterministic_mock_embedding(&self, text: &str) -> Vec<f32> {
-        use std::collections::HashMap;
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
 
-        // Normalize text for similarity - lowercase and simple cleanup
-        let normalized_text = text
-            .to_lowercase()
-            .replace(&[',', '.', '!', '?', ';', ':', '"', '\''][..], "");
-        let words: Vec<&str> = normalized_text.split_whitespace().collect();
+        // Simple hash-based approach for deterministic but varied embeddings
+        let mut hasher = DefaultHasher::new();
+        text.hash(&mut hasher);
+        let base_hash = hasher.finish();
 
-        // Create a simple word-to-dimension mapping for semantic similarity
-        let mut word_weights: HashMap<&str, f32> = HashMap::new();
-
-        // Define some common word patterns and their base weights
-        let word_patterns = [
-            ("main", 1.0),
-            ("function", 0.9),
-            ("fn", 0.9),
-            ("def", 0.9),
-            ("hello", 0.8),
-            ("world", 0.8),
-            ("print", 0.7),
-            ("println", 0.7),
-            ("error", 0.6),
-            ("result", 0.6),
-            ("handle", 0.5),
-            ("test", 0.4),
-            ("rust", 0.3),
-            ("python", 0.3),
-            ("javascript", 0.3),
-            ("code", 0.2),
-        ];
-
-        // Calculate word weights based on content
-        for word in &words {
-            let base_weight = word_patterns
-                .iter()
-                .find_map(|(pattern, weight)| {
-                    if word.contains(pattern) {
-                        Some(*weight)
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or(0.1); // Default small weight for unknown words
-
-            *word_weights.entry(word).or_insert(0.0) += base_weight;
-        }
-
-        // Generate embedding vector with semantic structure
-        let mut embedding = vec![0.0f32; self.model_info.dimensions];
-
-        // Use word weights to create structured embeddings
-        for (i, dim_value) in embedding.iter_mut().enumerate() {
-            let mut value = 0.0f32;
-
-            // Each dimension gets influenced by different word patterns
-            for (word, weight) in &word_weights {
-                // Use a simple hash of word + dimension index for deterministic but varied values
-                let word_hash = word
-                    .chars()
-                    .fold(0u64, |acc, c| acc.wrapping_mul(31).wrapping_add(c as u64));
-                let dim_hash = word_hash.wrapping_add(i as u64);
-                let dim_influence = ((dim_hash % 1000) as f32 / 1000.0 - 0.5) * weight;
-                value += dim_influence;
-            }
-
-            // Add some base structure so empty or very different texts don't all map to zero
-            let base_text_hash = normalized_text
-                .chars()
-                .fold(0u64, |acc, c| acc.wrapping_mul(17).wrapping_add(c as u64));
-            let base_influence =
-                ((base_text_hash.wrapping_add(i as u64) % 1000) as f32 / 1000.0 - 0.5) * 0.1;
-            value += base_influence;
-
-            *dim_value = value;
+        // Generate embedding vector using the hash as a seed
+        let mut embedding = Vec::with_capacity(self.model_info.dimensions);
+        for i in 0..self.model_info.dimensions {
+            // Use dimension index to vary the values across dimensions
+            let dim_hash = base_hash.wrapping_add(i as u64 * 37);
+            // Convert to float in range [-1.0, 1.0]
+            let value = ((dim_hash % 2000) as f32 / 1000.0) - 1.0;
+            embedding.push(value);
         }
 
         // Normalize the vector to unit length (like real embeddings)

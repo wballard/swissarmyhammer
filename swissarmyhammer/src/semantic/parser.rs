@@ -1335,6 +1335,65 @@ mod tests {
         assert!(config.max_file_size_bytes >= 1024);
     }
 
+    /// Helper function to test TreeSitter parsing with realistic Rust content
+    fn test_rust_content_parsing(
+        config: ParserConfig,
+        content: &str,
+        file_path: &Path,
+        expected_patterns: &[&str],
+    ) {
+        let parser = CodeParser::new(config).unwrap();
+
+        let chunks = parser.parse_file(file_path, content).unwrap();
+
+        // This test should fail with the current broken implementation
+        assert!(
+            !chunks.is_empty(),
+            "TreeSitter should extract chunks from real Rust code, but got 0 chunks"
+        );
+
+        // Count specific types of chunks we expect
+        let use_chunks = chunks
+            .iter()
+            .filter(|c| c.chunk_type == ChunkType::Import)
+            .count();
+        let struct_chunks = chunks
+            .iter()
+            .filter(|c| c.chunk_type == ChunkType::Class)
+            .count();
+        let function_chunks = chunks
+            .iter()
+            .filter(|c| c.chunk_type == ChunkType::Function)
+            .count();
+
+        // We should get multiple types of chunks from this realistic Rust code
+        let semantic_chunks = use_chunks + struct_chunks + function_chunks;
+        assert!(semantic_chunks > 0,
+            "Expected semantic chunks (use statements: {use_chunks}, structs/enums: {struct_chunks}, functions: {function_chunks}), but got plain text only");
+
+        // Verify we got some meaningful content
+        let has_meaningful_content = chunks.iter().any(|chunk| {
+            expected_patterns
+                .iter()
+                .any(|pattern| chunk.content.contains(pattern))
+        });
+        assert!(
+            has_meaningful_content,
+            "Chunks should contain meaningful Rust constructs"
+        );
+
+        // Log the chunks for debugging
+        println!("Extracted {} chunks:", chunks.len());
+        for (i, chunk) in chunks.iter().enumerate() {
+            println!(
+                "  Chunk {}: {:?} - '{}'...",
+                i,
+                chunk.chunk_type,
+                chunk.content.chars().take(50).collect::<String>()
+            );
+        }
+    }
+
     #[test]
     fn test_treesitter_extracts_chunks_from_real_rust_code() {
         // Issue: TreeSitter parser reports success but extracts 0 chunks from real Rust files
@@ -1345,7 +1404,6 @@ mod tests {
             max_chunks_per_file: 100,
             max_file_size_bytes: 10 * 1024 * 1024,
         };
-        let parser = CodeParser::new(config).unwrap();
 
         let file_path = Path::new("test_real_content.rs");
         let content = r#"//! Workflow execution visualization
@@ -1405,56 +1463,16 @@ pub fn format_content_preview(content: &str, max_length: usize) -> String {
 }
 "#;
 
-        let chunks = parser.parse_file(file_path, content).unwrap();
+        let expected_patterns = &[
+            "ExecutionVisualizer",
+            "VisualizationFormat",
+            "fn new()",
+            "use crate::workflow",
+        ];
 
-        // This test should fail with the current broken implementation
-        assert!(
-            !chunks.is_empty(),
-            "TreeSitter should extract chunks from real Rust code, but got 0 chunks"
-        );
-
-        // Count specific types of chunks we expect
-        let use_chunks = chunks
-            .iter()
-            .filter(|c| c.chunk_type == ChunkType::Import)
-            .count();
-        let struct_chunks = chunks
-            .iter()
-            .filter(|c| c.chunk_type == ChunkType::Class)
-            .count();
-        let function_chunks = chunks
-            .iter()
-            .filter(|c| c.chunk_type == ChunkType::Function)
-            .count();
-
-        // We should get multiple types of chunks from this realistic Rust code
-        let semantic_chunks = use_chunks + struct_chunks + function_chunks;
-        assert!(semantic_chunks > 0,
-            "Expected semantic chunks (use statements: {use_chunks}, structs/enums: {struct_chunks}, functions: {function_chunks}), but got plain text only");
-
-        // Verify we got some meaningful content
-        let has_meaningful_content = chunks.iter().any(|chunk| {
-            chunk.content.contains("ExecutionVisualizer")
-                || chunk.content.contains("VisualizationFormat")
-                || chunk.content.contains("fn new()")
-                || chunk.content.contains("use crate::workflow")
-        });
-        assert!(
-            has_meaningful_content,
-            "Chunks should contain meaningful Rust constructs"
-        );
-
-        // Log the chunks for debugging
-        println!("Extracted {} chunks:", chunks.len());
-        for (i, chunk) in chunks.iter().enumerate() {
-            println!(
-                "  Chunk {}: {:?} - '{}...'",
-                i,
-                chunk.chunk_type,
-                chunk.content.chars().take(50).collect::<String>()
-            );
-        }
+        test_rust_content_parsing(config, content, file_path, expected_patterns);
     }
+
 
     #[test]
     fn test_treesitter_with_default_config_reproduces_issue() {
@@ -1545,7 +1563,7 @@ pub fn format_content_preview(content: &str, max_length: usize) -> String {
 
         if chunks.is_empty() {
             println!("ISSUE REPRODUCED: Default config filters out all chunks!");
-            println!("Default min_chunk_size: {}", DEFAULT_MIN_CHUNK_SIZE);
+            println!("Default min_chunk_size: {DEFAULT_MIN_CHUNK_SIZE}");
 
             // Let's also test with a more permissive config to compare
             let permissive_config = ParserConfig {
@@ -1659,7 +1677,7 @@ impl ExecutionVisualizer {
 
             // Check if file is supported
             let is_supported = parser.is_supported_file(file_path);
-            println!("File is supported: {}", is_supported);
+            println!("File is supported: {is_supported}");
         }
 
         // Test with memo.rs content
@@ -1752,7 +1770,7 @@ pub async fn handle_memo_command(command: MemoCommands) -> Result<(), Box<dyn st
         // This addresses the original issue where 0 chunks were extracted despite successful TreeSitter parsing
 
         // Test with multiple configurations
-        let configs = vec![
+        let configs = [
             ParserConfig::default(),
             ParserConfig {
                 min_chunk_size: 1,
@@ -2066,7 +2084,7 @@ pub fn helper_function(data: &[u8]) -> String {
         let tree = parser.parse(content, None).unwrap();
 
         println!("=== DEBUGGING TREESITTER QUERY MATCHING ===");
-        println!("Content: {}", content);
+        println!("Content: {content}");
 
         // Test the query patterns one by one
         let test_queries = vec![

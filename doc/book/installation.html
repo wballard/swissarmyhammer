@@ -143,7 +143,7 @@
                         <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/docs/src/src/installation.md" title="Suggest an edit" aria-label="Suggest an edit">
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/installation.md" title="Suggest an edit" aria-label="Suggest an edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -173,6 +173,9 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
+<p>SwissArmyHammer can be installed in several ways depending on your needs and platform.</p>
+<h2 id="pre-built-binaries"><a class="header" href="#pre-built-binaries">Pre-built Binaries</a></h2>
+<p>Currently, SwissArmyHammer does not provide pre-built binaries for download. This is a planned feature for future releases. For now, please use the Cargo installation method below.</p>
 <h2 id="quick-install-recommended"><a class="header" href="#quick-install-recommended">Quick Install (Recommended)</a></h2>
 <p>To update SwissArmyHammer to the latest version:</p>
 <pre><code class="language-bash"># Update from git repository
@@ -213,22 +216,47 @@ swissarmyhammer doctor
 # Show help
 swissarmyhammer --help
 
-# List available commands
-swissarmyhammer list
 </code></pre>
 <p>The <code>doctor</code> command will check your installation and provide helpful diagnostics if anything needs attention.</p>
 <h2 id="shell-completions"><a class="header" href="#shell-completions">Shell Completions</a></h2>
 <p>Generate and install shell completions for better CLI experience:</p>
-<pre><code class="language-bash"># Bash
+<h3 id="bash"><a class="header" href="#bash">Bash</a></h3>
+<pre><code class="language-bash"># Linux/macOS (user-specific)
 swissarmyhammer completion bash &gt; ~/.local/share/bash-completion/completions/swissarmyhammer
 
-# Zsh (add to fpath)
+# macOS with Homebrew bash-completion
+swissarmyhammer completion bash &gt; $(brew --prefix)/etc/bash_completion.d/swissarmyhammer
+
+# Alternative location (ensure directory exists)
+mkdir -p ~/.bash_completion.d
+swissarmyhammer completion bash &gt; ~/.bash_completion.d/swissarmyhammer
+</code></pre>
+<h3 id="zsh"><a class="header" href="#zsh">Zsh</a></h3>
+<pre><code class="language-bash"># User-specific (ensure ~/.zfunc is in your fpath)
+mkdir -p ~/.zfunc
 swissarmyhammer completion zsh &gt; ~/.zfunc/_swissarmyhammer
 
-# Fish
+# Add to ~/.zshrc if not already present:
+# fpath=(~/.zfunc $fpath)
+# autoload -U compinit &amp;&amp; compinit
+
+# System-wide (with appropriate permissions)
+swissarmyhammer completion zsh &gt; /usr/local/share/zsh/site-functions/_swissarmyhammer
+</code></pre>
+<h3 id="fish"><a class="header" href="#fish">Fish</a></h3>
+<pre><code class="language-bash"># User-specific
 swissarmyhammer completion fish &gt; ~/.config/fish/completions/swissarmyhammer.fish
 
-# PowerShell
+# Ensure the directory exists
+mkdir -p ~/.config/fish/completions
+swissarmyhammer completion fish &gt; ~/.config/fish/completions/swissarmyhammer.fish
+</code></pre>
+<h3 id="powershell"><a class="header" href="#powershell">PowerShell</a></h3>
+<pre><code class="language-powershell"># Add to PowerShell profile
+swissarmyhammer completion powershell &gt;&gt; $PROFILE
+
+# Or create profile directory if it doesn't exist
+New-Item -ItemType Directory -Path (Split-Path $PROFILE) -Force
 swissarmyhammer completion powershell &gt;&gt; $PROFILE
 </code></pre>
 <p>Remember to reload your shell or start a new terminal session for completions to take effect.</p>

@@ -738,7 +738,7 @@ timeout = 60000  # 1 minute
 
 # Disable caching during development to see changes immediately
 [cache]
-enabled = false  # TODO: Enable for production
+enabled = false  # Set to true in production for better performance
 ```
 
 ### 4. Version Control

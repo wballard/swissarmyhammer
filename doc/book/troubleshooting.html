@@ -143,7 +143,7 @@
                         <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/docs/src/src/troubleshooting.md" title="Suggest an edit" aria-label="Suggest an edit">
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/troubleshooting.md" title="Suggest an edit" aria-label="Suggest an edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -248,7 +248,7 @@ swissarmyhammer serve --port 8081
 </li>
 <li>
 <p><strong>Debug mode</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer serve --debug
+<pre><code class="language-bash">swissarmyhammer --debug serve
 </code></pre>
 </li>
 <li>
@@ -304,12 +304,12 @@ curl -sSL https://install.sh | bash
 <li>
 <p><strong>Check logs</strong>:</p>
 <pre><code class="language-bash"># Enable debug logging
-swissarmyhammer serve --debug &gt; debug.log 2&gt;&amp;1
+swissarmyhammer --debug serve &gt; debug.log 2&gt;&amp;1
 </code></pre>
 </li>
 <li>
 <p><strong>Validate prompt syntax</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer doctor --check prompts
+<pre><code class="language-bash">swissarmyhammer validate
 </code></pre>
 </li>
 </ol>
@@ -327,8 +327,8 @@ ls -la ./.swissarmyhammer/prompts
 </li>
 <li>
 <p><strong>Validate prompts</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer test &lt;prompt-name&gt;
-swissarmyhammer doctor --check prompts --verbose
+<pre><code class="language-bash">swissarmyhammer prompt test &lt;prompt-name&gt;
+swissarmyhammer validate --verbose
 </code></pre>
 </li>
 <li>
@@ -414,7 +414,7 @@ description: What this prompt does
 <ol>
 <li>
 <p><strong>Check override hierarchy</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer list --verbose | grep "prompt-name"
+<pre><code class="language-bash">swissarmyhammer prompt list --verbose | grep "prompt-name"
 </code></pre>
 </li>
 <li>
@@ -523,23 +523,23 @@ sudo sysctl -p
 </ol>
 <h2 id="cli-command-issues"><a class="header" href="#cli-command-issues">CLI Command Issues</a></h2>
 <h3 id="test-command-fails"><a class="header" href="#test-command-fails">Test Command Fails</a></h3>
-<p><strong>Problem</strong>: <code>swissarmyhammer test</code> errors</p>
+<p><strong>Problem</strong>: <code>swissarmyhammer prompt test</code> errors</p>
 <p><strong>Solutions</strong>:</p>
 <ol>
 <li>
 <p><strong>Check prompt exists</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer list | grep "prompt-name"
+<pre><code class="language-bash">swissarmyhammer prompt list | grep "prompt-name"
 </code></pre>
 </li>
 <li>
 <p><strong>Validate arguments</strong>:</p>
 <pre><code class="language-bash"># Show required arguments
-swissarmyhammer test prompt-name --help
+swissarmyhammer prompt test prompt-name --help
 </code></pre>
 </li>
 <li>
 <p><strong>Debug mode</strong>:</p>
-<pre><code class="language-bash">swissarmyhammer test prompt-name --debug
+<pre><code class="language-bash">swissarmyhammer prompt test prompt-name --debug
 </code></pre>
 </li>
 </ol>
@@ -614,30 +614,30 @@ ldd $(which swissarmyhammer)
 <h2 id="debug-techniques"><a class="header" href="#debug-techniques">Debug Techniques</a></h2>
 <h3 id="enable-verbose-logging"><a class="header" href="#enable-verbose-logging">Enable Verbose Logging</a></h3>
 <pre><code class="language-bash"># Server debug mode
-swissarmyhammer serve --debug
+swissarmyhammer --debug serve
 
 # Redirect to file
-swissarmyhammer serve --debug &gt; debug.log 2&gt;&amp;1
+swissarmyhammer --debug serve &gt; debug.log 2&gt;&amp;1
 
 # CLI debug
-RUST_LOG=debug swissarmyhammer test prompt-name
+RUST_LOG=debug swissarmyhammer prompt test prompt-name
 </code></pre>
 <h3 id="check-configuration"><a class="header" href="#check-configuration">Check Configuration</a></h3>
 <pre><code class="language-bash"># Run comprehensive checks
 swissarmyhammer doctor --verbose
 
 # Check specific areas
-swissarmyhammer doctor --check prompts --check mcp
+swissarmyhammer validate --check mcp
 
 # Auto-fix issues
 swissarmyhammer doctor --fix
 </code></pre>
 <h3 id="trace-mcp-communication"><a class="header" href="#trace-mcp-communication">Trace MCP Communication</a></h3>
 <pre><code class="language-bash"># Save MCP messages
-swissarmyhammer serve --debug | grep MCP &gt; mcp-trace.log
+swissarmyhammer --debug serve | grep MCP &gt; mcp-trace.log
 
 # Monitor in real-time
-swissarmyhammer serve --debug | grep -E "(request|response)"
+swissarmyhammer --debug serve | grep -E "(request|response)"
 </code></pre>
 <h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
 <h3 id="documentation"><a class="header" href="#documentation">Documentation</a></h3>
@@ -718,7 +718,7 @@ ps aux | grep swissarmyhammer | grep -v grep
 <h3 id="prompt-not-found"><a class="header" href="#prompt-not-found">“Prompt not found”</a></h3>
 <ul>
 <li>Prompt name doesn’t exist</li>
-<li>Check: <code>swissarmyhammer list</code></li>
+<li>Check: <code>swissarmyhammer prompt list</code></li>
 </ul>
 <h3 id="connection-refused"><a class="header" href="#connection-refused">“Connection refused”</a></h3>
 <ul>
@@ -745,14 +745,14 @@ swissarmyhammer export ~/.swissarmyhammer/backups/prompts-$(date +%Y%m%d).tar.gz
 <li>
 <p><strong>Test changes</strong>:</p>
 <pre><code class="language-bash"># Before committing
-swissarmyhammer test new-prompt
-swissarmyhammer doctor --check prompts
+swissarmyhammer prompt test new-prompt
+swissarmyhammer validate
 </code></pre>
 </li>
 <li>
 <p><strong>Monitor logs</strong>:</p>
 <pre><code class="language-bash"># Keep logs for debugging
-swissarmyhammer serve --debug &gt; server.log 2&gt;&amp;1 &amp;
+swissarmyhammer --debug serve &gt; server.log 2&gt;&amp;1 &amp;
 </code></pre>
 </li>
 </ol>

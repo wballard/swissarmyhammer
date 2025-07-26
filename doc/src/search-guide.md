@@ -2,6 +2,16 @@
 
 SwissArmyHammer provides powerful search capabilities to help you discover and find prompts in your collection. This guide covers search strategies, advanced filtering, and integration workflows.
 
+## Search Strategies Overview
+
+SwissArmyHammer provides three complementary search strategies:
+
+1. **Fuzzy Search**: Fast approximate matching for typos and partial matches
+2. **Full-Text Search**: Precise term-based search with boolean operators
+3. **Semantic Search**: AI-powered semantic similarity using vector embeddings
+
+Each strategy has different strengths and use cases. You can use them individually or in combination for optimal results.
+
 ## Basic Search
 
 ### Simple Text Search
@@ -454,6 +464,100 @@ swissarmyhammer search --no-args --limit 50
 swissarmyhammer search --json "" --limit 100 | \
   jq '.results[] | select(.arguments | length > 5)'
 ```
+
+## Semantic Search
+
+### Overview
+
+Semantic search uses AI embeddings to find code and prompts based on meaning rather than exact text matches. This is particularly powerful for finding conceptually similar code even when the exact keywords differ.
+
+### Basic Semantic Search
+
+```bash
+# Find code semantically similar to a concept
+swissarmyhammer search --semantic "error handling patterns"
+
+# Search for code functionality
+swissarmyhammer search --semantic "database connection pooling"
+
+# Find similar algorithms or approaches
+swissarmyhammer search --semantic "sorting algorithms implementation"
+```
+
+### Language-Specific Semantic Search
+
+```bash
+# Find Rust-specific patterns
+swissarmyhammer search --semantic "async error handling" --language rust
+
+# Python-specific search
+swissarmyhammer search --semantic "decorator patterns" --language python
+
+# JavaScript/TypeScript patterns
+swissarmyhammer search --semantic "promise chain handling" --language typescript
+```
+
+### Semantic Search with Thresholds
+
+```bash
+# High-precision semantic search (only very similar results)
+swissarmyhammer search --semantic "REST API client" --threshold 0.8
+
+# Broader semantic search (more results, less similar)
+swissarmyhammer search --semantic "authentication" --threshold 0.6
+
+# Maximum recall (find anything remotely related)
+swissarmyhammer search --semantic "testing" --threshold 0.4
+```
+
+### Code Similarity Detection
+
+```bash
+# Find code similar to a specific file
+swissarmyhammer search --semantic-file path/to/example.rs
+
+# Find duplicated or similar functions
+swissarmyhammer search --semantic "function findUser(id)" --limit 10
+
+# Detect architectural patterns
+swissarmyhammer search --semantic "observer pattern implementation"
+```
+
+### Multi-Modal Semantic Search
+
+```bash
+# Combine text and code structure
+swissarmyhammer search --semantic "error handling" --include-structure
+
+# Search including comments and documentation
+swissarmyhammer search --semantic "caching strategy" --include-docs
+
+# Focus on specific code constructs
+swissarmyhammer search --semantic "async functions" --code-only
+```
+
+### Semantic Search Performance
+
+Semantic search characteristics:
+- **Latency**: 50-200ms for typical queries
+- **Memory**: Scales with result set size and embedding dimensions
+- **Accuracy**: High for conceptual matches, lower for exact syntax
+- **Best for**: Finding similar algorithms, patterns, and architectural concepts
+
+### When to Use Semantic Search
+
+**Use semantic search when:**
+- Looking for conceptually similar code patterns
+- Searching across different programming languages
+- Finding architectural patterns and design solutions
+- Exploring similar algorithms or approaches
+- Discovering duplicated or near-duplicate code
+
+**Use traditional search when:**
+- Looking for exact variable names or function signatures
+- Searching for specific syntax or language constructs
+- Finding exact string matches
+- Performance is critical (semantic search is slower)
 
 ## See Also
 

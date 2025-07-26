@@ -143,7 +143,7 @@
                         <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/docs/src/src/cli-search.md" title="Suggest an edit" aria-label="Suggest an edit">
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/cli-search.md" title="Suggest an edit" aria-label="Suggest an edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -188,6 +188,9 @@
 <ul>
 <li><code>--case-sensitive, -c</code> - Enable case-sensitive matching</li>
 <li><code>--regex, -r</code> - Use regular expressions instead of fuzzy matching</li>
+<li><code>--fuzzy</code> - Use fuzzy string matching (default for simple queries)</li>
+<li><code>--semantic</code> - Use AI-powered semantic search with embeddings</li>
+<li><code>--hybrid</code> - Combine fuzzy, full-text, and semantic search results</li>
 <li><code>--full, -f</code> - Show full prompt content in results</li>
 </ul>
 <h3 id="field-targeting"><a class="header" href="#field-targeting">Field Targeting</a></h3>
@@ -206,6 +209,15 @@
 <li><code>--source SOURCE</code> - Filter by prompt source (builtin, user, local)</li>
 <li><code>--has-arg ARG</code> - Show prompts that have a specific argument</li>
 <li><code>--no-args</code> - Show prompts with no arguments</li>
+<li><code>--language LANG</code> - Filter by programming language (for semantic search)</li>
+</ul>
+<h3 id="semantic-search-options"><a class="header" href="#semantic-search-options">Semantic Search Options</a></h3>
+<ul>
+<li><code>--threshold FLOAT</code> - Similarity threshold for semantic search (0.0-1.0)</li>
+<li><code>--model MODEL</code> - Embedding model to use for semantic search</li>
+<li><code>--include-structure</code> - Include code structure in semantic analysis</li>
+<li><code>--include-docs</code> - Include documentation and comments in search</li>
+<li><code>--code-only</code> - Search only code content, exclude comments</li>
 </ul>
 <h3 id="output-control"><a class="header" href="#output-control">Output Control</a></h3>
 <ul>
@@ -259,6 +271,25 @@ swissarmyhammer search --limit 5 test
 
 # Get JSON output for scripting
 swissarmyhammer search --json "data analysis"
+</code></pre>
+<h3 id="semantic-search-examples"><a class="header" href="#semantic-search-examples">Semantic Search Examples</a></h3>
+<pre><code class="language-bash"># Basic semantic search
+swissarmyhammer search --semantic "error handling patterns"
+
+# Language-specific semantic search
+swissarmyhammer search --semantic "async functions" --language rust
+
+# High-precision semantic search
+swissarmyhammer search --semantic "database connection" --threshold 0.8
+
+# Hybrid search combining all strategies
+swissarmyhammer search --hybrid "authentication middleware"
+
+# Semantic search with specific model
+swissarmyhammer search --semantic "testing patterns" --model all-mpnet-base-v2
+
+# Code-only semantic search
+swissarmyhammer search --semantic "sorting algorithm" --code-only
 </code></pre>
 <h2 id="output-format"><a class="header" href="#output-format">Output Format</a></h2>
 <h3 id="default-output"><a class="header" href="#default-output">Default Output</a></h3>
@@ -327,6 +358,8 @@ swissarmyhammer search debug --limit 5 | \
 <li><a href="./cli-test.html"><code>test</code></a> - Test prompts found through search</li>
 <li><a href="./cli-export.html"><code>export</code></a> - Export specific prompts</li>
 <li><a href="./search-guide.html">Search Guide</a> - Advanced search strategies</li>
+<li><a href="./search-architecture.html">Search Architecture</a> - Technical architecture details</li>
+<li><a href="./index-management.html">Index Management</a> - Managing search indices</li>
 </ul>
 
                     </main>

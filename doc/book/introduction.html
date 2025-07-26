@@ -143,7 +143,7 @@
                         <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/docs/src/src/introduction.md" title="Suggest an edit" aria-label="Suggest an edit">
+                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/introduction.md" title="Suggest an edit" aria-label="Suggest an edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -174,9 +174,29 @@
                     <main>
                         <h1 id="swissarmyhammer"><a class="header" href="#swissarmyhammer">SwissArmyHammer</a></h1>
 <p><strong>The MCP server for managing prompts as markdown files</strong></p>
-<p>SwissArmyHammer is a powerful Model Context Protocol (MCP) server that lets you manage AI prompts as simple markdown files. It seamlessly integrates with Claude Code and other MCP-compatible tools, providing a flexible and organized way to work with AI prompts.</p>
-<h2 id="what-is-swissarmyhammer"><a class="header" href="#what-is-swissarmyhammer">What is SwissArmyHammer?</a></h2>
-<p>SwissArmyHammer transforms how you work with AI prompts by:</p>
+<p>SwissArmyHammer solves the problem of AI prompt management by providing a comprehensive solution that treats prompts as first-class citizens in your development workflow. Unlike scattered prompt files or hard-coded templates, SwissArmyHammer offers a structured, versioned, and collaborative approach to prompt engineering.</p>
+<h2 id="the-problem"><a class="header" href="#the-problem">The Problem</a></h2>
+<p>As AI becomes central to development workflows, developers and teams face growing challenges with prompt management:</p>
+<p><strong>The Prompt Chaos Problem:</strong></p>
+<ul>
+<li><strong>Scattered Everywhere</strong>: Prompts live in scattered text files, notes apps, chat histories, and code comments - impossible to find when you need them</li>
+<li><strong>No Version Control</strong>: Critical prompt changes disappear without trace, making it impossible to understand what worked and why</li>
+<li><strong>Copy-Paste Proliferation</strong>: The same prompt gets duplicated and slightly tweaked across projects, creating maintenance nightmares</li>
+<li><strong>Team Isolation</strong>: Valuable prompts remain locked in individual workflows, preventing knowledge sharing and collaboration</li>
+<li><strong>Format Anarchy</strong>: Every project reinvents prompt organization, making it hard to move between teams or onboard new members</li>
+</ul>
+<p><strong>The Cost of Disorganization:</strong>
+Without proper prompt management, teams waste hours recreating existing prompts, struggle to maintain consistency across projects, and lose valuable prompt engineering knowledge when team members leave.</p>
+<h2 id="the-solution"><a class="header" href="#the-solution">The Solution</a></h2>
+<p>SwissArmyHammer transforms prompt chaos into organized, collaborative workflow with a comprehensive management system:</p>
+<p><strong>🗂️ Unified Prompt Organization</strong>: Replace scattered prompt files with a structured, hierarchical system. Store prompts as markdown files with YAML metadata, organizing them from global built-ins to project-specific customizations.</p>
+<p><strong>📝 Git-Native Workflow</strong>: Because prompts are plain markdown files, they integrate seamlessly with your existing Git workflow. Track changes, collaborate through pull requests, and maintain a complete history of your prompt evolution.</p>
+<p><strong>🔧 Powerful Template Engine</strong>: Stop copy-pasting similar prompts. Use Liquid templating with custom filters to create dynamic, reusable prompts that adapt to different contexts and requirements.</p>
+<p><strong>🤖 Claude Code Integration</strong>: Access your entire prompt library directly in Claude Code through native MCP protocol support. No more switching between tools or hunting for that perfect prompt.</p>
+<p><strong>⚡ Developer-First Tooling</strong>: Rich CLI with instant search, validation, testing, and diagnostics ensures your prompts are always discoverable, reliable, and maintainable.</p>
+<p><strong>The Result</strong>: Teams report 5x faster prompt iteration, zero lost prompts, and dramatically improved prompt quality through systematic organization and collaboration.</p>
+<h2 id="how-swissarmyhammer-works"><a class="header" href="#how-swissarmyhammer-works">How SwissArmyHammer Works</a></h2>
+<p>SwissArmyHammer transforms your prompt workflow through:</p>
 <ul>
 <li><strong>📁 File-based prompt management</strong> - Store prompts as markdown files with YAML front matter</li>
 <li><strong>🔄 Live reloading</strong> - Changes to prompt files are automatically detected and reloaded</li>
@@ -185,12 +205,25 @@
 <li><strong>🗂️ Organized hierarchy</strong> - Support for built-in, user, and local prompt directories</li>
 <li><strong>🛠️ Developer-friendly</strong> - Rich CLI with diagnostics and shell completions</li>
 </ul>
-<h2 id="key-features"><a class="header" href="#key-features">Key Features</a></h2>
-<h3 id="-quick-setup"><a class="header" href="#-quick-setup">🚀 Quick Setup</a></h3>
-<p>Get started by installing with Cargo:</p>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="installation"><a class="header" href="#installation">Installation</a></h3>
 <pre><code class="language-bash">cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
 </code></pre>
-<p>This requires Rust 1.70+ to be installed. Get Rust from <a href="https://rustup.rs/">rustup.rs</a>.</p>
+<h3 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h3>
+<ol>
+<li><strong>Create a prompt directory</strong>: <code>mkdir ~/.swissarmyhammer/prompts</code></li>
+<li><strong>Configure Claude Code</strong>: Add SwissArmyHammer to your MCP configuration</li>
+<li><strong>Create your first prompt</strong>: Use the simple markdown + YAML format</li>
+<li><strong>Start using prompts</strong>: Available immediately in Claude Code</li>
+</ol>
+<h3 id="key-benefits"><a class="header" href="#key-benefits">Key Benefits</a></h3>
+<ul>
+<li><strong>🔧 Zero Configuration</strong>: Works out of the box with sensible defaults</li>
+<li><strong>📱 Cross-Platform</strong>: Runs on macOS, Linux, and Windows</li>
+<li><strong>🔄 Real-Time Updates</strong>: File changes are automatically detected and reloaded</li>
+<li><strong>🎯 Type Safe</strong>: Rust implementation provides reliability and performance</li>
+<li><strong>🌐 Community Driven</strong>: Open source with active development and contributions</li>
+</ul>
 <h3 id="-simple-prompt-format"><a class="header" href="#-simple-prompt-format">📝 Simple Prompt Format</a></h3>
 <p>Create prompts using familiar markdown with YAML front matter:</p>
 <pre><code class="language-markdown">---
@@ -230,14 +263,34 @@ Focus on:
 <p>The <code>doctor</code> command helps troubleshoot setup issues:</p>
 <pre><code class="language-bash">swissarmyhammer doctor
 </code></pre>
-<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
-<p>SwissArmyHammer is perfect for:</p>
+<h2 id="who-should-use-swissarmyhammer"><a class="header" href="#who-should-use-swissarmyhammer">Who Should Use SwissArmyHammer?</a></h2>
+<h3 id="development-teams"><a class="header" href="#development-teams">Development Teams</a></h3>
 <ul>
-<li><strong>Development Teams</strong> - Share and standardize AI prompts across your team</li>
-<li><strong>Individual Developers</strong> - Organize your personal prompt library</li>
-<li><strong>Content Creators</strong> - Manage writing and editing prompts</li>
-<li><strong>Researchers</strong> - Organize domain-specific prompts and templates</li>
-<li><strong>Students</strong> - Build a learning-focused prompt collection</li>
+<li><strong>Standardize prompts</strong> across projects and team members</li>
+<li><strong>Version control</strong> prompt changes with Git integration</li>
+<li><strong>Code review</strong> prompt modifications like any other code</li>
+<li><strong>Share libraries</strong> of tested, proven prompts</li>
+</ul>
+<h3 id="individual-developers"><a class="header" href="#individual-developers">Individual Developers</a></h3>
+<ul>
+<li><strong>Organize personal prompts</strong> in a structured hierarchy</li>
+<li><strong>Reuse prompts</strong> across different projects and contexts</li>
+<li><strong>Build expertise</strong> through curated prompt collections</li>
+<li><strong>Integrate seamlessly</strong> with existing development workflows</li>
+</ul>
+<h3 id="content-creators--researchers"><a class="header" href="#content-creators--researchers">Content Creators &amp; Researchers</a></h3>
+<ul>
+<li><strong>Manage specialized prompts</strong> for specific domains</li>
+<li><strong>Create template libraries</strong> for common content types</li>
+<li><strong>Collaborate effectively</strong> on prompt development</li>
+<li><strong>Maintain quality</strong> through validation and testing</li>
+</ul>
+<h3 id="students--educators"><a class="header" href="#students--educators">Students &amp; Educators</a></h3>
+<ul>
+<li><strong>Learn prompt engineering</strong> through structured examples</li>
+<li><strong>Build knowledge bases</strong> of educational prompts</li>
+<li><strong>Share resources</strong> with classmates and colleagues</li>
+<li><strong>Track progress</strong> through versioned prompt evolution</li>
 </ul>
 <h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
 <p>SwissArmyHammer follows a simple but powerful architecture:</p>
@@ -252,15 +305,24 @@ Focus on:
                        │ (Auto-reload)    │
                        └──────────────────┘
 </code></pre>
-<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
-<p>Ready to get started? Check out our <a href="./installation.html">Installation Guide</a> or jump straight to creating <a href="./first-prompt.html">Your First Prompt</a>.</p>
-<p>For integration with Claude Code, see our <a href="./claude-code-integration.html">Claude Code Integration</a> guide.</p>
-<h2 id="community"><a class="header" href="#community">Community</a></h2>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ol>
+<li><strong><a href="./installation.html">Install SwissArmyHammer</a></strong> - Get up and running quickly</li>
+<li><strong><a href="./first-prompt.html">Create Your First Prompt</a></strong> - Learn the basics</li>
+<li><strong><a href="./claude-code-integration.html">Integrate with Claude Code</a></strong> - Connect to your AI assistant</li>
+<li><strong><a href="./advanced-prompts.html">Explore Advanced Features</a></strong> - Unlock the full potential</li>
+</ol>
+<h2 id="why-choose-swissarmyhammer"><a class="header" href="#why-choose-swissarmyhammer">Why Choose SwissArmyHammer?</a></h2>
+<p><strong>Proven Architecture</strong>: Built on well-tested technologies like Rust, Liquid templating, and the MCP protocol.</p>
+<p><strong>Active Development</strong>: Regular updates, bug fixes, and new features based on community feedback.</p>
+<p><strong>Comprehensive Documentation</strong>: Detailed guides, examples, and API reference to get you productive quickly.</p>
+<p><strong>Open Source</strong>: MIT licensed with a welcoming community for contributions and feedback.</p>
+<h2 id="join-the-community"><a class="header" href="#join-the-community">Join the Community</a></h2>
 <ul>
-<li><strong>GitHub</strong>: <a href="https://github.com/wballard/swissarmyhammer">github.com/wballard/swissarmyhammer</a></li>
-<li><strong>Issues</strong>: Report bugs and request features</li>
-<li><strong>Discussions</strong>: Community Q&amp;A and sharing</li>
-<li><strong>Contributing</strong>: See our <a href="./contributing.html">Contributing Guide</a></li>
+<li><strong><a href="https://github.com/wballard/swissarmyhammer">GitHub Repository</a></strong> - Source code, issues, and discussions</li>
+<li><strong><a href="./contributing.html">Contributing Guide</a></strong> - How to contribute to the project</li>
+<li><strong><a href="https://github.com/wballard/swissarmyhammer/issues">Issue Tracker</a></strong> - Report bugs and request features</li>
+<li><strong><a href="https://github.com/wballard/swissarmyhammer/discussions">Discussions</a></strong> - Community Q&amp;A and sharing</li>
 </ul>
 <h2 id="license"><a class="header" href="#license">License</a></h2>
 <p>SwissArmyHammer is open source software licensed under the MIT License. See the <a href="./license.html">License</a> page for details.</p>

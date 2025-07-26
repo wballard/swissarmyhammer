@@ -1,3 +1,4 @@
+use crate::common::generate_monotonic_ulid_string;
 use crate::config::Config;
 use crate::error::{Result, SwissArmyHammerError};
 use chrono::{DateTime, Utc};
@@ -394,7 +395,7 @@ impl IssueStorage for FileSystemIssueStorage {
 
         // If name is empty, generate a ULID
         let issue_name = if name.trim().is_empty() {
-            ulid::Ulid::new().to_string()
+            generate_monotonic_ulid_string()
         } else {
             sanitize_issue_name(&name)
         };

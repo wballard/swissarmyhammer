@@ -301,11 +301,18 @@ impl ParserConfig {
             )));
         }
 
-        // Validate non-zero constraints
+        // Validate non-zero constraints and reasonable bounds
         if min_chunk_size == 0 {
             return Err(SemanticError::TreeSitter(
                 "Invalid configuration: min_chunk_size must be > 0".to_string(),
             ));
+        }
+
+        // Validate reasonable upper bound to prevent excessive memory usage or processing time
+        if min_chunk_size > 1000 {
+            return Err(SemanticError::TreeSitter(format!(
+                "Invalid configuration: min_chunk_size ({min_chunk_size}) must be <= 1000 characters for reasonable performance"
+            )));
         }
 
         if max_chunk_size == 0 {

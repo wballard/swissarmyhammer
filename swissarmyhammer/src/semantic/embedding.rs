@@ -58,13 +58,22 @@ pub struct EmbeddingModelInfo {
     pub quantization: String,
 }
 
+/// Embedding model backend type
+enum EmbeddingBackend {
+    /// Production model using fastembed neural embeddings
+    Neural(TextEmbedding),
+    /// Mock model for testing (deterministic embeddings)
+    #[allow(dead_code)] // Only used in test code
+    Mock,
+}
+
 /// Embedding engine using fastembed-rs neural embeddings
 /// This provides high-quality semantic embeddings using local neural models
 /// without requiring external API dependencies.
 pub struct EmbeddingEngine {
     config: EmbeddingConfig,
     model_info: EmbeddingModelInfo,
-    model: Arc<Mutex<Option<TextEmbedding>>>,
+    backend: Arc<Mutex<EmbeddingBackend>>,
 }
 
 impl EmbeddingEngine {
@@ -155,7 +164,7 @@ impl EmbeddingEngine {
         Ok(Self {
             config,
             model_info,
-            model: Arc::new(Mutex::new(Some(model))),
+            backend: Arc::new(Mutex::new(EmbeddingBackend::Neural(model))),
         })
     }
 
@@ -256,12 +265,15 @@ impl EmbeddingEngine {
         }
 
         // Use fastembed to generate high-quality neural embeddings
-        let mut model_option = self.model.lock().await;
-        let model = model_option.as_mut().ok_or_else(|| {
-            SemanticError::Embedding(
-                "Model not initialized - only available in non-test mode".to_string(),
-            )
-        })?;
+        let mut backend = self.backend.lock().await;
+        let model = match &mut *backend {
+            EmbeddingBackend::Neural(model) => model,
+            EmbeddingBackend::Mock => {
+                return Err(SemanticError::Embedding(
+                    "Neural model not available in test mode".to_string(),
+                ))
+            }
+        };
 
         // Format text appropriately for embedding (code context)
         let formatted_text = format!("passage: {text}");
@@ -329,12 +341,15 @@ impl EmbeddingEngine {
             .collect();
 
         // Use fastembed's native batch processing
-        let mut model_option = self.model.lock().await;
-        let model = model_option.as_mut().ok_or_else(|| {
-            SemanticError::Embedding(
-                "Model not initialized - only available in non-test mode".to_string(),
-            )
-        })?;
+        let mut backend = self.backend.lock().await;
+        let model = match &mut *backend {
+            EmbeddingBackend::Neural(model) => model,
+            EmbeddingBackend::Mock => {
+                return Err(SemanticError::Embedding(
+                    "Neural batch processing not available in test mode".to_string(),
+                ))
+            }
+        };
 
         debug!("Processing batch of {} texts", texts.len());
 
@@ -431,14 +446,11 @@ impl EmbeddingEngine {
         // Since we can't create one without network access, we'll use a different strategy
         // We'll create a minimal engine that uses the mock path in create_neural_embedding
 
-        // For testing, we don't need a real model since the mock path will handle embeddings
-        let dummy_model = None;
-
         info!("Mock embedding engine created successfully");
         Ok(Self {
             config,
             model_info,
-            model: Arc::new(Mutex::new(dummy_model)),
+            backend: Arc::new(Mutex::new(EmbeddingBackend::Mock)),
         })
     }
 

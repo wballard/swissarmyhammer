@@ -47,6 +47,38 @@ pub enum ParseError {
 /// Result type for parsing operations
 pub type ParseResult<T> = Result<T, ParseError>;
 
+/// State ID validation utilities for workflow parsing
+impl MermaidParser {
+    /// Validates a state ID and determines if it should be included in the workflow.
+    ///
+    /// This validation handles special cases that can occur when parsing Mermaid state diagrams:
+    ///
+    /// 1. **Special [*] state**: Represents start/end markers in Mermaid but not actual workflow states
+    /// 2. **Empty state IDs**: Can occur when parallel state separators (|||) are used incorrectly,
+    ///    creating phantom empty states in the parsed diagram
+    /// 3. **Whitespace-only IDs**: Similar to empty IDs but containing only spaces or tabs
+    ///
+    /// Returns `true` if the state ID is valid and should be processed, `false` if it should be skipped.
+    ///
+    /// # Arguments
+    /// * `state_id` - The state identifier to validate
+    ///
+    /// # Returns
+    /// * `true` - State ID is valid and should be included in the workflow
+    /// * `false` - State ID should be skipped (special marker or empty/invalid)
+    fn is_valid_state_id(state_id: &str) -> bool {
+        // Skip the special [*] state as it's not a real state in our workflow model
+        if state_id == "[*]" {
+            return false;
+        }
+
+        // Skip empty or whitespace-only state IDs
+        // These can happen with parallel state separators (|||) creating invalid states
+        // when the Mermaid parser encounters malformed parallel constructs
+        !state_id.trim().is_empty()
+    }
+}
+
 /// Parser for Mermaid state diagrams
 pub struct MermaidParser;
 
@@ -209,13 +241,8 @@ impl MermaidParser {
 
         // Convert all states from mermaid to our format
         for (state_id, mermaid_state) in state_diagram.states {
-            // Skip the special [*] state as it's not a real state in our model
-            if state_id == "[*]" {
-                continue;
-            }
-
-            // Skip empty or whitespace-only state IDs (can happen with parallel state separators)
-            if state_id.trim().is_empty() {
+            // Validate state ID and skip invalid ones (including [*] markers and empty IDs)
+            if !Self::is_valid_state_id(&state_id) {
                 continue;
             }
 
@@ -334,13 +361,8 @@ impl MermaidParser {
 
         // Convert all states from mermaid to our format
         for (state_id, mermaid_state) in state_diagram.states {
-            // Skip the special [*] state as it's not a real state in our model
-            if state_id == "[*]" {
-                continue;
-            }
-
-            // Skip empty or whitespace-only state IDs (can happen with parallel state separators)
-            if state_id.trim().is_empty() {
+            // Validate state ID and skip invalid ones (including [*] markers and empty IDs)
+            if !Self::is_valid_state_id(&state_id) {
                 continue;
             }
 

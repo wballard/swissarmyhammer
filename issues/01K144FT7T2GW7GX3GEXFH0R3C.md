@@ -1,1 +1,0 @@
-when i run sah validate, i get 19 checks passed, 1 warnings -- but see no warning in the output

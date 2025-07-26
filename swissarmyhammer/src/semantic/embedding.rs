@@ -503,7 +503,6 @@ impl EmbeddingEngine {
         })
     }
 
-
     #[cfg(test)]
     /// Generate a deterministic mock embedding for testing
     pub async fn generate_mock_embedding_for_test(&self, text: &str) -> Vec<f32> {

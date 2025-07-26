@@ -33,7 +33,7 @@ async fn main() {
 
     // Only initialize heavy dependencies when actually needed
     use tracing::Level;
-    use tracing_subscriber::{EnvFilter, fmt, prelude::*, registry};
+    use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter};
 
     // Configure logging based on verbosity flags and MCP mode detection
     use is_terminal::IsTerminal;
@@ -56,10 +56,10 @@ async fn main() {
     let create_filter = || {
         if cli.debug {
             // When --debug is used, all crates including ORT get debug level
-            EnvFilter::new(format!("{}", log_level))
+            EnvFilter::new(format!("{log_level}"))
         } else {
             // Otherwise, set ORT to WARN and everything else to the requested level
-            EnvFilter::new(format!("ort=warn,{}", log_level))
+            EnvFilter::new(format!("ort=warn,{log_level}"))
         }
     };
 
@@ -98,7 +98,7 @@ async fn main() {
                                 let file = shared_file.clone();
                                 Box::new(FileWriterGuard::new(file)) as Box<dyn std::io::Write>
                             })
-                            .with_ansi(false) // No color codes in file
+                            .with_ansi(false), // No color codes in file
                     )
                     .init();
             }

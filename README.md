@@ -4,7 +4,7 @@
 
 # SwissArmyHammer
 
-**The MCP server and Rust library for managing prompts as markdown files**
+**Program all the things, just by writing markdown. Really.**
 
 📚 **[Complete Documentation & Guides](https://wballard.github.io/swissarmyhammer)** 📚
 
@@ -24,7 +24,9 @@
 
 ## ✨ What is SwissArmyHammer?
 
-SwissArmyHammer transforms how you work with AI prompts by letting you manage them as simple markdown files. It's both a powerful Model Context Protocol (MCP) server that seamlessly integrates with Claude Code and a flexible Rust library for building prompt-based applications.
+SwissArmyHammer transforms how you work with AI prompts and workflows by letting you manage them as simple markdown files. 
+
+It's both a powerful Model Context Protocol (MCP) server that seamlessly integrates with Claude Code and a flexible Rust library for building prompt-based applications.
 
 ```markdown
 ---

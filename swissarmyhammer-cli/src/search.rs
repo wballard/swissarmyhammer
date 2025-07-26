@@ -205,6 +205,7 @@ fn display_table(results: &[SearchResult], full: bool) -> Result<()> {
 
     if is_tty {
         // Add colors for better readability in terminal
+        // tabled 0.20+ changed API: Rows::single() → Rows::one()
         table.with(Modify::new(Rows::one(0)).with(Color::FG_BRIGHT_CYAN));
 
         // Color code sources

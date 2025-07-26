@@ -15,6 +15,8 @@ use tokio::sync::mpsc;
 pub struct FileWatcher {
     /// Handle to the background watcher task
     watcher_handle: Option<tokio::task::JoinHandle<()>>,
+    /// Shutdown sender to gracefully stop the watcher
+    shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 /// Configuration for file watching behavior
@@ -51,6 +53,7 @@ impl FileWatcher {
     pub fn new() -> Self {
         Self {
             watcher_handle: None,
+            shutdown_tx: None,
         }
     }
 
@@ -93,6 +96,9 @@ impl FileWatcher {
             return Ok(());
         }
 
+        // Create shutdown channel
+        let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel();
+
         // Create the file watcher
         let (tx, mut rx) = mpsc::channel(config.channel_buffer_size);
         let mut watcher = RecommendedWatcher::new(
@@ -127,49 +133,96 @@ impl FileWatcher {
             // The watcher must be moved into the task to prevent it from being dropped
             let _watcher = watcher;
 
-            while let Some(event) = rx.recv().await {
-                tracing::debug!("📁 File system event: {:?}", event);
+            loop {
+                tokio::select! {
+                    // Handle file system events
+                    event = rx.recv() => {
+                        match event {
+                            Some(event) => {
+                                tracing::debug!("📁 File system event: {:?}", event);
 
-                // Check if this is a relevant event
-                match event.kind {
-                    EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
-                        // Check if it's a prompt file
-                        let relevant_paths: Vec<std::path::PathBuf> = event
-                            .paths
-                            .iter()
-                            .filter(|p| is_any_prompt_file(p))
-                            .cloned()
-                            .collect();
+                                // Check if this is a relevant event
+                                match event.kind {
+                                    EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
+                                        // Check if it's a prompt file
+                                        let relevant_paths: Vec<std::path::PathBuf> = event
+                                            .paths
+                                            .iter()
+                                            .filter(|p| is_any_prompt_file(p))
+                                            .cloned()
+                                            .collect();
 
-                        if !relevant_paths.is_empty() {
-                            tracing::info!("📄 Prompt file changed: {:?}", relevant_paths);
+                                        if !relevant_paths.is_empty() {
+                                            tracing::info!("📄 Prompt file changed: {:?}", relevant_paths);
 
-                            // Notify callback about the change
-                            if let Err(e) = callback.on_file_changed(relevant_paths).await {
-                                tracing::error!("❌ File watcher callback failed: {}", e);
-                                callback.on_error(format!("Callback failed: {e}")).await;
+                                            // Notify callback about the change
+                                            if let Err(e) = callback.on_file_changed(relevant_paths).await {
+                                                tracing::error!("❌ File watcher callback failed: {}", e);
+                                                callback.on_error(format!("Callback failed: {e}")).await;
+                                            }
+                                        } else {
+                                            tracing::debug!("🚫 Ignoring non-prompt file: {:?}", event.paths);
+                                        }
+                                    }
+                                    _ => {
+                                        tracing::debug!("🚫 Ignoring event type: {:?}", event.kind);
+                                    }
+                                }
                             }
-                        } else {
-                            tracing::debug!("🚫 Ignoring non-prompt file: {:?}", event.paths);
+                            None => {
+                                // Channel closed, exit loop
+                                tracing::debug!("📁 File watch channel closed, stopping watcher");
+                                break;
+                            }
                         }
                     }
-                    _ => {
-                        tracing::debug!("🚫 Ignoring event type: {:?}", event.kind);
+                    // Handle shutdown signal
+                    _ = &mut shutdown_rx => {
+                        tracing::debug!("📁 Received shutdown signal, stopping file watcher");
+                        break;
                     }
                 }
             }
+            tracing::debug!("📁 File watcher task exiting");
         });
 
-        // Store the handle
+        // Store the handle and shutdown sender
         self.watcher_handle = Some(handle);
+        self.shutdown_tx = Some(shutdown_tx);
 
         Ok(())
     }
 
     /// Stop file watching
     pub fn stop_watching(&mut self) {
+        // Send shutdown signal if available
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            let _ = shutdown_tx.send(()); // Ignore error if receiver is dropped
+        }
+
+        // Wait for the task to complete (with timeout to avoid hanging)
         if let Some(handle) = self.watcher_handle.take() {
-            handle.abort();
+            // Use block_on with a timeout to avoid hanging in drop
+            let timeout_duration = std::time::Duration::from_millis(500);
+            let runtime_handle = tokio::runtime::Handle::try_current();
+
+            match runtime_handle {
+                Ok(handle_rt) => {
+                    // We're in an async context, spawn a task to wait
+                    std::mem::drop(handle_rt.spawn(async move {
+                        match tokio::time::timeout(timeout_duration, handle).await {
+                            Ok(_) => tracing::debug!("📁 File watcher task completed successfully"),
+                            Err(_) => {
+                                tracing::warn!("📁 File watcher task did not complete within timeout, aborting");
+                            }
+                        }
+                    }));
+                }
+                Err(_) => {
+                    // Not in async context, just abort (fallback for drop scenarios)
+                    handle.abort();
+                }
+            }
         }
     }
 

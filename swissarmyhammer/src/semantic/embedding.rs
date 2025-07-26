@@ -58,13 +58,22 @@ pub struct EmbeddingModelInfo {
     pub quantization: String,
 }
 
+/// Embedding model backend type
+enum EmbeddingBackend {
+    /// Production model using fastembed neural embeddings
+    Neural(Box<TextEmbedding>),
+    /// Mock model for testing (deterministic embeddings)
+    #[allow(dead_code)] // Only used in test code
+    Mock,
+}
+
 /// Embedding engine using fastembed-rs neural embeddings
 /// This provides high-quality semantic embeddings using local neural models
 /// without requiring external API dependencies.
 pub struct EmbeddingEngine {
     config: EmbeddingConfig,
     model_info: EmbeddingModelInfo,
-    model: Arc<Mutex<TextEmbedding>>,
+    backend: Arc<Mutex<EmbeddingBackend>>,
 }
 
 impl EmbeddingEngine {
@@ -155,7 +164,7 @@ impl EmbeddingEngine {
         Ok(Self {
             config,
             model_info,
-            model: Arc::new(Mutex::new(model)),
+            backend: Arc::new(Mutex::new(EmbeddingBackend::Neural(Box::new(model)))),
         })
     }
 
@@ -246,10 +255,25 @@ impl EmbeddingEngine {
         Ok(embedding)
     }
 
-    /// Create a neural embedding using fastembed
+    /// Create a neural embedding using fastembed (or mock for testing)
     async fn create_neural_embedding(&self, text: &str) -> Result<Vec<f32>> {
+        // Check if this is a mock/test instance
+        #[cfg(test)]
+        if self.model_info.model_id == "mock-test-model" {
+            // Return deterministic mock embedding for testing
+            return Ok(self.generate_deterministic_mock_embedding(text));
+        }
+
         // Use fastembed to generate high-quality neural embeddings
-        let mut model = self.model.lock().await;
+        let mut backend = self.backend.lock().await;
+        let model = match &mut *backend {
+            EmbeddingBackend::Neural(model) => model.as_mut(),
+            EmbeddingBackend::Mock => {
+                return Err(SemanticError::Embedding(
+                    "Neural model not available in test mode".to_string(),
+                ))
+            }
+        };
 
         // Format text appropriately for embedding (code context)
         let formatted_text = format!("passage: {text}");
@@ -269,6 +293,39 @@ impl EmbeddingEngine {
         }
     }
 
+    #[cfg(test)]
+    /// Generate a simple deterministic mock embedding for testing
+    /// Creates consistent embeddings without complex semantic modeling
+    fn generate_deterministic_mock_embedding(&self, text: &str) -> Vec<f32> {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        // Simple hash-based approach for deterministic but varied embeddings
+        let mut hasher = DefaultHasher::new();
+        text.hash(&mut hasher);
+        let base_hash = hasher.finish();
+
+        // Generate embedding vector using the hash as a seed
+        let mut embedding = Vec::with_capacity(self.model_info.dimensions);
+        for i in 0..self.model_info.dimensions {
+            // Use dimension index to vary the values across dimensions
+            let dim_hash = base_hash.wrapping_add(i as u64 * 37);
+            // Convert to float in range [-1.0, 1.0]
+            let value = ((dim_hash % 2000) as f32 / 1000.0) - 1.0;
+            embedding.push(value);
+        }
+
+        // Normalize the vector to unit length (like real embeddings)
+        let magnitude: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
+        if magnitude > 0.0 {
+            for value in &mut embedding {
+                *value /= magnitude;
+            }
+        }
+
+        embedding
+    }
+
     async fn process_text_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
         if texts.is_empty() {
             return Ok(Vec::new());
@@ -284,7 +341,15 @@ impl EmbeddingEngine {
             .collect();
 
         // Use fastembed's native batch processing
-        let mut model = self.model.lock().await;
+        let mut backend = self.backend.lock().await;
+        let model = match &mut *backend {
+            EmbeddingBackend::Neural(model) => model.as_mut(),
+            EmbeddingBackend::Mock => {
+                return Err(SemanticError::Embedding(
+                    "Neural batch processing not available in test mode".to_string(),
+                ))
+            }
+        };
 
         debug!("Processing batch of {} texts", texts.len());
 
@@ -351,9 +416,42 @@ impl EmbeddingEngine {
     }
 
     #[cfg(test)]
-    /// Create embedding engine for testing with mock embeddings
+    /// Create embedding engine for testing using mock model (no network required)
     pub async fn new_for_testing() -> Result<Self> {
-        Self::new().await
+        info!("Creating mock embedding engine for testing (no network required)");
+
+        let config = EmbeddingConfig {
+            model_id: "mock-test-model".to_string(),
+            embedding_model: EmbeddingModel::AllMiniLML6V2, // Not used for mock
+            batch_size: 1,
+            max_text_length: 1000,
+            batch_delay_ms: 0,
+            show_download_progress: false,
+            dimensions: Some(384), // Standard dimension for testing
+            max_sequence_length: 256,
+            quantization: "FP32".to_string(),
+        };
+
+        info!("Creating mock embedding engine with 384 dimensions");
+
+        // Create a mock model info without initializing the actual fastembed model
+        let model_info = EmbeddingModelInfo {
+            model_id: config.model_id.clone(),
+            dimensions: 384, // Standard embedding dimension for testing
+            max_sequence_length: config.max_sequence_length,
+            quantization: config.quantization.clone(),
+        };
+
+        // For testing, we need to provide a dummy TextEmbedding model
+        // Since we can't create one without network access, we'll use a different strategy
+        // We'll create a minimal engine that uses the mock path in create_neural_embedding
+
+        info!("Mock embedding engine created successfully");
+        Ok(Self {
+            config,
+            model_info,
+            backend: Arc::new(Mutex::new(EmbeddingBackend::Mock)),
+        })
     }
 
     #[cfg(test)]

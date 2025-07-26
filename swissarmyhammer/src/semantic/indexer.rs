@@ -650,7 +650,14 @@ mod tests {
 
     async fn create_test_indexer() -> Result<(FileIndexer, TempDir)> {
         let temp_dir = TempDir::new().map_err(SemanticError::FileSystem)?;
-        let db_name = format!("test_{}.db", std::process::id());
+
+        // Use thread ID and random number for better uniqueness and avoid race conditions
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let thread_id = std::thread::current().id();
+
+        let db_name = format!("test_{thread_id:?}_{counter}.db");
         let config = SemanticConfig {
             database_path: temp_dir.path().join(db_name),
             ..Default::default()
@@ -663,7 +670,12 @@ mod tests {
             max_chunks_per_file: 1000,
             max_file_size_bytes: 10 * 1024 * 1024,
         };
-        let embedding_service = EmbeddingEngine::new_for_testing().await?;
+
+        // Create embedding engine for testing - tests must work with embedding functionality
+        let embedding_service = EmbeddingEngine::new_for_testing().await.expect(
+            "Failed to create embedding engine for testing - tests require embedding functionality",
+        );
+
         let storage =
             VectorStorage::new(config).map_err(|e| SemanticError::Index(e.to_string()))?;
         storage
@@ -678,12 +690,16 @@ mod tests {
     #[tokio::test]
     async fn test_indexer_creation() {
         let result = create_test_indexer().await;
-        assert!(result.is_ok());
+        if let Err(e) = result {
+            panic!("Failed to create test indexer: {e}");
+        }
     }
 
     #[tokio::test]
     async fn test_index_empty_directory() {
-        let (mut indexer, _temp_dir) = create_test_indexer().await.unwrap();
+        let (mut indexer, _temp_dir) = create_test_indexer()
+            .await
+            .expect("Failed to create test indexer");
 
         let report = indexer.index_files(vec![], false).await;
         assert!(report.is_ok());
@@ -696,7 +712,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_index_single_rust_file() {
-        let (mut indexer, temp_dir) = create_test_indexer().await.unwrap();
+        let (mut indexer, temp_dir) = create_test_indexer()
+            .await
+            .expect("Failed to create test indexer");
 
         // Create a test Rust file
         let test_file = temp_dir.path().join("test.rs");
@@ -704,7 +722,6 @@ mod tests {
         fs::write(&test_file, content).unwrap();
 
         // Test indexing
-
         let report = indexer.index_files(vec![test_file], false).await;
         assert!(report.is_ok());
 
@@ -715,7 +732,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_new_index_glob_api() {
-        let (mut indexer, temp_dir) = create_test_indexer().await.unwrap();
+        let (mut indexer, temp_dir) = create_test_indexer()
+            .await
+            .expect("Failed to create test indexer");
 
         // Create test files
         std::fs::write(temp_dir.path().join("test.rs"), "fn main() {}").unwrap();
@@ -732,7 +751,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_incremental_vs_full_reindex() {
-        let (mut indexer, temp_dir) = create_test_indexer().await.unwrap();
+        let (mut indexer, temp_dir) = create_test_indexer()
+            .await
+            .expect("Failed to create test indexer");
 
         // Create test file
         let test_file = temp_dir.path().join("test.rs");
@@ -754,7 +775,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_index_with_glob_pattern() {
-        let (mut indexer, temp_dir) = create_test_indexer().await.unwrap();
+        let (mut indexer, temp_dir) = create_test_indexer()
+            .await
+            .expect("Failed to create test indexer");
 
         // Create test files
         fs::write(temp_dir.path().join("test.rs"), "fn main() {}").unwrap();
@@ -769,7 +792,9 @@ mod tests {
         assert_eq!(report.files_processed, 1); // Only test.rs should be processed
 
         // Create a fresh indexer for the second test to avoid "already indexed" issues
-        let (mut indexer2, _) = create_test_indexer().await.unwrap();
+        let (mut indexer2, _) = create_test_indexer()
+            .await
+            .expect("Failed to create second test indexer");
 
         // Index only Python file
         let report = indexer2
@@ -781,7 +806,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_gitignore_exclusion() {
-        let (mut indexer, temp_dir) = create_test_indexer().await.unwrap();
+        let (mut indexer, temp_dir) = create_test_indexer()
+            .await
+            .expect("Failed to create test indexer");
 
         // Initialize as a git repository (required for ignore crate to work properly)
         fs::create_dir_all(temp_dir.path().join(".git")).unwrap();
@@ -821,7 +848,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_nested_gitignore() {
-        let (mut indexer, temp_dir) = create_test_indexer().await.unwrap();
+        let (mut indexer, temp_dir) = create_test_indexer()
+            .await
+            .expect("Failed to create test indexer");
 
         // Initialize as a git repository (required for ignore crate to work properly)
         fs::create_dir_all(temp_dir.path().join(".git")).unwrap();
@@ -868,7 +897,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_gitignore() {
-        let (mut indexer, temp_dir) = create_test_indexer().await.unwrap();
+        let (mut indexer, temp_dir) = create_test_indexer()
+            .await
+            .expect("Failed to create test indexer");
 
         // Create empty .gitignore file
         fs::write(temp_dir.path().join(".gitignore"), "").unwrap();
@@ -888,7 +919,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_glob_pattern_parsing() {
-        let (indexer, _temp_dir) = create_test_indexer().await.unwrap();
+        let (indexer, _temp_dir) = create_test_indexer()
+            .await
+            .expect("Failed to create test indexer");
 
         // Test simple patterns
         let (base, pattern) = indexer.parse_glob_pattern("*.rs").unwrap();

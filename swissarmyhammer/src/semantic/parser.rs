@@ -11,7 +11,7 @@ use tree_sitter::{
 };
 
 /// Default minimum chunk size in characters
-pub const DEFAULT_MIN_CHUNK_SIZE: usize = 50;
+pub const DEFAULT_MIN_CHUNK_SIZE: usize = 10;
 /// Default maximum chunk size in characters  
 pub const DEFAULT_MAX_CHUNK_SIZE: usize = 2000;
 /// Default maximum number of chunks to extract per file
@@ -96,33 +96,16 @@ fn create_rust_definition() -> LanguageDefinition {
         extensions: vec!["rs"],
         tree_sitter_language: || tree_sitter_rust::LANGUAGE.into(),
         queries: vec![
-            // Functions
-            (
-                "(function_item name: (identifier) @name) @function",
-                ChunkType::Function,
-            ),
+            // Functions - try the format used in tree-sitter examples
+            (r"(function_item) @function", ChunkType::Function),
             // Impl blocks
-            (
-                "(impl_item) @impl",
-                ChunkType::Class,
-            ),
-            // Methods within impl blocks - corrected pattern
-            (
-                "(impl_item (declaration_list (function_item name: (identifier) @method_name) @method))",
-                ChunkType::Function,
-            ),
+            (r"(impl_item) @impl", ChunkType::Class),
             // Structs
-            (
-                "(struct_item name: (type_identifier) @name) @struct",
-                ChunkType::Class,
-            ),
+            (r"(struct_item) @struct", ChunkType::Class),
             // Enums
-            (
-                "(enum_item name: (type_identifier) @name) @enum",
-                ChunkType::Class,
-            ),
-            // Use statements
-            ("(use_declaration) @import", ChunkType::Import),
+            (r"(enum_item) @enum", ChunkType::Class),
+            // Use statements - simplest working pattern
+            (r"(use_declaration) @import", ChunkType::Import),
         ],
     }
 }
@@ -318,11 +301,18 @@ impl ParserConfig {
             )));
         }
 
-        // Validate non-zero constraints
+        // Validate non-zero constraints and reasonable bounds
         if min_chunk_size == 0 {
             return Err(SemanticError::TreeSitter(
                 "Invalid configuration: min_chunk_size must be > 0".to_string(),
             ));
+        }
+
+        // Validate reasonable upper bound to prevent excessive memory usage or processing time
+        if min_chunk_size > 1000 {
+            return Err(SemanticError::TreeSitter(format!(
+                "Invalid configuration: min_chunk_size ({min_chunk_size}) must be <= 1000 characters for reasonable performance"
+            )));
         }
 
         if max_chunk_size == 0 {
@@ -698,11 +688,10 @@ impl CodeParser {
             })?;
 
             let mut cursor = QueryCursor::new();
-            let matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
+            let mut matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
 
             let mut query_matches = 0;
-            let mut matches = matches;
-            while let Some(query_match) = matches.get() {
+            while let Some(query_match) = matches.next() {
                 for capture in query_match.captures {
                     let node = capture.node;
                     let chunk = self.create_chunk_from_node(
@@ -716,7 +705,6 @@ impl CodeParser {
                     chunks.push(chunk);
                     query_matches += 1;
                 }
-                matches.advance();
             }
 
             if query_matches > 0 {
@@ -1352,5 +1340,948 @@ mod tests {
         assert!(config.max_chunk_size > config.min_chunk_size);
         assert!(config.max_chunks_per_file > 0);
         assert!(config.max_file_size_bytes >= 1024);
+    }
+
+    /// Helper function to test TreeSitter parsing with realistic Rust content
+    fn test_rust_content_parsing(
+        config: ParserConfig,
+        content: &str,
+        file_path: &Path,
+        expected_patterns: &[&str],
+    ) {
+        let parser = CodeParser::new(config).unwrap();
+
+        let chunks = parser.parse_file(file_path, content).unwrap();
+
+        // This test should fail with the current broken implementation
+        assert!(
+            !chunks.is_empty(),
+            "TreeSitter should extract chunks from real Rust code, but got 0 chunks"
+        );
+
+        // Count specific types of chunks we expect
+        let use_chunks = chunks
+            .iter()
+            .filter(|c| c.chunk_type == ChunkType::Import)
+            .count();
+        let struct_chunks = chunks
+            .iter()
+            .filter(|c| c.chunk_type == ChunkType::Class)
+            .count();
+        let function_chunks = chunks
+            .iter()
+            .filter(|c| c.chunk_type == ChunkType::Function)
+            .count();
+
+        // We should get multiple types of chunks from this realistic Rust code
+        let semantic_chunks = use_chunks + struct_chunks + function_chunks;
+        assert!(semantic_chunks > 0,
+            "Expected semantic chunks (use statements: {use_chunks}, structs/enums: {struct_chunks}, functions: {function_chunks}), but got plain text only");
+
+        // Verify we got some meaningful content
+        let has_meaningful_content = chunks.iter().any(|chunk| {
+            expected_patterns
+                .iter()
+                .any(|pattern| chunk.content.contains(pattern))
+        });
+        assert!(
+            has_meaningful_content,
+            "Chunks should contain meaningful Rust constructs"
+        );
+
+        // Log the chunks for debugging
+        println!("Extracted {} chunks:", chunks.len());
+        for (i, chunk) in chunks.iter().enumerate() {
+            println!(
+                "  Chunk {}: {:?} - '{}'...",
+                i,
+                chunk.chunk_type,
+                chunk.content.chars().take(50).collect::<String>()
+            );
+        }
+    }
+
+    #[test]
+    fn test_treesitter_extracts_chunks_from_real_rust_code() {
+        // Issue: TreeSitter parser reports success but extracts 0 chunks from real Rust files
+        // This test ensures we get actual chunks from realistic Rust code
+        let config = ParserConfig {
+            min_chunk_size: 1, // Allow small chunks to catch all structures
+            max_chunk_size: 5000,
+            max_chunks_per_file: 100,
+            max_file_size_bytes: 10 * 1024 * 1024,
+        };
+
+        let file_path = Path::new("test_real_content.rs");
+        let content = r#"//! Workflow execution visualization
+
+use crate::workflow::{RunMetrics, StateId, Workflow, WorkflowRun, WorkflowRunStatus};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::fmt;
+use std::time::Duration;
+
+/// Maximum path length for full visualization
+pub const MAX_PATH_LENGTH_FULL: usize = 1000;
+
+/// Execution visualization generator
+#[derive(Debug, Clone)]
+pub struct ExecutionVisualizer {
+    /// Include timing information in visualization
+    pub include_timing: bool,
+    /// Include execution counts in visualization
+    pub include_counts: bool,
+}
+
+/// Visualization output format
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum VisualizationFormat {
+    /// Mermaid state diagram
+    Mermaid,
+    /// DOT graph format
+    Dot,
+    /// JSON execution trace
+    Json,
+}
+
+impl ExecutionVisualizer {
+    /// Create a new execution visualizer
+    pub fn new() -> Self {
+        Self {
+            include_timing: true,
+            include_counts: true,
+        }
+    }
+
+    /// Generate visualization
+    pub fn generate(&self, workflow: &Workflow) -> String {
+        "mermaid diagram".to_string()
+    }
+}
+
+pub fn format_content_preview(content: &str, max_length: usize) -> String {
+    let preview = if content.len() > max_length {
+        format!("{}...", &content[..max_length])
+    } else {
+        content.to_string()
+    };
+    preview.replace('\n', " ")
+}
+"#;
+
+        let expected_patterns = &[
+            "ExecutionVisualizer",
+            "VisualizationFormat",
+            "fn new()",
+            "use crate::workflow",
+        ];
+
+        test_rust_content_parsing(config, content, file_path, expected_patterns);
+    }
+
+    #[test]
+    fn test_treesitter_with_default_config_reproduces_issue() {
+        // This test reproduces the issue: using default config results in 0 chunks
+        // because the minimum chunk size filters out small chunks like use statements
+        let parser = CodeParser::new(ParserConfig::default()).unwrap(); // Use default config
+
+        let file_path = Path::new("test_default_config.rs");
+        let content = r#"//! Workflow execution visualization
+
+use crate::workflow::{RunMetrics, StateId, Workflow, WorkflowRun, WorkflowRunStatus};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::fmt;
+use std::time::Duration;
+
+/// Maximum path length for full visualization
+pub const MAX_PATH_LENGTH_FULL: usize = 1000;
+
+/// Execution visualization generator
+#[derive(Debug, Clone)]
+pub struct ExecutionVisualizer {
+    /// Include timing information in visualization
+    pub include_timing: bool,
+    /// Include execution counts in visualization
+    pub include_counts: bool,
+}
+
+/// Visualization output format
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum VisualizationFormat {
+    /// Mermaid state diagram
+    Mermaid,
+    /// DOT graph format
+    Dot,
+    /// JSON execution trace
+    Json,
+}
+
+impl ExecutionVisualizer {
+    /// Create a new execution visualizer
+    pub fn new() -> Self {
+        Self {
+            include_timing: true,
+            include_counts: true,
+        }
+    }
+
+    /// Generate visualization
+    pub fn generate(&self, workflow: &Workflow) -> String {
+        "mermaid diagram".to_string()
+    }
+}
+
+pub fn format_content_preview(content: &str, max_length: usize) -> String {
+    let preview = if content.len() > max_length {
+        format!("{}...", &content[..max_length])
+    } else {
+        content.to_string()
+    };
+    preview.replace('\n', " ")
+}
+"#;
+
+        let chunks = parser.parse_file(file_path, content).unwrap();
+
+        // Log the chunks for debugging
+        println!("Extracted {} chunks with DEFAULT config:", chunks.len());
+        for (i, chunk) in chunks.iter().enumerate() {
+            println!(
+                "  Chunk {}: {:?} - {} chars - '{}'",
+                i,
+                chunk.chunk_type,
+                chunk.content.len(),
+                chunk
+                    .content
+                    .chars()
+                    .take(50)
+                    .collect::<String>()
+                    .replace('\n', " ")
+            );
+        }
+
+        // This test demonstrates the issue: with default config (min_chunk_size: 50),
+        // small chunks like use statements get filtered out, potentially leaving 0 chunks
+        // if all extracted chunks are below the minimum size threshold
+
+        if chunks.is_empty() {
+            println!("ISSUE REPRODUCED: Default config filters out all chunks!");
+            println!("Default min_chunk_size: {DEFAULT_MIN_CHUNK_SIZE}");
+
+            // Let's also test with a more permissive config to compare
+            let permissive_config = ParserConfig {
+                min_chunk_size: 1,
+                max_chunk_size: 5000,
+                max_chunks_per_file: 100,
+                max_file_size_bytes: 10 * 1024 * 1024,
+            };
+            let permissive_parser = CodeParser::new(permissive_config).unwrap();
+            let permissive_chunks = permissive_parser.parse_file(file_path, content).unwrap();
+
+            println!(
+                "With permissive config (min_chunk_size: 1): {} chunks",
+                permissive_chunks.len()
+            );
+            for (i, chunk) in permissive_chunks.iter().enumerate().take(5) {
+                println!(
+                    "  Chunk {}: {:?} - {} chars",
+                    i,
+                    chunk.chunk_type,
+                    chunk.content.len()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_with_actual_problematic_files() {
+        // Test with the actual files mentioned in the issue to reproduce the problem
+        let parser = CodeParser::new(ParserConfig::default()).unwrap();
+
+        // Test with visualization.rs content (sample from the actual file)
+        let visualization_content = r#"//! Workflow execution visualization
+//!
+//! This module provides functionality to visualize workflow execution using Mermaid diagrams
+//! with execution overlays showing actual paths taken, timing information, and execution status.
+
+use crate::workflow::{RunMetrics, StateId, Workflow, WorkflowRun, WorkflowRunStatus};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::fmt;
+use std::time::Duration;
+
+/// Maximum path length for full visualization
+pub const MAX_PATH_LENGTH_FULL: usize = 1000;
+
+/// Maximum path length for minimal visualization
+pub const MAX_PATH_LENGTH_MINIMAL: usize = 100;
+
+/// Maximum execution steps allowed in a trace to prevent DoS
+pub const MAX_EXECUTION_STEPS: usize = 500;
+
+/// Execution visualization generator
+#[derive(Debug, Clone)]
+pub struct ExecutionVisualizer {
+    /// Include timing information in visualization
+    pub include_timing: bool,
+    /// Include execution counts in visualization
+    pub include_counts: bool,
+    /// Include status indicators in visualization
+    pub include_status: bool,
+    /// Maximum path length to display
+    pub max_path_length: usize,
+}
+
+impl ExecutionVisualizer {
+    /// Create a new execution visualizer with default settings
+    pub fn new() -> Self {
+        Self {
+            include_timing: true,
+            include_counts: true,
+            include_status: true,
+            max_path_length: MAX_PATH_LENGTH_FULL,
+        }
+    }
+
+    /// Generate execution trace from workflow run
+    pub fn generate_trace(&self) -> String {
+        "execution trace".to_string()
+    }
+}
+"#;
+
+        let file_path = Path::new("./swissarmyhammer/src/workflow/visualization.rs");
+        let chunks = parser.parse_file(file_path, visualization_content).unwrap();
+
+        println!("Testing with actual visualization.rs content:");
+        println!("Extracted {} chunks:", chunks.len());
+        for (i, chunk) in chunks.iter().enumerate() {
+            println!(
+                "  Chunk {}: {:?} - {} chars - '{}'",
+                i,
+                chunk.chunk_type,
+                chunk.content.len(),
+                chunk
+                    .content
+                    .chars()
+                    .take(50)
+                    .collect::<String>()
+                    .replace('\n', " ")
+            );
+        }
+
+        if chunks.is_empty() {
+            println!("ISSUE REPRODUCED: No chunks extracted from visualization.rs content!");
+
+            // Debug: Let's also check what language is detected
+            let detected_language = parser.detect_language(file_path);
+            println!("Detected language: {detected_language:?}");
+
+            // Check if file is supported
+            let is_supported = parser.is_supported_file(file_path);
+            println!("File is supported: {is_supported}");
+        }
+
+        // Test with memo.rs content
+        let memo_content = r#"use crate::cli::MemoCommands;
+use colored::*;
+use std::io::{self, Read};
+use swissarmyhammer::memoranda::{
+    AdvancedMemoSearchEngine, MarkdownMemoStorage, MemoId, MemoStorage, SearchOptions,
+};
+
+// Configurable preview length constants
+const DEFAULT_LIST_PREVIEW_LENGTH: usize = 100;
+const DEFAULT_SEARCH_PREVIEW_LENGTH: usize = 150;
+
+/// Format content preview with specified maximum length
+fn format_content_preview(content: &str, max_length: usize) -> String {
+    let preview = if content.len() > max_length {
+        format!("{}...", &content[..max_length])
+    } else {
+        content.to_string()
+    };
+    preview.replace('\n', " ")
+}
+
+pub async fn handle_memo_command(command: MemoCommands) -> Result<(), Box<dyn std::error::Error>> {
+    let storage = MarkdownMemoStorage::new_default()?;
+
+    match command {
+        MemoCommands::Create { title, content } => {
+            create_memo(storage, title, content).await?;
+        }
+        MemoCommands::List => {
+            list_memos(storage).await?;
+        }
+        MemoCommands::Get { id } => {
+            get_memo(storage, &id).await?;
+        }
+        MemoCommands::Update { id, content } => {
+            update_memo(storage, &id, content).await?;
+        }
+        MemoCommands::Delete { id } => {
+            delete_memo(storage, &id).await?;
+        }
+        MemoCommands::Search { query } => {
+            search_memos(storage, &query).await?;
+        }
+        MemoCommands::Context => {
+            get_context(storage).await?;
+        }
+    }
+
+    Ok(())
+}
+"#;
+
+        let memo_file_path = Path::new("./swissarmyhammer-cli/src/memo.rs");
+        let memo_chunks = parser.parse_file(memo_file_path, memo_content).unwrap();
+
+        println!("\nTesting with actual memo.rs content:");
+        println!("Extracted {} chunks:", memo_chunks.len());
+        for (i, chunk) in memo_chunks.iter().enumerate() {
+            println!(
+                "  Chunk {}: {:?} - {} chars - '{}'",
+                i,
+                chunk.chunk_type,
+                chunk.content.len(),
+                chunk
+                    .content
+                    .chars()
+                    .take(50)
+                    .collect::<String>()
+                    .replace('\n', " ")
+            );
+        }
+
+        if memo_chunks.is_empty() {
+            println!("ISSUE REPRODUCED: No chunks extracted from memo.rs content!");
+        }
+
+        // The test should pass if we extract chunks from either file
+        assert!(
+            !chunks.is_empty() || !memo_chunks.is_empty(),
+            "Should extract chunks from at least one of the test files"
+        );
+    }
+
+    #[test]
+    fn test_treesitter_chunk_extraction_independent_of_embedding() {
+        // This test verifies that TreeSitter chunk extraction works regardless of embedding engine availability
+        // This addresses the original issue where 0 chunks were extracted despite successful TreeSitter parsing
+
+        // Test with multiple configurations
+        let configs = [
+            ParserConfig::default(),
+            ParserConfig {
+                min_chunk_size: 1,
+                max_chunk_size: 10000,
+                max_chunks_per_file: 1000,
+                max_file_size_bytes: 10 * 1024 * 1024,
+            },
+            ParserConfig {
+                min_chunk_size: 25,
+                max_chunk_size: 500,
+                max_chunks_per_file: 50,
+                max_file_size_bytes: 10 * 1024 * 1024,
+            },
+        ];
+
+        for (i, config) in configs.iter().enumerate() {
+            let parser = CodeParser::new(config.clone()).unwrap();
+
+            // Test with realistic Rust code that should definitely extract chunks
+            let test_content = r#"use std::collections::HashMap;
+use std::fmt::Display;
+
+const MAX_SIZE: usize = 1000;
+
+#[derive(Debug, Clone)]
+pub struct DataProcessor {
+    pub config: ProcessorConfig,
+    pub cache: HashMap<String, String>,
+}
+
+#[derive(Debug)]
+pub enum ProcessorError {
+    InvalidInput,
+    ProcessingFailed,
+}
+
+impl DataProcessor {
+    pub fn new(config: ProcessorConfig) -> Self {
+        Self {
+            config,
+            cache: HashMap::new(),
+        }
+    }
+    
+    pub fn process(&mut self, input: &str) -> Result<String, ProcessorError> {
+        if input.is_empty() {
+            return Err(ProcessorError::InvalidInput);
+        }
+        
+        let result = format!("processed: {}", input);
+        self.cache.insert(input.to_string(), result.clone());
+        Ok(result)
+    }
+}
+
+pub fn helper_function(data: &[u8]) -> String {
+    String::from_utf8_lossy(data).to_string()
+}
+"#;
+
+            let file_path = Path::new("test_code.rs");
+            let chunks = parser.parse_file(file_path, test_content).unwrap();
+
+            println!(
+                "Config {}: min_chunk_size={}, extracted {} chunks:",
+                i,
+                config.min_chunk_size,
+                chunks.len()
+            );
+
+            for (j, chunk) in chunks.iter().enumerate() {
+                println!(
+                    "  Chunk {}: {:?} - {} chars",
+                    j,
+                    chunk.chunk_type,
+                    chunk.content.len()
+                );
+            }
+
+            // With any reasonable configuration, we should extract at least some chunks
+            // from this well-structured Rust code
+            if config.min_chunk_size <= 50 {
+                // With small min_chunk_size, we should get use statements, functions, structs, etc.
+                assert!(!chunks.is_empty(),
+                    "Config {} with min_chunk_size={} should extract chunks from realistic Rust code",
+                    i, config.min_chunk_size);
+
+                // We should get multiple types of chunks
+                let use_chunks = chunks
+                    .iter()
+                    .filter(|c| c.chunk_type == ChunkType::Import)
+                    .count();
+                let struct_chunks = chunks
+                    .iter()
+                    .filter(|c| c.chunk_type == ChunkType::Class)
+                    .count();
+                let function_chunks = chunks
+                    .iter()
+                    .filter(|c| c.chunk_type == ChunkType::Function)
+                    .count();
+
+                println!("  Use: {use_chunks}, Struct/Enum/Impl: {struct_chunks}, Function: {function_chunks}");
+
+                // We should get at least one semantic chunk (not just fallback to plain text)
+                let semantic_chunks = use_chunks + struct_chunks + function_chunks;
+                assert!(
+                    semantic_chunks > 0,
+                    "Should extract semantic chunks, not just plain text fallback"
+                );
+            }
+        }
+
+        println!("✅ TreeSitter chunk extraction works correctly across all configurations!");
+    }
+
+    #[test]
+    #[ignore] // Debug test - can be run manually if needed
+    fn test_manual_tree_walk() {
+        // Try manual tree walking to see all node types
+        let content = "fn main() {\n    println!(\"Hello, world!\");\n}";
+
+        let tree_sitter_language = tree_sitter_rust::LANGUAGE.into();
+        let mut tree_parser = tree_sitter::Parser::new();
+        tree_parser.set_language(&tree_sitter_language).unwrap();
+
+        let tree = tree_parser.parse(content, None).unwrap();
+        let root_node = tree.root_node();
+
+        // Walk all nodes and print them
+        println!("Walking all nodes:");
+        walk_all_nodes(&root_node, content, 0);
+
+        // Try the simplest possible query - first without captures
+        let simple_query = "(function_item)";
+        println!("\nTesting query without capture: '{simple_query}'");
+
+        match tree_sitter::Query::new(&tree_sitter_language, simple_query) {
+            Ok(query) => {
+                let mut cursor = tree_sitter::QueryCursor::new();
+                let mut matches = cursor.matches(&query, root_node, content.as_bytes());
+
+                let mut match_count = 0;
+                while let Some(query_match) = matches.get() {
+                    match_count += 1;
+                    println!(
+                        "  Match {}: {} captures",
+                        match_count,
+                        query_match.captures.len()
+                    );
+                    matches.advance();
+                }
+
+                if match_count == 0 {
+                    println!("  No matches found!");
+                } else {
+                    println!("  SUCCESS: Found {match_count} matches");
+                }
+            }
+            Err(e) => {
+                println!("  Query compilation failed: {e}");
+            }
+        }
+
+        // Now try with captures
+        let simple_query = "(function_item) @func";
+        println!("\nTesting query with capture: '{simple_query}'");
+
+        match tree_sitter::Query::new(&tree_sitter_language, simple_query) {
+            Ok(query) => {
+                let mut cursor = tree_sitter::QueryCursor::new();
+                let mut matches = cursor.matches(&query, root_node, content.as_bytes());
+
+                let mut match_count = 0;
+                while let Some(query_match) = matches.get() {
+                    match_count += 1;
+                    println!(
+                        "  Match {}: {} captures",
+                        match_count,
+                        query_match.captures.len()
+                    );
+                    for capture in query_match.captures {
+                        let node = capture.node;
+                        let text = &content[node.start_byte()..node.end_byte()];
+                        println!(
+                            "    Capture: '{}' ({})",
+                            text.chars().take(20).collect::<String>(),
+                            node.kind()
+                        );
+                    }
+                    matches.advance();
+                }
+
+                if match_count == 0 {
+                    println!("  No matches found with capture!");
+                } else {
+                    println!("  SUCCESS: Found {match_count} matches");
+                }
+            }
+            Err(e) => {
+                println!("  Query compilation failed: {e}");
+            }
+        }
+    }
+
+    fn walk_all_nodes(node: &tree_sitter::Node, _content: &str, depth: usize) {
+        let indent = "  ".repeat(depth);
+        println!(
+            "{}Node: {} (named: {})",
+            indent,
+            node.kind(),
+            node.is_named()
+        );
+
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                walk_all_nodes(&child, _content, depth + 1);
+            }
+        }
+    }
+
+    #[test]
+    #[ignore] // Debug test - can be run manually if needed
+    fn test_minimal_treesitter_working() {
+        // Minimal test to isolate TreeSitter query issue
+        let content = "fn main() {}";
+
+        // Create parser and parse
+        let mut parser = tree_sitter::Parser::new();
+        let language = tree_sitter_rust::LANGUAGE.into();
+        parser.set_language(&language).unwrap();
+        let tree = parser.parse(content, None).unwrap();
+
+        // Create a very simple query
+        let query = tree_sitter::Query::new(&language, "(function_item) @fn").unwrap();
+
+        // Execute query
+        let mut cursor = tree_sitter::QueryCursor::new();
+        let mut matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
+
+        println!("Testing minimal TreeSitter setup:");
+        println!("Content: '{content}'");
+        println!("Query: '(function_item) @fn'");
+
+        let mut found = false;
+        while let Some(m) = matches.next() {
+            found = true;
+            println!("Found match with {} captures", m.captures.len());
+            for capture in m.captures {
+                let text = &content[capture.node.start_byte()..capture.node.end_byte()];
+                println!("  Capture: '{text}'");
+            }
+        }
+
+        if !found {
+            println!("No matches found - TreeSitter queries definitely broken");
+
+            // Try manually finding function_item nodes
+            let mut cursor = tree.root_node().walk();
+
+            fn find_function_items(cursor: &mut tree_sitter::TreeCursor, content: &str) -> bool {
+                let node = cursor.node();
+                println!("Checking node: {}", node.kind());
+
+                if node.kind() == "function_item" {
+                    let text = &content[node.start_byte()..node.end_byte()];
+                    println!("Found function_item manually: '{text}'");
+                    return true;
+                }
+
+                if cursor.goto_first_child() {
+                    loop {
+                        if find_function_items(cursor, content) {
+                            return true;
+                        }
+                        if !cursor.goto_next_sibling() {
+                            break;
+                        }
+                    }
+                    cursor.goto_parent();
+                }
+                false
+            }
+
+            let found_function_item = find_function_items(&mut cursor, content);
+
+            if found_function_item {
+                println!("SUCCESS: Found function_item manually, so query system is broken");
+            } else {
+                println!("ERROR: Can't even find function_item manually");
+            }
+        } else {
+            println!("SUCCESS: TreeSitter queries work!");
+        }
+
+        // This test documents the current state - we expect it to fail
+        // assert!(found, "TreeSitter queries should work but currently don't");
+    }
+
+    #[test]
+    fn test_fix_treesitter_query_matching() {
+        // Fix the TreeSitter query matching issue
+        let content = "fn main() {\n    println!(\"Hello, world!\");\n}";
+
+        // Create parser and parse
+        let mut parser = tree_sitter::Parser::new();
+        let language = tree_sitter_rust::LANGUAGE.into();
+        parser.set_language(&language).unwrap();
+        let tree = parser.parse(content, None).unwrap();
+
+        println!("=== DEBUGGING TREESITTER QUERY MATCHING ===");
+        println!("Content: {content}");
+
+        // Test the query patterns one by one
+        let test_queries = vec![
+            ("(function_item) @function", "Function"),
+            (
+                "(function_item name: (identifier) @name) @function",
+                "Named Function",
+            ),
+            ("(function_item) @func", "Simple Function"),
+        ];
+
+        for (query_str, description) in test_queries {
+            println!("\nTesting query: {description} - '{query_str}'");
+
+            match tree_sitter::Query::new(&language, query_str) {
+                Ok(query) => {
+                    println!("  Query compiled successfully");
+                    println!("  Query capture names: {:?}", query.capture_names());
+
+                    let mut cursor = tree_sitter::QueryCursor::new();
+                    let mut matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
+
+                    let mut match_count = 0;
+                    let mut match_idx = 0;
+                    while let Some(query_match) = matches.next() {
+                        match_count += 1;
+                        println!(
+                            "  Match {}: {} captures",
+                            match_idx + 1,
+                            query_match.captures.len()
+                        );
+                        match_idx += 1;
+
+                        for (cap_idx, capture) in query_match.captures.iter().enumerate() {
+                            let node = capture.node;
+                            let text = &content[node.start_byte()..node.end_byte()];
+                            let capture_name = query.capture_names()[capture.index as usize];
+                            println!(
+                                "    Capture {}: '{}' = '{}' (node: {})",
+                                cap_idx,
+                                capture_name,
+                                text.chars()
+                                    .take(30)
+                                    .collect::<String>()
+                                    .replace('\n', "\\n"),
+                                node.kind()
+                            );
+                        }
+                    }
+
+                    if match_count == 0 {
+                        println!("  ❌ No matches found for this query!");
+                    } else {
+                        println!("  ✅ Found {match_count} matches");
+                    }
+                }
+                Err(e) => {
+                    println!("  ❌ Query compilation failed: {e}");
+                }
+            }
+        }
+
+        // Test with the exact same iterator pattern used in the main code
+        println!("\n=== Testing iterator pattern from main code ===");
+        let query = tree_sitter::Query::new(&language, "(function_item) @function").unwrap();
+        let mut cursor = tree_sitter::QueryCursor::new();
+        let mut matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
+
+        let mut found_with_next = 0;
+        while let Some(query_match) = matches.next() {
+            found_with_next += 1;
+            println!("Found match {found_with_next} with next() pattern");
+            for capture in query_match.captures {
+                let text = &content[capture.node.start_byte()..capture.node.end_byte()];
+                println!(
+                    "  Capture: '{}'",
+                    text.chars()
+                        .take(30)
+                        .collect::<String>()
+                        .replace('\n', "\\n")
+                );
+            }
+        }
+
+        if found_with_next == 0 {
+            println!("❌ No matches found with next() pattern - this is the bug!");
+        } else {
+            println!("✅ Found {found_with_next} matches with next() pattern");
+        }
+    }
+
+    #[test]
+    fn test_debug_treesitter_query_execution() {
+        // Debug test to understand why TreeSitter queries aren't matching
+        let config = ParserConfig {
+            min_chunk_size: 1,
+            max_chunk_size: 5000,
+            max_chunks_per_file: 100,
+            max_file_size_bytes: 10 * 1024 * 1024,
+        };
+        let parser = CodeParser::new(config).unwrap();
+
+        // Simple Rust function that should definitely match
+        let content = "fn main() {\n    println!(\"Hello, world!\");\n}";
+        let file_path = Path::new("debug.rs");
+
+        // Get TreeSitter language and parser directly
+        let language = parser.detect_language(file_path);
+        println!("Detected language: {language:?}");
+
+        let queries = parser.get_queries_for_language(&language);
+        println!("Found {} queries for {:?}", queries.len(), language);
+
+        for (i, (query_str, chunk_type)) in queries.iter().enumerate() {
+            println!("Query {i}: {chunk_type:?} - '{query_str}'");
+        }
+
+        // Try parsing with TreeSitter directly
+        let tree_sitter_language = tree_sitter_rust::LANGUAGE.into();
+        let mut tree_parser = tree_sitter::Parser::new();
+        tree_parser.set_language(&tree_sitter_language).unwrap();
+
+        let tree = tree_parser.parse(content, None).unwrap();
+        let root_node = tree.root_node();
+
+        println!(
+            "TreeSitter parse success. Root node: {:?}",
+            root_node.kind()
+        );
+        println!("Has error: {}", root_node.has_error());
+        println!("Node count: {}", root_node.named_child_count());
+
+        // Print the tree structure
+        print_tree(&root_node, content, 0);
+
+        // Test each query manually
+        for (query_str, chunk_type) in queries {
+            println!("\nTesting query: {chunk_type:?} - '{query_str}'");
+
+            match tree_sitter::Query::new(&tree_sitter_language, query_str) {
+                Ok(query) => {
+                    let mut cursor = tree_sitter::QueryCursor::new();
+                    let matches = cursor.matches(&query, root_node, content.as_bytes());
+
+                    let mut match_count = 0;
+                    let mut matches = matches;
+                    while let Some(query_match) = matches.get() {
+                        match_count += 1;
+                        println!(
+                            "  Match {}: {} captures",
+                            match_count,
+                            query_match.captures.len()
+                        );
+                        for capture in query_match.captures {
+                            let node = capture.node;
+                            let text = &content[node.start_byte()..node.end_byte()];
+                            println!(
+                                "    Capture: '{}' ({})",
+                                text.chars().take(30).collect::<String>(),
+                                node.kind()
+                            );
+                        }
+                        matches.advance();
+                    }
+
+                    if match_count == 0 {
+                        println!("  No matches found for this query!");
+                    }
+                }
+                Err(e) => {
+                    println!("  Query compilation failed: {e}");
+                }
+            }
+        }
+    }
+
+    fn print_tree(node: &tree_sitter::Node, content: &str, depth: usize) {
+        let indent = "  ".repeat(depth);
+        let node_text = if node.child_count() == 0 {
+            let text = &content[node.start_byte()..node.end_byte()];
+            format!(" \"{}\"", text.chars().take(20).collect::<String>())
+        } else {
+            String::new()
+        };
+
+        println!("{}{}:{}", indent, node.kind(), node_text);
+
+        if depth < 3 {
+            // Limit depth to avoid too much output
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    print_tree(&child, content, depth + 1);
+                }
+            }
+        }
     }
 }

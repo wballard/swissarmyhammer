@@ -223,11 +223,11 @@ Validation checks:
 
 Examples:
   swissarmyhammer validate                 # Validate all prompts and workflows
-  swissarmyhammer validate --quiet         # CI/CD mode (exit code only)
+  swissarmyhammer validate --quiet         # CI/CD mode - only shows errors, hides warnings
   swissarmyhammer validate --format json   # JSON output for tooling
 ")]
     Validate {
-        /// Only show errors, no warnings or info
+        /// Suppress all output except errors. In quiet mode, warnings are hidden from both output and summary.
         #[arg(short, long)]
         quiet: bool,
 

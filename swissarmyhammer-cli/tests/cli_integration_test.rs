@@ -1452,3 +1452,296 @@ fn test_issue_create_with_optional_names() -> Result<()> {
 
     Ok(())
 }
+
+/// Test validation quiet mode hides warnings from output and summary
+#[test]
+fn test_root_validate_quiet_mode_warnings_behavior() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
+    std::fs::create_dir_all(&prompts_dir)?;
+
+    // Create a prompt that will generate warnings but no errors
+    // This creates a warning due to unused template variable in arguments
+    std::fs::write(
+        prompts_dir.join("warning_only.md"),
+        r#"---
+title: Warning Only Prompt
+description: This prompt has a warning due to unused argument
+arguments:
+  - name: unused_var
+    required: false
+    description: This variable is defined but not used in template
+  - name: used_var
+    required: true
+    description: This variable is used in template
+---
+
+This prompt uses {{ used_var }} but not unused_var, creating a warning."#,
+    )?;
+
+    // Test in quiet mode - should produce no output for warnings only
+    let quiet_output = Command::cargo_bin("swissarmyhammer")
+        .unwrap()
+        .args(["validate", "--quiet"])
+        .env("HOME", temp_dir.path())
+        .output()?;
+
+    // Debug output to see what's happening
+    let quiet_stderr = String::from_utf8_lossy(&quiet_output.stderr);
+    let quiet_stdout = String::from_utf8_lossy(&quiet_output.stdout);
+
+    // With warnings present, quiet mode should still return exit code 1 but produce no output
+    assert_eq!(
+        quiet_output.status.code(),
+        Some(1),
+        "quiet mode validation with warnings should return exit code 1. stdout: '{}', stderr: '{}'",
+        quiet_stdout,
+        quiet_stderr
+    );
+
+    assert!(
+        quiet_stdout.trim().is_empty(),
+        "quiet mode should produce no output when only warnings exist: '{}'",
+        quiet_stdout
+    );
+
+    // Test in normal mode - should show warnings and summary
+    let normal_output = Command::cargo_bin("swissarmyhammer")
+        .unwrap()
+        .args(["validate"])
+        .env("HOME", temp_dir.path())
+        .output()?;
+
+    let normal_stdout = String::from_utf8_lossy(&normal_output.stdout);
+
+    // With warnings present, exit code should be 1 (warnings) not 0 (success) or 2 (errors)
+    assert_eq!(
+        normal_output.status.code(),
+        Some(1),
+        "normal mode validation with warnings should return exit code 1"
+    );
+
+    // Verify warning content is displayed
+    assert!(
+        normal_stdout.contains("WARN") || normal_stdout.contains("warning"),
+        "normal mode should show warnings in output: '{}'",
+        normal_stdout
+    );
+    assert!(
+        normal_stdout.contains("Summary:"),
+        "normal mode should show summary: '{}'",
+        normal_stdout
+    );
+    assert!(
+        normal_stdout.contains("Warnings:"),
+        "normal mode should show warning count: '{}'",
+        normal_stdout
+    );
+
+    Ok(())
+}
+
+/// Test validation quiet mode behavior when both errors and warnings exist
+#[test]
+fn test_root_validate_quiet_mode_with_errors_and_warnings() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
+    std::fs::create_dir_all(&prompts_dir)?;
+
+    // Create a prompt with warnings (unused argument)
+    std::fs::write(
+        prompts_dir.join("warning_prompt.md"),
+        r#"---
+title: Warning Prompt
+description: This prompt has warnings
+arguments:
+  - name: unused_var
+    required: false
+    description: This variable is not used
+  - name: used_var
+    required: true
+    description: This variable is used
+---
+
+This prompt uses {{ used_var }} but not unused_var."#,
+    )?;
+
+    // Create a prompt with errors (undefined variables)
+    std::fs::write(
+        prompts_dir.join("error_prompt.md"),
+        r#"---
+title: Test Undefined Variables
+description: This uses variables not defined in arguments
+arguments:
+  - name: defined_var
+    required: true
+---
+
+This uses {{ defined_var }} which is fine.
+But this uses {{ undefined_var }} which should error.
+And this uses {{ another_undefined }} too."#,
+    )?;
+
+    // Test in quiet mode - should show errors and summary, but hide warnings
+    let quiet_output = Command::cargo_bin("swissarmyhammer")
+        .unwrap()
+        .args(["validate", "--quiet"])
+        .env("HOME", temp_dir.path())
+        .output()?;
+
+    let quiet_stdout = String::from_utf8_lossy(&quiet_output.stdout);
+
+    // With errors present, should return exit code 2 (errors)
+    assert_eq!(
+        quiet_output.status.code(),
+        Some(2),
+        "quiet mode validation with errors should return exit code 2"
+    );
+
+    // Should show errors and summary in quiet mode when errors are present
+    assert!(
+        quiet_stdout.contains("ERROR") || quiet_stdout.contains("error"),
+        "quiet mode should show errors when they exist: '{}'",
+        quiet_stdout
+    );
+    assert!(
+        quiet_stdout.contains("Summary:"),
+        "quiet mode should show summary when errors exist: '{}'",
+        quiet_stdout
+    );
+    assert!(
+        quiet_stdout.contains("Errors:"),
+        "quiet mode should show error count when errors exist: '{}'",
+        quiet_stdout
+    );
+
+    // Should NOT show warnings in quiet mode, even when errors are present
+    assert!(
+        !quiet_stdout.contains("WARN") && !quiet_stdout.contains("Warnings:"),
+        "quiet mode should not show warning details or counts: '{}'",
+        quiet_stdout
+    );
+
+    // Test in normal mode for comparison - should show both errors and warnings
+    let normal_output = Command::cargo_bin("swissarmyhammer")
+        .unwrap()
+        .args(["validate"])
+        .env("HOME", temp_dir.path())
+        .output()?;
+
+    let normal_stdout = String::from_utf8_lossy(&normal_output.stdout);
+
+    // Should also return exit code 2 (errors take precedence)
+    assert_eq!(
+        normal_output.status.code(),
+        Some(2),
+        "normal mode validation with errors should return exit code 2"
+    );
+
+    // Should show both errors and warnings in normal mode
+    assert!(
+        normal_stdout.contains("ERROR") || normal_stdout.contains("error"),
+        "normal mode should show errors: '{}'",
+        normal_stdout
+    );
+    assert!(
+        normal_stdout.contains("WARN") || normal_stdout.contains("warning"),
+        "normal mode should show warnings: '{}'",
+        normal_stdout
+    );
+    assert!(
+        normal_stdout.contains("Summary:"),
+        "normal mode should show summary: '{}'",
+        normal_stdout
+    );
+    assert!(
+        normal_stdout.contains("Errors:") && normal_stdout.contains("Warnings:"),
+        "normal mode should show both error and warning counts: '{}'",
+        normal_stdout
+    );
+
+    Ok(())
+}
+
+/// Test validation performance with quiet mode conditional check
+#[test]
+fn test_validate_performance_quiet_mode_conditional() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
+    std::fs::create_dir_all(&prompts_dir)?;
+
+    // Create 50 prompt files to test validation performance
+    for i in 0..50 {
+        std::fs::write(
+            prompts_dir.join(format!("prompt_{i}.md")),
+            format!(
+                r#"---
+title: Test Prompt {i}
+description: This is test prompt number {i}
+arguments:
+  - name: input_{i}
+    required: true
+    description: Input parameter for prompt {i}
+---
+
+This is the content for prompt {i} using {{{{ input_{i} }}}}.
+It has multiple lines to simulate real prompt content.
+Test case {i} validates performance with conditional checking."#
+            ),
+        )?;
+    }
+
+    // Test quiet mode performance (should have minimal output processing)
+    let start_quiet = std::time::Instant::now();
+    let quiet_output = Command::cargo_bin("swissarmyhammer")
+        .unwrap()
+        .args(["validate", "--quiet"])
+        .env("HOME", temp_dir.path())
+        .output()?;
+    let quiet_duration = start_quiet.elapsed();
+
+    assert!(
+        quiet_output.status.code().is_some(),
+        "quiet mode validation should complete"
+    );
+
+    // Test normal mode performance
+    let start_normal = std::time::Instant::now();
+    let normal_output = Command::cargo_bin("swissarmyhammer")
+        .unwrap()
+        .args(["validate"])
+        .env("HOME", temp_dir.path())
+        .output()?;
+    let normal_duration = start_normal.elapsed();
+
+    assert!(
+        normal_output.status.code().is_some(),
+        "normal mode validation should complete"
+    );
+
+    // Both should complete in reasonable time (less than 5 seconds for 50 files + builtins)
+    assert!(
+        quiet_duration.as_secs() < 5,
+        "quiet mode validation should complete within 5 seconds, took {:.2}s",
+        quiet_duration.as_secs_f64()
+    );
+    assert!(
+        normal_duration.as_secs() < 5,
+        "normal mode validation should complete within 5 seconds, took {:.2}s",
+        normal_duration.as_secs_f64()
+    );
+
+    // The additional conditional check in quiet mode should not significantly impact performance
+    // Both modes should complete in reasonable time regardless of which runs first
+    // Allow for system variance by checking they're both reasonably fast rather than comparing directly
+    println!(
+        "Performance results - Quiet: {:.2}s, Normal: {:.2}s",
+        quiet_duration.as_secs_f64(),
+        normal_duration.as_secs_f64()
+    );
+
+    // The main goal is to ensure both modes complete efficiently, not to compare them directly
+    // since execution order and system state can affect timing
+
+    Ok(())
+}

@@ -494,20 +494,19 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Requires embedding models to be downloaded/available - run manually when models are set up
     async fn test_run_semantic_index_single_pattern() {
         let patterns = vec!["test_pattern.rs".to_string()];
 
-        // With local embeddings implementation, semantic indexing now works
+        // Semantic indexing should work with fastembed's automatic model caching
+        // Models will be downloaded on first run and cached for subsequent runs
         // The function should succeed even with non-existent patterns (0 files processed)
         run_semantic_index(&patterns, false).await
-            .expect("Failed to run semantic index with single pattern - embedding models must be available for testing");
+            .expect("Failed to run semantic index with single pattern - embedding models should download automatically");
 
         println!("✅ Semantic indexing succeeded as expected");
     }
 
     #[tokio::test]
-    #[ignore] // Requires embedding models to be downloaded/available - run manually when models are set up
     async fn test_run_semantic_index_multiple_patterns() {
         let patterns = vec![
             "src/**/*.rs".to_string(),
@@ -515,10 +514,11 @@ mod tests {
             "benches/**/*.rs".to_string(),
         ];
 
-        // With local embeddings implementation, semantic indexing now works
+        // Semantic indexing should work with fastembed's automatic model caching
+        // Models will be downloaded on first run and cached for subsequent runs
         // The function should succeed and process real files in the project
         run_semantic_index(&patterns, false).await
-            .expect("Failed to run semantic index with multiple patterns - embedding models must be available for testing");
+            .expect("Failed to run semantic index with multiple patterns - embedding models should download automatically");
 
         println!("✅ Semantic indexing succeeded as expected");
     }

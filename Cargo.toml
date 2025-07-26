@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["SwissArmyHammer Team"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/swissarmyhammer/swissarmyhammer"
+repository = "https://github.com/wballard/swissarmyhammer"
 
 [workspace.dependencies]
 # Core dependencies

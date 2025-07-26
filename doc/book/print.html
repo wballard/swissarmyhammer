@@ -6192,49 +6192,49 @@ nnoremap &lt;leader&gt;ms :MemoSearch
 <li><a href="./troubleshooting.html">Troubleshooting</a> - Common issues and solutions</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="rust-library-guide"><a class="header" href="#rust-library-guide">Rust Library Guide</a></h1>
-<p>SwissArmyHammer is available as a Rust library (<code>swissarmyhammer</code>) that you can integrate into your own applications. This guide covers installation, basic usage, and advanced integration patterns.</p>
+<p>SwissArmyHammer is available as a Rust library (<code>swissarmyhammer</code>) that you can integrate into your own applications. This guide covers installation, basic usage, and integration patterns.</p>
 <h2 id="installation-4"><a class="header" href="#installation-4">Installation</a></h2>
 <p>Add SwissArmyHammer to your <code>Cargo.toml</code>:</p>
 <pre><code class="language-toml">[dependencies]
-swissarmyhammer = { git = "https://github.com/wballard/swissarmyhammer", features = ["full"] }
+swissarmyhammer = { git = "https://github.com/wballard/swissarmyhammer" }
 </code></pre>
-<h3 id="feature-flags"><a class="header" href="#feature-flags">Feature Flags</a></h3>
-<p>Control which functionality to include:</p>
-<pre><code class="language-toml">[dependencies]
-swissarmyhammer = { 
-  git = "https://github.com/wballard/swissarmyhammer", 
-  features = ["prompts", "templates", "search", "mcp"] 
-}
-</code></pre>
-<p>Available features:</p>
-<ul>
-<li><code>prompts</code> - Core prompt management (always enabled)</li>
-<li><code>templates</code> - Liquid template engine with custom filters</li>
-<li><code>search</code> - Full-text search capabilities</li>
-<li><code>mcp</code> - Model Context Protocol server support</li>
-<li><code>storage</code> - Advanced storage backends</li>
-<li><code>full</code> - All features enabled</li>
-</ul>
 <h2 id="quick-start-2"><a class="header" href="#quick-start-2">Quick Start</a></h2>
 <h3 id="basic-prompt-library"><a class="header" href="#basic-prompt-library">Basic Prompt Library</a></h3>
-<pre><code class="language-rust">use swissarmyhammer::{PromptLibrary, ArgumentSpec};
+<pre><code class="language-rust">use swissarmyhammer::{PromptLibrary, ArgumentSpec, Prompt};
 use std::collections::HashMap;
 
 fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     // Create a new prompt library
     let mut library = PromptLibrary::new();
     
+    // Create a simple prompt
+    let prompt = Prompt::new("greet", "Hello {{name}}!")
+        .with_description("A greeting prompt")
+        .add_argument(ArgumentSpec {
+            name: "name".to_string(),
+            description: Some("Name to greet".to_string()),
+            required: true,
+            default: None,
+            type_hint: Some("string".to_string()),
+        });
+    
+    // Add prompt to library
+    library.add(prompt)?;
+    
     // Add prompts from a directory
-    let count = library.add_directory("./.swissarmyhammer/prompts")?;
-    println!("Loaded {} prompts from directory", count);
+    if std::path::Path::new("./.swissarmyhammer/prompts").exists() {
+        let count = library.add_directory("./.swissarmyhammer/prompts")?;
+        println!("Loaded {} prompts from directory", count);
+    }
     
     // List available prompts
-    for prompt_id in library.list() {
-        println!("Available prompt: {}", prompt_id);
+    let prompts = library.list()?;
+    for prompt in &amp;prompts {
+        println!("Available prompt: {}", prompt.name);
     }
     
     // Get a specific prompt
-    let prompt = library.get("code-review")?;
+    let prompt = library.get("greet")?;
     println!("Name: {}", prompt.name);
     if let Some(description) = &amp;prompt.description {
         println!("Description: {}", description);
@@ -6242,8 +6242,7 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     
     // Prepare arguments
     let mut args = HashMap::new();
-    args.insert("code".to_string(), "fn main() { println!(\"Hello\"); }".to_string());
-    args.insert("language".to_string(), "rust".to_string());
+    args.insert("name".to_string(), "World".to_string());
     
     // Render the prompt
     let rendered = prompt.render(&amp;args)?;
@@ -6253,6 +6252,7 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 }</code></pre>
 <h3 id="custom-prompt-creation"><a class="header" href="#custom-prompt-creation">Custom Prompt Creation</a></h3>
 <pre><code class="language-rust">use swissarmyhammer::{Prompt, ArgumentSpec};
+use std::collections::HashMap;
 
 fn create_custom_prompt() -&gt; Result&lt;Prompt, Box&lt;dyn std::error::Error&gt;&gt; {
     let template = r#"
@@ -6291,32 +6291,50 @@ Perform a general code review covering style, bugs, and maintainability.
     
     Ok(prompt)
 }
+
+// Test the custom prompt
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let prompt = create_custom_prompt()?;
+    
+    let mut args = HashMap::new();
+    args.insert("code".to_string(), "fn main() { println!(\"Hello\"); }".to_string());
+    args.insert("focus".to_string(), "security".to_string());
+    
+    let rendered = prompt.render(&amp;args)?;
+    println!("{}", rendered);
+    
+    Ok(())
+}
 </code></pre>
 <h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
 <h3 id="promptlibrary"><a class="header" href="#promptlibrary">PromptLibrary</a></h3>
 <p>The main interface for managing collections of prompts.</p>
 <pre><code class="language-rust">use swissarmyhammer::PromptLibrary;
 
+// Create a new library
 let mut library = PromptLibrary::new();
 
 // Add prompts from various sources
 library.add_directory("./.swissarmyhammer/prompts")?;
-library.add_from_file("./special-prompt.md")?;
 
 // Query prompts
-let prompts = library.list();
-let prompt = library.get("prompt-id")?;
-let filtered = library.filter_by_category("review");
+let prompts = library.list()?;
+let prompt = library.get("prompt-name")?;
 
-// Search prompts (if search feature is enabled)
-let results = library.search("code review")?</code></pre>
+// Search prompts
+let results = library.search("code review")?;
+
+// Render a prompt directly
+let mut args = std::collections::HashMap::new();
+args.insert("key".to_string(), "value".to_string());
+let rendered = library.render_prompt("prompt-name", &amp;args)?;</code></pre>
 <h3 id="prompt"><a class="header" href="#prompt">Prompt</a></h3>
 <p>Individual prompt with metadata and template.</p>
-<pre><code class="language-rust">use swissarmyhammer::Prompt;
+<pre><code class="language-rust">use swissarmyhammer::{Prompt, PromptLoader};
 use std::collections::HashMap;
 
 // Load from file using PromptLoader
-let loader = swissarmyhammer::PromptLoader::new();
+let loader = PromptLoader::new();
 let prompt = loader.load_file("./.swissarmyhammer/prompts/review.md")?;
 
 // Access metadata
@@ -6333,192 +6351,55 @@ let mut args = HashMap::new();
 args.insert("code".to_string(), "example code".to_string());
 let rendered = prompt.render(&amp;args)?;</code></pre>
 <h3 id="template-engine"><a class="header" href="#template-engine">Template Engine</a></h3>
-<p>Advanced template processing with custom filters.</p>
-<pre><code class="language-rust">use swissarmyhammer::template::{TemplateEngine, TemplateContext};
+<p>Template processing with Liquid syntax.</p>
+<pre><code class="language-rust">use swissarmyhammer::template::Template;
+use std::collections::HashMap;
 
-let engine = TemplateEngine::new();
+let template = Template::new("Hello {{ name | capitalize }}! Today is {{ date }}.")?;
 
-let template = "Hello {{ name | capitalize }}! Today is {{ 'now' | format_date: '%Y-%m-%d' }}.";
+let mut variables = HashMap::new();
+variables.insert("name".to_string(), "alice".to_string());
+variables.insert("date".to_string(), "2024-01-15".to_string());
 
-let mut context = TemplateContext::new();
-context.insert("name", "alice");
-
-let result = engine.render(template, &amp;context)?;
+let result = template.render(&amp;variables)?;
 println!("{}", result); // "Hello Alice! Today is 2024-01-15."</code></pre>
 <h2 id="advanced-usage-1"><a class="header" href="#advanced-usage-1">Advanced Usage</a></h2>
-<h3 id="custom-storage-backend"><a class="header" href="#custom-storage-backend">Custom Storage Backend</a></h3>
-<p>Implement your own storage for prompts:</p>
-<pre><code class="language-rust">use swissarmyhammer::storage::{StorageBackend, PromptSource};
-use async_trait::async_trait;
+<h3 id="loading-prompts-from-string"><a class="header" href="#loading-prompts-from-string">Loading Prompts from String</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::PromptLoader;
 
-struct DatabaseStorage {
-    // Your database connection
-    db: Database,
-}
+let loader = PromptLoader::new();
+let content = r#"---
+title: My Prompt
+description: A custom prompt
+arguments:
+  - name: input
+    description: The input text
+    required: true
+---
 
-#[async_trait]
-impl StorageBackend for DatabaseStorage {
-    async fn list_prompts(&amp;self) -&gt; Result&lt;Vec&lt;String&gt;, StorageError&gt; {
-        // Implement database query
-        todo!()
-    }
-    
-    async fn get_prompt(&amp;self, id: &amp;str) -&gt; Result&lt;PromptSource, StorageError&gt; {
-        // Implement database retrieval
-        todo!()
-    }
-    
-    async fn save_prompt(&amp;mut self, id: &amp;str, source: &amp;PromptSource) -&gt; Result&lt;(), StorageError&gt; {
-        // Implement database storage
-        todo!()
-    }
-}
+Process this input: {{ input }}
+"#;
 
-// Use custom storage
-let storage = DatabaseStorage::new(db);
-let mut library = PromptLibrary::with_storage(storage);</code></pre>
-<h3 id="search-integration"><a class="header" href="#search-integration">Search Integration</a></h3>
-<p>Advanced search capabilities:</p>
-<pre><code class="language-rust">use swissarmyhammer::search::{SearchEngine, SearchQuery, SearchResult};
+let prompt = loader.load_from_string("my-prompt", content)?;</code></pre>
+<h3 id="search-and-filter"><a class="header" href="#search-and-filter">Search and Filter</a></h3>
+<pre><code class="language-rust">use swissarmyhammer::PromptLibrary;
 
-let mut search_engine = SearchEngine::new();
+let mut library = PromptLibrary::new();
+library.add_directory("./.swissarmyhammer/prompts")?;
 
-// Index prompts
-search_engine.index_prompt("code-review", &amp;prompt).await?;
-
-// Perform searches
-let query = SearchQuery::new("code review")
-    .with_field("title")
-    .with_limit(10)
-    .case_sensitive(false);
-
-let results: Vec&lt;SearchResult&gt; = search_engine.search(&amp;query)?;
-
-for result in results {
-    println!("Found: {} (score: {:.2})", result.id, result.score);
+// Search for prompts
+let results = library.search("code review")?;
+for prompt in results {
+    println!("Found: {} - {}", prompt.name, 
+             prompt.description.unwrap_or_default());
 }</code></pre>
-<h3 id="mcp-server-integration"><a class="header" href="#mcp-server-integration">MCP Server Integration</a></h3>
-<p>Embed MCP server functionality:</p>
-<pre><code class="language-rust">use swissarmyhammer::mcp::{McpServer, McpConfig};
-
-let config = McpConfig {
-    name: "my-prompt-server".to_string(),
-    version: "1.0.0".to_string(),
-    // ... other config
-};
-
-let mut library = PromptLibrary::new();
-library.add_directory("./.swissarmyhammer/prompts").await?;
-
-let server = McpServer::new(config, library);
-
-// Run MCP server
-server.serve().await?;</code></pre>
-<h3 id="event-system"><a class="header" href="#event-system">Event System</a></h3>
-<p>React to library events:</p>
-<pre><code class="language-rust">use swissarmyhammer::events::{EventHandler, PromptEvent};
-
-struct MyEventHandler;
-
-impl EventHandler for MyEventHandler {
-    fn handle_prompt_added(&amp;self, id: &amp;str) {
-        println!("Prompt added: {}", id);
-    }
-    
-    fn handle_prompt_updated(&amp;self, id: &amp;str) {
-        println!("Prompt updated: {}", id);
-    }
-    
-    fn handle_prompt_removed(&amp;self, id: &amp;str) {
-        println!("Prompt removed: {}", id);
-    }
-}
-
-let mut library = PromptLibrary::new();
-library.add_event_handler(Box::new(MyEventHandler));</code></pre>
-<h3 id="file-watching-1"><a class="header" href="#file-watching-1">File Watching</a></h3>
-<p>Automatically reload prompts when files change:</p>
-<pre><code class="language-rust">use swissarmyhammer::watcher::FileWatcher;
-
-let mut library = PromptLibrary::new();
-library.add_directory("./.swissarmyhammer/prompts").await?;
-
-// Start watching for file changes
-let _watcher = FileWatcher::new("./.swissarmyhammer/prompts", move |event| {
-    match event {
-        FileEvent::Created(path) =&gt; {
-            if let Err(e) = library.reload_file(&amp;path) {
-                eprintln!("Failed to load {}: {}", path.display(), e);
-            }
-        }
-        FileEvent::Modified(path) =&gt; {
-            if let Err(e) = library.reload_file(&amp;path) {
-                eprintln!("Failed to reload {}: {}", path.display(), e);
-            }
-        }
-        FileEvent::Deleted(path) =&gt; {
-            library.remove_file(&amp;path);
-        }
-    }
-});
-
-// Keep the watcher alive
-std::thread::sleep(std::time::Duration::from_secs(60));</code></pre>
 <h2 id="integration-examples-1"><a class="header" href="#integration-examples-1">Integration Examples</a></h2>
-<h3 id="web-server-integration"><a class="header" href="#web-server-integration">Web Server Integration</a></h3>
-<pre><code class="language-rust">use axum::{extract::Path, http::StatusCode, response::Json, routing::get, Router};
-use swissarmyhammer::PromptLibrary;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-
-type SharedLibrary = Arc&lt;RwLock&lt;PromptLibrary&gt;&gt;;
-
-async fn list_prompts(library: SharedLibrary) -&gt; Json&lt;Vec&lt;String&gt;&gt; {
-    let lib = library.read().await;
-    Json(lib.list_prompts())
-}
-
-async fn get_prompt(
-    Path(id): Path&lt;String&gt;,
-    library: SharedLibrary,
-) -&gt; Result&lt;Json&lt;String&gt;, StatusCode&gt; {
-    let lib = library.read().await;
-    match lib.get(&amp;id) {
-        Ok(prompt) =&gt; Ok(Json(prompt.title().to_string())),
-        Err(_) =&gt; Err(StatusCode::NOT_FOUND),
-    }
-}
-
-#[tokio::main]
-async fn main() {
-    let mut library = PromptLibrary::new();
-    library.add_directory("./.swissarmyhammer/prompts").await
-        .expect("Failed to load prompts directory");
-    let shared_library = Arc::new(RwLock::new(library));
-
-    let app = Router::new()
-        .route("/prompts", get({
-            let lib = shared_library.clone();
-            move || list_prompts(lib)
-        }))
-        .route("/prompts/:id", get({
-            let lib = shared_library.clone();
-            move |path| get_prompt(path, lib)
-        }));
-
-    let addr = "0.0.0.0:3000".parse()
-        .expect("Failed to parse server address");
-    axum::Server::bind(&amp;addr)
-        .serve(app.into_make_service())
-        .await
-        .expect("Failed to start server");
-}</code></pre>
-<h3 id="cli-tool-integration"><a class="header" href="#cli-tool-integration">CLI Tool Integration</a></h3>
+<h3 id="simple-cli-tool"><a class="header" href="#simple-cli-tool">Simple CLI Tool</a></h3>
 <pre><code class="language-rust">use clap::{Arg, Command};
 use swissarmyhammer::PromptLibrary;
+use std::collections::HashMap;
 
-#[tokio::main]
-async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     let matches = Command::new("my-prompt-tool")
         .arg(Arg::new("prompt")
             .help("Prompt ID to render")
@@ -6526,20 +6407,20 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
             .index(1))
         .arg(Arg::new("args")
             .help("Template arguments as key=value pairs")
-            .multiple_values(true)
+            .action(clap::ArgAction::Append)
             .short('a')
             .long("arg"))
         .get_matches();
 
     let mut library = PromptLibrary::new();
-    library.add_directory("./.swissarmyhammer/prompts").await?;
+    library.add_directory("./.swissarmyhammer/prompts")?;
 
-    let prompt_id = matches.value_of("prompt")
+    let prompt_id = matches.get_one::&lt;String&gt;("prompt")
         .expect("Prompt ID is required");
     let prompt = library.get(prompt_id)?;
 
-    let mut args = std::collections::HashMap::new();
-    if let Some(arg_values) = matches.values_of("args") {
+    let mut args = HashMap::new();
+    if let Some(arg_values) = matches.get_many::&lt;String&gt;("args") {
         for arg in arg_values {
             if let Some((key, value)) = arg.split_once('=') {
                 args.insert(key.to_string(), value.to_string());
@@ -6554,122 +6435,119 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 }</code></pre>
 <h3 id="configuration-management"><a class="header" href="#configuration-management">Configuration Management</a></h3>
 <pre><code class="language-rust">use serde::{Deserialize, Serialize};
-use swissarmyhammer::{PromptLibrary, storage::FileSystemStorage};
+use swissarmyhammer::PromptLibrary;
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize)]
 struct AppConfig {
     prompt_directories: Vec&lt;String&gt;,
-    default_arguments: std::collections::HashMap&lt;String, String&gt;,
-    search_enabled: bool,
+    default_arguments: HashMap&lt;String, String&gt;,
 }
 
 impl Default for AppConfig {
     fn default() -&gt; Self {
         Self {
             prompt_directories: vec!["./.swissarmyhammer/prompts".to_string()],
-            default_arguments: std::collections::HashMap::new(),
-            search_enabled: true,
+            default_arguments: HashMap::new(),
         }
     }
 }
 
-async fn setup_library(config: &amp;AppConfig) -&gt; Result&lt;PromptLibrary, Box&lt;dyn std::error::Error&gt;&gt; {
+fn setup_library(config: &amp;AppConfig) -&gt; Result&lt;PromptLibrary, Box&lt;dyn std::error::Error&gt;&gt; {
     let mut library = PromptLibrary::new();
     
     for dir in &amp;config.prompt_directories {
-        library.add_directory(dir).await?;
-    }
-    
-    if config.search_enabled {
-        library.enable_search()?;
+        library.add_directory(dir)?;
     }
     
     Ok(library)
 }</code></pre>
 <h2 id="error-handling-5"><a class="header" href="#error-handling-5">Error Handling</a></h2>
 <p>SwissArmyHammer uses comprehensive error types:</p>
-<pre><code class="language-rust">use swissarmyhammer::error::{SwissArmyHammerError, PromptError, TemplateError};
+<pre><code class="language-rust">use swissarmyhammer::{SwissArmyHammerError, PromptLibrary};
+
+let library = PromptLibrary::new();
 
 match library.get("nonexistent") {
     Ok(prompt) =&gt; {
         // Handle success
+        println!("Found prompt: {}", prompt.name);
     }
     Err(SwissArmyHammerError::PromptNotFound(id)) =&gt; {
         eprintln!("Prompt '{}' not found", id);
     }
-    Err(SwissArmyHammerError::Template(TemplateError::RenderError(msg))) =&gt; {
-        eprintln!("Template rendering failed: {}", msg);
+    Err(SwissArmyHammerError::TemplateError(msg)) =&gt; {
+        eprintln!("Template error: {}", msg);
     }
-    Err(SwissArmyHammerError::Io(io_err)) =&gt; {
+    Err(SwissArmyHammerError::IoError(io_err)) =&gt; {
         eprintln!("I/O error: {}", io_err);
     }
     Err(e) =&gt; {
         eprintln!("Unexpected error: {}", e);
     }
 }</code></pre>
-<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
-<p>SwissArmyHammer provides testing utilities:</p>
-<pre><code class="language-rust">use swissarmyhammer::testing::{MockPromptLibrary, PromptTestCase};
+<h2 id="working-with-workflow-system"><a class="header" href="#working-with-workflow-system">Working with Workflow System</a></h2>
+<pre><code class="language-rust">use swissarmyhammer::{Workflow, WorkflowRun, State};
 
-#[tokio::test]
-async fn test_prompt_rendering() {
-    let mut library = MockPromptLibrary::new();
-    
-    let test_case = PromptTestCase::new("test-prompt")
-        .with_template("Hello {{ name }}!")
-        .with_argument("name", "World")
-        .expect_output("Hello World!");
-    
-    library.add_test_prompt(test_case);
-    
-    let prompt = library.get("test-prompt")
-        .expect("Test prompt should exist");
-    let mut args = std::collections::HashMap::new();
-    args.insert("name".to_string(), "World".to_string());
-    
-    let result = prompt.render(&amp;args)
-        .expect("Template rendering should succeed");
-    assert_eq!(result, "Hello World!");
-}</code></pre>
-<h2 id="performance-considerations-2"><a class="header" href="#performance-considerations-2">Performance Considerations</a></h2>
+// The workflow system is available but requires more complex setup
+// Refer to the workflow module documentation for detailed examples</code></pre>
+<h2 id="working-with-issues-and-memoranda"><a class="header" href="#working-with-issues-and-memoranda">Working with Issues and Memoranda</a></h2>
+<pre><code class="language-rust">use swissarmyhammer::{
+    CreateMemoRequest, Memo, 
+    issues::filesystem::FileSystemIssueStorage
+};
+
+// These modules provide issue tracking and memo functionality
+// See the respective module documentation for usage examples</code></pre>
+<h2 id="best-practices-9"><a class="header" href="#best-practices-9">Best Practices</a></h2>
 <h3 id="memory-usage"><a class="header" href="#memory-usage">Memory Usage</a></h3>
 <ul>
 <li>Prompt libraries cache parsed templates in memory</li>
-<li>Large collections may require custom storage backends</li>
-<li>Use lazy loading for better memory efficiency</li>
+<li>For large collections, consider periodically reloading</li>
+<li>Use the search functionality to find specific prompts efficiently</li>
 </ul>
-<h3 id="concurrency"><a class="header" href="#concurrency">Concurrency</a></h3>
+<h3 id="error-handling-6"><a class="header" href="#error-handling-6">Error Handling</a></h3>
 <ul>
-<li><code>PromptLibrary</code> is <code>Send + Sync</code> when used with appropriate storage</li>
-<li>Template rendering is thread-safe</li>
-<li>Consider using <code>Arc&lt;RwLock&lt;PromptLibrary&gt;&gt;</code> for shared access</li>
+<li>Always handle <code>SwissArmyHammerError</code> variants appropriately</li>
+<li>Use <code>?</code> operator for error propagation in functions returning <code>Result</code></li>
+<li>Log errors appropriately for debugging</li>
 </ul>
-<h3 id="best-practices-9"><a class="header" href="#best-practices-9">Best Practices</a></h3>
+<h3 id="performance-2"><a class="header" href="#performance-2">Performance</a></h3>
 <ul>
-<li>Prefer batch operations for multiple prompts</li>
-<li>Cache rendered templates when arguments don’t change</li>
-<li>Use feature flags to include only needed functionality</li>
-<li>Implement proper error handling for production use</li>
+<li>Template rendering is generally fast</li>
+<li>Cache commonly used prompts in your application</li>
+<li>Use batch operations when working with multiple prompts</li>
 </ul>
-<h2 id="migration-from-cli"><a class="header" href="#migration-from-cli">Migration from CLI</a></h2>
-<p>If you’re migrating from using the CLI to the library:</p>
-<pre><code class="language-rust">// CLI equivalent: swissarmyhammer search "code review"
-let results = library.search("code review")?;
+<h3 id="testing"><a class="header" href="#testing">Testing</a></h3>
+<pre><code class="language-rust">#[cfg(test)]
+mod tests {
+    use super::*;
+    use swissarmyhammer::{PromptLibrary, Prompt, ArgumentSpec};
+    use std::collections::HashMap;
 
-// CLI equivalent: swissarmyhammer test prompt-id --arg key=value
-let prompt = library.get("prompt-id")?;
-let mut args = HashMap::new();
-args.insert("key".to_string(), "value".to_string());
-let rendered = prompt.render(&amp;args)?;
+    #[test]
+    fn test_prompt_rendering() {
+        let prompt = Prompt::new("test", "Hello {{name}}!")
+            .add_argument(ArgumentSpec {
+                name: "name".to_string(),
+                description: Some("Name to greet".to_string()),
+                required: true,
+                default: None,
+                type_hint: Some("string".to_string()),
+            });
 
-// CLI equivalent: swissarmyhammer export --all output.tar.gz
-library.export_all("output.tar.gz", ExportFormat::TarGz)?;</code></pre>
+        let mut args = HashMap::new();
+        args.insert("name".to_string(), "World".to_string());
+        
+        let result = prompt.render(&amp;args).unwrap();
+        assert_eq!(result, "Hello World!");
+    }
+}</code></pre>
 <h2 id="see-also-4"><a class="header" href="#see-also-4">See Also</a></h2>
 <ul>
-<li><a href="./library-api.html">Library API Reference</a> - Complete API documentation</li>
-<li><a href="./library-examples.html">Integration Examples</a> - More integration patterns</li>
-<li><a href="./custom-filters.html">Custom Filters</a> - Template customization</li>
-<li><a href="./advanced-prompts.html">Advanced Prompts</a> - Complex template patterns</li>
+<li><a href="./builtin-prompts.html">Built-in Prompts</a> - Available built-in prompts</li>
+<li><a href="./creating-prompts.html">Creating Prompts</a> - How to create custom prompts</li>
+<li><a href="./cli-reference.html">CLI Reference</a> - Command-line interface documentation</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="api-guide"><a class="header" href="#api-guide">API Guide</a></h1>
 <p>This guide provides comprehensive usage patterns and examples for the SwissArmyHammer Rust API.</p>
@@ -7032,7 +6910,7 @@ let retrieved = storage.get_prompt("greeting")?;
 
 // List all stored prompts
 let all_prompts = storage.list_prompts()?;</code></pre>
-<h3 id="custom-storage-backend-1"><a class="header" href="#custom-storage-backend-1">Custom Storage Backend</a></h3>
+<h3 id="custom-storage-backend"><a class="header" href="#custom-storage-backend">Custom Storage Backend</a></h3>
 <pre><code class="language-rust">use swissarmyhammer::{StorageBackend, Prompt};
 use async_trait::async_trait;
 
@@ -7058,7 +6936,7 @@ impl StorageBackend for DatabaseStorage {
     }
 }</code></pre>
 <hr />
-<h2 id="error-handling-6"><a class="header" href="#error-handling-6">Error Handling</a></h2>
+<h2 id="error-handling-7"><a class="header" href="#error-handling-7">Error Handling</a></h2>
 <p>SwissArmyHammer uses a comprehensive error system.</p>
 <h3 id="error-types"><a class="header" href="#error-types">Error Types</a></h3>
 <pre><code class="language-rust">use swissarmyhammer::{SwissArmyHammerError, Result};
@@ -7148,7 +7026,7 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     Ok(())
 }</code></pre>
 <hr />
-<h2 id="performance-considerations-3"><a class="header" href="#performance-considerations-3">Performance Considerations</a></h2>
+<h2 id="performance-considerations-2"><a class="header" href="#performance-considerations-2">Performance Considerations</a></h2>
 <h3 id="caching"><a class="header" href="#caching">Caching</a></h3>
 <pre><code class="language-rust">// PromptLibrary caches loaded prompts automatically
 let library = PromptLibrary::new();
@@ -7457,7 +7335,7 @@ let rendered = prompt.render(&amp;args)?;</code></pre>
 <li><code>register_plugin&lt;P: SwissArmyHammerPlugin&gt;(&amp;mut self, plugin: P)</code> - Register plugin</li>
 <li><code>get_filters(&amp;self) -&gt; Vec&lt;&amp;dyn CustomLiquidFilter&gt;</code> - Get all registered filters</li>
 </ul>
-<h2 id="error-handling-7"><a class="header" href="#error-handling-7">Error Handling</a></h2>
+<h2 id="error-handling-8"><a class="header" href="#error-handling-8">Error Handling</a></h2>
 <h3 id="swissarmyhammererror"><a class="header" href="#swissarmyhammererror">SwissArmyHammerError</a></h3>
 <p>Main error type for the library.</p>
 <pre><code class="language-rust">pub enum SwissArmyHammerError {
@@ -7472,7 +7350,7 @@ let rendered = prompt.render(&amp;args)?;</code></pre>
 <h3 id="result-type"><a class="header" href="#result-type">Result Type</a></h3>
 <p>Convenient result type alias.</p>
 <pre><code class="language-rust">pub type Result&lt;T&gt; = std::result::Result&lt;T, SwissArmyHammerError&gt;;</code></pre>
-<h2 id="feature-flags-1"><a class="header" href="#feature-flags-1">Feature Flags</a></h2>
+<h2 id="feature-flags"><a class="header" href="#feature-flags">Feature Flags</a></h2>
 <p>The library supports several optional features:</p>
 <ul>
 <li><code>search</code> - Enables full-text search functionality</li>
@@ -7907,7 +7785,7 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     
     Ok(())
 }</code></pre>
-<h3 id="web-server-integration-1"><a class="header" href="#web-server-integration-1">Web Server Integration</a></h3>
+<h3 id="web-server-integration"><a class="header" href="#web-server-integration">Web Server Integration</a></h3>
 <pre><code class="language-rust">use swissarmyhammer::PromptManager;
 use axum::{
     routing::{get, post},
@@ -8013,7 +7891,7 @@ async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     
     Ok(())
 }</code></pre>
-<h2 id="error-handling-8"><a class="header" href="#error-handling-8">Error Handling</a></h2>
+<h2 id="error-handling-9"><a class="header" href="#error-handling-9">Error Handling</a></h2>
 <h3 id="comprehensive-error-handling"><a class="header" href="#comprehensive-error-handling">Comprehensive Error Handling</a></h3>
 <pre><code class="language-rust">use swissarmyhammer::{PromptManager, SwissArmyHammerError};
 
@@ -8612,7 +8490,7 @@ arguments:
   {% endcase %}
 {% endfor %}
 </code></pre>
-<h2 id="error-handling-9"><a class="header" href="#error-handling-9">Error Handling</a></h2>
+<h2 id="error-handling-10"><a class="header" href="#error-handling-10">Error Handling</a></h2>
 <h3 id="graceful-degradation"><a class="header" href="#graceful-degradation">Graceful Degradation</a></h3>
 <p>Handle errors gracefully:</p>
 <pre><code class="language-markdown">---
@@ -10201,7 +10079,7 @@ swissarmyhammer flow run data-processor --set user.name=Alice --set user.role=ad
 <li>Template rendering errors are logged as warnings but don’t stop workflow execution</li>
 <li>Use the <code>default</code> filter to provide fallback values for optional variables</li>
 </ul>
-<h2 id="error-handling-10"><a class="header" href="#error-handling-10">Error Handling</a></h2>
+<h2 id="error-handling-11"><a class="header" href="#error-handling-11">Error Handling</a></h2>
 <p>Workflows provide robust error handling:</p>
 <h3 id="retry-logic"><a class="header" href="#retry-logic">Retry Logic</a></h3>
 <p><strong>Note</strong>: Retry logic is handled automatically by Claude’s infrastructure. SwissArmyHammer workflows do not need to implement application-level retry mechanisms as Claude will automatically retry failed requests according to its built-in retry policies. This eliminates the need for manual retry implementation in your workflow logic.</p>
@@ -11496,7 +11374,7 @@ Hybrid          | 25ms         | 80ms          | 40 qps
 <li>GPU acceleration for semantic search</li>
 </ul>
 <h2 id="integration-points"><a class="header" href="#integration-points">Integration Points</a></h2>
-<h3 id="mcp-server-integration-1"><a class="header" href="#mcp-server-integration-1">MCP Server Integration</a></h3>
+<h3 id="mcp-server-integration"><a class="header" href="#mcp-server-integration">MCP Server Integration</a></h3>
 <pre><code class="language-rust">pub struct McpSearchHandler {
     search_engine: Arc&lt;SearchEngine&gt;,
     semantic_searcher: Arc&lt;SemanticSearcher&gt;,
@@ -13124,7 +13002,7 @@ install_script: |
   "params": {}
 }
 </code></pre>
-<h2 id="error-handling-11"><a class="header" href="#error-handling-11">Error Handling</a></h2>
+<h2 id="error-handling-12"><a class="header" href="#error-handling-12">Error Handling</a></h2>
 <p>MCP defines standard error codes:</p>
 <pre><code class="language-json">{
   "jsonrpc": "2.0",
@@ -13574,7 +13452,7 @@ strict_validation = true     # Fail on invalid prompts
 required_fields = ["name", "description"]
 max_file_size = "1MB"       # Maximum prompt file size
 </code></pre>
-<h3 id="file-watching-2"><a class="header" href="#file-watching-2">File Watching</a></h3>
+<h3 id="file-watching-1"><a class="header" href="#file-watching-1">File Watching</a></h3>
 <p>Configure file system monitoring:</p>
 <pre><code class="language-toml">[watch]
 enabled = true              # Enable/disable watching
@@ -14023,7 +13901,7 @@ timeout = 60000  # 1 minute
 
 # Disable caching during development to see changes immediately
 [cache]
-enabled = false  # TODO: Enable for production
+enabled = false  # Set to true in production for better performance
 </code></pre>
 <h3 id="4-version-control"><a class="header" href="#4-version-control">4. Version Control</a></h3>
 <p>Track configuration changes:</p>
@@ -14071,7 +13949,7 @@ swissarmyhammer serve --config new-config.toml --dry-run
 <li>Explore <a href="./troubleshooting.html">Troubleshooting</a> for common issues</li>
 <li>Read <a href="./security.html">Security</a> for security best practices</li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="file-watching-3"><a class="header" href="#file-watching-3">File Watching</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="file-watching-2"><a class="header" href="#file-watching-2">File Watching</a></h1>
 <p>SwissArmyHammer includes a powerful file watching system that automatically detects and reloads prompt changes without restarting the server.</p>
 <h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
 <p>The file watcher monitors your prompt directories for changes and automatically:</p>
@@ -14243,7 +14121,7 @@ watch:
   
 File will not be loaded. Fix errors and save again.
 </code></pre>
-<h2 id="performance-2"><a class="header" href="#performance-2">Performance</a></h2>
+<h2 id="performance-3"><a class="header" href="#performance-3">Performance</a></h2>
 <h3 id="optimization-tips-1"><a class="header" href="#optimization-tips-1">Optimization Tips</a></h3>
 <ol>
 <li>
@@ -14922,7 +14800,7 @@ swissarmyhammer validate --overrides
 <li>See <a href="./examples.html">Examples</a> of override patterns</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="built-in-prompts"><a class="header" href="#built-in-prompts">Built-in Prompts</a></h1>
-<p>SwissArmyHammer includes a comprehensive set of built-in prompts designed to assist with various development tasks. These prompts are organized by category and leverage Liquid templating for dynamic, customizable assistance.</p>
+<p>SwissArmyHammer includes a comprehensive set of built-in prompts designed to assist with various development tasks. These prompts use Liquid templating for dynamic, customizable assistance and are organized by category for easy discovery.</p>
 <h2 id="overview-9"><a class="header" href="#overview-9">Overview</a></h2>
 <p>All built-in prompts:</p>
 <ul>
@@ -14932,62 +14810,88 @@ swissarmyhammer validate --overrides
 <li>Follow a standardized YAML front matter format</li>
 </ul>
 <h2 id="categories"><a class="header" href="#categories">Categories</a></h2>
-<h3 id="analysis-1"><a class="header" href="#analysis-1">Analysis</a></h3>
-<h4 id="statistics-calculator"><a class="header" href="#statistics-calculator">statistics-calculator</a></h4>
-<p>Calculate statistics on numeric data using math filters and array operations.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>numbers</code> (required) - Comma-separated list of numbers</li>
-<li><code>precision</code> (default: “2”) - Decimal precision for calculations</li>
-<li><code>show_outliers</code> (default: “true”) - Identify outliers in the dataset</li>
-<li><code>percentiles</code> (default: “25,50,75”) - Calculate percentiles (comma-separated)</li>
-<li><code>visualization</code> (default: “true”) - Show ASCII visualization</li>
-</ul>
+<h3 id="system-management"><a class="header" href="#system-management">System Management</a></h3>
+<h4 id="are_issues_complete"><a class="header" href="#are_issues_complete">are_issues_complete</a></h4>
+<p>Check if the plan is complete.</p>
+<p><strong>Arguments:</strong> None</p>
 <p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test statistics-calculator --numbers "10,20,30,40,50" --percentiles "10,50,90"
+<pre><code class="language-bash">swissarmyhammer prompt test are_issues_complete
 </code></pre>
-<h3 id="communication"><a class="header" href="#communication">Communication</a></h3>
-<h4 id="email-composer"><a class="header" href="#email-composer">email-composer</a></h4>
-<p>Compose professional emails with dynamic content using capture blocks.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>recipient_name</code> (required) - Name of the email recipient</li>
-<li><code>sender_name</code> (required) - Name of the sender</li>
-<li><code>email_type</code> (required) - Type of email (welcome, followup, reminder, thank_you)</li>
-<li><code>context</code> (default: “”) - Additional context for the email</li>
-<li><code>formal</code> (default: “false”) - Use formal tone</li>
-<li><code>include_signature</code> (default: “true”) - Include email signature</li>
-<li><code>time_of_day</code> (default: “morning”) - Current time of day</li>
-</ul>
+<h4 id="are_reviews_done"><a class="header" href="#are_reviews_done">are_reviews_done</a></h4>
+<p>Check if all the code review items are complete.</p>
+<p><strong>Arguments:</strong> None</p>
 <p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test email-composer --recipient_name "John Doe" --sender_name "Jane Smith" --email_type "followup" --formal "true"
+<pre><code class="language-bash">swissarmyhammer prompt test are_reviews_done
 </code></pre>
-<h3 id="data-processing"><a class="header" href="#data-processing">Data Processing</a></h3>
-<h4 id="array-processor"><a class="header" href="#array-processor">array-processor</a></h4>
-<p>Process arrays with flexible filtering and loop control.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>items</code> (required) - Comma-separated list of items to process</li>
-<li><code>skip_pattern</code> (default: “”) - Pattern to skip items containing this text</li>
-<li><code>stop_pattern</code> (default: “”) - Pattern to stop processing</li>
-<li><code>max_items</code> (default: “100”) - Maximum number of items to process</li>
-<li><code>show_skipped</code> (default: “false”) - Show skipped items separately</li>
-<li><code>format</code> (default: “list”) - Output format (list, table, json)</li>
-</ul>
+<h4 id="are_tests_passing"><a class="header" href="#are_tests_passing">are_tests_passing</a></h4>
+<p>Check if all tests are passing.</p>
+<p><strong>Arguments:</strong> None</p>
 <p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test array-processor --items "apple,banana,cherry" --skip_pattern "berry" --format "table"
+<pre><code class="language-bash">swissarmyhammer prompt test are_tests_passing
 </code></pre>
-<h3 id="debug"><a class="header" href="#debug">Debug</a></h3>
+<h3 id="issue-management"><a class="header" href="#issue-management">Issue Management</a></h3>
+<h4 id="branch-issue_branch"><a class="header" href="#branch-issue_branch">branch (issue_branch)</a></h4>
+<p>Create an issue work branch for the next issue to work</p>
+<p><strong>Arguments:</strong> None</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-bash">swissarmyhammer prompt test branch
+</code></pre>
+<h4 id="issue_complete"><a class="header" href="#issue_complete">issue_complete</a></h4>
+<p>Mark an issue as complete</p>
+<p><strong>Arguments:</strong> None</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-bash">swissarmyhammer prompt test issue_complete
+</code></pre>
+<h3 id="code-development"><a class="header" href="#code-development">Code Development</a></h3>
+<h4 id="codeissue-do_issue"><a class="header" href="#codeissue-do_issue">code/issue (do_issue)</a></h4>
+<p>Code up an issue</p>
+<p><strong>Arguments:</strong> None</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-bash">swissarmyhammer prompt test code/issue
+</code></pre>
+<h4 id="codereview"><a class="header" href="#codereview">code/review</a></h4>
+<p>Do Code Review</p>
+<p><strong>Arguments:</strong> None</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-bash">swissarmyhammer prompt test code/review
+</code></pre>
+<h3 id="version-control"><a class="header" href="#version-control">Version Control</a></h3>
+<h4 id="commit"><a class="header" href="#commit">commit</a></h4>
+<p>Commit your work to git.</p>
+<p><strong>Arguments:</strong> None</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-bash">swissarmyhammer prompt test commit
+</code></pre>
+<h4 id="merge"><a class="header" href="#merge">merge</a></h4>
+<p>Merge your work into the main branch.</p>
+<p><strong>Arguments:</strong> None</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-bash">swissarmyhammer prompt test merge
+</code></pre>
+<h3 id="testing--quality"><a class="header" href="#testing--quality">Testing &amp; Quality</a></h3>
+<h4 id="coverage"><a class="header" href="#coverage">coverage</a></h4>
+<p>Improve coverage.</p>
+<p><strong>Arguments:</strong> None</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-bash">swissarmyhammer prompt test coverage
+</code></pre>
+<h4 id="test"><a class="header" href="#test">test</a></h4>
+<p>Iterate to correct test failures in the codebase.</p>
+<p><strong>Arguments:</strong> None</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-bash">swissarmyhammer prompt test test
+</code></pre>
+<h3 id="debugging-2"><a class="header" href="#debugging-2">Debugging</a></h3>
 <h4 id="debugerror"><a class="header" href="#debugerror">debug/error</a></h4>
 <p>Analyze error messages and provide debugging guidance with potential solutions.</p>
 <p><strong>Arguments:</strong></p>
 <ul>
 <li><code>error_message</code> (required) - The error message or stack trace to analyze</li>
 <li><code>language</code> (default: “auto-detect”) - The programming language</li>
-<li><code>context</code> (default: “”) - Additional context about when the error occurs</li>
+<li><code>context</code> (optional) - Additional context about when the error occurs</li>
 </ul>
 <p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test debug/error --error_message "TypeError: cannot read property 'name' of undefined" --language "javascript"
+<pre><code class="language-bash">swissarmyhammer prompt test debug/error --arg error_message="TypeError: cannot read property 'name' of undefined" --arg language="javascript"
 </code></pre>
 <h4 id="debuglogs"><a class="header" href="#debuglogs">debug/logs</a></h4>
 <p>Analyze log files to identify issues and patterns.</p>
@@ -14999,32 +14903,14 @@ swissarmyhammer validate --overrides
 <li><code>log_format</code> (default: “auto-detect”) - Log format (json, plaintext, syslog, etc.)</li>
 </ul>
 <p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test debug/logs --log_content "$(cat application.log)" --issue_description "API timeout errors"
-</code></pre>
-<h4 id="debugperformance"><a class="header" href="#debugperformance">debug/performance</a></h4>
-<p>Analyze performance problems and suggest optimization strategies.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>problem_description</code> (required) - Description of the performance issue</li>
-<li><code>metrics</code> (default: “not provided”) - Performance metrics</li>
-<li><code>code_snippet</code> (default: “”) - Relevant code that might be causing the issue</li>
-<li><code>environment</code> (default: “development”) - Environment details</li>
-</ul>
-<p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test debug/performance --problem_description "Database queries taking 5+ seconds" --environment "production"
+<pre><code class="language-bash">swissarmyhammer prompt test debug/logs --arg log_content="$(cat application.log)" --arg issue_description="API timeout errors"
 </code></pre>
 <h3 id="documentation"><a class="header" href="#documentation">Documentation</a></h3>
-<h4 id="docsapi"><a class="header" href="#docsapi">docs/api</a></h4>
-<p>Create comprehensive API documentation from code.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>code</code> (required) - The API code to document</li>
-<li><code>api_type</code> (default: “REST”) - Type of API (REST, GraphQL, gRPC, library)</li>
-<li><code>format</code> (default: “markdown”) - Documentation format (markdown, openapi, swagger)</li>
-<li><code>include_examples</code> (default: “true”) - Whether to include usage examples</li>
-</ul>
+<h4 id="document"><a class="header" href="#document">document</a></h4>
+<p>Create documentation for the project</p>
+<p><strong>Arguments:</strong> None</p>
 <p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test docs/api --code "$(cat api.py)" --api_type "REST" --include_examples "true"
+<pre><code class="language-bash">swissarmyhammer prompt test document
 </code></pre>
 <h4 id="docscomments"><a class="header" href="#docscomments">docs/comments</a></h4>
 <p>Add comprehensive comments and documentation to code.</p>
@@ -15036,7 +14922,7 @@ swissarmyhammer validate --overrides
 <li><code>audience</code> (default: “developers”) - Target audience for the comments</li>
 </ul>
 <p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test docs/comments --code "$(cat utils.js)" --comment_style "jsdoc" --detail_level "comprehensive"
+<pre><code class="language-bash">swissarmyhammer prompt test docs/comments --arg code="$(cat utils.js)" --arg comment_style="jsdoc" --arg detail_level="comprehensive"
 </code></pre>
 <h4 id="docsreadme"><a class="header" href="#docsreadme">docs/readme</a></h4>
 <p>Create comprehensive README documentation for a project.</p>
@@ -15049,129 +14935,51 @@ swissarmyhammer validate --overrides
 <li><code>target_audience</code> (default: “developers”) - Who this project is for</li>
 </ul>
 <p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test docs/readme --project_name "MyLib" --project_description "A library for awesome things" --features "fast,reliable,easy"
+<pre><code class="language-bash">swissarmyhammer prompt test docs/readme --arg project_name="MyLib" --arg project_description="A library for awesome things" --arg features="fast,reliable,easy"
 </code></pre>
-<h3 id="formatting"><a class="header" href="#formatting">Formatting</a></h3>
-<h4 id="table-generator"><a class="header" href="#table-generator">table-generator</a></h4>
-<p>Generate formatted tables with alternating row styles.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>headers</code> (required) - Comma-separated list of table headers</li>
-<li><code>rows</code> (required) - Semicolon-separated rows, with comma-separated values</li>
-<li><code>style</code> (default: “markdown”) - Table style (markdown, html, ascii)</li>
-<li><code>zebra</code> (default: “true”) - Enable zebra striping for rows</li>
-<li><code>row_numbers</code> (default: “false”) - Add row numbers</li>
-</ul>
-<p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test table-generator --headers "Name,Age,City" --rows "John,30,NYC;Jane,25,LA" --style "markdown"
-</code></pre>
-<h3 id="planning--productivity"><a class="header" href="#planning--productivity">Planning &amp; Productivity</a></h3>
+<h3 id="planning"><a class="header" href="#planning">Planning</a></h3>
 <h4 id="plan"><a class="header" href="#plan">plan</a></h4>
-<p>Create structured plans and break down complex tasks.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>task</code> (required) - The task to plan for</li>
-<li><code>context</code> (default: “”) - Additional context for the planning</li>
-<li><code>constraints</code> (default: “none”) - Any constraints or limitations to consider</li>
-</ul>
+<p>Generate a step by step development plan from a specification.</p>
+<p><strong>Arguments:</strong> None</p>
 <p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test plan --task "Implement user authentication" --constraints "Must use OAuth2"
-</code></pre>
-<h4 id="task-formatter"><a class="header" href="#task-formatter">task-formatter</a></h4>
-<p>Format and organize tasks with priorities and grouping.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>tasks</code> (required) - Comma-separated list of tasks</li>
-<li><code>group_by</code> (default: “none”) - How to group tasks (priority, status, category, none)</li>
-<li><code>show_index</code> (default: “true”) - Show task numbers</li>
-<li><code>show_status</code> (default: “true”) - Include status checkboxes</li>
-<li><code>date_format</code> (default: “%B %d, %Y”) - Date format for due dates</li>
-</ul>
-<p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test task-formatter --tasks "Write tests,Fix bug,Update docs" --group_by "priority"
-</code></pre>
-<h3 id="prompt-management"><a class="header" href="#prompt-management">Prompt Management</a></h3>
-<h4 id="promptscreate"><a class="header" href="#promptscreate">prompts/create</a></h4>
-<p>Help create effective prompts for SwissArmyHammer.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>purpose</code> (required) - What the prompt should accomplish</li>
-<li><code>category</code> (default: “general”) - Category for the prompt</li>
-<li><code>inputs_needed</code> (default: “”) - What information the prompt needs from users</li>
-<li><code>complexity</code> (default: “moderate”) - Complexity level (simple, moderate, advanced)</li>
-</ul>
-<p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test prompts/create --purpose "Generate database migrations" --category "database"
-</code></pre>
-<h4 id="promptsimprove"><a class="header" href="#promptsimprove">prompts/improve</a></h4>
-<p>Analyze and enhance existing prompts for better effectiveness.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>prompt_content</code> (required) - The current prompt content (including YAML front matter)</li>
-<li><code>improvement_goals</code> (default: “overall enhancement”) - What aspects to improve</li>
-<li><code>user_feedback</code> (default: “”) - Any feedback or issues users have reported</li>
-</ul>
-<p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test prompts/improve --prompt_content "$(cat my-prompt.md)" --improvement_goals "clarity,flexibility"
-</code></pre>
-<h3 id="refactoring"><a class="header" href="#refactoring">Refactoring</a></h3>
-<h4 id="refactorclean"><a class="header" href="#refactorclean">refactor/clean</a></h4>
-<p>Refactor code for better readability, maintainability, and adherence to best practices.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>code</code> (required) - The code to refactor</li>
-<li><code>language</code> (default: “auto-detect”) - Programming language</li>
-<li><code>focus_areas</code> (default: “all”) - Specific areas to focus on</li>
-<li><code>style_guide</code> (default: “language defaults”) - Specific style guide to follow</li>
-</ul>
-<p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test refactor/clean --code "$(cat messy_code.py)" --focus_areas "naming,complexity"
-</code></pre>
-<h4 id="refactorextract"><a class="header" href="#refactorextract">refactor/extract</a></h4>
-<p>Extract code into well-named, reusable methods or functions.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>code</code> (required) - The code containing logic to extract</li>
-<li><code>extract_purpose</code> (required) - What the extracted method should do</li>
-<li><code>method_name</code> (default: “auto-suggest”) - Suggested name for the extracted method</li>
-<li><code>scope</code> (default: “method”) - Scope for the extraction (method, function, class, module)</li>
-</ul>
-<p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test refactor/extract --code "$(cat complex.js)" --extract_purpose "validate user input"
-</code></pre>
-<h4 id="refactorpatterns"><a class="header" href="#refactorpatterns">refactor/patterns</a></h4>
-<p>Refactor code to match a target pattern or improve structure.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>code</code> (required) - The code to refactor</li>
-<li><code>target_pattern</code> (required) - The pattern or style to refactor towards</li>
-</ul>
-<p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test refactor/patterns --code "$(cat service.py)" --target_pattern "Repository pattern"
+<pre><code class="language-bash">swissarmyhammer prompt test plan
 </code></pre>
 <h3 id="code-review"><a class="header" href="#code-review">Code Review</a></h3>
+<h4 id="reviewaccessibility"><a class="header" href="#reviewaccessibility">review/accessibility</a></h4>
+<p>Review code for accessibility compliance and best practices.</p>
+<p><strong>Arguments:</strong></p>
+<ul>
+<li><code>code</code> (required) - The UI/frontend code to review</li>
+<li><code>wcag_level</code> (default: “AA”) - WCAG compliance level target (A, AA, AAA)</li>
+<li><code>component_type</code> (default: “general”) - Type of component (form, navigation, content, interactive)</li>
+<li><code>target_users</code> (default: “all users”) - Specific user needs to consider</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-bash">swissarmyhammer prompt test review/accessibility --arg code="$(cat form.html)" --arg component_type="form" --arg wcag_level="AA"
+</code></pre>
+<h4 id="reviewbranch"><a class="header" href="#reviewbranch">review/branch</a></h4>
+<p>Review code</p>
+<p><strong>Arguments:</strong> None</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-bash">swissarmyhammer prompt test review/branch
+</code></pre>
 <h4 id="reviewcode"><a class="header" href="#reviewcode">review/code</a></h4>
 <p>Review code for quality, bugs, and improvements.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>file_path</code> (required) - Path to the file being reviewed</li>
-<li><code>context</code> (default: “general review”) - Additional context about the code review focus</li>
-</ul>
+<p><strong>Arguments:</strong> None</p>
 <p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test review/code --file_path "src/auth.py" --context "focus on security"
+<pre><code class="language-bash">swissarmyhammer prompt test review/code
 </code></pre>
-<h4 id="reviewcode-dynamic"><a class="header" href="#reviewcode-dynamic">review/code-dynamic</a></h4>
-<p>Language-specific code review with conditional logic.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>file_path</code> (required) - Path to the file being reviewed</li>
-<li><code>language</code> (required) - Programming language (python, javascript, rust, etc.)</li>
-<li><code>focus_areas</code> (default: “style,bugs,performance”) - Comma-separated list of areas to focus on</li>
-<li><code>severity_level</code> (default: “warning”) - Minimum severity level to report (info, warning, error)</li>
-<li><code>include_suggestions</code> (default: “true”) - Include code improvement suggestions</li>
-</ul>
+<h4 id="reviewdocumentation"><a class="header" href="#reviewdocumentation">review/documentation</a></h4>
+<p>Review documentation</p>
+<p><strong>Arguments:</strong> None</p>
 <p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test review/code-dynamic --file_path "app.js" --language "javascript" --focus_areas "security,performance"
+<pre><code class="language-bash">swissarmyhammer prompt test review/documentation
+</code></pre>
+<h4 id="reviewpatterns"><a class="header" href="#reviewpatterns">review/patterns</a></h4>
+<p>Perform a comprehensive review of the code to improve pattern use.</p>
+<p><strong>Arguments:</strong> None</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-bash">swissarmyhammer prompt test review/patterns
 </code></pre>
 <h4 id="reviewsecurity"><a class="header" href="#reviewsecurity">review/security</a></h4>
 <p>Perform a comprehensive security review of code to identify vulnerabilities.</p>
@@ -15183,56 +14991,31 @@ swissarmyhammer validate --overrides
 <li><code>severity_threshold</code> (default: “low”) - Minimum severity to report (critical, high, medium, low)</li>
 </ul>
 <p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test review/security --code "$(cat login.php)" --context "handles user authentication"
+<pre><code class="language-bash">swissarmyhammer prompt test review/security --arg code="$(cat login.php)" --arg context="handles user authentication"
 </code></pre>
-<h4 id="reviewaccessibility"><a class="header" href="#reviewaccessibility">review/accessibility</a></h4>
-<p>Review code for accessibility compliance and best practices.</p>
+<h3 id="prompt-management"><a class="header" href="#prompt-management">Prompt Management</a></h3>
+<h4 id="promptscreate"><a class="header" href="#promptscreate">prompts/create</a></h4>
+<p>Help create effective prompts for swissarmyhammer.</p>
 <p><strong>Arguments:</strong></p>
 <ul>
-<li><code>code</code> (required) - The UI/frontend code to review</li>
-<li><code>wcag_level</code> (default: “AA”) - WCAG compliance level target (A, AA, AAA)</li>
-<li><code>component_type</code> (default: “general”) - Type of component (form, navigation, content, interactive)</li>
-<li><code>target_users</code> (default: “all users”) - Specific user needs to consider</li>
+<li><code>purpose</code> (required) - What the prompt should accomplish</li>
+<li><code>category</code> (default: “general”) - Category for the prompt</li>
+<li><code>inputs_needed</code> (default: “”) - What information the prompt needs from users</li>
+<li><code>complexity</code> (default: “moderate”) - Complexity level (simple, moderate, advanced)</li>
 </ul>
 <p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test review/accessibility --code "$(cat form.html)" --component_type "form" --wcag_level "AA"
+<pre><code class="language-bash">swissarmyhammer prompt test prompts/create --arg purpose="Generate database migrations" --arg category="database"
 </code></pre>
-<h3 id="testing-2"><a class="header" href="#testing-2">Testing</a></h3>
-<h4 id="testunit"><a class="header" href="#testunit">test/unit</a></h4>
-<p>Create comprehensive unit tests for code with good coverage.</p>
+<h4 id="promptsimprove"><a class="header" href="#promptsimprove">prompts/improve</a></h4>
+<p>Analyze and enhance existing prompts for better effectiveness.</p>
 <p><strong>Arguments:</strong></p>
 <ul>
-<li><code>code</code> (required) - The code to generate tests for</li>
-<li><code>framework</code> (default: “auto-detect”) - Testing framework to use</li>
-<li><code>style</code> (default: “BDD”) - Testing style (BDD, TDD, classical)</li>
-<li><code>coverage_target</code> (default: “80”) - Target test coverage percentage</li>
+<li><code>prompt_content</code> (required) - The current prompt content (including YAML front matter)</li>
+<li><code>improvement_goals</code> (default: “overall enhancement”) - What aspects to improve</li>
+<li><code>user_feedback</code> (default: “”) - Any feedback or issues users have reported</li>
 </ul>
 <p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test test/unit --code "$(cat calculator.py)" --framework "pytest" --style "BDD"
-</code></pre>
-<h4 id="testintegration"><a class="header" href="#testintegration">test/integration</a></h4>
-<p>Create integration tests to verify component interactions.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>system_description</code> (required) - Description of the system/components to test</li>
-<li><code>test_scenarios</code> (default: “basic flow”) - Specific scenarios to test (comma-separated)</li>
-<li><code>framework</code> (default: “auto-detect”) - Testing framework to use</li>
-<li><code>environment</code> (default: “local”) - Test environment setup requirements</li>
-</ul>
-<p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test test/integration --system_description "User service and database" --test_scenarios "user creation,user update"
-</code></pre>
-<h4 id="testproperty"><a class="header" href="#testproperty">test/property</a></h4>
-<p>Create property-based tests to find edge cases automatically.</p>
-<p><strong>Arguments:</strong></p>
-<ul>
-<li><code>code</code> (required) - The code to test with properties</li>
-<li><code>framework</code> (default: “auto-detect”) - Property testing framework</li>
-<li><code>properties_to_test</code> (default: “common properties”) - Specific properties or invariants to verify</li>
-<li><code>num_examples</code> (default: “100”) - Number of random examples to generate</li>
-</ul>
-<p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test test/property --code "$(cat sort.js)" --properties_to_test "output length equals input length"
+<pre><code class="language-bash">swissarmyhammer prompt test prompts/improve --arg prompt_content="$(cat my-prompt.md)" --arg improvement_goals="clarity,flexibility"
 </code></pre>
 <h3 id="general-purpose"><a class="header" href="#general-purpose">General Purpose</a></h3>
 <h4 id="help"><a class="header" href="#help">help</a></h4>
@@ -15240,10 +15023,10 @@ swissarmyhammer validate --overrides
 <p><strong>Arguments:</strong></p>
 <ul>
 <li><code>topic</code> (default: “general assistance”) - The topic to get help about</li>
-<li><code>detail_level</code> (default: “normal”) - How detailed the help should be</li>
+<li><code>detail_level</code> (default: “normal”) - How detailed the help should be (basic, normal, detailed)</li>
 </ul>
 <p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test help --topic "git workflows" --detail_level "detailed"
+<pre><code class="language-bash">swissarmyhammer prompt test help --arg topic="git workflows" --arg detail_level="detailed"
 </code></pre>
 <h4 id="example-3"><a class="header" href="#example-3">example</a></h4>
 <p>An example prompt for testing.</p>
@@ -15252,41 +15035,58 @@ swissarmyhammer validate --overrides
 <li><code>topic</code> (default: “general topic”) - The topic to ask about</li>
 </ul>
 <p><strong>Example:</strong></p>
-<pre><code class="language-bash">swissarmyhammer test example --topic "testing prompts"
+<pre><code class="language-bash">swissarmyhammer prompt test example --arg topic="testing prompts"
 </code></pre>
+<h4 id="say-hello"><a class="header" href="#say-hello">say-hello</a></h4>
+<p>A simple greeting prompt that can be customized with name and language.</p>
+<p><strong>Arguments:</strong></p>
+<ul>
+<li><code>name</code> (default: “friend”) - Name to greet</li>
+<li><code>language</code> (default: “english”) - Language for the greeting</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-bash">swissarmyhammer prompt test say-hello --arg name="Alice" --arg language="spanish"
+</code></pre>
+<h2 id="template-partials"><a class="header" href="#template-partials">Template Partials</a></h2>
+<p>These <code>.md</code> files are partial templates used by other prompts for consistency:</p>
+<ul>
+<li><code>code.md</code> - Partial template for reuse in other prompts</li>
+<li><code>coding_standards.md</code> - Coding Standards template</li>
+<li><code>documentation.md</code> - Documentation template</li>
+<li><code>empty.md</code> - Empty template</li>
+<li><code>principals.md</code> - Principals template</li>
+<li><code>review_format.md</code> - Review Format template</li>
+<li><code>todo.md</code> - Todo template</li>
+</ul>
 <h2 id="usage-patterns"><a class="header" href="#usage-patterns">Usage Patterns</a></h2>
 <h3 id="basic-usage-6"><a class="header" href="#basic-usage-6">Basic Usage</a></h3>
 <pre><code class="language-bash"># Use a prompt with default arguments
-swissarmyhammer test review/code --file_path "main.py"
+swissarmyhammer prompt test review/code
 
 # Specify custom arguments
-swissarmyhammer test test/unit --code "$(cat utils.js)" --framework "jest" --coverage_target "90"
+swissarmyhammer prompt test debug/error --arg error_message="NullPointerException" --arg language="java"
 </code></pre>
 <h3 id="piping-content"><a class="header" href="#piping-content">Piping Content</a></h3>
-<pre><code class="language-bash"># Pipe file content to a prompt
-cat error.log | xargs -I {} swissarmyhammer test debug/logs --log_content "{}" --issue_description "memory leak"
+<pre><code class="language-bash"># Use command substitution to pass file content
+swissarmyhammer prompt test docs/comments --arg code="$(cat utils.py)" --arg comment_style="docstring"
 
-# Use command substitution
-swissarmyhammer test docs/api --code "$(cat api.py)" --api_type "REST"
+# Pipe log content for analysis
+cat error.log | xargs -I {} swissarmyhammer prompt test debug/logs --arg log_content="{}" --arg issue_description="memory leak"
 </code></pre>
-<h3 id="combining-multiple-prompts"><a class="header" href="#combining-multiple-prompts">Combining Multiple Prompts</a></h3>
-<pre><code class="language-bash"># First analyze the code
-swissarmyhammer test review/code --file_path "service.py" &gt; review.md
-
-# Then generate tests based on the review
-swissarmyhammer test test/unit --code "$(cat service.py)" --style "TDD"
+<h3 id="non-interactive-mode"><a class="header" href="#non-interactive-mode">Non-Interactive Mode</a></h3>
+<pre><code class="language-bash"># Run prompts non-interactively with all arguments specified
+swissarmyhammer prompt test help --arg topic="git" --arg detail_level="detailed"
 </code></pre>
-<h3 id="custom-workflows-2"><a class="header" href="#custom-workflows-2">Custom Workflows</a></h3>
-<pre><code class="language-bash"># Create a security-focused workflow
-swissarmyhammer test review/security --code "$(cat auth.js)" --severity_threshold "medium" &gt; security.md
-swissarmyhammer test test/unit --code "$(cat auth.js)" --focus "security edge cases"
+<h3 id="debugging-prompts"><a class="header" href="#debugging-prompts">Debugging Prompts</a></h3>
+<pre><code class="language-bash"># Use debug mode to see template processing
+swissarmyhammer prompt test debug/error --debug --arg error_message="Sample error"
 </code></pre>
 <h2 id="best-practices-22"><a class="header" href="#best-practices-22">Best Practices</a></h2>
 <ol>
 <li><strong>Choose the Right Prompt</strong> - Select prompts that match your specific task</li>
-<li><strong>Provide Context</strong> - Use optional arguments to give more context</li>
+<li><strong>Provide Context</strong> - Use optional arguments to give more context when available</li>
 <li><strong>Combine Prompts</strong> - Use multiple prompts in sequence for comprehensive workflows</li>
-<li><strong>Customize Arguments</strong> - Override defaults when you need specific behavior</li>
+<li><strong>Test Arguments</strong> - Use the test command to verify prompt behavior before using in workflows</li>
 <li><strong>Review Output</strong> - Always review and validate generated content before using it</li>
 </ol>
 <h2 id="creating-custom-prompts"><a class="header" href="#creating-custom-prompts">Creating Custom Prompts</a></h2>
@@ -17228,7 +17028,7 @@ cases:
 mdbook build
 mdbook serve  # Preview at http://localhost:3000
 </code></pre>
-<h2 id="testing-3"><a class="header" href="#testing-3">Testing</a></h2>
+<h2 id="testing-2"><a class="header" href="#testing-2">Testing</a></h2>
 <h3 id="test-organization"><a class="header" href="#test-organization">Test Organization</a></h3>
 <pre><code>tests/
 ├── integration/     # Integration tests
@@ -17607,7 +17407,7 @@ mdbook serve
 # Check documentation examples
 cargo test --doc
 </code></pre>
-<h2 id="debugging-2"><a class="header" href="#debugging-2">Debugging</a></h2>
+<h2 id="debugging-3"><a class="header" href="#debugging-3">Debugging</a></h2>
 <h3 id="vs-code-debug-configuration"><a class="header" href="#vs-code-debug-configuration">VS Code Debug Configuration</a></h3>
 <p><code>.vscode/launch.json</code>:</p>
 <pre><code class="language-json">{
@@ -17947,7 +17747,7 @@ jobs:
 <li>See <a href="./release-process.html">Release Process</a> for release procedures</li>
 <li>Review <a href="./architecture.html">Architecture</a> for system design</li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="testing-4"><a class="header" href="#testing-4">Testing</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="testing-3"><a class="header" href="#testing-3">Testing</a></h1>
 <p>This guide covers testing practices and strategies for SwissArmyHammer development.</p>
 <h2 id="overview-12"><a class="header" href="#overview-12">Overview</a></h2>
 <p>SwissArmyHammer uses a comprehensive testing approach:</p>

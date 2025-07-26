@@ -286,7 +286,7 @@ impl VectorStorage {
                 // Parse vector from JSON with robust handling for corrupted data
                 let vector = match serde_json::from_str::<Vec<f32>>(&vector_str) {
                     Ok(vec) => Some(vec),
-                    Err(e) => {
+                    Err(_e) => {
                         // Try to parse as a single float and convert to a vector
                         match serde_json::from_str::<f32>(&vector_str) {
                             Ok(single_float) => {
@@ -346,7 +346,7 @@ impl VectorStorage {
             let row_data = row_result.map_err(|e| {
                 SwissArmyHammerError::Storage(format!("Failed to process row: {e}"))
             })?;
-            
+
             // Skip corrupted records that returned None
             let (
                 chunk_id,
@@ -431,7 +431,7 @@ impl VectorStorage {
                 // Parse vector from JSON with robust handling for corrupted data
                 let vector = match serde_json::from_str::<Vec<f32>>(&vector_str) {
                     Ok(vec) => Some(vec),
-                    Err(e) => {
+                    Err(_e) => {
                         // Try to parse as a single float and convert to a vector
                         match serde_json::from_str::<f32>(&vector_str) {
                             Ok(single_float) => {
@@ -477,7 +477,7 @@ impl VectorStorage {
             let row_data = row_result.map_err(|e| {
                 SwissArmyHammerError::Storage(format!("Failed to process detailed search row: {e}"))
             })?;
-            
+
             // Skip corrupted records that returned None
             let (chunk_id, vector) = match row_data {
                 Some(data) => data,
@@ -1402,36 +1402,36 @@ mod tests {
         assert_eq!(chunks.unwrap().len(), 0);
     }
 
-    #[test] 
+    #[test]
     fn test_reproduce_similarity_search_failure() {
         // This test reproduces the exact failure scenario from the issue
         let config = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
         storage.initialize().unwrap();
-        
+
         // Create a query vector like the real search would
         let query_embedding = vec![0.1; 384];
-        
+
         // This should succeed but currently fails
         let result = storage.similarity_search(&query_embedding, 10, 0.5);
-        
+
         match result {
             Ok(results) => {
                 println!("Search succeeded with {} results", results.len());
                 assert_eq!(results.len(), 0); // Should be empty but not fail
             }
             Err(e) => {
-                println!("Search failed with error: {}", e);
-                panic!("similarity_search should not fail on empty database: {}", e);
+                println!("Search failed with error: {e}");
+                panic!("similarity_search should not fail on empty database: {e}");
             }
         }
     }
 
     #[tokio::test]
     async fn test_reproduce_full_search_integration() {
-        use crate::semantic::{SemanticSearcher, SearchQuery, SemanticConfig};
+        use crate::semantic::{SearchQuery, SemanticConfig, SemanticSearcher};
         use std::error::Error;
-        
+
         // Use the real config like the failing command does
         let config = SemanticConfig::default();
         let storage = VectorStorage::new(config.clone()).unwrap();
@@ -1450,32 +1450,35 @@ mod tests {
 
                 match searcher.search(&search_query).await {
                     Ok(results) => {
-                        println!("Full integration search succeeded! Found {} results", results.len());
+                        println!(
+                            "Full integration search succeeded! Found {} results",
+                            results.len()
+                        );
                         // The important thing is that the search succeeds without crashing
                         // The number of results doesn't matter - it could be 0 or more
-                        assert!(results.len() >= 0); // Should succeed without failing
+                        // Test that we get results back (could be 0 or more)
                     }
                     Err(e) => {
-                        println!("Full integration search failed with error: {}", e);
-                        println!("Error debug: {:?}", e);
-                        
+                        println!("Full integration search failed with error: {e}");
+                        println!("Error debug: {e:?}");
+
                         // Print the full error chain
                         let mut source = e.source();
                         let mut level = 1;
                         while let Some(err) = source {
-                            println!("  Error level {}: {}", level, err);
-                            println!("  Error level {} debug: {:?}", level, err);
+                            println!("  Error level {level}: {err}");
+                            println!("  Error level {level} debug: {err:?}");
                             source = err.source();
                             level += 1;
                         }
-                        
-                        panic!("Full integration search should not fail on empty database: {}", e);
+
+                        panic!("Full integration search should not fail on empty database: {e}");
                     }
                 }
             }
             Err(e) => {
-                println!("Failed to create searcher: {}", e);
-                panic!("Failed to create searcher: {}", e);
+                println!("Failed to create searcher: {e}");
+                panic!("Failed to create searcher: {e}");
             }
         }
     }

@@ -214,6 +214,11 @@ impl MermaidParser {
                 continue;
             }
 
+            // Skip empty or whitespace-only state IDs (can happen with parallel state separators)
+            if state_id.trim().is_empty() {
+                continue;
+            }
+
             let is_terminal = Self::is_terminal_state(&state_id, &state_diagram.transitions);
 
             // Get the action for this state from the actions map
@@ -267,6 +272,11 @@ impl MermaidParser {
             // Handle terminal transitions to [*]
             if transition.to == "[*]" {
                 // Mark the source state as terminal (already handled above)
+                continue;
+            }
+
+            // Skip transitions with empty or whitespace-only state IDs
+            if transition.from.trim().is_empty() || transition.to.trim().is_empty() {
                 continue;
             }
 
@@ -329,6 +339,11 @@ impl MermaidParser {
                 continue;
             }
 
+            // Skip empty or whitespace-only state IDs (can happen with parallel state separators)
+            if state_id.trim().is_empty() {
+                continue;
+            }
+
             let is_terminal = Self::is_terminal_state(&state_id, &state_diagram.transitions);
 
             // Get the action for this state from the actions map
@@ -382,6 +397,11 @@ impl MermaidParser {
             // Handle terminal transitions to [*]
             if transition.to == "[*]" {
                 // Mark the source state as terminal (already handled above)
+                continue;
+            }
+
+            // Skip transitions with empty or whitespace-only state IDs
+            if transition.from.trim().is_empty() || transition.to.trim().is_empty() {
                 continue;
             }
 

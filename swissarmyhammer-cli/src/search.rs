@@ -205,20 +205,21 @@ fn display_table(results: &[SearchResult], full: bool) -> Result<()> {
 
     if is_tty {
         // Add colors for better readability in terminal
-        table.with(Modify::new(Rows::single(0)).with(Color::FG_BRIGHT_CYAN));
+        // tabled 0.20+ changed API: Rows::single() → Rows::one()
+        table.with(Modify::new(Rows::one(0)).with(Color::FG_BRIGHT_CYAN));
 
         // Color code sources
         for (i, result) in results.iter().enumerate() {
             let row_index = i + 1; // +1 because row 0 is header
             match result.source.as_str() {
                 "builtin" => {
-                    table.with(Modify::new(Rows::single(row_index)).with(Color::FG_GREEN));
+                    table.with(Modify::new(Rows::one(row_index)).with(Color::FG_GREEN));
                 }
                 "user" => {
-                    table.with(Modify::new(Rows::single(row_index)).with(Color::FG_BLUE));
+                    table.with(Modify::new(Rows::one(row_index)).with(Color::FG_BLUE));
                 }
                 "local" => {
-                    table.with(Modify::new(Rows::single(row_index)).with(Color::FG_YELLOW));
+                    table.with(Modify::new(Rows::one(row_index)).with(Color::FG_YELLOW));
                 }
                 _ => {}
             }

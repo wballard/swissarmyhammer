@@ -172,8 +172,11 @@ impl SearchEngine {
         let mut results = Vec::new();
 
         for (score, doc_address) in top_docs {
-            let doc: tantivy::TantivyDocument = searcher
-                .doc(doc_address)
+            // tantivy 0.24+ requires explicit type annotation for doc() method
+            // Previous versions: searcher.doc(doc_address)
+            // Current version: searcher.doc::<tantivy::TantivyDocument>(doc_address)
+            let doc = searcher
+                .doc::<tantivy::TantivyDocument>(doc_address)
                 .map_err(|e| SwissArmyHammerError::Other(e.to_string()))?;
 
             if let Some(name_value) = doc.get_first(self.name_field) {

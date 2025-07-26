@@ -379,8 +379,8 @@ impl AdvancedMemoSearchEngine {
             .collect();
 
         for (score, doc_address) in top_docs {
-            let doc: tantivy::TantivyDocument = searcher
-                .doc(doc_address)
+            let doc = searcher
+                .doc::<tantivy::TantivyDocument>(doc_address)
                 .map_err(|e| Self::map_tantivy_error("Failed to retrieve document", e))?;
 
             if let Some(id_value) = doc.get_first(self.id_field) {

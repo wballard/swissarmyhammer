@@ -500,7 +500,7 @@ mod tests {
         // The function should succeed even with non-existent patterns (0 files processed)
         run_semantic_index(&patterns, false).await
             .expect("Failed to run semantic index with single pattern - embedding models must be available for testing");
-        
+
         println!("✅ Semantic indexing succeeded as expected");
     }
 
@@ -516,7 +516,7 @@ mod tests {
         // The function should succeed and process real files in the project
         run_semantic_index(&patterns, false).await
             .expect("Failed to run semantic index with multiple patterns - embedding models must be available for testing");
-        
+
         println!("✅ Semantic indexing succeeded as expected");
     }
 }

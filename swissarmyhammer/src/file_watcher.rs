@@ -546,7 +546,7 @@ mod tests {
 
         // If the result is an error, log it for debugging before asserting
         if let Err(ref e) = result {
-            eprintln!("File watcher failed to start: {}", e);
+            eprintln!("File watcher failed to start: {e}");
         }
 
         assert!(

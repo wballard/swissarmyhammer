@@ -1149,7 +1149,7 @@ stateDiagram-v2
 
         // Create a valid workflow
         std::fs::write(
-            local_dir.join("test-workflow.mermaid"),
+            local_dir.join("test-workflow.md"),
             r#"---
 name: test-workflow
 description: Test workflow for validation

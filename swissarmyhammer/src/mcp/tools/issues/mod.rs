@@ -16,7 +16,4 @@
 // TODO: Implement individual tool modules
 // TODO: Add markdown descriptions for each tool
 
-#[allow(dead_code)]
-pub(crate) mod placeholder {
-    // Placeholder to prevent empty module warnings during setup
-}
+// Placeholder module removed - ready for issue tools implementation

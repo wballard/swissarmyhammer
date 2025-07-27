@@ -7,7 +7,4 @@
 // TODO: Add description.md with tool documentation
 // TODO: Implement tool registration
 
-#[allow(dead_code)]
-pub(crate) mod placeholder {
-    // Placeholder implementation - move from mcp.rs
-}
+// Placeholder module removed - ready for create issue tool implementation

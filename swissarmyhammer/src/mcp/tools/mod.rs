@@ -12,7 +12,4 @@
 // TODO: Add tool traits and interfaces  
 // TODO: Integrate with existing MCP server
 
-#[allow(dead_code)]
-pub(crate) mod placeholder {
-    // Placeholder to prevent empty module warnings during setup
-}
+// Placeholder module removed - ready for tool registry implementation

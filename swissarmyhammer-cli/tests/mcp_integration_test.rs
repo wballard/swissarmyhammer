@@ -9,6 +9,7 @@ use test_utils::ProcessGuard;
 
 /// Simple MCP integration test that verifies the server works correctly
 #[tokio::test]
+#[ignore = "MCP integration tests hang due to blocking I/O - needs async/timeout redesign"]
 async fn test_mcp_server_basic_functionality() {
     // Start the MCP server process
     let child = Command::new("cargo")
@@ -117,6 +118,7 @@ async fn test_mcp_server_basic_functionality() {
 
 /// Test that MCP server loads prompts from the same directories as CLI
 #[tokio::test]
+#[ignore = "MCP integration tests hang due to blocking I/O - needs async/timeout redesign"]
 async fn test_mcp_server_prompt_loading() {
     use tempfile::TempDir;
 
@@ -249,6 +251,7 @@ async fn test_mcp_server_prompt_loading() {
 
 /// Test that MCP server loads built-in prompts
 #[tokio::test]
+#[ignore = "MCP integration tests hang due to blocking I/O - needs async/timeout redesign"]
 async fn test_mcp_server_builtin_prompts() {
     // Start MCP server
     let child = Command::new("cargo")

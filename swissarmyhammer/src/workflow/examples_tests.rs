@@ -77,7 +77,9 @@ fn test_simple_workflow_example() {
     );
 
     // Verify workflow structure is valid
-    workflow.validate().expect("Workflow should be valid");
+    workflow
+        .validate_structure()
+        .expect("Workflow should be valid");
 }
 
 /// Test the parallel workflow example
@@ -110,7 +112,9 @@ fn test_parallel_workflow_example() {
     );
 
     // Verify workflow structure is valid
-    workflow.validate().expect("Workflow should be valid");
+    workflow
+        .validate_structure()
+        .expect("Workflow should be valid");
 }
 
 /// Test the user confirmation workflow example
@@ -143,7 +147,9 @@ fn test_user_confirmation_workflow_example() {
     );
 
     // Verify workflow structure is valid
-    workflow.validate().expect("Workflow should be valid");
+    workflow
+        .validate_structure()
+        .expect("Workflow should be valid");
 }
 
 /// Test simple workflow execution
@@ -476,7 +482,9 @@ stateDiagram-v2
         assert_eq!(workflow.description, "A test workflow");
 
         // Validate the workflow structure
-        workflow.validate().expect("Workflow should be valid");
+        workflow
+            .validate_structure()
+            .expect("Workflow should be valid");
 
         // Verify states
         assert!(workflow

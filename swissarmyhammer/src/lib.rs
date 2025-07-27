@@ -140,6 +140,9 @@ pub use memoranda::{
     SearchMemosRequest, SearchMemosResponse, UpdateMemoRequest,
 };
 
+/// Validation types and traits
+pub use validation::{Validatable, ValidationIssue, ValidationLevel, ValidationResult};
+
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

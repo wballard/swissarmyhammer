@@ -27,6 +27,7 @@
 //! assert_eq!(result, "Hello World!");
 //! ```
 
+use crate::validation::{Validatable, ValidationIssue, ValidationLevel};
 use crate::{Result, SwissArmyHammerError, Template};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -625,6 +626,214 @@ impl Prompt {
     pub fn with_tags(mut self, tags: Vec<String>) -> Self {
         self.tags = tags;
         self
+    }
+}
+
+impl Validatable for Prompt {
+    fn validate(&self, source_path: Option<&Path>) -> Vec<ValidationIssue> {
+        let mut issues = Vec::new();
+        let file_path = source_path
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| PathBuf::from(format!("prompt:{}", self.name)));
+
+        // Check if this is a partial template by looking at the description
+        let is_partial = self
+            .description
+            .as_ref()
+            .map(|desc| desc == "Partial template for reuse in other prompts")
+            .unwrap_or(false);
+
+        // Skip field validation for partial templates
+        if !is_partial {
+            // Check required fields
+            if self.metadata.get("title").is_none()
+                || self
+                    .metadata
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.is_empty())
+                    .unwrap_or(true)
+            {
+                issues.push(ValidationIssue {
+                    level: ValidationLevel::Error,
+                    file_path: file_path.clone(),
+                    content_title: Some(self.name.clone()),
+                    line: None,
+                    column: None,
+                    message: "Missing required field: title".to_string(),
+                    suggestion: Some("Add a title field to the YAML front matter".to_string()),
+                });
+            }
+
+            if self.description.is_none() || self.description.as_ref().unwrap().is_empty() {
+                issues.push(ValidationIssue {
+                    level: ValidationLevel::Error,
+                    file_path: file_path.clone(),
+                    content_title: Some(self.name.clone()),
+                    line: None,
+                    column: None,
+                    message: "Missing required field: description".to_string(),
+                    suggestion: Some(
+                        "Add a description field to the YAML front matter".to_string(),
+                    ),
+                });
+            }
+        }
+
+        // Skip variable validation for partial templates
+        if !is_partial {
+            issues.extend(self.validate_template_variables(&file_path));
+        }
+
+        issues
+    }
+}
+
+impl Prompt {
+    /// Validate template variables against defined arguments
+    fn validate_template_variables(&self, file_path: &PathBuf) -> Vec<ValidationIssue> {
+        use regex::Regex;
+
+        let mut issues = Vec::new();
+
+        // Remove {% raw %} blocks from content before validation
+        let raw_regex = Regex::new(r"(?s)\{%\s*raw\s*%\}.*?\{%\s*endraw\s*%\}").unwrap();
+        let content_without_raw = raw_regex.replace_all(&self.template, "");
+
+        // Enhanced regex to match various Liquid variable patterns
+        let patterns = [
+            // Simple variables: {{ variable }}
+            r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}",
+            // Variables with filters: {{ variable | filter }}
+            r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\|",
+            // Variables as filter arguments: {{ "value" | filter: variable }}
+            r"\|\s*[a-zA-Z_][a-zA-Z0-9_]*\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)",
+            // Object properties: {{ object.property }}
+            r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\.[a-zA-Z_][a-zA-Z0-9_]*",
+            // Array access: {{ array[0] }}
+            r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\[",
+            // Case statements: {% case variable %}
+            r"\{\%\s*case\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\%\}",
+            // If statements: {% if variable %}
+            r"\{\%\s*if\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*[%}=<>!]",
+            // Unless statements: {% unless variable %}
+            r"\{\%\s*unless\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*[%}=<>!]",
+            // Elsif statements: {% elsif variable %}
+            r"\{\%\s*elsif\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*[%}=<>!]",
+            // Variable comparisons: {% if variable == "value" %}
+            r"\{\%\s*(?:if|elsif|unless)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*[=<>!]",
+            // Assignment statements: {% assign var = variable %}
+            r"\{\%\s*assign\s+[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*([a-zA-Z_][a-zA-Z0-9_]*)",
+        ];
+
+        let mut used_variables = std::collections::HashSet::new();
+
+        for pattern in &patterns {
+            if let Ok(regex) = Regex::new(pattern) {
+                for captures in regex.captures_iter(&content_without_raw) {
+                    if let Some(var_match) = captures.get(1) {
+                        let var_name = var_match.as_str().trim();
+                        // Skip built-in Liquid objects and variables
+                        let builtin_vars = ["env", "forloop", "tablerow", "paginate"];
+                        if !builtin_vars.contains(&var_name) {
+                            used_variables.insert(var_name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Find assigned variables with {% assign %} statements
+        let assign_regex = Regex::new(r"\{\%\s*assign\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=").unwrap();
+        let mut assigned_variables = std::collections::HashSet::new();
+        for captures in assign_regex.captures_iter(&content_without_raw) {
+            if let Some(var_match) = captures.get(1) {
+                assigned_variables.insert(var_match.as_str().trim().to_string());
+            }
+        }
+
+        // Also check for loop variables in {% for %} statements
+        let for_regex =
+            Regex::new(r"\{\%\s*for\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+in\s+([a-zA-Z_][a-zA-Z0-9_]*)")
+                .unwrap();
+        for captures in for_regex.captures_iter(&content_without_raw) {
+            if let Some(loop_var) = captures.get(1) {
+                // The loop variable is defined by the for loop
+                assigned_variables.insert(loop_var.as_str().trim().to_string());
+            }
+            if let Some(collection_match) = captures.get(2) {
+                let collection_name = collection_match.as_str().trim();
+                used_variables.insert(collection_name.to_string());
+            }
+        }
+
+        // Also find variables from {% capture %} blocks
+        let capture_regex =
+            Regex::new(r"\{\%\s*capture\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\%\}").unwrap();
+        for captures in capture_regex.captures_iter(&content_without_raw) {
+            if let Some(var_match) = captures.get(1) {
+                assigned_variables.insert(var_match.as_str().trim().to_string());
+            }
+        }
+
+        // Check if all used variables are defined in arguments
+        let defined_args: std::collections::HashSet<String> =
+            self.arguments.iter().map(|arg| arg.name.clone()).collect();
+
+        for used_var in &used_variables {
+            // Skip if this variable is defined within the template
+            if assigned_variables.contains(used_var) {
+                continue;
+            }
+
+            // Check if it's defined in arguments
+            if !defined_args.contains(used_var) {
+                issues.push(ValidationIssue {
+                    level: ValidationLevel::Error,
+                    file_path: file_path.clone(),
+                    content_title: Some(self.name.clone()),
+                    line: None,
+                    column: None,
+                    message: format!("Undefined template variable: '{used_var}'"),
+                    suggestion: Some(format!(
+                        "Add '{used_var}' to the arguments list or remove the template variable"
+                    )),
+                });
+            }
+        }
+
+        // Check for unused arguments (warning)
+        for arg in &self.arguments {
+            if !used_variables.contains(&arg.name) {
+                issues.push(ValidationIssue {
+                    level: ValidationLevel::Warning,
+                    file_path: file_path.clone(),
+                    content_title: Some(self.name.clone()),
+                    line: None,
+                    column: None,
+                    message: format!("Unused argument: '{}'", arg.name),
+                    suggestion: Some(format!(
+                        "Remove '{}' from arguments or use it in the template",
+                        arg.name
+                    )),
+                });
+            }
+        }
+
+        // Check if template has variables but no arguments defined
+        if !used_variables.is_empty() && self.arguments.is_empty() {
+            issues.push(ValidationIssue {
+                level: ValidationLevel::Warning,
+                file_path: file_path.clone(),
+                content_title: Some(self.name.clone()),
+                line: None,
+                column: None,
+                message: "Template uses variables but no arguments are defined".to_string(),
+                suggestion: Some("Define arguments for the template variables".to_string()),
+            });
+        }
+
+        issues
     }
 }
 

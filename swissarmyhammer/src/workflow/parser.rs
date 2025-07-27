@@ -532,7 +532,7 @@ impl MermaidParser {
     /// Validate workflow structure with additional checks beyond basic validation
     fn validate_workflow_structure(workflow: &Workflow) -> ParseResult<()> {
         // Run basic validation first
-        if let Err(errors) = workflow.validate() {
+        if let Err(errors) = workflow.validate_structure() {
             return Err(ParseError::InvalidStructure {
                 message: errors.join("; "),
             });

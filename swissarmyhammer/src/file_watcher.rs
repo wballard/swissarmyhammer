@@ -531,7 +531,7 @@ mod tests {
         fs::create_dir_all(&test_prompts_dir).unwrap();
         fs::write(test_prompts_dir.join("test.yaml"), "name: test").unwrap();
 
-        // Set current directory to temp dir
+        // Set current directory to temp dir with better error handling
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
@@ -540,12 +540,22 @@ mod tests {
 
         // Start watching with error callback
         let result = watcher.start_watching(callback.clone()).await;
-        assert!(result.is_ok());
+
+        // Restore original directory before asserting to avoid leaving test in bad state
+        let _ = std::env::set_current_dir(&original_dir);
+
+        // If the result is an error, log it for debugging before asserting
+        if let Err(ref e) = result {
+            eprintln!("File watcher failed to start: {}", e);
+        }
+
+        assert!(
+            result.is_ok(),
+            "File watcher should start successfully, but got error: {:?}",
+            result.err()
+        );
         assert!(watcher.watcher_handle.is_some());
 
         watcher.stop_watching();
-
-        // Restore original directory before temp_dir is dropped
-        let _ = std::env::set_current_dir(&original_dir);
     }
 }

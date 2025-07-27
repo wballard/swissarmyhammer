@@ -26,6 +26,7 @@ pub mod memo_types;
 pub mod responses;
 pub mod shared_utils;
 pub mod tool_handlers;
+pub mod tool_registry;
 pub mod types;
 pub mod utils;
 
@@ -36,6 +37,7 @@ use memo_types::{
 };
 use responses::create_issue_response;
 use tool_handlers::ToolHandlers;
+use tool_registry::{ToolContext, ToolRegistry, register_issue_tools, register_memo_tools};
 use types::{
     AllCompleteRequest, CreateIssueRequest, CurrentIssueRequest, IssueName, MarkCompleteRequest,
     MergeIssueRequest, NextIssueRequest, UpdateIssueRequest, WorkIssueRequest,
@@ -85,6 +87,8 @@ pub struct McpServer {
     issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
     git_ops: Arc<Mutex<Option<GitOperations>>>,
     tool_handlers: ToolHandlers,
+    tool_registry: Arc<ToolRegistry>,
+    tool_context: Arc<ToolContext>,
 }
 
 impl McpServer {
@@ -171,6 +175,14 @@ impl McpServer {
         let tool_handlers =
             ToolHandlers::new(issue_storage.clone(), git_ops_arc.clone(), memo_storage_arc);
 
+        // Initialize tool registry and context
+        let mut tool_registry = ToolRegistry::new();
+        let tool_context = Arc::new(ToolContext::new(Arc::new(tool_handlers.clone())));
+        
+        // Register all available tools
+        register_issue_tools(&mut tool_registry);
+        register_memo_tools(&mut tool_registry);
+
         Ok(Self {
             library: Arc::new(RwLock::new(library)),
             workflow_storage: Arc::new(RwLock::new(workflow_storage)),
@@ -178,6 +190,8 @@ impl McpServer {
             issue_storage,
             git_ops: git_ops_arc,
             tool_handlers,
+            tool_registry: Arc::new(tool_registry),
+            tool_context,
         })
     }
 

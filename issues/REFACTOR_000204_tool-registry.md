@@ -179,6 +179,59 @@ pub fn register_search_tools(registry: &mut ToolRegistry) {
 4. **Consistency**: Common patterns for parameter parsing and error handling
 5. **Dynamic Discovery**: Tools can be discovered and documented automatically
 
+## Proposed Solution
+
+After analyzing the current codebase, I understand that there's already a `ToolHandlers` struct with individual handler methods for each tool. The `McpServer` has a large match statement that parses arguments and delegates to these handlers.
+
+### Implementation Strategy
+
+1. **Create Core Abstractions**: Define the `McpTool` trait and `ToolRegistry` as specified
+2. **Leverage Existing Handlers**: Create individual tool implementations that wrap the existing `ToolHandlers` methods initially
+3. **Incremental Migration**: Replace the match statement with registry lookup while maintaining backward compatibility
+4. **Shared Dependencies**: Use `ToolContext` to provide access to storage and git operations
+
+### Detailed Implementation Plan
+
+#### Phase 1: Core Infrastructure
+```rust
+// Create new module: swissarmyhammer/src/mcp/tool_registry.rs
+pub trait McpTool: Send + Sync {
+    fn name(&self) -> &'static str;
+    fn description(&self) -> &'static str;
+    fn schema(&self) -> serde_json::Value;
+    
+    async fn execute(
+        &self,
+        arguments: serde_json::Map<String, serde_json::Value>,
+        context: &ToolContext,
+    ) -> std::result::Result<CallToolResult, McpError>;
+}
+
+pub struct ToolContext {
+    pub tool_handlers: Arc<ToolHandlers>,
+}
+
+pub struct ToolRegistry {
+    tools: HashMap<String, Box<dyn McpTool>>,
+}
+```
+
+#### Phase 2: Individual Tool Implementations
+Create wrapper implementations for each existing tool, starting with:
+- `IssueCreateTool` -> wraps `ToolHandlers::handle_issue_create`
+- `IssueMarkCompleteTool` -> wraps `ToolHandlers::handle_issue_mark_complete`
+- `MemoCreateTool` -> wraps `ToolHandlers::handle_memo_create`
+- etc.
+
+#### Phase 3: Registry Integration
+Update `McpServer` to use the registry while keeping the existing `ToolHandlers` as the implementation backend.
+
+### Benefits of This Approach
+- **Minimal Risk**: Existing handlers remain unchanged initially
+- **Gradual Migration**: Can migrate one tool at a time
+- **Testable**: Each tool can be tested independently
+- **Extensible**: New tools can be added without touching core MCP logic
+
 ## Success Criteria
 - [ ] `McpTool` trait and `ToolRegistry` implemented
 - [ ] `McpServer` updated to use registry pattern

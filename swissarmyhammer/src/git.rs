@@ -377,15 +377,25 @@ mod tests {
         let temp_dir = create_test_git_repo().unwrap();
         let original_dir = std::env::current_dir().unwrap();
 
+        // Ensure we restore directory on panic or normal exit
+        struct DirGuard {
+            original_dir: std::path::PathBuf,
+        }
+
+        impl Drop for DirGuard {
+            fn drop(&mut self) {
+                let _ = std::env::set_current_dir(&self.original_dir);
+            }
+        }
+
+        let _guard = DirGuard { original_dir };
+
         // Change to test repo directory
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
         // Test creating GitOperations
         let result = GitOperations::new();
         assert!(result.is_ok());
-
-        // Restore original directory (ensure we don't fail if temp dir is cleaned up)
-        let _ = std::env::set_current_dir(original_dir);
     }
 
     #[test]
@@ -402,15 +412,25 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let original_dir = std::env::current_dir().unwrap();
 
+        // Ensure we restore directory on panic or normal exit
+        struct DirGuard {
+            original_dir: std::path::PathBuf,
+        }
+
+        impl Drop for DirGuard {
+            fn drop(&mut self) {
+                let _ = std::env::set_current_dir(&self.original_dir);
+            }
+        }
+
+        let _guard = DirGuard { original_dir };
+
         // Change to non-git directory
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
         // Test creating GitOperations should fail
         let result = GitOperations::new();
         assert!(result.is_err());
-
-        // Restore original directory (ensure we don't fail if temp dir is cleaned up)
-        let _ = std::env::set_current_dir(original_dir);
     }
 
     #[test]

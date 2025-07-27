@@ -1494,15 +1494,12 @@ This prompt uses {{ used_var }} but not unused_var, creating a warning."#,
     assert_eq!(
         quiet_output.status.code(),
         Some(1),
-        "quiet mode validation with warnings should return exit code 1. stdout: '{}', stderr: '{}'",
-        quiet_stdout,
-        quiet_stderr
+        "quiet mode validation with warnings should return exit code 1. stdout: '{quiet_stdout}', stderr: '{quiet_stderr}'"
     );
 
     assert!(
         quiet_stdout.trim().is_empty(),
-        "quiet mode should produce no output when only warnings exist: '{}'",
-        quiet_stdout
+        "quiet mode should produce no output when only warnings exist: '{quiet_stdout}'"
     );
 
     // Test in normal mode - should show warnings and summary
@@ -1524,18 +1521,15 @@ This prompt uses {{ used_var }} but not unused_var, creating a warning."#,
     // Verify warning content is displayed
     assert!(
         normal_stdout.contains("WARN") || normal_stdout.contains("warning"),
-        "normal mode should show warnings in output: '{}'",
-        normal_stdout
+        "normal mode should show warnings in output: '{normal_stdout}'"
     );
     assert!(
         normal_stdout.contains("Summary:"),
-        "normal mode should show summary: '{}'",
-        normal_stdout
+        "normal mode should show summary: '{normal_stdout}'"
     );
     assert!(
         normal_stdout.contains("Warnings:"),
-        "normal mode should show warning count: '{}'",
-        normal_stdout
+        "normal mode should show warning count: '{normal_stdout}'"
     );
 
     Ok(())
@@ -1601,25 +1595,21 @@ And this uses {{ another_undefined }} too."#,
     // Should show errors and summary in quiet mode when errors are present
     assert!(
         quiet_stdout.contains("ERROR") || quiet_stdout.contains("error"),
-        "quiet mode should show errors when they exist: '{}'",
-        quiet_stdout
+        "quiet mode should show errors when they exist: '{quiet_stdout}'"
     );
     assert!(
         quiet_stdout.contains("Summary:"),
-        "quiet mode should show summary when errors exist: '{}'",
-        quiet_stdout
+        "quiet mode should show summary when errors exist: '{quiet_stdout}'"
     );
     assert!(
         quiet_stdout.contains("Errors:"),
-        "quiet mode should show error count when errors exist: '{}'",
-        quiet_stdout
+        "quiet mode should show error count when errors exist: '{quiet_stdout}'"
     );
 
     // Should NOT show warnings in quiet mode, even when errors are present
     assert!(
         !quiet_stdout.contains("WARN") && !quiet_stdout.contains("Warnings:"),
-        "quiet mode should not show warning details or counts: '{}'",
-        quiet_stdout
+        "quiet mode should not show warning details or counts: '{quiet_stdout}'"
     );
 
     // Test in normal mode for comparison - should show both errors and warnings

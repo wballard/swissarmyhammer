@@ -512,10 +512,10 @@ mod tests {
                     || error_msg.contains("I/O error")
                     || error_msg.contains("No such file or directory")
                 {
-                    println!("⚠️  Semantic indexing skipped - model initialization failed in test environment: {}", error_msg);
+                    println!("⚠️  Semantic indexing skipped - model initialization failed in test environment: {error_msg}");
                     println!("   This is expected when fastembed models cannot be downloaded (offline/restricted environment)");
                 } else {
-                    panic!("Unexpected error in semantic indexing: {}", error_msg);
+                    panic!("Unexpected error in semantic indexing: {error_msg}");
                 }
             }
         }
@@ -543,10 +543,10 @@ mod tests {
                     || error_msg.contains("I/O error")
                     || error_msg.contains("No such file or directory")
                 {
-                    println!("⚠️  Semantic indexing skipped - model initialization failed in test environment: {}", error_msg);
+                    println!("⚠️  Semantic indexing skipped - model initialization failed in test environment: {error_msg}");
                     println!("   This is expected when fastembed models cannot be downloaded (offline/restricted environment)");
                 } else {
-                    panic!("Unexpected error in semantic indexing: {}", error_msg);
+                    panic!("Unexpected error in semantic indexing: {error_msg}");
                 }
             }
         }

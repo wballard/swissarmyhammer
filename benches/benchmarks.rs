@@ -7,6 +7,7 @@ use swissarmyhammer::workflow::{
     ConditionType, MermaidParser, State, StateId, StateType, Transition, TransitionCondition,
     Workflow, WorkflowCacheManager, WorkflowExecutor, WorkflowName, WorkflowRun, WorkflowStorage,
 };
+use swissarmyhammer::Validatable;
 
 // Workflow performance benchmarks
 fn create_simple_workflow() -> Workflow {
@@ -341,7 +342,7 @@ fn benchmark_workflow_scalability(c: &mut Criterion) {
                 }
 
                 // Validate the workflow
-                workflow.validate()
+                workflow.validate(None)
             });
         });
     }

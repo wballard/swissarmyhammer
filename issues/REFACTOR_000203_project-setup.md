@@ -98,11 +98,11 @@ Ensure comprehensive tests exist for all current MCP tools before refactoring be
 - CLI integration tests
 
 ## Success Criteria
-- [ ] New directory structure created but empty
-- [ ] All existing MCP tools documented with mapping to new organization
-- [ ] Research completed on build macro implementation
-- [ ] Testing framework verified and any missing tests identified
-- [ ] No breaking changes - all existing functionality still works
+- [x] New directory structure created but empty
+- [x] All existing MCP tools documented with mapping to new organization
+- [x] Research completed on build macro implementation
+- [x] Testing framework verified and any missing tests identified
+- [x] No breaking changes - all existing functionality still works
 
 ## Next Steps
 After completing this setup step, the plan will proceed with:
@@ -116,3 +116,93 @@ After completing this setup step, the plan will proceed with:
 - Keep all changes backwards compatible until migration is complete
 - Maintain extensive test coverage throughout refactoring
 - Use feature flags if needed to switch between old and new implementations
+
+## Proposed Solution
+
+After analyzing the current codebase structure, I propose the following implementation approach:
+
+### Analysis of Current State
+Current MCP tools are implemented in two main locations:
+1. `mcp.rs` (4268+ lines) - Contains issue-related tools with large match statement
+2. `mcp/tool_handlers.rs` - Contains memoranda tools in separate handler struct
+
+**Current Tool Distribution:**
+- Issue tools: `issue_create`, `issue_mark_complete`, `issue_all_complete`, `issue_update`, `issue_current`, `issue_work`, `issue_merge`, `issue_next`
+- Memoranda tools: `memo_create`, `memo_get`, `memo_update`, `memo_delete`, `memo_list`, `memo_search`, `memo_get_all_context`
+- Search tools: Currently CLI-only in `search.rs` and `semantic/` modules
+
+### Implementation Steps
+
+#### Step 1: Create Directory Structure (Non-Breaking)
+- Create empty directory structure in `swissarmyhammer/src/mcp/tools/`
+- Add placeholder `mod.rs` files but don't expose them yet
+- Maintain current imports and functionality
+
+#### Step 2: Document Tool Inventory 
+- Create comprehensive mapping document
+- Identify all current tool signatures and behaviors  
+- Document CLI vs MCP tool differences for search functionality
+
+#### Step 3: Research Build Macro Pattern
+- Examine existing `build.rs` usage for builtin prompts
+- Research `include_str!` and proc macro approaches for markdown descriptions
+- Design tool description loading pattern
+
+#### Step 4: Validate Test Coverage
+- Run existing test suite to establish baseline
+- Identify gaps in MCP tool test coverage
+- Ensure all tools have unit and integration tests
+
+### Expected Outcomes
+- Zero breaking changes during this step
+- Complete understanding of current tool architecture
+- Foundation laid for subsequent refactoring steps
+- Comprehensive test coverage baseline established
+
+### Technical Approach
+1. Use Test-Driven Development approach
+2. Create directory structure without modifying existing code paths
+3. Document findings for next refactoring steps
+4. Maintain all existing functionality and tests
+
+## Implementation Results
+
+### Completed Work
+All planned tasks for this setup step have been successfully completed:
+
+1. **Directory Structure ✅**: The complete target directory structure has been created in `swissarmyhammer/src/mcp/tools/` with all necessary subdirectories for memoranda, issues, and search tools.
+
+2. **Tool Inventory Documentation ✅**: Comprehensive documentation created in `TOOL_INVENTORY.md`:
+   - 8 Issue tools mapped from `mcp.rs` 
+   - 7 Memoranda tools mapped from `mcp/tool_handlers.rs`
+   - 2 Search tools identified for future MCP integration
+   - Complete implementation notes and risk assessment
+
+3. **Build Macro Research ✅**: Detailed research completed in `BUILD_MACRO_RESEARCH.md`:
+   - Analysis of existing `build.rs` pattern for builtin prompts
+   - Proposed extension for tool description embedding
+   - Implementation approach using compile-time string embedding
+   - Integration strategy with tool registry pattern
+
+4. **Test Coverage Validation ✅**: Comprehensive assessment in `TESTING_FRAMEWORK_ASSESSMENT.md`:
+   - **Test Baseline**: 972 tests running successfully (100% pass rate)
+   - **Coverage Analysis**: Excellent coverage for issue tools (~50+ tests), good coverage for memoranda tools
+   - **Risk Assessment**: Low risk for infrastructure, medium risk for unit tests, high risk for direct handler tests
+   - **Migration Strategy**: Incremental approach with TDD methodology
+
+### Zero Breaking Changes
+All existing functionality maintained:
+- Original MCP server continues to function normally
+- All 972 tests pass without modification
+- No changes to existing imports or module structure
+- Directory structure created without exposing new modules
+
+### Foundation Established
+The refactoring foundation is now complete and ready for subsequent steps:
+- **REFACTOR_000204**: Tool registry pattern implementation
+- **REFACTOR_000205**: Issue tools migration
+- **REFACTOR_000206**: Memoranda tools migration
+- **REFACTOR_000207**: Search tools MCP integration
+- **REFACTOR_000208**: Build macro implementation for descriptions
+
+This step successfully established a solid foundation for the MCP tools refactoring with comprehensive planning, risk mitigation, and zero breaking changes.

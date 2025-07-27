@@ -646,7 +646,7 @@ impl Validatable for Prompt {
         // Skip field validation for partial templates
         if !is_partial {
             // Check required fields
-            if self.metadata.get("title").is_none()
+            if !self.metadata.contains_key("title")
                 || self
                     .metadata
                     .get("title")
@@ -656,7 +656,7 @@ impl Validatable for Prompt {
             {
                 issues.push(ValidationIssue {
                     level: ValidationLevel::Error,
-                    file_path: file_path.clone(),
+                    file_path: file_path.to_path_buf(),
                     content_title: Some(self.name.clone()),
                     line: None,
                     column: None,
@@ -668,7 +668,7 @@ impl Validatable for Prompt {
             if self.description.is_none() || self.description.as_ref().unwrap().is_empty() {
                 issues.push(ValidationIssue {
                     level: ValidationLevel::Error,
-                    file_path: file_path.clone(),
+                    file_path: file_path.to_path_buf(),
                     content_title: Some(self.name.clone()),
                     line: None,
                     column: None,
@@ -691,7 +691,7 @@ impl Validatable for Prompt {
 
 impl Prompt {
     /// Validate template variables against defined arguments
-    fn validate_template_variables(&self, file_path: &PathBuf) -> Vec<ValidationIssue> {
+    fn validate_template_variables(&self, file_path: &Path) -> Vec<ValidationIssue> {
         use regex::Regex;
 
         let mut issues = Vec::new();
@@ -790,7 +790,7 @@ impl Prompt {
             if !defined_args.contains(used_var) {
                 issues.push(ValidationIssue {
                     level: ValidationLevel::Error,
-                    file_path: file_path.clone(),
+                    file_path: file_path.to_path_buf(),
                     content_title: Some(self.name.clone()),
                     line: None,
                     column: None,
@@ -807,7 +807,7 @@ impl Prompt {
             if !used_variables.contains(&arg.name) {
                 issues.push(ValidationIssue {
                     level: ValidationLevel::Warning,
-                    file_path: file_path.clone(),
+                    file_path: file_path.to_path_buf(),
                     content_title: Some(self.name.clone()),
                     line: None,
                     column: None,
@@ -824,7 +824,7 @@ impl Prompt {
         if !used_variables.is_empty() && self.arguments.is_empty() {
             issues.push(ValidationIssue {
                 level: ValidationLevel::Warning,
-                file_path: file_path.clone(),
+                file_path: file_path.to_path_buf(),
                 content_title: Some(self.name.clone()),
                 line: None,
                 column: None,

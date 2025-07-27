@@ -136,6 +136,7 @@ YOU MUST follow this debugging framework for ANY technical issue:
 ### React
 
 - Always use TypeScript with full type annotations
+- Never #[allow(dead_code)], delete it -- we have source control these days
 - Always format your files with `npx prettier`
   - Format all files with `npx prettier --write .`
 - Always lint your files with `npx eslint` and `npx tsc --noEmit`

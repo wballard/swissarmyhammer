@@ -556,8 +556,8 @@ mod tests {
     fn test_file_line_format() {
         // Test that file:line format is correctly structured
         use std::path::PathBuf;
-        use swissarmyhammer::semantic::{CodeChunk, ContentHash, Language, ChunkType};
-        
+        use swissarmyhammer::semantic::{ChunkType, CodeChunk, ContentHash, Language};
+
         let chunk = CodeChunk {
             id: "test-chunk".to_string(),
             file_path: PathBuf::from("./src/main.rs"),
@@ -572,7 +572,7 @@ mod tests {
         // Test the format string that would be used in the display
         let formatted_result = format!("{}:{}", chunk.file_path.display(), chunk.start_line);
         assert_eq!(formatted_result, "./src/main.rs:42");
-        
+
         // Test with a different path format
         let chunk2 = CodeChunk {
             id: "test-chunk-2".to_string(),
@@ -584,7 +584,7 @@ mod tests {
             chunk_type: ChunkType::Function,
             content_hash: ContentHash("hash456".to_string()),
         };
-        
+
         let formatted_result2 = format!("{}:{}", chunk2.file_path.display(), chunk2.start_line);
         assert_eq!(formatted_result2, "tests/integration.rs:123");
     }

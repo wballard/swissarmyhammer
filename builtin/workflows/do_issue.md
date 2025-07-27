@@ -27,10 +27,10 @@ stateDiagram-v2
 ## Actions
 
 - start: log "Working an issue"
-- branch: execute prompt "branch"
+- branch: execute prompt "issue/branch"
 - code: run workflow "code_issue"
 - review: run workflow "review_issue"
-- complete: execute prompt "issue_complete"
+- complete: execute prompt "issue/complete"
 - merge: execute prompt "merge"
 
 ## Description

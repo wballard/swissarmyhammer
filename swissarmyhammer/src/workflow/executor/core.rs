@@ -67,7 +67,7 @@ impl WorkflowExecutor {
     pub fn start_workflow(&mut self, workflow: Workflow) -> ExecutorResult<WorkflowRun> {
         // Validate workflow before starting
         workflow
-            .validate()
+            .validate_structure()
             .map_err(|errors| ExecutorError::ValidationFailed(errors.join("; ")))?;
 
         let run = WorkflowRun::new(workflow);

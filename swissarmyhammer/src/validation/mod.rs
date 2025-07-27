@@ -261,6 +261,22 @@ impl ContentValidator for YamlTypoValidator {
     }
 }
 
+/// Trait for types that can validate themselves
+///
+/// This trait allows types to implement their own validation logic
+/// and return a list of validation issues. It's designed to move
+/// validation logic closer to the types being validated.
+pub trait Validatable {
+    /// Validate this instance and return any issues found
+    ///
+    /// # Arguments
+    /// * `source_path` - Optional path to the source file for better error reporting
+    ///
+    /// # Returns
+    /// A vector of validation issues. An empty vector indicates successful validation.
+    fn validate(&self, source_path: Option<&std::path::Path>) -> Vec<ValidationIssue>;
+}
+
 /// Manager for running multiple validators
 pub struct ValidationManager {
     validators: Vec<Box<dyn ContentValidator>>,

@@ -1,8 +1,10 @@
 //! Main workflow type and validation
 
+use crate::validation::{Validatable, ValidationIssue, ValidationLevel};
 use crate::workflow::{State, StateId, Transition};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::Path;
 use thiserror::Error;
 
 /// Errors that can occur when creating workflow-related types
@@ -94,7 +96,7 @@ impl Workflow {
     }
 
     /// Validate the workflow structure
-    pub fn validate(&self) -> Result<(), Vec<String>> {
+    pub fn validate_structure(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
 
         // Check if workflow name is not empty
@@ -159,6 +161,32 @@ impl Workflow {
     }
 }
 
+impl Validatable for Workflow {
+    fn validate(&self, source_path: Option<&Path>) -> Vec<ValidationIssue> {
+        match self.validate_structure() {
+            Ok(()) => Vec::new(),
+            Err(error_messages) => {
+                let workflow_path = source_path.map(|p| p.to_path_buf()).unwrap_or_else(|| {
+                    std::path::PathBuf::from(format!("workflow:{}", self.name.as_str()))
+                });
+
+                error_messages
+                    .into_iter()
+                    .map(|message| ValidationIssue {
+                        level: ValidationLevel::Error,
+                        file_path: workflow_path.clone(),
+                        content_title: Some(self.name.to_string()),
+                        line: None,
+                        column: None,
+                        message,
+                        suggestion: None,
+                    })
+                    .collect()
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,7 +195,7 @@ mod tests {
     #[test]
     fn test_workflow_validation_success() {
         let workflow = create_basic_workflow();
-        assert!(workflow.validate().is_ok());
+        assert!(workflow.validate_structure().is_ok());
     }
 
     #[test]
@@ -178,7 +206,7 @@ mod tests {
             StateId::new("start"),
         );
 
-        let result = workflow.validate();
+        let result = workflow.validate_structure();
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| e.contains("Initial state")));
@@ -194,7 +222,7 @@ mod tests {
 
         workflow.add_state(create_state("start", "Start state", false));
 
-        let result = workflow.validate();
+        let result = workflow.validate_structure();
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(errors.iter().any(|e| e.contains("terminal state")));

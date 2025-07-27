@@ -420,9 +420,10 @@ async fn run_semantic_query(query: &str, limit: usize) -> Result<()> {
             println!(
                 "{}",
                 format!(
-                    "{}. {} (score: {:.3})",
+                    "{}. {}:{} (score: {:.3})",
                     i + 1,
                     result.chunk.file_path.display(),
+                    result.chunk.start_line,
                     result.similarity_score
                 )
                 .color(score_color)
@@ -549,5 +550,42 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_file_line_format() {
+        // Test that file:line format is correctly structured
+        use std::path::PathBuf;
+        use swissarmyhammer::semantic::{CodeChunk, ContentHash, Language, ChunkType};
+        
+        let chunk = CodeChunk {
+            id: "test-chunk".to_string(),
+            file_path: PathBuf::from("./src/main.rs"),
+            language: Language::Rust,
+            content: "fn main() {}".to_string(),
+            start_line: 42,
+            end_line: 45,
+            chunk_type: ChunkType::Function,
+            content_hash: ContentHash("hash123".to_string()),
+        };
+
+        // Test the format string that would be used in the display
+        let formatted_result = format!("{}:{}", chunk.file_path.display(), chunk.start_line);
+        assert_eq!(formatted_result, "./src/main.rs:42");
+        
+        // Test with a different path format
+        let chunk2 = CodeChunk {
+            id: "test-chunk-2".to_string(),
+            file_path: PathBuf::from("tests/integration.rs"),
+            language: Language::Rust,
+            content: "#[test] fn test() {}".to_string(),
+            start_line: 123,
+            end_line: 125,
+            chunk_type: ChunkType::Function,
+            content_hash: ContentHash("hash456".to_string()),
+        };
+        
+        let formatted_result2 = format!("{}:{}", chunk2.file_path.display(), chunk2.start_line);
+        assert_eq!(formatted_result2, "tests/integration.rs:123");
     }
 }

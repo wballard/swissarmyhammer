@@ -60,7 +60,7 @@ impl McpTool for MergeIssueTool {
         context: &ToolContext,
     ) -> std::result::Result<CallToolResult, McpError> {
         let request: MergeIssueRequest = BaseToolImpl::parse_arguments(arguments)?;
-        
+
         // Get the issue to determine its details
         let issue_storage = context.issue_storage.read().await;
         let issue = match issue_storage.get_issue(request.name.as_str()).await {

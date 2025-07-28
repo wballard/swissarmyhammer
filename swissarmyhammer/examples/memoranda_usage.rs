@@ -3,7 +3,7 @@
 //! This example demonstrates how to programmatically interact with the memoranda system
 //! for structured note-taking and knowledge management.
 
-use swissarmyhammer::memoranda::{MarkdownMemoStorage, MemoStorage, Memo, MemoId};
+use swissarmyhammer::memoranda::{MarkdownMemoStorage, MemoStorage};
 use tempfile::TempDir;
 
 #[tokio::main]
@@ -332,32 +332,6 @@ fn read_file() -> Result<String, Box<dyn Error>> {
     Ok(())
 }
 
-/// Analyze memo content and return statistics
-async fn analyze_memo_content(memo: &Memo) -> std::collections::HashMap<&'static str, usize> {
-    let mut stats = std::collections::HashMap::new();
-    
-    // Count headers (lines starting with #)
-    let headers = memo.content.lines()
-        .filter(|line| line.trim_start().starts_with('#'))
-        .count();
-    stats.insert("headers", headers);
-    
-    // Count action items (lines containing [ ] or [x])
-    let action_items = memo.content.lines()
-        .filter(|line| line.contains("- [ ]") || line.contains("- [x]"))
-        .count();
-    stats.insert("action_items", action_items);
-    
-    // Count words
-    let words = memo.content.split_whitespace().count();
-    stats.insert("words", words);
-    
-    // Count lines
-    let lines = memo.content.lines().count();
-    stats.insert("lines", lines);
-    
-    stats
-}
 
 #[cfg(test)]
 mod tests {

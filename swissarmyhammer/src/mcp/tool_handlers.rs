@@ -50,7 +50,6 @@ impl ToolHandlers {
         )
     }
 
-
     /// Handle memo operation errors consistently based on error type
     ///
     /// Uses the shared error handler for consistent error mapping across all MCP operations.
@@ -66,8 +65,6 @@ impl ToolHandlers {
     fn handle_memo_error(error: crate::error::SwissArmyHammerError, operation: &str) -> McpError {
         McpErrorHandler::handle_error(error, operation)
     }
-
-
 
     /// Handle the memo_create tool operation.
     ///
@@ -371,5 +368,4 @@ impl ToolHandlers {
             Err(e) => Err(McpErrorHandler::handle_error(e, "get memo context")),
         }
     }
-
 }

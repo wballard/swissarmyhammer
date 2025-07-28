@@ -50,7 +50,7 @@ impl McpTool for WorkIssueTool {
         context: &ToolContext,
     ) -> std::result::Result<CallToolResult, McpError> {
         let request: WorkIssueRequest = BaseToolImpl::parse_arguments(arguments)?;
-        
+
         // Get the issue to determine its number for branch naming
         let issue_storage = context.issue_storage.read().await;
         let issue = match issue_storage.get_issue(request.name.as_str()).await {

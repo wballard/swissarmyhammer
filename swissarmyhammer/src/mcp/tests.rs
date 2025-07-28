@@ -10,9 +10,6 @@ use crate::prompts::Prompt;
 use crate::PromptLibrary;
 use rmcp::ServerHandler;
 use std::collections::HashMap;
-use std::fs;
-use std::process::Command;
-use tempfile::TempDir;
 
 #[tokio::test]
 async fn test_mcp_server_creation() {
@@ -374,7 +371,6 @@ async fn test_mcp_server_initializes_with_issue_storage() {
     );
 }
 
-
 #[test]
 fn test_validate_issue_name_success() {
     // Test successful validation
@@ -454,7 +450,4 @@ fn test_validate_issue_name_trimming() {
 
 // Integration tests for MCP tools
 mod mcp_integration_tests {
-    use super::*;
-
-
 }

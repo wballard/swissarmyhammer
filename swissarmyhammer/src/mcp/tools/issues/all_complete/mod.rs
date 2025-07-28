@@ -45,7 +45,7 @@ impl McpTool for AllCompleteIssueTool {
         context: &ToolContext,
     ) -> std::result::Result<CallToolResult, McpError> {
         let _request: AllCompleteRequest = BaseToolImpl::parse_arguments(arguments)?;
-        
+
         let issue_storage = context.issue_storage.read().await;
 
         // Get all issues with comprehensive error handling

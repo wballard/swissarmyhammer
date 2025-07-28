@@ -2,13 +2,14 @@
 //!
 //! This module provides the CreateIssueTool for creating new issues through the MCP protocol.
 
-use crate::mcp::tool_registry::{McpTool, ToolContext, BaseToolImpl};
+use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 use crate::mcp::types::CreateIssueRequest;
 use async_trait::async_trait;
 use rmcp::model::CallToolResult;
 use rmcp::Error as McpError;
 
 /// Tool for creating new issues
+#[derive(Default)]
 pub struct CreateIssueTool;
 
 impl CreateIssueTool {

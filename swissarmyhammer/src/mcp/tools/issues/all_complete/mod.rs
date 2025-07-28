@@ -2,13 +2,14 @@
 //!
 //! This module provides the AllCompleteIssueTool for checking if all issues are completed.
 
-use crate::mcp::tool_registry::{McpTool, ToolContext, BaseToolImpl};
+use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 use crate::mcp::types::AllCompleteRequest;
 use async_trait::async_trait;
 use rmcp::model::CallToolResult;
 use rmcp::Error as McpError;
 
 /// Tool for checking if all issues are complete
+#[derive(Default)]
 pub struct AllCompleteIssueTool;
 
 impl AllCompleteIssueTool {

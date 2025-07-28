@@ -2,13 +2,14 @@
 //!
 //! This module provides the NextIssueTool for getting the next issue to work on.
 
-use crate::mcp::tool_registry::{McpTool, ToolContext, BaseToolImpl};
+use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 use crate::mcp::types::NextIssueRequest;
 use async_trait::async_trait;
 use rmcp::model::CallToolResult;
 use rmcp::Error as McpError;
 
 /// Tool for getting the next issue to work on
+#[derive(Default)]
 pub struct NextIssueTool;
 
 impl NextIssueTool {

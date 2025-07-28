@@ -2,13 +2,14 @@
 //!
 //! This module provides the MergeIssueTool for merging issue work branches.
 
-use crate::mcp::tool_registry::{McpTool, ToolContext, BaseToolImpl};
+use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 use crate::mcp::types::MergeIssueRequest;
 use async_trait::async_trait;
 use rmcp::model::CallToolResult;
 use rmcp::Error as McpError;
 
 /// Tool for merging an issue work branch
+#[derive(Default)]
 pub struct MergeIssueTool;
 
 impl MergeIssueTool {

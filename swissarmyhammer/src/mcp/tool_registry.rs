@@ -198,10 +198,6 @@ pub fn register_memo_tools(registry: &mut ToolRegistry) {
     registry.register(MemoSearchTool);
 }
 
-/// Concrete tool implementations
-
-
-
 /// Tool for creating new memos
 pub struct MemoCreateTool;
 
@@ -306,11 +302,6 @@ impl McpTool for MemoGetAllContextTool {
             .await
     }
 }
-
-
-
-
-
 
 /// Tool for getting a memo by ID
 pub struct MemoGetTool;

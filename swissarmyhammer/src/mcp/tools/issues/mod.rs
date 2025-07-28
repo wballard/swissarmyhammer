@@ -3,14 +3,14 @@
 //! This module provides all issue-related tools using the tool registry pattern.
 //! Each tool is in its own submodule with dedicated implementation and description.
 
-pub mod create;
-pub mod mark_complete;
 pub mod all_complete;
-pub mod update;
+pub mod create;
 pub mod current;
-pub mod work;
+pub mod mark_complete;
 pub mod merge;
 pub mod next;
+pub mod update;
+pub mod work;
 
 use crate::mcp::tool_registry::ToolRegistry;
 

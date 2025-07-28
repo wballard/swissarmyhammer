@@ -2,13 +2,14 @@
 //!
 //! This module provides the WorkIssueTool for switching to work on a specific issue.
 
-use crate::mcp::tool_registry::{McpTool, ToolContext, BaseToolImpl};
+use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 use crate::mcp::types::WorkIssueRequest;
 use async_trait::async_trait;
 use rmcp::model::CallToolResult;
 use rmcp::Error as McpError;
 
 /// Tool for switching to work on an issue
+#[derive(Default)]
 pub struct WorkIssueTool;
 
 impl WorkIssueTool {

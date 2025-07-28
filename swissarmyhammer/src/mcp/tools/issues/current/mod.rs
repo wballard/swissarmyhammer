@@ -2,13 +2,14 @@
 //!
 //! This module provides the CurrentIssueTool for getting the current issue being worked on.
 
-use crate::mcp::tool_registry::{McpTool, ToolContext, BaseToolImpl};
+use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 use crate::mcp::types::CurrentIssueRequest;
 use async_trait::async_trait;
 use rmcp::model::CallToolResult;
 use rmcp::Error as McpError;
 
 /// Tool for getting the current issue being worked on
+#[derive(Default)]
 pub struct CurrentIssueTool;
 
 impl CurrentIssueTool {

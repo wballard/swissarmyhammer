@@ -48,6 +48,29 @@ impl McpTool for DeleteMemoTool {
         context: &ToolContext,
     ) -> std::result::Result<CallToolResult, McpError> {
         let request: DeleteMemoRequest = BaseToolImpl::parse_arguments(arguments)?;
-        context.tool_handlers.handle_memo_delete(request).await
+        
+        tracing::debug!("Deleting memo with ID: {}", request.id);
+
+        let memo_id = match crate::memoranda::MemoId::from_string(request.id.clone()) {
+            Ok(id) => id,
+            Err(_) => {
+                return Err(McpError::invalid_params(
+                    format!("Invalid memo ID format: {}", request.id),
+                    None,
+                ))
+            }
+        };
+
+        let memo_storage = context.memo_storage.write().await;
+        match memo_storage.delete_memo(&memo_id).await {
+            Ok(()) => {
+                tracing::info!("Deleted memo {}", request.id);
+                Ok(BaseToolImpl::create_success_response(format!(
+                    "Successfully deleted memo with ID: {}",
+                    request.id
+                )))
+            }
+            Err(e) => Err(crate::mcp::shared_utils::McpErrorHandler::handle_error(e, "delete memo")),
+        }
     }
 }

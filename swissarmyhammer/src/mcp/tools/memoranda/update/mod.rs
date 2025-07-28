@@ -52,6 +52,36 @@ impl McpTool for UpdateMemoTool {
         context: &ToolContext,
     ) -> std::result::Result<CallToolResult, McpError> {
         let request: UpdateMemoRequest = BaseToolImpl::parse_arguments(arguments)?;
-        context.tool_handlers.handle_memo_update(request).await
+        
+        tracing::debug!("Updating memo with ID: {}", request.id);
+
+        // Validate memo content using shared validation
+        crate::mcp::shared_utils::McpValidation::validate_not_empty(&request.content, "memo content")
+            .map_err(|e| crate::mcp::shared_utils::McpErrorHandler::handle_error(e, "validate memo content"))?;
+
+        let memo_id = match crate::memoranda::MemoId::from_string(request.id.clone()) {
+            Ok(id) => id,
+            Err(_) => {
+                return Err(McpError::invalid_params(
+                    format!("Invalid memo ID format: {}", request.id),
+                    None,
+                ))
+            }
+        };
+
+        let memo_storage = context.memo_storage.write().await;
+        match memo_storage.update_memo(&memo_id, request.content).await {
+            Ok(memo) => {
+                tracing::info!("Updated memo {}", memo.id);
+                Ok(BaseToolImpl::create_success_response(format!(
+                    "Successfully updated memo:\n\nID: {}\nTitle: {}\nUpdated: {}\n\nContent:\n{}",
+                    memo.id,
+                    memo.title,
+                    crate::mcp::shared_utils::McpFormatter::format_timestamp(memo.updated_at),
+                    memo.content
+                )))
+            }
+            Err(e) => Err(crate::mcp::shared_utils::McpErrorHandler::handle_error(e, "update memo")),
+        }
     }
 }

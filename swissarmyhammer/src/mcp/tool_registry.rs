@@ -4,22 +4,42 @@
 //! the large match statement with a flexible, extensible system.
 
 use super::tool_handlers::ToolHandlers;
+use crate::git::GitOperations;
+use crate::issues::IssueStorage;
+use crate::memoranda::MemoStorage;
 use rmcp::model::{Annotated, CallToolResult, RawContent, RawTextContent, Tool};
 use rmcp::Error as McpError;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock};
 
 /// Context shared by all tools during execution
 #[derive(Clone)]
 pub struct ToolContext {
-    /// The tool handlers instance containing the business logic
+    /// The tool handlers instance containing the business logic (for backward compatibility)
     pub tool_handlers: Arc<ToolHandlers>,
+    /// Direct access to issue storage for new tool implementations
+    pub issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
+    /// Direct access to git operations for new tool implementations
+    pub git_ops: Arc<Mutex<Option<GitOperations>>>,
+    /// Direct access to memo storage for new tool implementations
+    pub memo_storage: Arc<RwLock<Box<dyn MemoStorage>>>,
 }
 
 impl ToolContext {
     /// Create a new tool context
-    pub fn new(tool_handlers: Arc<ToolHandlers>) -> Self {
-        Self { tool_handlers }
+    pub fn new(
+        tool_handlers: Arc<ToolHandlers>,
+        issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
+        git_ops: Arc<Mutex<Option<GitOperations>>>,
+        memo_storage: Arc<RwLock<Box<dyn MemoStorage>>>,
+    ) -> Self {
+        Self {
+            tool_handlers,
+            issue_storage,
+            git_ops,
+            memo_storage,
+        }
     }
 }
 
@@ -314,8 +334,12 @@ mod tests {
         let memo_storage: Arc<RwLock<Box<dyn MemoStorage>>> =
             Arc::new(RwLock::new(Box::new(MockMemoStorage::new())));
 
-        let tool_handlers = Arc::new(ToolHandlers::new(issue_storage, git_ops, memo_storage));
-        let context = ToolContext::new(tool_handlers);
+        let tool_handlers = Arc::new(ToolHandlers::new(
+            issue_storage.clone(),
+            git_ops.clone(),
+            memo_storage.clone(),
+        ));
+        let context = ToolContext::new(tool_handlers, issue_storage, git_ops, memo_storage);
 
         let tool = MockTool {
             name: "exec_test",

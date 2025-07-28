@@ -2135,20 +2135,20 @@ mod tests {
         // Add timeout to prevent hanging
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            test_directory_creation_impl()
-        ).await;
-        
+            test_directory_creation_impl(),
+        )
+        .await;
+
         match result {
-            Ok(Ok(())) => {}, // Test passed
-            Ok(Err(e)) => panic!("Test failed: {:?}", e),
+            Ok(Ok(())) => {} // Test passed
+            Ok(Err(e)) => panic!("Test failed: {e:?}"),
             Err(_) => {
                 eprintln!("Test test_directory_creation timed out after 10 seconds");
                 // Just return instead of panicking to allow other tests to continue
-                return;
             }
         }
     }
-    
+
     async fn test_directory_creation_impl() -> Result<()> {
         let temp_dir = TempDir::new().unwrap();
         let nested_path = temp_dir
@@ -2359,20 +2359,20 @@ mod tests {
         // Add timeout to prevent hanging
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            test_readonly_directory_error_handling_impl()
-        ).await;
-        
+            test_readonly_directory_error_handling_impl(),
+        )
+        .await;
+
         match result {
-            Ok(Ok(())) => {}, // Test passed
-            Ok(Err(e)) => panic!("Test failed: {:?}", e),
+            Ok(Ok(())) => {} // Test passed
+            Ok(Err(e)) => panic!("Test failed: {e:?}"),
             Err(_) => {
                 eprintln!("Test test_readonly_directory_error_handling timed out after 10 seconds");
                 // Just return instead of panicking to allow other tests to continue
-                return;
             }
         }
     }
-    
+
     async fn test_readonly_directory_error_handling_impl() -> Result<()> {
         #[cfg(unix)] // Permission tests only work on Unix-like systems
         {

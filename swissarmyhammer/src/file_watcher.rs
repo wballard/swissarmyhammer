@@ -221,7 +221,9 @@ impl FileWatcher {
             match tokio::time::timeout(timeout_duration, handle).await {
                 Ok(_) => tracing::debug!("📁 File watcher task completed successfully"),
                 Err(_) => {
-                    tracing::debug!("📁 File watcher task did not complete within timeout, aborting");
+                    tracing::debug!(
+                        "📁 File watcher task did not complete within timeout, aborting"
+                    );
                     // If timeout occurs, we don't have the handle anymore so we can't abort
                 }
             }

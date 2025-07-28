@@ -24,6 +24,7 @@ pub mod error_handling;
 pub mod file_watcher;
 pub mod memo_types;
 pub mod responses;
+pub mod search_types;
 pub mod shared_utils;
 pub mod tool_handlers;
 pub mod tool_registry;
@@ -33,7 +34,7 @@ pub mod utils;
 
 // Re-export commonly used items from submodules
 use tool_handlers::ToolHandlers;
-use tool_registry::{register_issue_tools, register_memo_tools, ToolContext, ToolRegistry};
+use tool_registry::{register_issue_tools, register_memo_tools, register_search_tools, ToolContext, ToolRegistry};
 #[cfg(test)]
 use types::{
     AllCompleteRequest, CreateIssueRequest, CurrentIssueRequest, IssueName, MarkCompleteRequest,
@@ -169,6 +170,7 @@ impl McpServer {
         // Register all available tools
         register_issue_tools(&mut tool_registry);
         register_memo_tools(&mut tool_registry);
+        register_search_tools(&mut tool_registry);
 
         Ok(Self {
             library: Arc::new(RwLock::new(library)),

@@ -1,8 +1,8 @@
 //! Utilities and helpers for semantic search
 
 use crate::error::Result;
-use crate::semantic::storage::VectorStorage;
-use crate::semantic::types::{ContentHash, FileChangeReport, FileChangeStatus, Language};
+use crate::search::storage::VectorStorage;
+use crate::search::types::{ContentHash, FileChangeReport, FileChangeStatus, Language};
 use std::path::{Path, PathBuf};
 
 /// Utility functions for semantic search operations

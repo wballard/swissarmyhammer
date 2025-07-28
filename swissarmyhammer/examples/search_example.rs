@@ -2,7 +2,7 @@
 
 use swissarmyhammer::{Prompt, PromptLibrary};
 
-use swissarmyhammer::search::SearchEngine;
+use swissarmyhammer::prelude::SearchEngine;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a library with various prompts

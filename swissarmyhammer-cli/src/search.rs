@@ -10,7 +10,7 @@ use tabled::{
 use crate::cli::{OutputFormat, PromptSource, PromptSourceArg, SearchCommands};
 use swissarmyhammer::{
     prelude::{AdvancedSearchEngine, AdvancedSearchOptions},
-    semantic::{FileIndexer, SearchQuery, SemanticConfig, SemanticSearcher, VectorStorage},
+    search::{FileIndexer, SearchQuery, SemanticConfig, SemanticSearcher, VectorStorage},
     PromptFilter, PromptLibrary, PromptResolver,
 };
 
@@ -556,7 +556,7 @@ mod tests {
     fn test_file_line_format() {
         // Test that file:line format is correctly structured
         use std::path::PathBuf;
-        use swissarmyhammer::semantic::{ChunkType, CodeChunk, ContentHash, Language};
+        use swissarmyhammer::search::{ChunkType, CodeChunk, ContentHash, Language};
 
         let chunk = CodeChunk {
             id: "test-chunk".to_string(),

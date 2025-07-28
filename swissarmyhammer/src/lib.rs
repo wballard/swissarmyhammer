@@ -57,7 +57,10 @@ pub mod mcp;
 /// Storage abstractions and implementations
 pub mod storage;
 
-/// Search functionality
+/// Prompt search functionality
+pub mod prompt_search;
+
+/// Semantic search functionality using vector embeddings
 pub mod search;
 
 /// Advanced search functionality
@@ -75,8 +78,6 @@ pub mod issues;
 /// Memoranda management and storage system
 pub mod memoranda;
 
-/// Semantic search functionality using vector embeddings
-pub mod semantic;
 
 /// Git operations for issue management
 pub mod git;
@@ -164,7 +165,7 @@ pub mod prelude {
     };
 
     pub use crate::mcp::McpServer;
-    pub use crate::search::{SearchEngine, SearchResult};
+    pub use crate::prompt_search::{SearchEngine, SearchResult};
     pub use crate::search_advanced::{
         generate_excerpt, AdvancedSearchEngine, AdvancedSearchOptions, AdvancedSearchResult,
     };
@@ -180,7 +181,7 @@ pub mod prelude {
     };
 
     // Semantic search types for convenient access
-    pub use crate::semantic::{
+    pub use crate::search::{
         CodeChunk, EmbeddingEngine, FileIndexer, IndexingOptions, IndexingStats, Language,
         SemanticConfig, SemanticSearcher, SemanticUtils, VectorStorage,
     };

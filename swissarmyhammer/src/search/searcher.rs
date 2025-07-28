@@ -9,7 +9,7 @@
 //! ## Basic Usage
 //!
 //! ```rust,no_run
-//! use swissarmyhammer::semantic::{SemanticSearcher, VectorStorage, SemanticConfig, SearchQuery};
+//! use swissarmyhammer::search::{SemanticSearcher, VectorStorage, SemanticConfig, SearchQuery};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let config = SemanticConfig::default();
@@ -28,7 +28,7 @@
 //! ## Advanced Search
 //!
 //! ```rust,no_run
-//! use swissarmyhammer::semantic::{SemanticSearcher, SearchQuery, Language};
+//! use swissarmyhammer::search::{SemanticSearcher, SearchQuery, Language};
 //!
 //! # async fn example(searcher: SemanticSearcher) -> Result<(), Box<dyn std::error::Error>> {
 //! // Language-specific search
@@ -46,7 +46,7 @@
 //! # }
 //! ```
 
-use crate::semantic::{
+use crate::search::{
     CodeChunk, EmbeddingEngine, Language, Result, ResultExplanation, SearchExplanation,
     SearchQuery, SearchStats, SemanticConfig, SemanticSearchResult, VectorStorage,
 };
@@ -74,7 +74,7 @@ use std::collections::HashMap;
 /// # Example
 ///
 /// ```rust,no_run
-/// use swissarmyhammer::semantic::{SemanticSearcher, VectorStorage, SemanticConfig};
+/// use swissarmyhammer::search::{SemanticSearcher, VectorStorage, SemanticConfig};
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let config = SemanticConfig::default();
@@ -112,7 +112,7 @@ impl SemanticSearcher {
     /// # Example
     ///
     /// ```rust,no_run
-    /// use swissarmyhammer::semantic::{SemanticSearcher, VectorStorage, SemanticConfig};
+    /// use swissarmyhammer::search::{SemanticSearcher, VectorStorage, SemanticConfig};
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let config = SemanticConfig::default();
@@ -152,7 +152,7 @@ impl SemanticSearcher {
     /// # Example
     ///
     /// ```rust,no_run
-    /// use swissarmyhammer::semantic::{SemanticSearcher, VectorStorage, EmbeddingEngine, SemanticConfig};
+    /// use swissarmyhammer::search::{SemanticSearcher, VectorStorage, EmbeddingEngine, SemanticConfig};
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let config = SemanticConfig::default();
@@ -201,7 +201,7 @@ impl SemanticSearcher {
     /// # Example
     ///
     /// ```rust,no_run
-    /// use swissarmyhammer::semantic::{SemanticSearcher, SearchQuery, Language};
+    /// use swissarmyhammer::search::{SemanticSearcher, SearchQuery, Language};
     ///
     /// # async fn example(searcher: SemanticSearcher) -> Result<(), Box<dyn std::error::Error>> {
     /// let query = SearchQuery {
@@ -232,7 +232,7 @@ impl SemanticSearcher {
         let similar_chunk_ids = self
             .storage
             .similarity_search(&query_embedding, query.limit, query.similarity_threshold)
-            .map_err(|e| crate::semantic::SemanticError::VectorStorage {
+            .map_err(|e| crate::search::SemanticError::VectorStorage {
                 operation: "similarity search".to_string(),
                 source: Box::new(e),
             })?;
@@ -283,7 +283,7 @@ impl SemanticSearcher {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # async fn example(searcher: swissarmyhammer::semantic::SemanticSearcher) -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example(searcher: swissarmyhammer::search::SemanticSearcher) -> Result<(), Box<dyn std::error::Error>> {
     /// // Find code related to database connections
     /// let results = searcher.search_simple("database connect", 10).await?;
     ///
@@ -330,9 +330,9 @@ impl SemanticSearcher {
     /// # Example
     ///
     /// ```rust,no_run
-    /// use swissarmyhammer::semantic::Language;
+    /// use swissarmyhammer::search::Language;
     ///
-    /// # async fn example(searcher: swissarmyhammer::semantic::SemanticSearcher) -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example(searcher: swissarmyhammer::search::SemanticSearcher) -> Result<(), Box<dyn std::error::Error>> {
     /// // Find error handling patterns specifically in Rust code
     /// let rust_results = searcher.search_by_language(
     ///     "Result Error match",
@@ -396,10 +396,10 @@ impl SemanticSearcher {
     /// # Example
     ///
     /// ```rust,no_run
-    /// use swissarmyhammer::semantic::{CodeChunk, Language, ChunkType, ContentHash};
+    /// use swissarmyhammer::search::{CodeChunk, Language, ChunkType, ContentHash};
     /// use std::path::PathBuf;
     ///
-    /// # async fn example(searcher: swissarmyhammer::semantic::SemanticSearcher) -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example(searcher: swissarmyhammer::search::SemanticSearcher) -> Result<(), Box<dyn std::error::Error>> {
     /// let reference_chunk = CodeChunk {
     ///     id: "example-chunk".to_string(),
     ///     file_path: PathBuf::from("src/utils.rs"),
@@ -473,7 +473,7 @@ impl SemanticSearcher {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # async fn example(searcher: swissarmyhammer::semantic::SemanticSearcher) -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example(searcher: swissarmyhammer::search::SemanticSearcher) -> Result<(), Box<dyn std::error::Error>> {
     /// // Find code related to error handling using multiple related terms
     /// let error_queries = vec![
     ///     "error handling Result".to_string(),
@@ -661,7 +661,7 @@ impl SemanticSearcher {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # async fn example(searcher: swissarmyhammer::semantic::SemanticSearcher) -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example(searcher: swissarmyhammer::search::SemanticSearcher) -> Result<(), Box<dyn std::error::Error>> {
     /// let stats = searcher.get_search_stats().await?;
     ///
     /// println!("Index Statistics:");
@@ -678,7 +678,7 @@ impl SemanticSearcher {
     /// ```
     pub async fn get_search_stats(&self) -> Result<SearchStats> {
         let index_stats = self.storage.get_index_stats().map_err(|e| {
-            crate::semantic::SemanticError::VectorStorage {
+            crate::search::SemanticError::VectorStorage {
                 operation: "index statistics retrieval".to_string(),
                 source: Box::new(e),
             }
@@ -728,9 +728,9 @@ impl SemanticSearcher {
     /// # Example
     ///
     /// ```rust,no_run
-    /// use swissarmyhammer::semantic::SearchQuery;
+    /// use swissarmyhammer::search::SearchQuery;
     ///
-    /// # async fn example(searcher: swissarmyhammer::semantic::SemanticSearcher) -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example(searcher: swissarmyhammer::search::SemanticSearcher) -> Result<(), Box<dyn std::error::Error>> {
     /// let query = SearchQuery {
     ///     text: "async function".to_string(),
     ///     limit: 10,
@@ -772,7 +772,7 @@ impl SemanticSearcher {
                 query.limit,
                 0.0, // Get all results for explanation
             )
-            .map_err(|e| crate::semantic::SemanticError::VectorStorage {
+            .map_err(|e| crate::search::SemanticError::VectorStorage {
                 operation: "detailed similarity search".to_string(),
                 source: Box::new(e),
             })?;
@@ -780,7 +780,7 @@ impl SemanticSearcher {
         let mut explanations = Vec::new();
         for (chunk_id, similarity_score, _embedding) in similar_results {
             if let Some(chunk) = self.storage.get_chunk(&chunk_id).map_err(|e| {
-                crate::semantic::SemanticError::SearchOperation {
+                crate::search::SemanticError::SearchOperation {
                     operation: "chunk retrieval for explanation".to_string(),
                     message: format!("Failed to retrieve chunk {chunk_id}"),
                     source: Some(Box::new(e)),
@@ -818,7 +818,7 @@ impl SemanticSearcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::semantic::{ChunkType, ContentHash, Language, SemanticConfig};
+    use crate::search::{ChunkType, ContentHash, Language, SemanticConfig};
     use std::path::PathBuf;
 
     async fn create_test_searcher() -> Result<SemanticSearcher> {
@@ -835,7 +835,7 @@ mod tests {
         };
         let embedding_engine = EmbeddingEngine::new_for_testing().await?;
         let storage = VectorStorage::new(config.clone()).map_err(|e| {
-            crate::semantic::SemanticError::SearchOperation {
+            crate::search::SemanticError::SearchOperation {
                 operation: "test storage creation".to_string(),
                 message: "Failed to create test vector storage".to_string(),
                 source: Some(Box::new(e)),
@@ -843,7 +843,7 @@ mod tests {
         })?;
         storage
             .initialize()
-            .map_err(|e| crate::semantic::SemanticError::SearchOperation {
+            .map_err(|e| crate::search::SemanticError::SearchOperation {
                 operation: "test storage initialization".to_string(),
                 message: "Failed to initialize test vector storage".to_string(),
                 source: Some(Box::new(e)),
@@ -1031,7 +1031,7 @@ mod tests {
         };
         let embedding_engine = EmbeddingEngine::new_for_testing().await?;
         let storage = VectorStorage::new(config.clone()).map_err(|e| {
-            crate::semantic::SemanticError::SearchOperation {
+            crate::search::SemanticError::SearchOperation {
                 operation: "test storage creation".to_string(),
                 message: "Failed to create test vector storage".to_string(),
                 source: Some(Box::new(e)),
@@ -1039,7 +1039,7 @@ mod tests {
         })?;
         storage
             .initialize()
-            .map_err(|e| crate::semantic::SemanticError::SearchOperation {
+            .map_err(|e| crate::search::SemanticError::SearchOperation {
                 operation: "test storage initialization".to_string(),
                 message: "Failed to initialize test vector storage".to_string(),
                 source: Some(Box::new(e)),

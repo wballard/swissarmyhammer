@@ -234,7 +234,7 @@ This is test prompt {i}!"#
 
 #[test]
 fn test_search_engine() {
-    use swissarmyhammer::search::SearchEngine;
+    use swissarmyhammer::prelude::SearchEngine;
 
     let mut engine = SearchEngine::new().unwrap();
 

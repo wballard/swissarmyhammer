@@ -458,6 +458,12 @@ pub fn register_memo_tools(registry: &mut ToolRegistry) {
     memoranda::register_memoranda_tools(registry);
 }
 
+/// Register all search-related tools with the registry
+pub fn register_search_tools(registry: &mut ToolRegistry) {
+    use crate::mcp::tools::search;
+    search::register_search_tools(registry);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

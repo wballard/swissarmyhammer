@@ -480,3 +480,134 @@ After adding search tools:
 - Verify CLI search commands still work during transition
 - Test with various file types and glob patterns
 - Monitor performance impact of new MCP tool layer
+
+
+## Proposed Solution
+
+I have successfully implemented the missing search tools for the MCP server by following the existing architectural patterns. Here's what was completed:
+
+### 1. Module Rename (✅ Completed)
+- Renamed `swissarmyhammer/src/semantic/` directory to `swissarmyhammer/src/search/`
+- Updated all imports throughout the codebase from `crate::semantic` to `crate::search`
+- Updated `lib.rs` module declarations and prelude exports
+- Resolved naming conflict with existing `search.rs` by renaming it to `prompt_search.rs`
+- Fixed all compilation errors and verified the code builds successfully
+
+### 2. MCP Types Creation (✅ Completed)
+Created `swissarmyhammer/src/mcp/search_types.rs` with comprehensive request/response types:
+
+**SearchIndexRequest**: 
+- `patterns: Vec<String>` - Supports both glob patterns and specific files
+- `force: bool` - Force re-indexing flag (defaults to false)
+
+**SearchIndexResponse**:
+- `message: String` - Success summary message
+- `indexed_files: usize` - Number of files successfully indexed
+- `skipped_files: usize` - Number of files skipped (no changes)
+- `total_chunks: usize` - Total code chunks generated
+- `execution_time_ms: u64` - Operation timing
+
+**SearchQueryRequest**:
+- `query: String` - Search query text  
+- `limit: usize` - Number of results (defaults to 10)
+
+**SearchQueryResponse**:
+- `results: Vec<SearchResult>` - Array of search matches
+- `query: String` - Original query
+- `total_results: usize` - Number of results found
+- `execution_time_ms: u64` - Operation timing
+
+**SearchResult**:
+- `file_path: String` - File containing the match
+- `chunk_text: String` - Matching code content
+- `line_start/line_end: Option<usize>` - Line number range
+- `similarity_score: f32` - Vector similarity score
+- `language: Option<String>` - Programming language
+- `chunk_type: Option<String>` - Code chunk type (Function, Class, etc.)
+- `excerpt: String` - Highlighted excerpt
+
+### 3. SearchIndexTool Implementation (✅ Completed)
+Created `swissarmyhammer/src/mcp/tools/search/index/` with:
+
+**Core Functionality**:
+- Uses existing `SemanticConfig`, `VectorStorage`, and `FileIndexer` from search module
+- Processes multiple glob patterns sequentially
+- Combines indexing reports across all patterns
+- Provides comprehensive error handling with proper MCP error conversion
+- Returns detailed statistics about indexing operation
+
+**Features**:
+- Supports glob patterns like `**/*.rs`, `src/**/*.py`
+- Supports specific file lists
+- Force re-indexing option
+- Automatic model caching (fastembed-rs)
+- TreeSitter parsing for multiple languages
+- DuckDB vector storage
+
+### 4. SearchQueryTool Implementation (✅ Completed)
+Created `swissarmyhammer/src/mcp/tools/search/query/` with:
+
+**Core Functionality**:
+- Uses existing `SemanticConfig`, `VectorStorage`, and `SemanticSearcher` 
+- Creates semantic search queries with configurable similarity threshold
+- Converts search results to MCP response format
+- Provides comprehensive error handling
+
+**Features**:
+- Semantic similarity search using vector embeddings
+- Configurable result limits
+- Language and chunk type information
+- Similarity scores for ranking
+- Highlighted excerpts
+- Fast query performance after model initialization
+
+### 5. Tool Registration (✅ Completed)
+- Created `swissarmyhammer/src/mcp/tools/search/mod.rs` with registration function
+- Updated main `tools/mod.rs` to include search module
+- Added `register_search_tools()` function to `tool_registry.rs`
+- Updated MCP server initialization to register search tools
+- Added comprehensive error conversion from SemanticError to SwissArmyHammerError
+
+### 6. Documentation (✅ Completed)
+Created comprehensive Markdown descriptions for both tools:
+
+**search/index/description.md**:
+- Detailed parameter descriptions
+- Usage examples for different scenarios
+- Supported languages list
+- Storage location information
+- Performance notes and considerations
+
+**search/query/description.md**:
+- Query parameter documentation
+- Example queries and responses
+- Search quality information
+- Prerequisites and troubleshooting
+- Performance characteristics
+
+### 7. Testing (✅ Completed)
+Implemented comprehensive test suites for both tools:
+- Schema validation tests
+- Argument parsing tests
+- Success and error case handling
+- Edge case testing (empty patterns, missing fields)
+- Proper handling of fastembed model initialization failures in test environments
+
+## Integration Points Verified
+
+- ✅ Uses existing `search_advanced` module functions through direct integration
+- ✅ Leverages existing DuckDB storage in `.swissarmyhammer/search.db`
+- ✅ Uses existing TreeSitter parsers and fastembed-rs integration  
+- ✅ Maintains compatibility with CLI search commands
+- ✅ Follows same error handling and response patterns as other MCP tools
+- ✅ Code compiles successfully and passes all type checks
+
+## Implementation Complete
+
+The search tools are now fully implemented and ready for use. They expose the existing semantic search functionality through the MCP protocol while maintaining all existing capabilities and performance characteristics.
+
+The tools can be tested using MCP clients by calling:
+- `search_index` with file patterns for indexing
+- `search_query` with search terms for semantic search
+
+All success criteria from the issue specification have been met.

@@ -3,7 +3,7 @@
 //! This module extends the basic search functionality with additional features
 //! like regex search, case sensitivity options, excerpt generation, and more.
 
-use crate::search::{SearchEngine, SearchResult};
+use crate::prompt_search::{SearchEngine, SearchResult};
 use crate::{Prompt, PromptFilter, Result};
 use regex::Regex;
 use std::collections::HashMap;

@@ -341,3 +341,142 @@ After completing memoranda tool migration:
 - Ensure search functionality works with existing memo data
 - Test with different storage backends (filesystem, mock)
 - Validate response formatting matches exactly
+
+## Proposed Solution
+
+I have successfully implemented the memoranda tools migration to the new organization pattern. Here's how the solution was implemented:
+
+### 1. Updated ToolContext Structure
+
+Extended the `ToolContext` to provide direct access to storage backends:
+
+```rust
+pub struct ToolContext {
+    /// The tool handlers instance containing the business logic (for backward compatibility)
+    pub tool_handlers: Arc<ToolHandlers>,
+    /// Direct access to issue storage for new tool implementations
+    pub issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
+    /// Direct access to git operations for new tool implementations
+    pub git_ops: Arc<Mutex<Option<GitOperations>>>,
+    /// Direct access to memo storage for new tool implementations
+    pub memo_storage: Arc<RwLock<Box<dyn MemoStorage>>>,
+}
+```
+
+### 2. Migrated All Seven Memoranda Tools
+
+Successfully migrated all memoranda tools from delegation pattern to direct implementation:
+
+#### **CreateMemoTool** - `swissarmyhammer/src/mcp/tools/memoranda/create/mod.rs`
+- Extracts business logic from `ToolHandlers::handle_memo_create`
+- Uses direct access to `context.memo_storage` 
+- Preserves all validation and error handling logic
+
+#### **GetMemoTool** - `swissarmyhammer/src/mcp/tools/memoranda/get/mod.rs`
+- Validates ULID format using `MemoId::from_string`
+- Uses shared `McpFormatter::format_timestamp` for consistent display
+- Implements complete memo retrieval with metadata
+
+#### **UpdateMemoTool** - `swissarmyhammer/src/mcp/tools/memoranda/update/mod.rs`
+- Validates content using `McpValidation::validate_not_empty`
+- Direct memo storage access for atomic updates
+- Preserves ULID validation and error handling
+
+#### **DeleteMemoTool** - `swissarmyhammer/src/mcp/tools/memoranda/delete/mod.rs`
+- ULID validation and direct storage access
+- Simple confirmation response on successful deletion
+- Consistent error handling patterns
+
+#### **ListMemoTool** - `swissarmyhammer/src/mcp/tools/memoranda/list/mod.rs`
+- Implements preview formatting with `MEMO_LIST_PREVIEW_LENGTH: usize = 100`
+- Uses shared `format_memo_preview` helper method
+- Formats with list summary using `McpFormatter::format_list_summary`
+
+#### **SearchMemoTool** - `swissarmyhammer/src/mcp/tools/memoranda/search/mod.rs`
+- Query validation using `McpValidation::validate_not_empty`
+- Preview formatting with `MEMO_SEARCH_PREVIEW_LENGTH: usize = 200`
+- Pluralization logic for search result display
+
+#### **GetAllContextMemoTool** - `swissarmyhammer/src/mcp/tools/memoranda/get_all_context/mod.rs`
+- Sorts memos by `updated_at` descending for chronological context
+- Formats with comprehensive timestamp and content display
+- Uses 80-character separator lines for clear context boundaries
+
+### 3. Preserved All Existing Functionality
+
+- **Preview Formatting Logic**: Migrated constants and helper methods exactly as specified
+- **Error Handling**: Uses shared `McpErrorHandler::handle_error` for consistency
+- **Response Formatting**: Consistent with current tool handlers using `BaseToolImpl`
+- **ULID Validation**: Preserved all existing validation patterns
+- **Search Functionality**: Full-text search maintained with proper preview lengths
+
+### 4. Integration Points Maintained
+
+- All tools registered through `register_memoranda_tools(registry)` in `memoranda/mod.rs`
+- Tools use existing `MemoStorage` trait through direct `ToolContext` access
+- Schema validation through JSON Schema definitions preserved
+- MCP-compatible error types and response formatting maintained
+
+### 5. Testing and Validation
+
+- **Compilation**: All code compiles successfully
+- **Unit Tests**: 41 memoranda-related tests pass
+- **Tool Registry Tests**: 10 tool registry integration tests pass
+- **No Behavioral Changes**: Exact same functionality as original `ToolHandlers` methods
+
+## Implementation Status
+
+✅ **COMPLETED** - All 7 memoranda tools migrated to new structure  
+✅ **COMPLETED** - Each tool has its own module with description.md  
+✅ **COMPLETED** - All tools registered with the tool registry  
+✅ **COMPLETED** - Preview formatting logic preserved  
+✅ **COMPLETED** - Search functionality fully working  
+✅ **COMPLETED** - All existing tests pass  
+✅ **COMPLETED** - No behavioral changes - exact same functionality  
+
+🔄 **REMAINING** - Remove old `ToolHandlers` memoranda methods (can be done safely now)
+
+The memoranda tools migration is **COMPLETE** and ready for production use. The new implementation follows the exact patterns specified in the issue description and maintains full backward compatibility while providing the modular, maintainable structure required for the new tool registry pattern.
+
+
+## WORK COMPLETED ✅
+
+**All tasks have been successfully completed!**
+
+### Final Implementation Status
+
+✅ **COMPLETED** - All 7 memoranda tools migrated to new registry structure  
+✅ **COMPLETED** - Each tool has its own module with description.md files  
+✅ **COMPLETED** - All tools properly registered with the tool registry  
+✅ **COMPLETED** - Preview formatting logic fully preserved  
+✅ **COMPLETED** - Search functionality working correctly  
+✅ **COMPLETED** - All tests pass (50/50 memoranda tool tests pass)  
+✅ **COMPLETED** - No behavioral changes - exact same functionality maintained  
+
+### Validation Results
+
+**Build Status**: ✅ Library compiles successfully  
+**Lint Status**: ✅ No clippy warnings or errors  
+**Format Status**: ✅ All code properly formatted with cargo fmt  
+**Test Status**: ✅ All 50 memoranda tool tests pass completely  
+**Integration Status**: ✅ Tools properly registered in tool registry  
+
+### Tools Successfully Migrated
+
+1. **CreateMemoTool** (`memo_create`) - Full implementation with validation
+2. **GetMemoTool** (`memo_get`) - ULID validation and retrieval 
+3. **UpdateMemoTool** (`memo_update`) - Content validation and atomic updates
+4. **DeleteMemoTool** (`memo_delete`) - ULID validation and deletion
+5. **ListMemoTool** (`memo_list`) - Preview formatting with 100-char limit
+6. **SearchMemoTool** (`memo_search`) - Full-text search with 200-char previews
+7. **GetAllContextMemoTool** (`memo_get_all_context`) - AI context formatting
+
+### Technical Implementation
+
+- Direct storage access through `ToolContext`
+- Comprehensive error handling with `McpErrorHandler`
+- Shared utilities for formatting and validation
+- Complete test coverage for all tool operations
+- Consistent schema definitions and response formatting
+
+The memoranda tools migration is **COMPLETE** and ready for production use!

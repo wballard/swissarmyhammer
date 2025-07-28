@@ -2,40 +2,265 @@
 //!
 //! This module provides a registry pattern for managing MCP tools, replacing
 //! the large match statement with a flexible, extensible system.
+//!
+//! # Architecture Overview
+//!
+//! The tool registry pattern enables a modular, extensible approach to MCP tool management:
+//!
+//! 1. **McpTool Trait**: Defines the interface that all tools must implement
+//! 2. **ToolRegistry**: Central registry that stores and manages tool instances
+//! 3. **ToolContext**: Shared context providing access to storage and services
+//! 4. **BaseToolImpl**: Common utility methods for tool implementations
+//!
+//! # Migration from Legacy System
+//!
+//! This registry pattern replaces the previous delegation-based approach where all
+//! tools were routed through `ToolHandlers` with a large match statement. The new
+//! pattern offers:
+//!
+//! - **Modularity**: Each tool is self-contained in its own module
+//! - **Extensibility**: New tools can be added without modifying existing code
+//! - **Testability**: Tools can be unit tested independently
+//! - **Performance**: Direct access to storage eliminates delegation overhead
+//!
+//! # Creating New Tools
+//!
+//! To create a new MCP tool:
+//!
+//! 1. Create a struct implementing the `McpTool` trait
+//! 2. Define the tool's schema using JSON Schema
+//! 3. Implement the execute method with your business logic
+//! 4. Register the tool with the appropriate registry function
+//!
+//! ```rust,ignore
+//! use async_trait::async_trait;
+//! use crate::mcp::tool_registry::{McpTool, ToolContext, BaseToolImpl};
+//!
+//! #[derive(Default)]
+//! pub struct MyTool;
+//!
+//! #[async_trait]
+//! impl McpTool for MyTool {
+//!     fn name(&self) -> &'static str {
+//!         "my_tool_name"
+//!     }
+//!
+//!     fn description(&self) -> &'static str {
+//!         include_str!("description.md")
+//!     }
+//!
+//!     fn schema(&self) -> serde_json::Value {
+//!         serde_json::json!({
+//!             "type": "object",
+//!             "properties": {
+//!                 "param": {"type": "string", "description": "Parameter description"}
+//!             },
+//!             "required": ["param"]
+//!         })
+//!     }
+//!
+//!     async fn execute(
+//!         &self,
+//!         arguments: serde_json::Map<String, serde_json::Value>,
+//!         context: &ToolContext,
+//!     ) -> std::result::Result<CallToolResult, McpError> {
+//!         let request: MyRequest = BaseToolImpl::parse_arguments(arguments)?;
+//!         // Tool implementation here
+//!         Ok(BaseToolImpl::create_success_response("Success!"))
+//!     }
+//! }
+//! ```
 
 use super::tool_handlers::ToolHandlers;
+use crate::git::GitOperations;
+use crate::issues::IssueStorage;
+use crate::memoranda::MemoStorage;
 use rmcp::model::{Annotated, CallToolResult, RawContent, RawTextContent, Tool};
 use rmcp::Error as McpError;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock};
 
 /// Context shared by all tools during execution
+///
+/// The `ToolContext` provides tools with access to all necessary storage backends
+/// and services required for their operation. It serves as the dependency injection
+/// mechanism for the tool registry pattern.
+///
+/// # Architecture Notes
+///
+/// The context maintains both legacy `tool_handlers` for backward compatibility
+/// and direct storage access for new tool implementations. This dual approach
+/// allows for gradual migration from the old delegation pattern to the new
+/// direct access pattern.
+///
+/// # Thread Safety
+///
+/// All storage backends are wrapped in appropriate synchronization primitives:
+/// - `RwLock` for storage that supports concurrent reads
+/// - `Mutex` for exclusive access operations
+/// - `Arc` for shared ownership across async tasks
+///
+/// # Usage Patterns
+///
+/// New tools should prefer direct access to storage backends:
+///
+/// ```rust,ignore
+/// async fn execute(&self, args: Args, context: &ToolContext) -> Result<CallToolResult> {
+///     let memo_storage = context.memo_storage.write().await;
+///     let memo = memo_storage.create_memo(title, content).await?;
+///     // Process memo...
+/// }
+/// ```
 #[derive(Clone)]
 pub struct ToolContext {
-    /// The tool handlers instance containing the business logic
+    /// The tool handlers instance containing the business logic (for backward compatibility)
+    ///
+    /// This field exists to support legacy tools that haven't been migrated to the
+    /// new registry pattern. New tools should prefer direct storage access.
     pub tool_handlers: Arc<ToolHandlers>,
+
+    /// Direct access to issue storage for new tool implementations
+    ///
+    /// Provides thread-safe access to issue storage operations. Use `read()` for
+    /// read operations and `write()` for write operations.
+    pub issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
+
+    /// Direct access to git operations for new tool implementations
+    ///
+    /// Git operations are wrapped in `Option` to handle cases where git is not
+    /// available or not initialized. Always check for `None` before use.
+    pub git_ops: Arc<Mutex<Option<GitOperations>>>,
+
+    /// Direct access to memo storage for new tool implementations
+    ///
+    /// Provides thread-safe access to memoranda storage operations. Use `read()` for
+    /// read operations and `write()` for write operations.
+    pub memo_storage: Arc<RwLock<Box<dyn MemoStorage>>>,
 }
 
 impl ToolContext {
     /// Create a new tool context
-    pub fn new(tool_handlers: Arc<ToolHandlers>) -> Self {
-        Self { tool_handlers }
+    pub fn new(
+        tool_handlers: Arc<ToolHandlers>,
+        issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
+        git_ops: Arc<Mutex<Option<GitOperations>>>,
+        memo_storage: Arc<RwLock<Box<dyn MemoStorage>>>,
+    ) -> Self {
+        Self {
+            tool_handlers,
+            issue_storage,
+            git_ops,
+            memo_storage,
+        }
     }
 }
 
 /// Trait defining the interface for all MCP tools
+///
+/// The `McpTool` trait provides a standardized interface for implementing MCP tools
+/// within the registry pattern. All tools must implement this trait to be usable
+/// with the tool registry system.
+///
+/// # Design Principles
+///
+/// - **Stateless**: Tools should be stateless and derive all context from the `ToolContext`
+/// - **Thread-Safe**: Tools must be `Send + Sync` to work in async environments
+/// - **Self-Describing**: Tools provide their own schema and documentation
+/// - **Error Handling**: Tools use structured error handling via `McpError`
+///
+/// # Implementation Guidelines
+///
+/// ## Tool Names
+/// Tool names should follow the pattern `{domain}_{action}` (e.g., `memo_create`, `issue_list`).
+/// Names must be unique within the registry and should be stable across versions.
+///
+/// ## Descriptions
+/// Use `include_str!("description.md")` to load descriptions from separate Markdown files.
+/// This improves maintainability and allows for rich documentation.
+///
+/// ## Schemas
+/// Define comprehensive JSON schemas using the `serde_json::json!` macro. Include:
+/// - Parameter types and descriptions
+/// - Required vs optional parameters
+/// - Validation constraints
+/// - Examples in the description
+///
+/// ## Error Handling
+/// Use `McpErrorHandler::handle_error()` to convert domain errors to MCP errors:
+///
+/// ```rust,ignore
+/// match storage.create_memo(title, content).await {
+///     Ok(memo) => Ok(BaseToolImpl::create_success_response(format!("Created: {}", memo.id))),
+///     Err(e) => Err(McpErrorHandler::handle_error(e, "create memo")),
+/// }
+/// ```
+///
+/// ## Testing
+/// Each tool should have comprehensive unit tests covering:
+/// - Schema validation
+/// - Success cases
+/// - Error conditions
+/// - Edge cases
 #[async_trait::async_trait]
 pub trait McpTool: Send + Sync {
-    /// Get the tool's name
+    /// Get the tool's unique identifier name
+    ///
+    /// The name must be unique within the registry and should follow the
+    /// `{domain}_{action}` pattern (e.g., `memo_create`, `issue_list`).
+    /// Names should be stable across versions.
     fn name(&self) -> &'static str;
 
-    /// Get the tool's description
+    /// Get the tool's human-readable description
+    ///
+    /// This description is shown to users in tool listings and help text.
+    /// Consider using `include_str!("description.md")` to load descriptions
+    /// from separate Markdown files for better maintainability.
     fn description(&self) -> &'static str;
 
-    /// Get the tool's JSON schema for arguments
+    /// Get the tool's JSON schema for argument validation
+    ///
+    /// The schema should be a valid JSON Schema object defining the structure
+    /// and validation rules for the tool's arguments. Include detailed
+    /// descriptions for all parameters.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// fn schema(&self) -> serde_json::Value {
+    ///     serde_json::json!({
+    ///         "type": "object",
+    ///         "properties": {
+    ///             "title": {
+    ///                 "type": "string",
+    ///                 "description": "The memo title",
+    ///                 "minLength": 1
+    ///             }
+    ///         },
+    ///         "required": ["title"]
+    ///     })
+    /// }
+    /// ```
     fn schema(&self) -> serde_json::Value;
 
     /// Execute the tool with the given arguments and context
+    ///
+    /// This is the main entry point for tool execution. The method receives:
+    /// - `arguments`: Validated JSON arguments from the MCP client
+    /// - `context`: Access to storage backends and services
+    ///
+    /// # Implementation Pattern
+    ///
+    /// 1. Parse arguments using `BaseToolImpl::parse_arguments()`
+    /// 2. Validate business logic constraints
+    /// 3. Perform the operation using context storage
+    /// 4. Return structured response using `BaseToolImpl::create_success_response()`
+    /// 5. Handle errors using `McpErrorHandler::handle_error()`
+    ///
+    /// # Error Handling
+    ///
+    /// Always use `McpErrorHandler::handle_error()` to convert domain errors
+    /// to appropriate MCP errors for consistent client experience.
     async fn execute(
         &self,
         arguments: serde_json::Map<String, serde_json::Value>,
@@ -44,8 +269,52 @@ pub trait McpTool: Send + Sync {
 }
 
 /// Registry for managing MCP tools
+///
+/// The `ToolRegistry` serves as the central repository for all MCP tools within
+/// the application. It provides registration, lookup, and enumeration capabilities
+/// for tools implementing the `McpTool` trait.
+///
+/// # Design Goals
+///
+/// - **Type Safety**: Tools are stored as trait objects with compile-time guarantees
+/// - **Performance**: HashMap-based lookup provides O(1) tool resolution
+/// - **Extensibility**: New tools can be registered dynamically at runtime
+/// - **Memory Efficiency**: Tools are stored once and accessed by reference
+///
+/// # Usage Patterns
+///
+/// ## Registration
+/// ```rust,ignore
+/// let mut registry = ToolRegistry::new();
+/// registry.register(MyTool::new());
+/// registry.register(AnotherTool::new());
+/// ```
+///
+/// ## Tool Execution
+/// ```rust,ignore
+/// if let Some(tool) = registry.get_tool("memo_create") {
+///     let result = tool.execute(arguments, &context).await?;
+///     // Handle result...
+/// }
+/// ```
+///
+/// ## MCP Integration
+/// ```rust,ignore
+/// // List all tools for MCP list_tools response
+/// let tools = registry.list_tools();
+/// ```
+///
+/// # Thread Safety
+///
+/// The registry itself is not thread-safe and should be protected by appropriate
+/// synchronization when shared across threads. However, individual tools must
+/// implement `Send + Sync` and can be safely called concurrently.
 #[derive(Default)]
 pub struct ToolRegistry {
+    /// Internal storage mapping tool names to trait objects
+    ///
+    /// Uses HashMap for O(1) lookup performance. Tool names must be unique
+    /// and are used as the primary key for tool resolution.
     tools: HashMap<String, Box<dyn McpTool>>,
 }
 
@@ -314,8 +583,12 @@ mod tests {
         let memo_storage: Arc<RwLock<Box<dyn MemoStorage>>> =
             Arc::new(RwLock::new(Box::new(MockMemoStorage::new())));
 
-        let tool_handlers = Arc::new(ToolHandlers::new(issue_storage, git_ops, memo_storage));
-        let context = ToolContext::new(tool_handlers);
+        let tool_handlers = Arc::new(ToolHandlers::new(
+            issue_storage.clone(),
+            git_ops.clone(),
+            memo_storage.clone(),
+        ));
+        let context = ToolContext::new(tool_handlers, issue_storage, git_ops, memo_storage);
 
         let tool = MockTool {
             name: "exec_test",

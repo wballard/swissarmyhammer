@@ -151,12 +151,20 @@ impl McpServer {
         let git_ops_arc = Arc::new(Mutex::new(git_ops));
 
         // Initialize tool handlers with all storage instances
-        let tool_handlers =
-            ToolHandlers::new(issue_storage.clone(), git_ops_arc.clone(), memo_storage_arc);
+        let tool_handlers = ToolHandlers::new(
+            issue_storage.clone(),
+            git_ops_arc.clone(),
+            memo_storage_arc.clone(),
+        );
 
         // Initialize tool registry and context
         let mut tool_registry = ToolRegistry::new();
-        let tool_context = Arc::new(ToolContext::new(Arc::new(tool_handlers.clone())));
+        let tool_context = Arc::new(ToolContext::new(
+            Arc::new(tool_handlers.clone()),
+            issue_storage.clone(),
+            git_ops_arc.clone(),
+            memo_storage_arc.clone(),
+        ));
 
         // Register all available tools
         register_issue_tools(&mut tool_registry);

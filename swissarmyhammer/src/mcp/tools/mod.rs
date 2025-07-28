@@ -37,3 +37,4 @@
 
 pub mod issues;
 pub mod memoranda;
+pub mod search;

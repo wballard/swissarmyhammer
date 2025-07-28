@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::semantic::*;
+    use crate::search::*;
 
     #[test]
     fn test_semantic_module_imports() {

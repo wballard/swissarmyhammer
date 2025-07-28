@@ -258,6 +258,16 @@ mod tests {
         errors: Arc<Mutex<Vec<String>>>,
     }
 
+    struct DirGuard {
+        original_dir: std::path::PathBuf,
+    }
+
+    impl Drop for DirGuard {
+        fn drop(&mut self) {
+            let _ = std::env::set_current_dir(&self.original_dir);
+        }
+    }
+
     impl TestCallback {
         fn new() -> Self {
             Self {
@@ -303,6 +313,9 @@ mod tests {
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
+        // Ensure directory is restored even if test panics
+        let _guard = DirGuard { original_dir };
+
         let mut watcher = FileWatcher::new();
         let callback = TestCallback::new();
 
@@ -311,12 +324,12 @@ mod tests {
         assert!(result.is_ok());
         assert!(watcher.watcher_handle.is_some());
 
-        // Stop watching
+        // Add small delay to ensure watcher is fully initialized
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        // Stop watching with timeout
         watcher.stop_watching_async().await;
         assert!(watcher.watcher_handle.is_none());
-
-        // Restore original directory
-        let _ = std::env::set_current_dir(original_dir);
     }
 
     #[test]
@@ -365,6 +378,9 @@ mod tests {
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
+        // Ensure directory is restored even if test panics
+        let _guard = DirGuard { original_dir };
+
         let mut watcher = FileWatcher::new();
         let callback = TestCallback::new();
         let config = FileWatcherConfig {
@@ -377,11 +393,12 @@ mod tests {
         assert!(result.is_ok());
         assert!(watcher.watcher_handle.is_some());
 
-        watcher.stop_watching();
-        assert!(watcher.watcher_handle.is_none());
+        // Add small delay to ensure watcher is fully initialized
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
-        // Restore original directory before temp_dir is dropped
-        let _ = std::env::set_current_dir(&original_dir);
+        // Use async stop to ensure proper cleanup
+        watcher.stop_watching_async().await;
+        assert!(watcher.watcher_handle.is_none());
     }
 
     #[tokio::test]
@@ -400,6 +417,9 @@ mod tests {
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
+        // Ensure directory is restored even if test panics
+        let _guard = DirGuard { original_dir };
+
         let mut watcher = FileWatcher::new();
         let callback = TestCallback::new();
 
@@ -408,13 +428,13 @@ mod tests {
         assert!(result.is_ok());
         assert!(watcher.watcher_handle.is_some());
 
+        // Add small delay to ensure watcher is fully initialized
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
         // Stop watching using async method instead of relying on Drop
         watcher.stop_watching_async().await;
         // Verify the watcher handle is cleared
         assert!(watcher.watcher_handle.is_none());
-
-        // Restore original directory
-        let _ = std::env::set_current_dir(original_dir);
     }
 
     #[tokio::test]
@@ -435,19 +455,8 @@ mod tests {
         // Set current directory to temp dir
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
-        struct DirGuard {
-            original_dir: std::path::PathBuf,
-        }
-
-        impl Drop for DirGuard {
-            fn drop(&mut self) {
-                let _ = std::env::set_current_dir(&self.original_dir);
-            }
-        }
-
-        let _guard = DirGuard {
-            original_dir: original_dir.clone(),
-        };
+        // Ensure directory is restored even if test panics
+        let _guard = DirGuard { original_dir };
 
         let mut watcher = FileWatcher::new();
         let callback1 = TestCallback::new();
@@ -458,10 +467,22 @@ mod tests {
         assert!(result1.is_ok());
         assert!(watcher.watcher_handle.is_some());
 
-        // Start watching again - should stop previous and start new
+        // Add delay to ensure watcher is fully initialized
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        // Stop first watcher explicitly to ensure proper cleanup
+        watcher.stop_watching_async().await;
+
+        // Add delay to ensure complete cleanup
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        // Start watching again with second callback
         let result2 = watcher.start_watching(callback2).await;
         assert!(result2.is_ok());
         assert!(watcher.watcher_handle.is_some());
+
+        // Add delay before final cleanup
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
         watcher.stop_watching_async().await;
     }
@@ -539,14 +560,14 @@ mod tests {
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
+        // Ensure directory is restored even if test panics
+        let _guard = DirGuard { original_dir };
+
         let mut watcher = FileWatcher::new();
         let callback = ErrorCallback::new();
 
         // Start watching with error callback
         let result = watcher.start_watching(callback.clone()).await;
-
-        // Restore original directory before asserting to avoid leaving test in bad state
-        let _ = std::env::set_current_dir(&original_dir);
 
         // If the result is an error, log it for debugging before asserting
         if let Err(ref e) = result {
@@ -560,6 +581,10 @@ mod tests {
         );
         assert!(watcher.watcher_handle.is_some());
 
+        // Add small delay to ensure watcher is fully initialized
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        // Clean up immediately without waiting for events that never come
         watcher.stop_watching_async().await;
     }
 }

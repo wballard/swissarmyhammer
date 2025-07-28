@@ -112,7 +112,7 @@ pub enum SwissArmyHammerError {
 
     /// Semantic search error
     #[error("Semantic search error: {0}")]
-    Semantic(#[from] crate::semantic::SemanticError),
+    Semantic(#[from] crate::search::SemanticError),
 
     /// Other errors
     #[error("{0}")]

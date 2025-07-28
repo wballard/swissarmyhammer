@@ -1,6 +1,6 @@
 //! Local embedding generation using fastembed-rs neural embeddings
 
-use crate::semantic::{CodeChunk, Embedding, Result, SemanticError};
+use crate::search::{CodeChunk, Embedding, Result, SemanticError};
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -331,6 +331,19 @@ impl EmbeddingEngine {
             return Ok(Vec::new());
         }
 
+        // Check if this is a mock/test instance
+        #[cfg(test)]
+        if self.model_info.model_id == "mock-test-model" {
+            // Generate mock embeddings for each text
+            let mut embeddings = Vec::new();
+            for text in texts {
+                let cleaned = self.clean_text(text);
+                let mock_embedding = self.generate_deterministic_mock_embedding(&cleaned);
+                embeddings.push(mock_embedding);
+            }
+            return Ok(embeddings);
+        }
+
         // Clean and format texts for fastembed
         let cleaned_texts: Vec<String> = texts
             .iter()
@@ -418,9 +431,7 @@ impl EmbeddingEngine {
     #[cfg(test)]
     /// Create embedding engine for testing using mock model (no network required)
     pub async fn new_for_testing() -> Result<Self> {
-        info!("Creating mock embedding engine for testing (no network required)");
-
-        let config = EmbeddingConfig {
+        Self::new_for_testing_with_config(EmbeddingConfig {
             model_id: "mock-test-model".to_string(),
             embedding_model: EmbeddingModel::NomicEmbedTextV15, // Not used for mock
             batch_size: 1,
@@ -430,14 +441,20 @@ impl EmbeddingEngine {
             dimensions: Some(768), // Standard dimension for NomicEmbedTextV15
             max_sequence_length: 256,
             quantization: "FP32".to_string(),
-        };
+        }).await
+    }
 
-        info!("Creating mock embedding engine with 768 dimensions");
+    #[cfg(test)]
+    /// Create embedding engine for testing with custom config (no network required)
+    pub async fn new_for_testing_with_config(config: EmbeddingConfig) -> Result<Self> {
+        info!("Creating mock embedding engine for testing (no network required)");
+
+        info!("Creating mock embedding engine with {} dimensions", config.dimensions.unwrap_or(768));
 
         // Create a mock model info without initializing the actual fastembed model
         let model_info = EmbeddingModelInfo {
             model_id: config.model_id.clone(),
-            dimensions: 768, // Standard embedding dimension for NomicEmbedTextV15
+            dimensions: config.dimensions.unwrap_or(768), // Use config dimensions or default
             max_sequence_length: config.max_sequence_length,
             quantization: config.quantization.clone(),
         };
@@ -466,20 +483,32 @@ impl EmbeddingEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::semantic::{ChunkType, ContentHash, Language};
+    use crate::search::{ChunkType, ContentHash, Language};
     use std::path::PathBuf;
 
     #[tokio::test]
     #[serial_test::serial]
     async fn test_embedding_engine_creation() {
-        let engine = EmbeddingEngine::new().await;
+        let engine = EmbeddingEngine::new_for_testing().await;
         assert!(engine.is_ok());
     }
 
     #[tokio::test]
     #[serial_test::serial]
     async fn test_embedding_engine_with_model_id() {
-        let engine = EmbeddingEngine::with_model_id("custom-model".to_string()).await;
+        let config = EmbeddingConfig {
+            model_id: "custom-model".to_string(),
+            embedding_model: EmbeddingModel::NomicEmbedTextV15, // Not used for mock
+            batch_size: 1,
+            max_text_length: 1000,
+            batch_delay_ms: 0,
+            show_download_progress: false,
+            dimensions: Some(768),
+            max_sequence_length: 256,
+            quantization: "FP32".to_string(),
+        };
+        
+        let engine = EmbeddingEngine::new_for_testing_with_config(config).await;
         assert!(engine.is_ok());
 
         let engine = engine.unwrap();
@@ -501,7 +530,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_embed_text() {
-        let engine = EmbeddingEngine::new().await.unwrap();
+        let engine = EmbeddingEngine::new_for_testing().await.unwrap();
         let embedding = engine.embed_text("fn main() {}").await;
 
         assert!(embedding.is_ok());
@@ -516,7 +545,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_embed_text_empty() {
-        let engine = EmbeddingEngine::new().await.unwrap();
+        let engine = EmbeddingEngine::new_for_testing().await.unwrap();
         let embedding = engine.embed_text("").await;
 
         assert!(embedding.is_err());
@@ -525,14 +554,8 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_embed_chunk() {
-        // Try to create engine, but skip test if it fails (e.g., model not available)
-        let engine = match EmbeddingEngine::new().await {
-            Ok(engine) => engine,
-            Err(_) => {
-                eprintln!("Skipping test_embed_chunk: embedding model not available");
-                return;
-            }
-        };
+        // Use mock engine for testing to avoid network dependencies
+        let engine = EmbeddingEngine::new_for_testing().await.unwrap();
 
         let chunk = CodeChunk {
             id: "test_chunk".to_string(),
@@ -556,7 +579,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_embed_batch() {
-        let engine = EmbeddingEngine::new().await.unwrap();
+        let engine = EmbeddingEngine::new_for_testing().await.unwrap();
         let texts = vec!["fn main() {}", "println!(\"hello\");"];
         let embeddings = engine.embed_batch(&texts).await;
 
@@ -570,7 +593,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_semantic_consistency() {
-        let engine = EmbeddingEngine::new().await.unwrap();
+        let engine = EmbeddingEngine::new_for_testing().await.unwrap();
 
         // Test that similar texts produce similar embeddings
         let text1 = "fn add(a: i32, b: i32) -> i32 { a + b }";
@@ -646,22 +669,24 @@ mod tests {
         assert!(cleaned.contains("line4"));
     }
 
-    #[test]
+    #[tokio::test]
     #[serial_test::serial]
-    fn test_clean_text_truncation() {
+    async fn test_clean_text_truncation() {
+        // Create a mock config with limited text length for testing
         let config = EmbeddingConfig {
-            max_text_length: 10,
-            ..Default::default()
+            model_id: "mock-test-model".to_string(),
+            embedding_model: EmbeddingModel::NomicEmbedTextV15, // Not used for mock
+            batch_size: 1,
+            max_text_length: 10, // Test truncation at 10 characters
+            batch_delay_ms: 0,
+            show_download_progress: false,
+            dimensions: Some(768),
+            max_sequence_length: 256,
+            quantization: "FP32".to_string(),
         };
 
-        // Try to create engine, but skip test if it fails (e.g., model not available)
-        let engine = match futures::executor::block_on(EmbeddingEngine::with_config(config)) {
-            Ok(engine) => engine,
-            Err(_) => {
-                eprintln!("Skipping test_clean_text_truncation: embedding model not available");
-                return;
-            }
-        };
+        // Use mock engine for testing to avoid network dependencies
+        let engine = EmbeddingEngine::new_for_testing_with_config(config).await.unwrap();
 
         let long_text = "This is a very long text that should be truncated";
         let cleaned = engine.clean_text(long_text);

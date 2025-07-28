@@ -1,6 +1,6 @@
 //! File indexing logic for semantic search
 
-use crate::semantic::{
+use crate::search::{
     CodeChunk, CodeParser, EmbeddingEngine, FileChangeTracker, FileHasher, FileId, IndexedFile,
     ParserConfig, Result, SemanticError, VectorStorage,
 };
@@ -337,7 +337,7 @@ impl FileIndexer {
         let metadata_duration = metadata_start.elapsed();
 
         // Import the constant from parser for consistency
-        use crate::semantic::parser::DEFAULT_MAX_FILE_SIZE_BYTES;
+        use crate::search::parser::DEFAULT_MAX_FILE_SIZE_BYTES;
         if file_size > DEFAULT_MAX_FILE_SIZE_BYTES as u64 {
             return Err(SemanticError::Index(format!(
                 "File {} is too large ({} bytes > {} bytes limit). Skipping to prevent OOM.",
@@ -644,7 +644,7 @@ impl SingleFileReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::semantic::{ParserConfig, SemanticConfig, VectorStorage};
+    use crate::search::{ParserConfig, SemanticConfig, VectorStorage};
     use std::fs;
     use tempfile::TempDir;
 

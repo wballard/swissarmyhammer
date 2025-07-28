@@ -341,8 +341,8 @@ impl SemanticConfig {
     }
 
     /// Create a ParserConfig from this SemanticConfig
-    pub fn to_parser_config(&self) -> crate::Result<crate::semantic::parser::ParserConfig> {
-        crate::semantic::parser::ParserConfig::new(
+    pub fn to_parser_config(&self) -> crate::Result<crate::search::parser::ParserConfig> {
+        crate::search::parser::ParserConfig::new(
             self.min_chunk_size,
             self.max_chunk_size,
             self.max_chunks_per_file,
@@ -983,7 +983,7 @@ pub struct SearchStats {
     /// Total number of embeddings
     pub total_embeddings: usize,
     /// Information about the embedding model
-    pub model_info: crate::semantic::EmbeddingModelInfo,
+    pub model_info: crate::search::EmbeddingModelInfo,
 }
 
 /// Detailed explanation of search results for debugging

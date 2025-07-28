@@ -5,7 +5,7 @@
 //! similarity and manages the database schema for semantic search operations.
 
 use crate::error::{Result, SwissArmyHammerError};
-use crate::semantic::{
+use crate::search::{
     types::{
         CodeChunk, ContentHash, Embedding, IndexStats, IndexedFile, Language, SemanticSearchResult,
     },
@@ -1161,13 +1161,13 @@ impl VectorStorage {
     }
 
     /// Parse ChunkType enum from string representation
-    fn parse_chunk_type(s: &str) -> crate::semantic::types::ChunkType {
+    fn parse_chunk_type(s: &str) -> crate::search::types::ChunkType {
         match s {
-            "Function" => crate::semantic::types::ChunkType::Function,
-            "Class" => crate::semantic::types::ChunkType::Class,
-            "Module" => crate::semantic::types::ChunkType::Module,
-            "Import" => crate::semantic::types::ChunkType::Import,
-            _ => crate::semantic::types::ChunkType::PlainText,
+            "Function" => crate::search::types::ChunkType::Function,
+            "Class" => crate::search::types::ChunkType::Class,
+            "Module" => crate::search::types::ChunkType::Module,
+            "Import" => crate::search::types::ChunkType::Import,
+            _ => crate::search::types::ChunkType::PlainText,
         }
     }
 }
@@ -1188,7 +1188,7 @@ pub struct StorageStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::semantic::types::{ChunkType, FileId};
+    use crate::search::types::{ChunkType, FileId};
     use chrono::Utc;
 
     fn create_test_config() -> SemanticConfig {
@@ -1429,7 +1429,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_reproduce_full_search_integration() {
-        use crate::semantic::{EmbeddingEngine, SearchQuery, SemanticConfig, SemanticSearcher};
+        use crate::search::{EmbeddingEngine, SearchQuery, SemanticConfig, SemanticSearcher};
         use std::error::Error;
         use std::time::{SystemTime, UNIX_EPOCH};
 

@@ -53,11 +53,11 @@ impl McpTool for CreateMemoTool {
         context: &ToolContext,
     ) -> std::result::Result<CallToolResult, McpError> {
         let request: CreateMemoRequest = BaseToolImpl::parse_arguments(arguments)?;
-        
+
         tracing::debug!("Creating memo with title: {}", request.title);
 
         // Note: Both title and content can be empty - storage layer supports this
-        
+
         let memo_storage = context.memo_storage.write().await;
         match memo_storage
             .create_memo(request.title, request.content)
@@ -72,5 +72,130 @@ impl McpTool for CreateMemoTool {
             }
             Err(e) => Err(McpErrorHandler::handle_error(e, "create memo")),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::GitOperations;
+    use crate::issues::IssueStorage;
+    use crate::mcp::tool_handlers::ToolHandlers;
+    use crate::mcp::tool_registry::ToolContext;
+    use crate::memoranda::{mock_storage::MockMemoStorage, MemoStorage};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use tokio::sync::{Mutex, RwLock};
+
+    async fn create_test_context() -> ToolContext {
+        let issue_storage: Arc<RwLock<Box<dyn IssueStorage>>> = Arc::new(RwLock::new(Box::new(
+            crate::issues::FileSystemIssueStorage::new(PathBuf::from("./test_issues")).unwrap(),
+        )));
+        let git_ops: Arc<Mutex<Option<GitOperations>>> = Arc::new(Mutex::new(None));
+        let memo_storage: Arc<RwLock<Box<dyn MemoStorage>>> =
+            Arc::new(RwLock::new(Box::new(MockMemoStorage::new())));
+
+        let tool_handlers = Arc::new(ToolHandlers::new(
+            issue_storage.clone(),
+            git_ops.clone(),
+            memo_storage.clone(),
+        ));
+
+        ToolContext::new(tool_handlers, issue_storage, git_ops, memo_storage)
+    }
+
+    #[test]
+    fn test_create_memo_tool_new() {
+        let tool = CreateMemoTool::new();
+        assert_eq!(tool.name(), "memo_create");
+        assert!(!tool.description().is_empty());
+    }
+
+    #[test]
+    fn test_create_memo_tool_schema() {
+        let tool = CreateMemoTool::new();
+        let schema = tool.schema();
+
+        assert_eq!(schema["type"], "object");
+        assert!(schema["properties"]["title"].is_object());
+        assert!(schema["properties"]["content"].is_object());
+        assert_eq!(schema["required"], serde_json::json!(["title", "content"]));
+    }
+
+    #[tokio::test]
+    async fn test_create_memo_tool_execute_success() {
+        let tool = CreateMemoTool::new();
+        let context = create_test_context().await;
+
+        let mut arguments = serde_json::Map::new();
+        arguments.insert(
+            "title".to_string(),
+            serde_json::Value::String("Test Memo".to_string()),
+        );
+        arguments.insert(
+            "content".to_string(),
+            serde_json::Value::String("This is test content".to_string()),
+        );
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_ok());
+
+        let call_result = result.unwrap();
+        assert_eq!(call_result.is_error, Some(false));
+        assert!(!call_result.content.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_create_memo_tool_execute_empty_title_and_content() {
+        let tool = CreateMemoTool::new();
+        let context = create_test_context().await;
+
+        let mut arguments = serde_json::Map::new();
+        arguments.insert(
+            "title".to_string(),
+            serde_json::Value::String("".to_string()),
+        );
+        arguments.insert(
+            "content".to_string(),
+            serde_json::Value::String("".to_string()),
+        );
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_ok()); // Empty title and content should be allowed
+    }
+
+    #[tokio::test]
+    async fn test_create_memo_tool_execute_missing_required_field() {
+        let tool = CreateMemoTool::new();
+        let context = create_test_context().await;
+
+        let mut arguments = serde_json::Map::new();
+        arguments.insert(
+            "title".to_string(),
+            serde_json::Value::String("Test Memo".to_string()),
+        );
+        // Missing content field
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_memo_tool_execute_invalid_argument_type() {
+        let tool = CreateMemoTool::new();
+        let context = create_test_context().await;
+
+        let mut arguments = serde_json::Map::new();
+        arguments.insert(
+            "title".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(123)),
+        );
+        arguments.insert(
+            "content".to_string(),
+            serde_json::Value::String("content".to_string()),
+        );
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_err());
     }
 }

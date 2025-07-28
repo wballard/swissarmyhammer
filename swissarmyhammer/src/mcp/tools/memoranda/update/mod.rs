@@ -52,12 +52,17 @@ impl McpTool for UpdateMemoTool {
         context: &ToolContext,
     ) -> std::result::Result<CallToolResult, McpError> {
         let request: UpdateMemoRequest = BaseToolImpl::parse_arguments(arguments)?;
-        
+
         tracing::debug!("Updating memo with ID: {}", request.id);
 
         // Validate memo content using shared validation
-        crate::mcp::shared_utils::McpValidation::validate_not_empty(&request.content, "memo content")
-            .map_err(|e| crate::mcp::shared_utils::McpErrorHandler::handle_error(e, "validate memo content"))?;
+        crate::mcp::shared_utils::McpValidation::validate_not_empty(
+            &request.content,
+            "memo content",
+        )
+        .map_err(|e| {
+            crate::mcp::shared_utils::McpErrorHandler::handle_error(e, "validate memo content")
+        })?;
 
         let memo_id = match crate::memoranda::MemoId::from_string(request.id.clone()) {
             Ok(id) => id,
@@ -81,7 +86,189 @@ impl McpTool for UpdateMemoTool {
                     memo.content
                 )))
             }
-            Err(e) => Err(crate::mcp::shared_utils::McpErrorHandler::handle_error(e, "update memo")),
+            Err(e) => Err(crate::mcp::shared_utils::McpErrorHandler::handle_error(
+                e,
+                "update memo",
+            )),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::GitOperations;
+    use crate::issues::IssueStorage;
+    use crate::mcp::tool_handlers::ToolHandlers;
+    use crate::mcp::tool_registry::ToolContext;
+    use crate::memoranda::{mock_storage::MockMemoStorage, MemoStorage};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use tokio::sync::{Mutex, RwLock};
+
+    async fn create_test_context() -> ToolContext {
+        let issue_storage: Arc<RwLock<Box<dyn IssueStorage>>> = Arc::new(RwLock::new(Box::new(
+            crate::issues::FileSystemIssueStorage::new(PathBuf::from("./test_issues")).unwrap(),
+        )));
+        let git_ops: Arc<Mutex<Option<GitOperations>>> = Arc::new(Mutex::new(None));
+        let memo_storage: Arc<RwLock<Box<dyn MemoStorage>>> =
+            Arc::new(RwLock::new(Box::new(MockMemoStorage::new())));
+
+        let tool_handlers = Arc::new(ToolHandlers::new(
+            issue_storage.clone(),
+            git_ops.clone(),
+            memo_storage.clone(),
+        ));
+
+        ToolContext::new(tool_handlers, issue_storage, git_ops, memo_storage)
+    }
+
+    #[test]
+    fn test_update_memo_tool_new() {
+        let tool = UpdateMemoTool::new();
+        assert_eq!(tool.name(), "memo_update");
+        assert!(!tool.description().is_empty());
+    }
+
+    #[test]
+    fn test_update_memo_tool_schema() {
+        let tool = UpdateMemoTool::new();
+        let schema = tool.schema();
+
+        assert_eq!(schema["type"], "object");
+        assert!(schema["properties"]["id"].is_object());
+        assert!(schema["properties"]["content"].is_object());
+        assert_eq!(schema["required"], serde_json::json!(["id", "content"]));
+    }
+
+    #[tokio::test]
+    async fn test_update_memo_tool_execute_success() {
+        let tool = UpdateMemoTool::new();
+        let context = create_test_context().await;
+
+        // First create a memo to update
+        let memo_storage = context.memo_storage.write().await;
+        let memo = memo_storage
+            .create_memo("Test Memo".to_string(), "Original content".to_string())
+            .await
+            .unwrap();
+        drop(memo_storage); // Release the lock
+
+        let mut arguments = serde_json::Map::new();
+        arguments.insert(
+            "id".to_string(),
+            serde_json::Value::String(memo.id.to_string()),
+        );
+        arguments.insert(
+            "content".to_string(),
+            serde_json::Value::String("Updated content".to_string()),
+        );
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_ok());
+
+        let call_result = result.unwrap();
+        assert_eq!(call_result.is_error, Some(false));
+        assert!(!call_result.content.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_update_memo_tool_execute_empty_content() {
+        let tool = UpdateMemoTool::new();
+        let context = create_test_context().await;
+
+        // First create a memo to update
+        let memo_storage = context.memo_storage.write().await;
+        let memo = memo_storage
+            .create_memo("Test Memo".to_string(), "Original content".to_string())
+            .await
+            .unwrap();
+        drop(memo_storage); // Release the lock
+
+        let mut arguments = serde_json::Map::new();
+        arguments.insert(
+            "id".to_string(),
+            serde_json::Value::String(memo.id.to_string()),
+        );
+        arguments.insert(
+            "content".to_string(),
+            serde_json::Value::String("".to_string()),
+        );
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_err()); // Should fail due to validation
+    }
+
+    #[tokio::test]
+    async fn test_update_memo_tool_execute_invalid_id_format() {
+        let tool = UpdateMemoTool::new();
+        let context = create_test_context().await;
+
+        let mut arguments = serde_json::Map::new();
+        arguments.insert(
+            "id".to_string(),
+            serde_json::Value::String("invalid-id".to_string()),
+        );
+        arguments.insert(
+            "content".to_string(),
+            serde_json::Value::String("New content".to_string()),
+        );
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_update_memo_tool_execute_nonexistent_memo() {
+        let tool = UpdateMemoTool::new();
+        let context = create_test_context().await;
+
+        let mut arguments = serde_json::Map::new();
+        arguments.insert(
+            "id".to_string(),
+            serde_json::Value::String("01ARZ3NDEKTSV4RRFFQ69G5FAV".to_string()),
+        );
+        arguments.insert(
+            "content".to_string(),
+            serde_json::Value::String("New content".to_string()),
+        );
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_err()); // Should fail because memo doesn't exist
+    }
+
+    #[tokio::test]
+    async fn test_update_memo_tool_execute_missing_required_field() {
+        let tool = UpdateMemoTool::new();
+        let context = create_test_context().await;
+
+        let mut arguments = serde_json::Map::new();
+        arguments.insert(
+            "id".to_string(),
+            serde_json::Value::String("01ARZ3NDEKTSV4RRFFQ69G5FAV".to_string()),
+        );
+        // Missing content field
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_update_memo_tool_execute_invalid_argument_type() {
+        let tool = UpdateMemoTool::new();
+        let context = create_test_context().await;
+
+        let mut arguments = serde_json::Map::new();
+        arguments.insert(
+            "id".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(123)),
+        );
+        arguments.insert(
+            "content".to_string(),
+            serde_json::Value::String("New content".to_string()),
+        );
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_err());
     }
 }

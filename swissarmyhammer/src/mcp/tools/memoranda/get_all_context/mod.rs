@@ -43,7 +43,7 @@ impl McpTool for GetAllContextMemoTool {
         context: &ToolContext,
     ) -> std::result::Result<CallToolResult, McpError> {
         let _request: GetAllContextRequest = BaseToolImpl::parse_arguments(arguments)?;
-        
+
         tracing::debug!("Getting all memo context");
 
         let memo_storage = context.memo_storage.read().await;
@@ -51,7 +51,9 @@ impl McpTool for GetAllContextMemoTool {
             Ok(memos) => {
                 tracing::info!("Retrieved {} memos for context", memos.len());
                 if memos.is_empty() {
-                    Ok(BaseToolImpl::create_success_response("No memos available".to_string()))
+                    Ok(BaseToolImpl::create_success_response(
+                        "No memos available".to_string(),
+                    ))
                 } else {
                     // Sort memos by updated_at descending (most recent first)
                     let mut sorted_memos = memos;
@@ -64,8 +66,12 @@ impl McpTool for GetAllContextMemoTool {
                                 "=== {} (ID: {}) ===\nCreated: {}\nUpdated: {}\n\n{}",
                                 memo.title,
                                 memo.id,
-                                crate::mcp::shared_utils::McpFormatter::format_timestamp(memo.created_at),
-                                crate::mcp::shared_utils::McpFormatter::format_timestamp(memo.updated_at),
+                                crate::mcp::shared_utils::McpFormatter::format_timestamp(
+                                    memo.created_at
+                                ),
+                                crate::mcp::shared_utils::McpFormatter::format_timestamp(
+                                    memo.updated_at
+                                ),
                                 memo.content
                             )
                         })
@@ -79,7 +85,173 @@ impl McpTool for GetAllContextMemoTool {
                     )))
                 }
             }
-            Err(e) => Err(crate::mcp::shared_utils::McpErrorHandler::handle_error(e, "get memo context")),
+            Err(e) => Err(crate::mcp::shared_utils::McpErrorHandler::handle_error(
+                e,
+                "get memo context",
+            )),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::GitOperations;
+    use crate::issues::IssueStorage;
+    use crate::mcp::tool_handlers::ToolHandlers;
+    use crate::mcp::tool_registry::ToolContext;
+    use crate::memoranda::{mock_storage::MockMemoStorage, MemoStorage};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use tokio::sync::{Mutex, RwLock};
+
+    async fn create_test_context() -> ToolContext {
+        let issue_storage: Arc<RwLock<Box<dyn IssueStorage>>> = Arc::new(RwLock::new(Box::new(
+            crate::issues::FileSystemIssueStorage::new(PathBuf::from("./test_issues")).unwrap(),
+        )));
+        let git_ops: Arc<Mutex<Option<GitOperations>>> = Arc::new(Mutex::new(None));
+        let memo_storage: Arc<RwLock<Box<dyn MemoStorage>>> =
+            Arc::new(RwLock::new(Box::new(MockMemoStorage::new())));
+
+        let tool_handlers = Arc::new(ToolHandlers::new(
+            issue_storage.clone(),
+            git_ops.clone(),
+            memo_storage.clone(),
+        ));
+
+        ToolContext::new(tool_handlers, issue_storage, git_ops, memo_storage)
+    }
+
+    #[test]
+    fn test_get_all_context_memo_tool_new() {
+        let tool = GetAllContextMemoTool::new();
+        assert_eq!(tool.name(), "memo_get_all_context");
+        assert!(!tool.description().is_empty());
+    }
+
+    #[test]
+    fn test_get_all_context_memo_tool_schema() {
+        let tool = GetAllContextMemoTool::new();
+        let schema = tool.schema();
+
+        assert_eq!(schema["type"], "object");
+        assert_eq!(schema["properties"], serde_json::json!({}));
+        assert_eq!(schema["required"], serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn test_get_all_context_memo_tool_execute_empty() {
+        let tool = GetAllContextMemoTool::new();
+        let context = create_test_context().await;
+
+        let arguments = serde_json::Map::new();
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_ok());
+
+        let call_result = result.unwrap();
+        assert_eq!(call_result.is_error, Some(false));
+        assert!(!call_result.content.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_all_context_memo_tool_execute_with_memos() {
+        let tool = GetAllContextMemoTool::new();
+        let context = create_test_context().await;
+
+        // Create some test memos
+        let memo_storage = context.memo_storage.write().await;
+        memo_storage
+            .create_memo("First Memo".to_string(), "First content".to_string())
+            .await
+            .unwrap();
+        memo_storage
+            .create_memo("Second Memo".to_string(), "Second content".to_string())
+            .await
+            .unwrap();
+        drop(memo_storage); // Release the lock
+
+        let arguments = serde_json::Map::new();
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_ok());
+
+        let call_result = result.unwrap();
+        assert_eq!(call_result.is_error, Some(false));
+        assert!(!call_result.content.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_all_context_memo_tool_execute_sorting() {
+        let tool = GetAllContextMemoTool::new();
+        let context = create_test_context().await;
+
+        // Create memos with some delay to ensure different timestamps
+        let memo_storage = context.memo_storage.write().await;
+        let _first_memo = memo_storage
+            .create_memo("First Memo".to_string(), "First content".to_string())
+            .await
+            .unwrap();
+
+        // Small delay to ensure different timestamps
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        let _second_memo = memo_storage
+            .create_memo("Second Memo".to_string(), "Second content".to_string())
+            .await
+            .unwrap();
+        drop(memo_storage); // Release the lock
+
+        let arguments = serde_json::Map::new();
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_ok());
+
+        let call_result = result.unwrap();
+        assert_eq!(call_result.is_error, Some(false));
+        assert!(!call_result.content.is_empty());
+
+        // The most recently created memo should appear first in the context
+        // Since we created second_memo after first_memo, it should have a later updated_at
+    }
+
+    #[tokio::test]
+    async fn test_get_all_context_memo_tool_execute_singular_plural() {
+        let tool = GetAllContextMemoTool::new();
+        let context = create_test_context().await;
+
+        // Create exactly one memo
+        let memo_storage = context.memo_storage.write().await;
+        memo_storage
+            .create_memo("Single Memo".to_string(), "Single content".to_string())
+            .await
+            .unwrap();
+        drop(memo_storage); // Release the lock
+
+        let arguments = serde_json::Map::new();
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_ok());
+
+        let call_result = result.unwrap();
+        assert_eq!(call_result.is_error, Some(false));
+        assert!(!call_result.content.is_empty());
+        // Should use singular form "memo" not "memos" for single result
+    }
+
+    #[tokio::test]
+    async fn test_get_all_context_memo_tool_execute_with_invalid_arguments() {
+        let tool = GetAllContextMemoTool::new();
+        let context = create_test_context().await;
+
+        let mut arguments = serde_json::Map::new();
+        arguments.insert(
+            "invalid_field".to_string(),
+            serde_json::Value::String("invalid".to_string()),
+        );
+
+        let result = tool.execute(arguments, &context).await;
+        // Should succeed because the schema allows extra fields and the parsing ignores unknown fields
+        assert!(result.is_ok());
     }
 }

@@ -20,14 +20,14 @@
 //! ```rust
 //! use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 //! use crate::mcp::types::*;
-//! 
+//!
 //! #[derive(Default)]
 //! pub struct ExampleIssueTool;
-//! 
+//!
 //! impl ExampleIssueTool {
 //!     pub fn new() -> Self { Self }
 //! }
-//! 
+//!
 //! #[async_trait]
 //! impl McpTool for ExampleIssueTool {
 //!     fn description(&self) -> &'static str {

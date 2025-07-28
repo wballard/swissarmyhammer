@@ -48,7 +48,7 @@ impl McpTool for GetMemoTool {
         context: &ToolContext,
     ) -> std::result::Result<CallToolResult, McpError> {
         let request: GetMemoRequest = BaseToolImpl::parse_arguments(arguments)?;
-        
+
         tracing::debug!("Getting memo with ID: {}", request.id);
 
         let memo_id = match crate::memoranda::MemoId::from_string(request.id.clone()) {
@@ -74,7 +74,139 @@ impl McpTool for GetMemoTool {
                     memo.content
                 )))
             }
-            Err(e) => Err(crate::mcp::shared_utils::McpErrorHandler::handle_error(e, "get memo")),
+            Err(e) => Err(crate::mcp::shared_utils::McpErrorHandler::handle_error(
+                e, "get memo",
+            )),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::GitOperations;
+    use crate::issues::IssueStorage;
+    use crate::mcp::tool_handlers::ToolHandlers;
+    use crate::mcp::tool_registry::ToolContext;
+    use crate::memoranda::{mock_storage::MockMemoStorage, MemoStorage};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use tokio::sync::{Mutex, RwLock};
+
+    async fn create_test_context() -> ToolContext {
+        let issue_storage: Arc<RwLock<Box<dyn IssueStorage>>> = Arc::new(RwLock::new(Box::new(
+            crate::issues::FileSystemIssueStorage::new(PathBuf::from("./test_issues")).unwrap(),
+        )));
+        let git_ops: Arc<Mutex<Option<GitOperations>>> = Arc::new(Mutex::new(None));
+        let memo_storage: Arc<RwLock<Box<dyn MemoStorage>>> =
+            Arc::new(RwLock::new(Box::new(MockMemoStorage::new())));
+
+        let tool_handlers = Arc::new(ToolHandlers::new(
+            issue_storage.clone(),
+            git_ops.clone(),
+            memo_storage.clone(),
+        ));
+
+        ToolContext::new(tool_handlers, issue_storage, git_ops, memo_storage)
+    }
+
+    #[test]
+    fn test_get_memo_tool_new() {
+        let tool = GetMemoTool::new();
+        assert_eq!(tool.name(), "memo_get");
+        assert!(!tool.description().is_empty());
+    }
+
+    #[test]
+    fn test_get_memo_tool_schema() {
+        let tool = GetMemoTool::new();
+        let schema = tool.schema();
+
+        assert_eq!(schema["type"], "object");
+        assert!(schema["properties"]["id"].is_object());
+        assert_eq!(schema["required"], serde_json::json!(["id"]));
+    }
+
+    #[tokio::test]
+    async fn test_get_memo_tool_execute_success() {
+        let tool = GetMemoTool::new();
+        let context = create_test_context().await;
+
+        // First create a memo to retrieve
+        let memo_storage = context.memo_storage.write().await;
+        let memo = memo_storage
+            .create_memo("Test Memo".to_string(), "Test content".to_string())
+            .await
+            .unwrap();
+        drop(memo_storage); // Release the lock
+
+        let mut arguments = serde_json::Map::new();
+        arguments.insert(
+            "id".to_string(),
+            serde_json::Value::String(memo.id.to_string()),
+        );
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_ok());
+
+        let call_result = result.unwrap();
+        assert_eq!(call_result.is_error, Some(false));
+        assert!(!call_result.content.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_memo_tool_execute_invalid_id_format() {
+        let tool = GetMemoTool::new();
+        let context = create_test_context().await;
+
+        let mut arguments = serde_json::Map::new();
+        arguments.insert(
+            "id".to_string(),
+            serde_json::Value::String("invalid-id".to_string()),
+        );
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_get_memo_tool_execute_nonexistent_memo() {
+        let tool = GetMemoTool::new();
+        let context = create_test_context().await;
+
+        let mut arguments = serde_json::Map::new();
+        arguments.insert(
+            "id".to_string(),
+            serde_json::Value::String("01ARZ3NDEKTSV4RRFFQ69G5FAV".to_string()),
+        );
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_err()); // Should fail because memo doesn't exist
+    }
+
+    #[tokio::test]
+    async fn test_get_memo_tool_execute_missing_required_field() {
+        let tool = GetMemoTool::new();
+        let context = create_test_context().await;
+
+        let arguments = serde_json::Map::new(); // Missing id field
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_get_memo_tool_execute_invalid_argument_type() {
+        let tool = GetMemoTool::new();
+        let context = create_test_context().await;
+
+        let mut arguments = serde_json::Map::new();
+        arguments.insert(
+            "id".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(123)),
+        );
+
+        let result = tool.execute(arguments, &context).await;
+        assert!(result.is_err());
     }
 }

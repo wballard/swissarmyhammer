@@ -589,11 +589,7 @@ mod tests {
         let memo_storage: Arc<RwLock<Box<dyn MemoStorage>>> =
             Arc::new(RwLock::new(Box::new(MockMemoStorage::new())));
 
-        let tool_handlers = Arc::new(ToolHandlers::new(
-            issue_storage.clone(),
-            git_ops.clone(),
-            memo_storage.clone(),
-        ));
+        let tool_handlers = Arc::new(ToolHandlers::new(memo_storage.clone()));
         let context = ToolContext::new(tool_handlers, issue_storage, git_ops, memo_storage);
 
         let tool = MockTool {

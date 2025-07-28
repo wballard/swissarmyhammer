@@ -3,7 +3,7 @@
 //! This example demonstrates how to programmatically interact with the memoranda system
 //! for structured note-taking and knowledge management.
 
-use swissarmyhammer::memoranda::{MarkdownMemoStorage, MemoStorage};
+use swissarmyhammer::memoranda::{MarkdownMemoStorage, MemoStorage, Memo, MemoId};
 use tempfile::TempDir;
 
 #[tokio::main]
@@ -332,6 +332,33 @@ fn read_file() -> Result<String, Box<dyn Error>> {
     Ok(())
 }
 
+/// Analyze memo content and return statistics
+async fn analyze_memo_content(memo: &Memo) -> std::collections::HashMap<&'static str, usize> {
+    let mut stats = std::collections::HashMap::new();
+    
+    // Count headers (lines starting with #)
+    let headers = memo.content.lines()
+        .filter(|line| line.trim_start().starts_with('#'))
+        .count();
+    stats.insert("headers", headers);
+    
+    // Count action items (lines containing [ ] or [x])
+    let action_items = memo.content.lines()
+        .filter(|line| line.contains("- [ ]") || line.contains("- [x]"))
+        .count();
+    stats.insert("action_items", action_items);
+    
+    // Count words
+    let words = memo.content.split_whitespace().count();
+    stats.insert("words", words);
+    
+    // Count lines
+    let lines = memo.content.lines().count();
+    stats.insert("lines", lines);
+    
+    stats
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -373,7 +400,7 @@ mod tests {
     #[tokio::test]
     async fn test_memo_content_analysis() {
         let memo = Memo {
-            id: "01TEST123456789012345678".to_string(),
+            id: MemoId::from_string("01TEST123456789012345678".to_string()).unwrap(),
             title: "Test Memo".to_string(),
             content: "# Header 1\n\nSome content\n\n## Header 2\n\n- [ ] Task 1\n- [x] Task 2"
                 .to_string(),

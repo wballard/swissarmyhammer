@@ -1,9 +1,9 @@
 use serde_json::{json, Value};
+use serial_test::serial;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use tokio::time::{sleep, timeout};
-use serial_test::serial;
 
 mod test_utils;
 use test_utils::ProcessGuard;
@@ -75,7 +75,14 @@ async fn wait_for_server_ready(
 async fn test_mcp_server_partial_rendering() {
     // Start the MCP server process
     let child = Command::new("cargo")
-        .args(["run", "--release", "--bin", "swissarmyhammer", "--", "serve"])
+        .args([
+            "run",
+            "--release",
+            "--bin",
+            "swissarmyhammer",
+            "--",
+            "serve",
+        ])
         .current_dir("..") // Run from project root
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

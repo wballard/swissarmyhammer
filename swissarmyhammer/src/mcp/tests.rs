@@ -15,7 +15,6 @@ use std::fs;
 use std::process::Command;
 use tempfile::TempDir;
 
-
 #[tokio::test]
 async fn test_mcp_server_creation() {
     let library = PromptLibrary::new();
@@ -47,8 +46,8 @@ async fn test_mcp_server_list_prompts() {
 #[tokio::test]
 async fn test_mcp_server_get_prompt() {
     let mut library = PromptLibrary::new();
-    let prompt = Prompt::new("test", "Hello {{ name }}!")
-        .with_description("Greeting prompt".to_string());
+    let prompt =
+        Prompt::new("test", "Hello {{ name }}!").with_description("Greeting prompt".to_string());
     library.add(prompt).unwrap();
 
     let server = McpServer::new(library).unwrap();
@@ -690,7 +689,6 @@ mod mcp_integration_tests {
 
         (server, temp_dir)
     }
-
 
     #[tokio::test]
     async fn test_mcp_create_issue() {

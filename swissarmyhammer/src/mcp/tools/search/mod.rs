@@ -11,7 +11,7 @@ use crate::mcp::tool_registry::ToolRegistry;
 /// Register all search-related tools with the registry
 ///
 /// This function registers both the search indexing and query tools with the provided registry.
-/// These tools expose the semantic search functionality that uses vector embeddings and 
+/// These tools expose the semantic search functionality that uses vector embeddings and
 /// TreeSitter parsing for code understanding.
 ///
 /// # Arguments

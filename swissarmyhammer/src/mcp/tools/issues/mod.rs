@@ -31,7 +31,8 @@
 //! #[async_trait]
 //! impl McpTool for ExampleIssueTool {
 //!     fn description(&self) -> &'static str {
-//!         include_str!("description.md")  // Co-located documentation
+//!         crate::mcp::tool_descriptions::get_tool_description("issues", "example")
+//!             .unwrap_or("Tool description not available")
 //!     }
 //!     // ... other trait methods
 //! }

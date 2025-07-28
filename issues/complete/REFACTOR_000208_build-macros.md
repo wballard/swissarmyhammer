@@ -423,3 +423,42 @@ After implementing build macros:
 - Provide fallback descriptions for missing files
 - Test build process in CI/CD pipeline
 - Document build requirements clearly
+
+
+## Proposed Solution
+
+After analyzing the current build.rs and tool structure, I propose implementing the build-time macro system as follows:
+
+### Analysis of Current State
+
+1. **Existing Build System**: The `build.rs` already processes builtin prompts and workflows from `../builtin/` directories using a recursive collection approach
+2. **Tool Structure**: Tools are organized in `src/mcp/tools/{noun}/{verb}/` directories, each containing:
+   - `mod.rs` - tool implementation 
+   - `description.md` - tool description (already exists for all tools)
+3. **Current Implementation**: Tools use `include_str!("description.md")` which works but doesn't follow the build macro pattern
+
+### Implementation Plan
+
+1. **Extend build.rs**: Add `collect_tool_descriptions()` function similar to existing `collect_prompts()` and `collect_workflows()`
+2. **Generate tool_descriptions.rs**: Create a registry that maps tool paths to embedded descriptions
+3. **Create access module**: Add `src/mcp/tool_descriptions.rs` to provide runtime access to descriptions
+4. **Update tool implementations**: Replace `include_str!()` calls with build-time registry lookups
+5. **Add validation**: Ensure description files are well-formed markdown
+
+### Advantages of this approach
+
+- Follows existing patterns in the codebase
+- Centralizes tool description access
+- Provides build-time validation
+- Makes descriptions searchable and listable at runtime  
+- Maintains compatibility with existing tool structure
+
+### Implementation Steps
+
+1. Extend build.rs with tool description processing
+2. Create tool_descriptions.rs module for runtime access
+3. Update all tool implementations to use the registry
+4. Add comprehensive tests
+5. Validate build process works correctly
+
+This approach maintains the same directory structure but provides centralized, validated access to tool descriptions at runtime while embedding them at build-time.

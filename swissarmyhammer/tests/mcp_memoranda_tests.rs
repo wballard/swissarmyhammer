@@ -11,6 +11,7 @@
 use serde_json::json;
 use std::io::BufReader;
 use std::time::Duration;
+use serial_test::serial;
 
 // Test utilities module
 mod test_utils {
@@ -36,7 +37,7 @@ mod test_utils {
         let memos_dir = temp_dir.path().join("memos");
 
         let child = Command::new("cargo")
-            .args(["run", "--bin", "swissarmyhammer", "--", "serve"])
+            .args(["run", "--release", "--bin", "swissarmyhammer", "--", "serve"])
             .current_dir("..") // Run from project root
             .env("SWISSARMYHAMMER_MEMOS_DIR", memos_dir)
             .stdin(Stdio::piped())
@@ -137,7 +138,7 @@ mod test_utils {
 
     /// Wait for server to be ready
     pub async fn wait_for_server_ready() {
-        tokio::time::sleep(Duration::from_millis(2000)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
     /// Send JSON-RPC request to MCP server
@@ -195,6 +196,7 @@ use test_utils::*;
 
 /// Test memo creation via MCP
 #[tokio::test]
+#[serial]
 async fn test_mcp_memo_create() {
     let mut server = start_mcp_server().unwrap();
     wait_for_server_ready().await;
@@ -237,6 +239,7 @@ async fn test_mcp_memo_create() {
 
 /// Test memo creation with empty title and content
 #[tokio::test]
+#[serial]
 async fn test_mcp_memo_create_empty_content() {
     let mut server = start_mcp_server().unwrap();
     wait_for_server_ready().await;
@@ -271,6 +274,7 @@ async fn test_mcp_memo_create_empty_content() {
 
 /// Test memo creation with unicode content
 #[tokio::test]
+#[serial]
 async fn test_mcp_memo_create_unicode() {
     let mut server = start_mcp_server().unwrap();
     wait_for_server_ready().await;
@@ -303,6 +307,7 @@ async fn test_mcp_memo_create_unicode() {
 
 /// Test memo retrieval via MCP
 #[tokio::test]
+#[serial]
 async fn test_mcp_memo_get() {
     let mut server = start_mcp_server().unwrap();
     wait_for_server_ready().await;
@@ -358,6 +363,7 @@ async fn test_mcp_memo_get() {
 
 /// Test memo get with invalid ID
 #[tokio::test]
+#[serial]
 async fn test_mcp_memo_get_invalid_id() {
     let mut server = start_mcp_server().unwrap();
     wait_for_server_ready().await;
@@ -392,6 +398,7 @@ async fn test_mcp_memo_get_invalid_id() {
 
 /// Test memo get with non-existent valid ID
 #[tokio::test]
+#[serial]
 async fn test_mcp_memo_get_nonexistent() {
     let mut server = start_mcp_server().unwrap();
     wait_for_server_ready().await;
@@ -423,6 +430,7 @@ async fn test_mcp_memo_get_nonexistent() {
 
 /// Test memo update via MCP
 #[tokio::test]
+#[serial]
 async fn test_mcp_memo_update() {
     let mut server = start_mcp_server().unwrap();
     wait_for_server_ready().await;
@@ -478,6 +486,7 @@ async fn test_mcp_memo_update() {
 
 /// Test memo delete via MCP
 #[tokio::test]
+#[serial]
 async fn test_mcp_memo_delete() {
     let mut server = start_mcp_server().unwrap();
     wait_for_server_ready().await;
@@ -547,6 +556,7 @@ async fn test_mcp_memo_delete() {
 
 /// Test memo list via MCP
 #[tokio::test]
+#[serial]
 async fn test_mcp_memo_list() {
     let mut server = start_mcp_server().unwrap();
     wait_for_server_ready().await;
@@ -602,6 +612,7 @@ async fn test_mcp_memo_list() {
 
 /// Test memo search via MCP
 #[tokio::test]
+#[serial]
 async fn test_mcp_memo_search() {
     let mut server = start_mcp_server().unwrap();
     wait_for_server_ready().await;
@@ -674,6 +685,7 @@ async fn test_mcp_memo_search() {
 
 /// Test memo search case insensitivity
 #[tokio::test]
+#[serial]
 async fn test_mcp_memo_search_case_insensitive() {
     let mut server = start_mcp_server().unwrap();
     wait_for_server_ready().await;
@@ -722,6 +734,7 @@ async fn test_mcp_memo_search_case_insensitive() {
 
 /// Test memo get all context via MCP
 #[tokio::test]
+#[serial]
 async fn test_mcp_memo_get_all_context() {
     let mut server = start_mcp_server().unwrap();
     wait_for_server_ready().await;
@@ -761,7 +774,7 @@ async fn test_mcp_memo_get_all_context() {
         let _ = read_response(&mut reader).unwrap();
 
         // Small delay to ensure different timestamps
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
 
     // Get all context
@@ -782,6 +795,7 @@ async fn test_mcp_memo_get_all_context() {
 
 /// Test large memo content handling via MCP
 #[tokio::test]
+#[serial]
 async fn test_mcp_memo_large_content() {
     let mut server = start_mcp_server().unwrap();
     wait_for_server_ready().await;
@@ -844,6 +858,7 @@ async fn test_mcp_memo_large_content() {
 
 /// Test concurrent MCP requests
 #[tokio::test]
+#[serial]
 async fn test_mcp_memo_concurrent_requests() {
     let mut server = start_mcp_server().unwrap();
     wait_for_server_ready().await;
@@ -896,6 +911,7 @@ async fn test_mcp_memo_concurrent_requests() {
 
 /// Test MCP error handling for malformed requests
 #[tokio::test]
+#[serial]
 async fn test_mcp_memo_malformed_requests() {
     let mut server = start_mcp_server().unwrap();
     wait_for_server_ready().await;
@@ -937,6 +953,7 @@ async fn test_mcp_memo_malformed_requests() {
 
 /// Test MCP tool list includes all memo tools
 #[tokio::test]
+#[serial]
 async fn test_mcp_memo_tool_list() {
     let mut server = start_mcp_server().unwrap();
     wait_for_server_ready().await;

@@ -3,6 +3,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use tokio::time::{sleep, timeout};
+use serial_test::serial;
 
 mod test_utils;
 use test_utils::ProcessGuard;
@@ -12,7 +13,7 @@ async fn wait_for_server_ready(
     stdin: &mut std::process::ChildStdin,
     reader: &mut BufReader<std::process::ChildStdout>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    const MAX_ATTEMPTS: u32 = 50; // 5 seconds with 100ms intervals
+    const MAX_ATTEMPTS: u32 = 10; // 1 second with 100ms intervals
     const RETRY_DELAY: Duration = Duration::from_millis(100);
 
     for attempt in 0..MAX_ATTEMPTS {
@@ -70,10 +71,11 @@ async fn wait_for_server_ready(
 
 /// End-to-end test for MCP server handling prompts with partials (issue #58)
 #[tokio::test]
+#[serial]
 async fn test_mcp_server_partial_rendering() {
     // Start the MCP server process
     let child = Command::new("cargo")
-        .args(["run", "--bin", "swissarmyhammer", "--", "serve"])
+        .args(["run", "--release", "--bin", "swissarmyhammer", "--", "serve"])
         .current_dir("..") // Run from project root
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

@@ -26,7 +26,8 @@ impl McpTool for MarkCompleteIssueTool {
     }
 
     fn description(&self) -> &'static str {
-        include_str!("description.md")
+        crate::mcp::tool_descriptions::get_tool_description("issues", "mark_complete")
+            .unwrap_or("Tool description not available")
     }
 
     fn schema(&self) -> serde_json::Value {

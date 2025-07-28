@@ -26,6 +26,7 @@ pub mod memo_types;
 pub mod responses;
 pub mod search_types;
 pub mod shared_utils;
+pub mod tool_descriptions;
 pub mod tool_handlers;
 pub mod tool_registry;
 pub mod tools;

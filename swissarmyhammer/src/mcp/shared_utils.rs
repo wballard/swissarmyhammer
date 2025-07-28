@@ -182,8 +182,10 @@ impl McpValidation {
     pub fn validate_string_length(value: &str, field: &str, max_length: usize) -> Result<()> {
         if value.len() > max_length {
             return Err(SwissArmyHammerError::Other(format!(
-                "{field} too long: {} characters (max: {max_length})",
-                value.len()
+                "{} too long: {} characters (max: {})",
+                Self::capitalize_first_letter(field),
+                value.len(),
+                max_length
             )));
         }
         Ok(())
@@ -193,24 +195,37 @@ impl McpValidation {
     pub fn validate_not_empty(value: &str, field: &str) -> Result<()> {
         if value.trim().is_empty() {
             return Err(SwissArmyHammerError::Other(format!(
-                "{field} cannot be empty"
+                "{} cannot be empty",
+                Self::capitalize_first_letter(field)
             )));
         }
         Ok(())
+    }
+
+    /// Helper function to capitalize the first letter of a string
+    fn capitalize_first_letter(s: &str) -> String {
+        let mut chars = s.chars();
+        match chars.next() {
+            None => String::new(),
+            Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        }
     }
 
     /// Validate identifier format (alphanumeric, hyphens, underscores only)
     pub fn validate_identifier(value: &str, field: &str) -> Result<()> {
         if value.is_empty() {
             return Err(SwissArmyHammerError::Other(format!(
-                "{field} cannot be empty"
+                "{} cannot be empty",
+                Self::capitalize_first_letter(field)
             )));
         }
 
         for char in value.chars() {
             if !char.is_alphanumeric() && char != '-' && char != '_' {
                 return Err(SwissArmyHammerError::Other(format!(
-                    "{field} contains invalid character: '{char}'. Only alphanumeric characters, hyphens, and underscores are allowed"
+                    "{} contains invalid character: '{}'. Only alphanumeric characters, hyphens, and underscores are allowed",
+                    Self::capitalize_first_letter(field),
+                    char
                 )));
             }
         }

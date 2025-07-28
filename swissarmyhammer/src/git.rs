@@ -204,6 +204,20 @@ impl GitOperations {
         let branch_name = format!("issue/{issue_name}");
         let main_branch = self.main_branch()?;
 
+        // Debug: List all branches before checking
+        let list_output = Command::new("git")
+            .current_dir(&self.work_dir)
+            .args(["branch", "-a"])
+            .output();
+        if let Ok(output) = list_output {
+            tracing::debug!(
+                "All branches before merge check: {}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+        } else {
+            tracing::debug!("Failed to list branches");
+        }
+
         // Ensure the branch exists
         if !self.branch_exists(&branch_name)? {
             return Err(SwissArmyHammerError::Other(format!(
@@ -319,6 +333,11 @@ impl GitOperations {
     pub fn has_uncommitted_changes(&self) -> Result<bool> {
         let changes = self.is_working_directory_clean()?;
         Ok(!changes.is_empty())
+    }
+
+    /// Get the work directory path
+    pub fn work_dir(&self) -> &std::path::Path {
+        &self.work_dir
     }
 }
 

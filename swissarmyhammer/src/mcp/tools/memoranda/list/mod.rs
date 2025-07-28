@@ -20,18 +20,6 @@ impl ListMemoTool {
     pub fn new() -> Self {
         Self
     }
-
-    /// Format a memo preview with consistent formatting
-    fn format_memo_preview(memo: &crate::memoranda::Memo, preview_length: usize) -> String {
-        format!(
-            "• {} ({})\n  Created: {}\n  Updated: {}\n  Preview: {}",
-            memo.title,
-            memo.id,
-            crate::mcp::shared_utils::McpFormatter::format_timestamp(memo.created_at),
-            crate::mcp::shared_utils::McpFormatter::format_timestamp(memo.updated_at),
-            crate::mcp::shared_utils::McpFormatter::format_preview(&memo.content, preview_length)
-        )
-    }
 }
 
 #[async_trait]
@@ -72,7 +60,12 @@ impl McpTool for ListMemoTool {
                 } else {
                     let memo_list = memos
                         .iter()
-                        .map(|memo| Self::format_memo_preview(memo, Self::MEMO_LIST_PREVIEW_LENGTH))
+                        .map(|memo| {
+                            crate::mcp::shared_utils::McpFormatter::format_memo_preview(
+                                memo,
+                                Self::MEMO_LIST_PREVIEW_LENGTH,
+                            )
+                        })
                         .collect::<Vec<_>>()
                         .join("\n\n");
 
@@ -97,31 +90,7 @@ impl McpTool for ListMemoTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::git::GitOperations;
-    use crate::issues::IssueStorage;
-    use crate::mcp::tool_handlers::ToolHandlers;
-    use crate::mcp::tool_registry::ToolContext;
-    use crate::memoranda::{mock_storage::MockMemoStorage, MemoStorage};
-    use std::path::PathBuf;
-    use std::sync::Arc;
-    use tokio::sync::{Mutex, RwLock};
-
-    async fn create_test_context() -> ToolContext {
-        let issue_storage: Arc<RwLock<Box<dyn IssueStorage>>> = Arc::new(RwLock::new(Box::new(
-            crate::issues::FileSystemIssueStorage::new(PathBuf::from("./test_issues")).unwrap(),
-        )));
-        let git_ops: Arc<Mutex<Option<GitOperations>>> = Arc::new(Mutex::new(None));
-        let memo_storage: Arc<RwLock<Box<dyn MemoStorage>>> =
-            Arc::new(RwLock::new(Box::new(MockMemoStorage::new())));
-
-        let tool_handlers = Arc::new(ToolHandlers::new(
-            issue_storage.clone(),
-            git_ops.clone(),
-            memo_storage.clone(),
-        ));
-
-        ToolContext::new(tool_handlers, issue_storage, git_ops, memo_storage)
-    }
+    use crate::test_utils::create_test_context;
 
     #[test]
     fn test_list_memo_tool_new() {
@@ -153,7 +122,7 @@ mod tests {
             updated_at: Utc::now(),
         };
 
-        let preview = ListMemoTool::format_memo_preview(&memo, 50);
+        let preview = crate::mcp::shared_utils::McpFormatter::format_memo_preview(&memo, 50);
         assert!(preview.contains("Test Memo"));
         assert!(preview.contains("Created:"));
         assert!(preview.contains("Updated:"));

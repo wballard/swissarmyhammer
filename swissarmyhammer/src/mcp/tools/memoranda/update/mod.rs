@@ -97,31 +97,7 @@ impl McpTool for UpdateMemoTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::git::GitOperations;
-    use crate::issues::IssueStorage;
-    use crate::mcp::tool_handlers::ToolHandlers;
-    use crate::mcp::tool_registry::ToolContext;
-    use crate::memoranda::{mock_storage::MockMemoStorage, MemoStorage};
-    use std::path::PathBuf;
-    use std::sync::Arc;
-    use tokio::sync::{Mutex, RwLock};
-
-    async fn create_test_context() -> ToolContext {
-        let issue_storage: Arc<RwLock<Box<dyn IssueStorage>>> = Arc::new(RwLock::new(Box::new(
-            crate::issues::FileSystemIssueStorage::new(PathBuf::from("./test_issues")).unwrap(),
-        )));
-        let git_ops: Arc<Mutex<Option<GitOperations>>> = Arc::new(Mutex::new(None));
-        let memo_storage: Arc<RwLock<Box<dyn MemoStorage>>> =
-            Arc::new(RwLock::new(Box::new(MockMemoStorage::new())));
-
-        let tool_handlers = Arc::new(ToolHandlers::new(
-            issue_storage.clone(),
-            git_ops.clone(),
-            memo_storage.clone(),
-        ));
-
-        ToolContext::new(tool_handlers, issue_storage, git_ops, memo_storage)
-    }
+    use crate::test_utils::create_test_context;
 
     #[test]
     fn test_update_memo_tool_new() {

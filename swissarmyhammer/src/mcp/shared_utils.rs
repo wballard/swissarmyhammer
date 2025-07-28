@@ -307,6 +307,21 @@ impl McpFormatter {
             format!("Showing {count} of {total} {plural_name}")
         }
     }
+
+    /// Format a memo preview with consistent formatting
+    ///
+    /// This provides standardized formatting for memo displays across all tools,
+    /// ensuring consistent presentation in list, search, and other operations.
+    pub fn format_memo_preview(memo: &crate::memoranda::Memo, preview_length: usize) -> String {
+        format!(
+            "• {} ({})\n  Created: {}\n  Updated: {}\n  Preview: {}",
+            memo.title,
+            memo.id,
+            Self::format_timestamp(memo.created_at),
+            Self::format_timestamp(memo.updated_at),
+            Self::format_preview(&memo.content, preview_length)
+        )
+    }
 }
 
 #[cfg(test)]
@@ -379,5 +394,26 @@ mod tests {
             McpFormatter::format_list_summary("item", 3, 10),
             "Showing 3 of 10 items"
         );
+    }
+
+    #[test]
+    fn test_formatter_memo_preview() {
+        use crate::memoranda::{Memo, MemoId};
+        use chrono::Utc;
+
+        let memo = Memo {
+            id: MemoId::new(),
+            title: "Test Memo".to_string(),
+            content: "This is a long piece of content that should be truncated in the preview to show only the first part".to_string(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let preview = McpFormatter::format_memo_preview(&memo, 50);
+        assert!(preview.contains("Test Memo"));
+        assert!(preview.contains("Created:"));
+        assert!(preview.contains("Updated:"));
+        assert!(preview.contains("Preview:"));
+        assert!(preview.contains("This is a long piece of content"));
     }
 }

@@ -1,15 +1,10 @@
 // MCP Tools Registry Module
 //
-// This module will contain the tool registry pattern to replace the large match statement
-// in mcp.rs. Currently placeholder during refactoring setup phase.
+// The tool registry pattern has been successfully implemented in ../tool_registry.rs
+// This module structure is preserved for documentation and future tool organization.
 //
-// Future structure:
-// - Tool registry for dynamic dispatch
-// - Common tool traits and interfaces
-// - Tool discovery and validation
-
-// TODO: Implement tool registry pattern
-// TODO: Add tool traits and interfaces  
-// TODO: Integrate with existing MCP server
-
-// Placeholder module removed - ready for tool registry implementation
+// Current implementation:
+// - Tool registry with dynamic dispatch ✓ (in ../tool_registry.rs)
+// - Common tool traits and interfaces ✓ (McpTool trait)
+// - Tool discovery and validation ✓ (ToolRegistry struct)
+// - Integration with MCP server ✓ (used in ../mcp.rs)

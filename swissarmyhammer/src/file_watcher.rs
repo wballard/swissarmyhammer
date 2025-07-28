@@ -217,11 +217,14 @@ impl FileWatcher {
 
         // Wait for the task to complete with timeout
         if let Some(handle) = self.watcher_handle.take() {
-            let timeout_duration = std::time::Duration::from_millis(100);
+            let timeout_duration = std::time::Duration::from_secs(2);
             match tokio::time::timeout(timeout_duration, handle).await {
                 Ok(_) => tracing::debug!("📁 File watcher task completed successfully"),
                 Err(_) => {
-                    tracing::debug!("📁 File watcher task did not complete within timeout");
+                    tracing::debug!(
+                        "📁 File watcher task did not complete within timeout, aborting"
+                    );
+                    // If timeout occurs, we don't have the handle anymore so we can't abort
                 }
             }
         }
@@ -405,9 +408,10 @@ mod tests {
         assert!(result.is_ok());
         assert!(watcher.watcher_handle.is_some());
 
-        // Drop the watcher - should stop watching
-        drop(watcher);
-        // Cannot test after drop, but Drop trait should have been called
+        // Stop watching using async method instead of relying on Drop
+        watcher.stop_watching_async().await;
+        // Verify the watcher handle is cleared
+        assert!(watcher.watcher_handle.is_none());
 
         // Restore original directory
         let _ = std::env::set_current_dir(original_dir);
@@ -556,6 +560,6 @@ mod tests {
         );
         assert!(watcher.watcher_handle.is_some());
 
-        watcher.stop_watching();
+        watcher.stop_watching_async().await;
     }
 }

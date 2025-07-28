@@ -1,8 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::collections::HashMap;
-use std::path::PathBuf;
-use swissarmyhammer::issues::Issue;
-use swissarmyhammer::mcp::McpServer;
 use swissarmyhammer::workflow::{
     ConditionType, MermaidParser, State, StateId, StateType, Transition, TransitionCondition,
     Workflow, WorkflowCacheManager, WorkflowExecutor, WorkflowName, WorkflowRun, WorkflowStorage,

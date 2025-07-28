@@ -1631,23 +1631,19 @@ And this uses {{ another_undefined }} too."#,
     // Should show both errors and warnings in normal mode
     assert!(
         normal_stdout.contains("ERROR") || normal_stdout.contains("error"),
-        "normal mode should show errors: '{}'",
-        normal_stdout
+        "normal mode should show errors: '{normal_stdout}'"
     );
     assert!(
         normal_stdout.contains("WARN") || normal_stdout.contains("warning"),
-        "normal mode should show warnings: '{}'",
-        normal_stdout
+        "normal mode should show warnings: '{normal_stdout}'"
     );
     assert!(
         normal_stdout.contains("Summary:"),
-        "normal mode should show summary: '{}'",
-        normal_stdout
+        "normal mode should show summary: '{normal_stdout}'"
     );
     assert!(
         normal_stdout.contains("Errors:") && normal_stdout.contains("Warnings:"),
-        "normal mode should show both error and warning counts: '{}'",
-        normal_stdout
+        "normal mode should show both error and warning counts: '{normal_stdout}'"
     );
 
     Ok(())

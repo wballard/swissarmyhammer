@@ -45,10 +45,17 @@ impl McpTool for SearchQueryTool {
     ) -> std::result::Result<CallToolResult, McpError> {
         let request: SearchQueryRequest = BaseToolImpl::parse_arguments(arguments)?;
 
-        tracing::debug!("Starting search query: '{}', limit: {}", request.query, request.limit);
+        tracing::debug!(
+            "Starting search query: '{}', limit: {}",
+            request.query,
+            request.limit
+        );
 
         if request.query.trim().is_empty() {
-            return Err(McpError::invalid_request("Search query cannot be empty", None));
+            return Err(McpError::invalid_request(
+                "Search query cannot be empty",
+                None,
+            ));
         }
 
         let start_time = Instant::now();
@@ -57,12 +64,17 @@ impl McpTool for SearchQueryTool {
         let config = SemanticConfig::default();
         let storage = VectorStorage::new(config.clone())
             .map_err(|e| McpErrorHandler::handle_error(e, "initialize vector storage"))?;
-        
-        storage.initialize()
+
+        storage
+            .initialize()
             .map_err(|e| McpErrorHandler::handle_error(e, "initialize storage database"))?;
 
-        let searcher = SemanticSearcher::new(storage, config).await
-            .map_err(|e| McpErrorHandler::handle_error(crate::SwissArmyHammerError::Semantic(e), "create semantic searcher"))?;
+        let searcher = SemanticSearcher::new(storage, config).await.map_err(|e| {
+            McpErrorHandler::handle_error(
+                crate::SwissArmyHammerError::Semantic(e),
+                "create semantic searcher",
+            )
+        })?;
 
         // Perform search
         let search_query = SearchQuery {
@@ -72,8 +84,12 @@ impl McpTool for SearchQueryTool {
             language_filter: None,
         };
 
-        let search_results = searcher.search(&search_query).await
-            .map_err(|e| McpErrorHandler::handle_error(crate::SwissArmyHammerError::Semantic(e), &format!("search for '{}'", request.query)))?;
+        let search_results = searcher.search(&search_query).await.map_err(|e| {
+            McpErrorHandler::handle_error(
+                crate::SwissArmyHammerError::Semantic(e),
+                &format!("search for '{}'", request.query),
+            )
+        })?;
 
         let duration = start_time.elapsed();
 
@@ -99,11 +115,18 @@ impl McpTool for SearchQueryTool {
             execution_time_ms: duration.as_millis() as u64,
         };
 
-        tracing::info!("Search query completed: found {} results for '{}' in {:?}", 
-                      response.total_results, response.query, duration);
+        tracing::info!(
+            "Search query completed: found {} results for '{}' in {:?}",
+            response.total_results,
+            response.query,
+            duration
+        );
 
-        Ok(BaseToolImpl::create_success_response(serde_json::to_string_pretty(&response)
-            .map_err(|e| McpError::internal_error(format!("Failed to serialize response: {e}"), None))?))
+        Ok(BaseToolImpl::create_success_response(
+            serde_json::to_string_pretty(&response).map_err(|e| {
+                McpError::internal_error(format!("Failed to serialize response: {e}"), None)
+            })?,
+        ))
     }
 }
 
@@ -168,11 +191,12 @@ mod tests {
                 assert_eq!(result.is_error, Some(false));
                 assert!(!result.content.is_empty());
                 // The result should be a JSON response with search results
-                let content_str = if let rmcp::model::RawContent::Text(text) = &result.content[0].raw {
-                    &text.text
-                } else {
-                    panic!("Expected text content");
-                };
+                let content_str =
+                    if let rmcp::model::RawContent::Text(text) = &result.content[0].raw {
+                        &text.text
+                    } else {
+                        panic!("Expected text content");
+                    };
                 assert!(content_str.contains("results"));
                 assert!(content_str.contains("query"));
             }

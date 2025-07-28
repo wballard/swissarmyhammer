@@ -9,10 +9,10 @@ use std::collections::HashMap;
 include!(concat!(env!("OUT_DIR"), "/tool_descriptions.rs"));
 
 /// Get description for a specific tool path
-/// 
+///
 /// # Arguments
 /// * `tool_path` - The tool path (e.g., "issues_create")
-/// 
+///
 /// # Returns
 /// * `Some(&str)` - The description if found
 /// * `None` - If the tool path is not found
@@ -22,7 +22,7 @@ pub fn get_description(tool_path: &str) -> Option<&'static str> {
 }
 
 /// List all available tool descriptions
-/// 
+///
 /// # Returns
 /// * `Vec<(&str, &str)>` - Vector of (tool_path, description) tuples
 pub fn list_all_descriptions() -> Vec<(&'static str, &'static str)> {
@@ -31,31 +31,31 @@ pub fn list_all_descriptions() -> Vec<(&'static str, &'static str)> {
 }
 
 /// Get description for a tool by noun and verb
-/// 
+///
 /// # Arguments
 /// * `noun` - The tool noun (e.g., "issues")
 /// * `verb` - The tool verb (e.g., "create")
-/// 
+///
 /// # Returns
 /// * `Some(&str)` - The description if found
 /// * `None` - If the tool is not found
-/// 
+///
 /// # Example
 /// ```rust
 /// let desc = get_tool_description("issues", "create");
 /// assert!(desc.is_some());
 /// ```
 pub fn get_tool_description(noun: &str, verb: &str) -> Option<&'static str> {
-    let tool_path = format!("{}_{}", noun, verb);
+    let tool_path = format!("{noun}_{verb}");
     get_description(&tool_path)
 }
 
 /// Check if a tool description exists
-/// 
+///
 /// # Arguments
 /// * `noun` - The tool noun (e.g., "issues")
 /// * `verb` - The tool verb (e.g., "create")
-/// 
+///
 /// # Returns
 /// * `bool` - True if the description exists, false otherwise
 pub fn has_tool_description(noun: &str, verb: &str) -> bool {
@@ -63,13 +63,13 @@ pub fn has_tool_description(noun: &str, verb: &str) -> bool {
 }
 
 /// Get all tool descriptions grouped by noun
-/// 
+///
 /// # Returns
 /// * `HashMap<String, Vec<(String, &str)>>` - Map of noun to list of (verb, description) pairs
 pub fn get_descriptions_by_noun() -> HashMap<String, Vec<(String, &'static str)>> {
     let descriptions = get_tool_descriptions();
     let mut grouped = HashMap::new();
-    
+
     for (tool_path, description) in descriptions {
         if let Some((noun, verb)) = tool_path.split_once('_') {
             grouped
@@ -78,12 +78,12 @@ pub fn get_descriptions_by_noun() -> HashMap<String, Vec<(String, &'static str)>
                 .push((verb.to_string(), description));
         }
     }
-    
+
     // Sort verbs within each noun group
     for verbs in grouped.values_mut() {
         verbs.sort_by_key(|(verb, _)| verb.clone());
     }
-    
+
     grouped
 }
 
@@ -116,7 +116,7 @@ mod tests {
         let grouped = get_descriptions_by_noun();
         assert!(grouped.contains_key("issues"));
         assert!(grouped.contains_key("memoranda"));
-        
+
         // Check that issues has expected verbs
         let issues = &grouped["issues"];
         let verbs: Vec<&str> = issues.iter().map(|(v, _)| v.as_str()).collect();
@@ -126,8 +126,14 @@ mod tests {
     #[test]
     fn test_description_content_quality() {
         if let Some(create_issue_desc) = get_tool_description("issues", "create") {
-            assert!(create_issue_desc.len() > 10, "Description should be substantial");
-            assert!(!create_issue_desc.trim().is_empty(), "Description should not be empty");
+            assert!(
+                create_issue_desc.len() > 10,
+                "Description should be substantial"
+            );
+            assert!(
+                !create_issue_desc.trim().is_empty(),
+                "Description should not be empty"
+            );
         }
     }
 }

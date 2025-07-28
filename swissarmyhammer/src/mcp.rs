@@ -35,7 +35,9 @@ pub mod utils;
 
 // Re-export commonly used items from submodules
 use tool_handlers::ToolHandlers;
-use tool_registry::{register_issue_tools, register_memo_tools, register_search_tools, ToolContext, ToolRegistry};
+use tool_registry::{
+    register_issue_tools, register_memo_tools, register_search_tools, ToolContext, ToolRegistry,
+};
 #[cfg(test)]
 use types::{
     AllCompleteRequest, CreateIssueRequest, CurrentIssueRequest, IssueName, MarkCompleteRequest,

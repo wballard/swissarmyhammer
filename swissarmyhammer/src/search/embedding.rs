@@ -441,7 +441,8 @@ impl EmbeddingEngine {
             dimensions: Some(768), // Standard dimension for NomicEmbedTextV15
             max_sequence_length: 256,
             quantization: "FP32".to_string(),
-        }).await
+        })
+        .await
     }
 
     #[cfg(test)]
@@ -449,7 +450,10 @@ impl EmbeddingEngine {
     pub async fn new_for_testing_with_config(config: EmbeddingConfig) -> Result<Self> {
         info!("Creating mock embedding engine for testing (no network required)");
 
-        info!("Creating mock embedding engine with {} dimensions", config.dimensions.unwrap_or(768));
+        info!(
+            "Creating mock embedding engine with {} dimensions",
+            config.dimensions.unwrap_or(768)
+        );
 
         // Create a mock model info without initializing the actual fastembed model
         let model_info = EmbeddingModelInfo {
@@ -507,7 +511,7 @@ mod tests {
             max_sequence_length: 256,
             quantization: "FP32".to_string(),
         };
-        
+
         let engine = EmbeddingEngine::new_for_testing_with_config(config).await;
         assert!(engine.is_ok());
 
@@ -686,7 +690,9 @@ mod tests {
         };
 
         // Use mock engine for testing to avoid network dependencies
-        let engine = EmbeddingEngine::new_for_testing_with_config(config).await.unwrap();
+        let engine = EmbeddingEngine::new_for_testing_with_config(config)
+            .await
+            .unwrap();
 
         let long_text = "This is a very long text that should be truncated";
         let cleaned = engine.clean_text(long_text);

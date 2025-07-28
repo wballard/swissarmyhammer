@@ -78,7 +78,6 @@ pub mod issues;
 /// Memoranda management and storage system
 pub mod memoranda;
 
-
 /// Git operations for issue management
 pub mod git;
 

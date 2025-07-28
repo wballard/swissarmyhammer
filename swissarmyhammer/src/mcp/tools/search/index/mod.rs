@@ -45,7 +45,11 @@ impl McpTool for SearchIndexTool {
     ) -> std::result::Result<CallToolResult, McpError> {
         let request: SearchIndexRequest = BaseToolImpl::parse_arguments(arguments)?;
 
-        tracing::debug!("Starting search indexing with patterns: {:?}, force: {}", request.patterns, request.force);
+        tracing::debug!(
+            "Starting search indexing with patterns: {:?}, force: {}",
+            request.patterns,
+            request.force
+        );
 
         if request.patterns.is_empty() {
             return Err(McpError::invalid_request("No patterns or files provided for indexing. Please specify one or more glob patterns (like '**/*.rs') or file paths.", None));
@@ -57,20 +61,32 @@ impl McpTool for SearchIndexTool {
         let config = SemanticConfig::default();
         let storage = VectorStorage::new(config.clone())
             .map_err(|e| McpErrorHandler::handle_error(e, "initialize vector storage"))?;
-        
-        storage.initialize()
+
+        storage
+            .initialize()
             .map_err(|e| McpErrorHandler::handle_error(e, "initialize storage database"))?;
 
-        let mut indexer = FileIndexer::new(storage).await
-            .map_err(|e| McpErrorHandler::handle_error(crate::SwissArmyHammerError::Semantic(e), "create file indexer"))?;
+        let mut indexer = FileIndexer::new(storage).await.map_err(|e| {
+            McpErrorHandler::handle_error(
+                crate::SwissArmyHammerError::Semantic(e),
+                "create file indexer",
+            )
+        })?;
 
         // Perform indexing for all patterns
         let mut combined_report = None;
-        
+
         for pattern in &request.patterns {
             tracing::debug!("Processing pattern: {}", pattern);
-            let report = indexer.index_glob(pattern, request.force).await
-                .map_err(|e| McpErrorHandler::handle_error(crate::SwissArmyHammerError::Semantic(e), &format!("index pattern '{}'", pattern)))?;
+            let report = indexer
+                .index_glob(pattern, request.force)
+                .await
+                .map_err(|e| {
+                    McpErrorHandler::handle_error(
+                        crate::SwissArmyHammerError::Semantic(e),
+                        &format!("index pattern '{pattern}'"),
+                    )
+                })?;
 
             match combined_report {
                 None => combined_report = Some(report),
@@ -93,11 +109,18 @@ impl McpTool for SearchIndexTool {
             execution_time_ms: duration.as_millis() as u64,
         };
 
-        tracing::info!("Search indexing completed: {} files indexed, {} chunks created in {:?}", 
-                      response.indexed_files, response.total_chunks, duration);
+        tracing::info!(
+            "Search indexing completed: {} files indexed, {} chunks created in {:?}",
+            response.indexed_files,
+            response.total_chunks,
+            duration
+        );
 
-        Ok(BaseToolImpl::create_success_response(serde_json::to_string_pretty(&response)
-            .map_err(|e| McpError::internal_error(format!("Failed to serialize response: {e}"), None))?))
+        Ok(BaseToolImpl::create_success_response(
+            serde_json::to_string_pretty(&response).map_err(|e| {
+                McpError::internal_error(format!("Failed to serialize response: {e}"), None)
+            })?,
+        ))
     }
 }
 
@@ -130,18 +153,15 @@ mod tests {
         let context = create_test_context().await;
 
         let mut arguments = serde_json::Map::new();
-        arguments.insert(
-            "patterns".to_string(),
-            serde_json::Value::Array(vec![]),
-        );
-        arguments.insert(
-            "force".to_string(),
-            serde_json::Value::Bool(false),
-        );
+        arguments.insert("patterns".to_string(), serde_json::Value::Array(vec![]));
+        arguments.insert("force".to_string(), serde_json::Value::Bool(false));
 
         let result = tool.execute(arguments, &context).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No patterns or files provided"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No patterns or files provided"));
     }
 
     #[tokio::test]
@@ -154,10 +174,7 @@ mod tests {
             "patterns".to_string(),
             serde_json::Value::Array(vec![serde_json::Value::String("**/*.rs".to_string())]),
         );
-        arguments.insert(
-            "force".to_string(),
-            serde_json::Value::Bool(false),
-        );
+        arguments.insert("force".to_string(), serde_json::Value::Bool(false));
 
         // Note: This test may fail if fastembed models cannot be downloaded in test environment
         // This is expected and acceptable in CI/offline environments
@@ -173,7 +190,9 @@ mod tests {
                     || error_msg.contains("No such file or directory")
                 {
                     // Expected in test environments without model access
-                    println!("⚠️  Search indexing skipped - model initialization failed: {error_msg}");
+                    println!(
+                        "⚠️  Search indexing skipped - model initialization failed: {error_msg}"
+                    );
                 } else {
                     panic!("Unexpected error: {error_msg}");
                 }

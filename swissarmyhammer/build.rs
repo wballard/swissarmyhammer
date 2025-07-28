@@ -169,11 +169,7 @@ fn generate_tool_descriptions(out_dir: &str) {
     generate_tool_descriptions_code(&descriptions, &dest_path);
 }
 
-fn collect_tool_descriptions(
-    dir: &Path,
-    prefix: &str,
-    descriptions: &mut HashMap<String, String>,
-) {
+fn collect_tool_descriptions(dir: &Path, prefix: &str, descriptions: &mut HashMap<String, String>) {
     if let Ok(entries) = fs::read_dir(dir) {
         let mut entries: Vec<_> = entries.collect();
         entries.sort_by_key(|entry| entry.as_ref().unwrap().path());
@@ -187,7 +183,7 @@ fn collect_tool_descriptions(
                 let new_prefix = if prefix.is_empty() {
                     dir_name.clone()
                 } else {
-                    format!("{}_{}", prefix, dir_name)
+                    format!("{prefix}_{dir_name}")
                 };
 
                 // Check for description.md in this directory
@@ -196,7 +192,7 @@ fn collect_tool_descriptions(
                     if let Ok(content) = fs::read_to_string(&desc_file) {
                         // Validate the description content
                         if let Err(e) = validate_tool_description(&content, &new_prefix) {
-                            panic!("Tool description validation failed for {}: {}", new_prefix, e);
+                            panic!("Tool description validation failed for {new_prefix}: {e}");
                         }
                         descriptions.insert(new_prefix.clone(), content);
                         println!("cargo:rerun-if-changed={}", desc_file.display());
@@ -223,7 +219,7 @@ fn generate_tool_descriptions_code(descriptions: &HashMap<String, String>, dest_
     sorted_descriptions.sort_by_key(|(k, _)| *k);
 
     for (tool_path, description) in sorted_descriptions {
-        writeln!(code, "    map.insert({:?}, {:?});", tool_path, description).unwrap();
+        writeln!(code, "    map.insert({tool_path:?}, {description:?});").unwrap();
     }
 
     code.push_str("    map\n");
@@ -235,16 +231,16 @@ fn generate_tool_descriptions_code(descriptions: &HashMap<String, String>, dest_
 fn validate_tool_description(content: &str, tool_path: &str) -> Result<(), String> {
     // Basic validation
     if content.trim().is_empty() {
-        return Err(format!("Description for {} is empty", tool_path));
+        return Err(format!("Description for {tool_path} is empty"));
     }
 
     // Check for basic structure - should have some content
     if content.len() < 10 {
-        return Err(format!("Description for {} is too short", tool_path));
+        return Err(format!("Description for {tool_path} is too short"));
     }
 
     // Optional: Check for Parameters section if needed
     // This is relaxed validation - tools can have different formats
-    
+
     Ok(())
 }

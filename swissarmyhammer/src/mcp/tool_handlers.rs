@@ -93,7 +93,7 @@ impl ToolHandlers {
         // Skip rate limiting in test environment
         #[cfg(test)]
         {
-            return Ok(());
+            Ok(())
         }
 
         #[cfg(not(test))]
@@ -630,7 +630,6 @@ impl ToolHandlers {
             )),
         }
     }
-
 
     /// Handle the memo_create tool operation.
     ///

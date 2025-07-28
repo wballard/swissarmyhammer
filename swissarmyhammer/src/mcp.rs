@@ -42,7 +42,6 @@ use types::{
 use utils::validate_issue_name;
 
 /// Constants for issue branch management
-
 /// Request structure for getting a prompt
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct GetPromptRequest {
@@ -1908,7 +1907,7 @@ mod tests {
                 .await
                 .unwrap();
             if merge_result.is_error.unwrap_or(false) {
-                if let Some(content) = merge_result.content.get(0) {
+                if let Some(content) = merge_result.content.first() {
                     if let RawContent::Text(text) = &content.raw {
                         println!("MERGE ERROR: {}", text.text);
                     }
@@ -2133,9 +2132,12 @@ mod tests {
                 .output()
                 .expect("Failed to list git branches before merge");
             let branches_output = String::from_utf8_lossy(&git_branches.stdout);
-            println!("DEBUG: Branches before merge: {}", branches_output);
-            println!("DEBUG: Looking for branch: issue/git_integration_test");
-            println!("DEBUG: Branch exists: {}", branches_output.contains("issue/git_integration_test"));
+            tracing::debug!("Branches before merge: {branches_output}");
+            tracing::debug!("Looking for branch: issue/git_integration_test");
+            tracing::debug!(
+                "Branch exists: {}",
+                branches_output.contains("issue/git_integration_test")
+            );
 
             // Test 5: Merge the issue branch (if it still exists)
             let merge_request = MergeIssueRequest {

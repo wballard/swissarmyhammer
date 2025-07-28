@@ -1,10 +1,6 @@
-// MCP Tools Registry Module
-//
-// The tool registry pattern has been successfully implemented in ../tool_registry.rs
-// This module structure is preserved for documentation and future tool organization.
-//
-// Current implementation:
-// - Tool registry with dynamic dispatch ✓ (in ../tool_registry.rs)
-// - Common tool traits and interfaces ✓ (McpTool trait)
-// - Tool discovery and validation ✓ (ToolRegistry struct)
-// - Integration with MCP server ✓ (used in ../mcp.rs)
+//! MCP Tools Registry Module
+//!
+//! This module organizes MCP tools using the modular registry pattern.
+//! Each tool category has its own submodule with dedicated implementations.
+
+pub mod issues;

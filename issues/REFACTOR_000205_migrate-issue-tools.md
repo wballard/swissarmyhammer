@@ -50,6 +50,49 @@ swissarmyhammer/src/mcp/tools/issues/
     └── description.md
 ```
 
+## Proposed Solution
+
+All 8 issue tools have been successfully migrated from the large match statement to the new tool registry pattern:
+
+### 1. Directory Structure Created ✅
+Created modular structure under `./mcp/tools/issues/` with individual modules for each tool:
+- `create/` - CreateIssueTool implementation and description
+- `mark_complete/` - MarkCompleteIssueTool implementation and description  
+- `all_complete/` - AllCompleteIssueTool implementation and description
+- `update/` - UpdateIssueTool implementation and description
+- `current/` - CurrentIssueTool implementation and description
+- `work/` - WorkIssueTool implementation and description
+- `merge/` - MergeIssueTool implementation and description
+- `next/` - NextIssueTool implementation and description
+
+### 2. Tool Implementations ✅
+Each tool has been implemented as a separate module following the McpTool trait:
+- All 8 issue tools converted to implement `McpTool` trait correctly
+- All tools use `include_str!("description.md")` for descriptions
+- All tools delegate to existing `tool_handlers` methods maintaining exact same functionality
+- Schemas and validation remain unchanged
+- Error handling patterns preserved
+
+### 3. Markdown Descriptions ✅
+Comprehensive description files created for each tool with:
+- Clear parameter documentation
+- Usage examples with JSON examples
+- Return value descriptions
+- MCP-compliant formatting
+
+### 4. Registration System ✅
+- Updated `tools/mod.rs` to include issues module
+- Updated `mcp.rs` to declare tools module
+- Registration function in `issues/mod.rs` properly registers all 8 tools
+- Old implementations removed from `tool_registry.rs`
+- Import cleanup completed
+
+### 5. Testing ✅
+- All existing tests pass (`cargo test tool_registry` - 10/10 tests passing)
+- Code compiles without errors
+- Only documentation warnings remain (expected for new modules)
+- Backward compatibility maintained - exact same functionality
+
 ## Tasks for This Step
 
 ### 1. Create Issue Tools Module Structure

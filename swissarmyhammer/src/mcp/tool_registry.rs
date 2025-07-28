@@ -8,10 +8,6 @@ use super::memo_types::{
     SearchMemosRequest, UpdateMemoRequest,
 };
 use super::tool_handlers::ToolHandlers;
-use super::types::{
-    AllCompleteRequest, CreateIssueRequest, CurrentIssueRequest, MarkCompleteRequest,
-    MergeIssueRequest, NextIssueRequest, UpdateIssueRequest, WorkIssueRequest,
-};
 use rmcp::model::{Annotated, CallToolResult, RawContent, RawTextContent, Tool};
 use rmcp::Error as McpError;
 use std::collections::HashMap;
@@ -187,14 +183,8 @@ impl BaseToolImpl {
 /// Tool registration functions for organizing tools by category
 /// Register all issue-related tools with the registry
 pub fn register_issue_tools(registry: &mut ToolRegistry) {
-    registry.register(IssueCreateTool);
-    registry.register(IssueMarkCompleteTool);
-    registry.register(IssueAllCompleteTool);
-    registry.register(IssueUpdateTool);
-    registry.register(IssueCurrentTool);
-    registry.register(IssueWorkTool);
-    registry.register(IssueMergeTool);
-    registry.register(IssueNextTool);
+    use crate::mcp::tools::issues;
+    issues::register_issue_tools(registry);
 }
 
 /// Register all memo-related tools with the registry
@@ -209,118 +199,8 @@ pub fn register_memo_tools(registry: &mut ToolRegistry) {
 }
 
 /// Concrete tool implementations
-/// Tool for creating new issues
-pub struct IssueCreateTool;
 
-#[async_trait::async_trait]
-impl McpTool for IssueCreateTool {
-    fn name(&self) -> &'static str {
-        "issue_create"
-    }
 
-    fn description(&self) -> &'static str {
-        "Create a new issue with auto-assigned number"
-    }
-
-    fn schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": ["string", "null"],
-                    "description": "Name of the issue (optional for nameless issues)"
-                },
-                "content": {
-                    "type": "string",
-                    "description": "Markdown content of the issue"
-                }
-            },
-            "required": ["content"]
-        })
-    }
-
-    async fn execute(
-        &self,
-        arguments: serde_json::Map<String, serde_json::Value>,
-        context: &ToolContext,
-    ) -> std::result::Result<CallToolResult, McpError> {
-        let request: CreateIssueRequest = BaseToolImpl::parse_arguments(arguments)?;
-        context.tool_handlers.handle_issue_create(request).await
-    }
-}
-
-/// Tool for marking issues as complete
-pub struct IssueMarkCompleteTool;
-
-#[async_trait::async_trait]
-impl McpTool for IssueMarkCompleteTool {
-    fn name(&self) -> &'static str {
-        "issue_mark_complete"
-    }
-
-    fn description(&self) -> &'static str {
-        "Mark an issue as complete by moving it to the completed directory"
-    }
-
-    fn schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "Issue name to mark as complete"
-                }
-            },
-            "required": ["name"]
-        })
-    }
-
-    async fn execute(
-        &self,
-        arguments: serde_json::Map<String, serde_json::Value>,
-        context: &ToolContext,
-    ) -> std::result::Result<CallToolResult, McpError> {
-        let request: MarkCompleteRequest = BaseToolImpl::parse_arguments(arguments)?;
-        context
-            .tool_handlers
-            .handle_issue_mark_complete(request)
-            .await
-    }
-}
-
-/// Tool for checking if all issues are complete
-pub struct IssueAllCompleteTool;
-
-#[async_trait::async_trait]
-impl McpTool for IssueAllCompleteTool {
-    fn name(&self) -> &'static str {
-        "issue_all_complete"
-    }
-
-    fn description(&self) -> &'static str {
-        "Check if all issues are completed and get project status"
-    }
-
-    fn schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {},
-            "required": []
-        })
-    }
-
-    async fn execute(
-        &self,
-        arguments: serde_json::Map<String, serde_json::Value>,
-        context: &ToolContext,
-    ) -> std::result::Result<CallToolResult, McpError> {
-        let request: AllCompleteRequest = BaseToolImpl::parse_arguments(arguments)?;
-        context
-            .tool_handlers
-            .handle_issue_all_complete(request)
-            .await
-    }
-}
 
 /// Tool for creating new memos
 pub struct MemoCreateTool;
@@ -427,194 +307,10 @@ impl McpTool for MemoGetAllContextTool {
     }
 }
 
-/// Tool for updating issue content
-pub struct IssueUpdateTool;
 
-#[async_trait::async_trait]
-impl McpTool for IssueUpdateTool {
-    fn name(&self) -> &'static str {
-        "issue_update"
-    }
 
-    fn description(&self) -> &'static str {
-        "Update the content of an existing issue with additional context or modifications"
-    }
 
-    fn schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "Issue name to update"
-                },
-                "content": {
-                    "type": "string",
-                    "description": "New markdown content for the issue"
-                },
-                "append": {
-                    "type": "boolean",
-                    "description": "If true, append to existing content instead of replacing",
-                    "default": false
-                }
-            },
-            "required": ["name", "content"]
-        })
-    }
 
-    async fn execute(
-        &self,
-        arguments: serde_json::Map<String, serde_json::Value>,
-        context: &ToolContext,
-    ) -> std::result::Result<CallToolResult, McpError> {
-        let request: UpdateIssueRequest = BaseToolImpl::parse_arguments(arguments)?;
-        context.tool_handlers.handle_issue_update(request).await
-    }
-}
-
-/// Tool for getting the current issue being worked on
-pub struct IssueCurrentTool;
-
-#[async_trait::async_trait]
-impl McpTool for IssueCurrentTool {
-    fn name(&self) -> &'static str {
-        "issue_current"
-    }
-
-    fn description(&self) -> &'static str {
-        "Get the current issue being worked on (checks branch name to identify active issue)"
-    }
-
-    fn schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "branch": {
-                    "type": ["string", "null"],
-                    "description": "Which branch to check (optional, defaults to current)"
-                }
-            },
-            "required": []
-        })
-    }
-
-    async fn execute(
-        &self,
-        arguments: serde_json::Map<String, serde_json::Value>,
-        context: &ToolContext,
-    ) -> std::result::Result<CallToolResult, McpError> {
-        let request: CurrentIssueRequest = BaseToolImpl::parse_arguments(arguments)?;
-        context.tool_handlers.handle_issue_current(request).await
-    }
-}
-
-/// Tool for switching to work on an issue
-pub struct IssueWorkTool;
-
-#[async_trait::async_trait]
-impl McpTool for IssueWorkTool {
-    fn name(&self) -> &'static str {
-        "issue_work"
-    }
-
-    fn description(&self) -> &'static str {
-        "Switch to a work branch for the specified issue (creates branch issue/<issue_name> if needed)"
-    }
-
-    fn schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "Issue name to work on"
-                }
-            },
-            "required": ["name"]
-        })
-    }
-
-    async fn execute(
-        &self,
-        arguments: serde_json::Map<String, serde_json::Value>,
-        context: &ToolContext,
-    ) -> std::result::Result<CallToolResult, McpError> {
-        let request: WorkIssueRequest = BaseToolImpl::parse_arguments(arguments)?;
-        context.tool_handlers.handle_issue_work(request).await
-    }
-}
-
-/// Tool for merging an issue work branch
-pub struct IssueMergeTool;
-
-#[async_trait::async_trait]
-impl McpTool for IssueMergeTool {
-    fn name(&self) -> &'static str {
-        "issue_merge"
-    }
-
-    fn description(&self) -> &'static str {
-        "Merge the work branch for an issue back to the main branch"
-    }
-
-    fn schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "Issue name to merge"
-                },
-                "delete_branch": {
-                    "type": "boolean",
-                    "description": "Whether to delete the branch after merging",
-                    "default": false
-                }
-            },
-            "required": ["name"]
-        })
-    }
-
-    async fn execute(
-        &self,
-        arguments: serde_json::Map<String, serde_json::Value>,
-        context: &ToolContext,
-    ) -> std::result::Result<CallToolResult, McpError> {
-        let request: MergeIssueRequest = BaseToolImpl::parse_arguments(arguments)?;
-        context.tool_handlers.handle_issue_merge(request).await
-    }
-}
-
-/// Tool for getting the next issue to work on
-pub struct IssueNextTool;
-
-#[async_trait::async_trait]
-impl McpTool for IssueNextTool {
-    fn name(&self) -> &'static str {
-        "issue_next"
-    }
-
-    fn description(&self) -> &'static str {
-        "Get the next issue to work on (returns the first pending issue alphabetically by name)"
-    }
-
-    fn schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {},
-            "required": []
-        })
-    }
-
-    async fn execute(
-        &self,
-        arguments: serde_json::Map<String, serde_json::Value>,
-        context: &ToolContext,
-    ) -> std::result::Result<CallToolResult, McpError> {
-        let request: NextIssueRequest = BaseToolImpl::parse_arguments(arguments)?;
-        context.tool_handlers.handle_issue_next(request).await
-    }
-}
 
 /// Tool for getting a memo by ID
 pub struct MemoGetTool;

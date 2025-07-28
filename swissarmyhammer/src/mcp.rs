@@ -27,6 +27,7 @@ pub mod responses;
 pub mod shared_utils;
 pub mod tool_handlers;
 pub mod tool_registry;
+pub mod tools;
 pub mod types;
 pub mod utils;
 

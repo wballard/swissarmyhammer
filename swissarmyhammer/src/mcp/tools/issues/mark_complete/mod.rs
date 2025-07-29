@@ -2,7 +2,7 @@
 //!
 //! This module provides the MarkCompleteIssueTool for marking issues as complete through the MCP protocol.
 
-use crate::mcp::responses::{create_error_response, create_mark_complete_response};
+use crate::mcp::responses::create_mark_complete_response;
 use crate::mcp::shared_utils::{McpErrorHandler, McpValidation};
 use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 use crate::mcp::types::MarkCompleteRequest;
@@ -29,7 +29,7 @@ impl McpTool for MarkCompleteIssueTool {
 
     fn description(&self) -> &'static str {
         crate::mcp::tool_descriptions::get_tool_description("issues", "mark_complete")
-            .unwrap_or("Tool description not available")
+            .expect("Tool description should be available")
     }
 
     fn schema(&self) -> serde_json::Value {
@@ -95,13 +95,10 @@ impl McpTool for MarkCompleteIssueTool {
                         }
                     }
                 }
-                drop(git_ops_guard);
 
                 Ok(create_mark_complete_response(&issue))
             }
-            Err(e) => Ok(create_error_response(format!(
-                "Failed to mark issue complete: {e}"
-            ))),
+            Err(e) => Err(McpErrorHandler::handle_error(e, "mark issue complete")),
         }
     }
 }

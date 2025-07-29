@@ -8,6 +8,26 @@ use dashmap::DashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+/// Trait for rate limiting functionality
+///
+/// This trait allows for dependency injection of rate limiting behavior,
+/// enabling easier testing with mock implementations.
+pub trait RateLimitChecker: Send + Sync {
+    /// Check if an operation is allowed for a client
+    ///
+    /// # Arguments
+    ///
+    /// * `client_id` - Unique identifier for the client (IP, session ID, etc.)
+    /// * `operation` - The operation being performed
+    /// * `cost` - Token cost of the operation (default: 1, expensive operations: 2-5)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if operation is allowed
+    /// * `Err(SwissArmyHammerError)` if rate limit exceeded
+    fn check_rate_limit(&self, client_id: &str, operation: &str, cost: u32) -> Result<()>;
+}
+
 /// Default rate limits for different operation types
 pub const DEFAULT_GLOBAL_RATE_LIMIT: u32 = 100; // requests per minute
 /// Default rate limit per client (requests per minute)
@@ -231,6 +251,22 @@ impl RateLimiter {
 impl Default for RateLimiter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl RateLimitChecker for RateLimiter {
+    fn check_rate_limit(&self, client_id: &str, operation: &str, cost: u32) -> Result<()> {
+        self.check_rate_limit(client_id, operation, cost)
+    }
+}
+
+/// Mock rate limiter for testing that always allows operations
+#[derive(Debug, Default)]
+pub struct MockRateLimiter;
+
+impl RateLimitChecker for MockRateLimiter {
+    fn check_rate_limit(&self, _client_id: &str, _operation: &str, _cost: u32) -> Result<()> {
+        Ok(())
     }
 }
 

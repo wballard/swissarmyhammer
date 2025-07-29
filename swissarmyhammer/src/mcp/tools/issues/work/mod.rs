@@ -2,7 +2,8 @@
 //!
 //! This module provides the WorkIssueTool for switching to work on a specific issue.
 
-use crate::mcp::responses::{create_error_response, create_success_response};
+use crate::mcp::responses::create_success_response;
+use crate::mcp::shared_utils::McpErrorHandler;
 use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 use crate::mcp::types::WorkIssueRequest;
 use async_trait::async_trait;
@@ -28,7 +29,7 @@ impl McpTool for WorkIssueTool {
 
     fn description(&self) -> &'static str {
         crate::mcp::tool_descriptions::get_tool_description("issues", "work")
-            .unwrap_or("Tool description not available")
+            .expect("Tool description should be available")
     }
 
     fn schema(&self) -> serde_json::Value {
@@ -54,17 +55,8 @@ impl McpTool for WorkIssueTool {
         // Get the issue to determine its number for branch naming
         let issue_storage = context.issue_storage.read().await;
         let issue = match issue_storage.get_issue(request.name.as_str()).await {
-            Ok(issue) => {
-                drop(issue_storage);
-                issue
-            }
-            Err(e) => {
-                drop(issue_storage);
-                return Ok(create_error_response(format!(
-                    "Failed to get issue '{}': {e}",
-                    request.name
-                )));
-            }
+            Ok(issue) => issue,
+            Err(e) => return Err(McpErrorHandler::handle_error(e, "get issue")),
         };
 
         // Create work branch with format: number_name
@@ -76,20 +68,11 @@ impl McpTool for WorkIssueTool {
                 Ok(branch_name) => Ok(create_success_response(format!(
                     "Switched to work branch: {branch_name}"
                 ))),
-                Err(e) => {
-                    // Check if this is an ABORT ERROR - if so, return it directly
-                    if e.is_abort_error() {
-                        let error_msg = e.abort_error_message().unwrap_or_else(|| e.to_string());
-                        Ok(create_error_response(error_msg))
-                    } else {
-                        Ok(create_error_response(format!(
-                            "Failed to create work branch: {e}"
-                        )))
-                    }
-                }
+                Err(e) => Err(McpErrorHandler::handle_error(e, "create work branch")),
             },
-            None => Ok(create_error_response(
+            None => Err(McpError::internal_error(
                 "Git operations not available".to_string(),
+                None,
             )),
         }
     }

@@ -332,7 +332,6 @@ fn read_file() -> Result<String, Box<dyn Error>> {
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

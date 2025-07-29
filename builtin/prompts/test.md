@@ -18,9 +18,9 @@ The goal is to have:
 - Corrections should be constructive, meaning 'just deleting code' is not an acceptable fix
 - YOU MUST debug the code to make all tests pass, only change tests as a last resort
 - Feel free to refactor
-- Do not make any editorial comments about why tests are failing, just fix them already. I can pay humans if I want excuses.
-
-If tests take a 'long time' -- more than 5 minutes, check if any tests are hanging and correct them.
+- If tests take a 'long time' -- more than 2 minutes
+  - check if any tests are hanging and correct them
+  - identify the slowest test and speed it up
 
 ## Process
 

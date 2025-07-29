@@ -3,6 +3,7 @@
 //! This module provides the MergeIssueTool for merging issue work branches.
 
 use crate::mcp::responses::{create_error_response, create_success_response};
+use crate::mcp::shared_utils::McpErrorHandler;
 use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 use crate::mcp::types::MergeIssueRequest;
 use async_trait::async_trait;
@@ -33,7 +34,7 @@ impl McpTool for MergeIssueTool {
 
     fn description(&self) -> &'static str {
         crate::mcp::tool_descriptions::get_tool_description("issues", "merge")
-            .unwrap_or("Tool description not available")
+            .expect("Tool description should be available")
     }
 
     fn schema(&self) -> serde_json::Value {
@@ -64,17 +65,8 @@ impl McpTool for MergeIssueTool {
         // Get the issue to determine its details
         let issue_storage = context.issue_storage.read().await;
         let issue = match issue_storage.get_issue(request.name.as_str()).await {
-            Ok(issue) => {
-                drop(issue_storage);
-                issue
-            }
-            Err(e) => {
-                drop(issue_storage);
-                return Ok(create_error_response(format!(
-                    "Failed to get issue '{}': {e}",
-                    request.name
-                )));
-            }
+            Ok(issue) => issue,
+            Err(e) => return Err(McpErrorHandler::handle_error(e, "get issue for merge")),
         };
 
         // Validate that the issue is completed before allowing merge
@@ -140,9 +132,7 @@ impl McpTool for MergeIssueTool {
                     Err(e) => {
                         // Add debug output to understand what's failing
                         tracing::error!("Merge failed for issue '{}': {}", issue_name, e);
-                        Ok(create_error_response(format!(
-                            "Failed to merge branch: {e}"
-                        )))
+                        Err(McpErrorHandler::handle_error(e, "merge issue branch"))
                     }
                 }
             }

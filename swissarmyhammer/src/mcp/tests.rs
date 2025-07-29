@@ -449,5 +449,4 @@ fn test_validate_issue_name_trimming() {
 }
 
 // Integration tests for MCP tools
-mod mcp_integration_tests {
-}
+mod mcp_integration_tests {}

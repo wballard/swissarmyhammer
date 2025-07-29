@@ -2,8 +2,6 @@
 //!
 //! This module provides the CreateIssueTool for creating new issues through the MCP protocol.
 
-#[cfg(not(test))]
-use crate::common::rate_limiter::get_rate_limiter;
 use crate::mcp::responses::create_issue_response;
 use crate::mcp::shared_utils::{McpErrorHandler, McpValidation};
 use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
@@ -22,51 +20,6 @@ impl CreateIssueTool {
     pub fn new() -> Self {
         Self
     }
-
-    /// Check rate limit for an MCP operation
-    ///
-    /// Applies rate limiting to prevent DoS attacks. Uses client identification
-    /// based on request context when available, falls back to a default client ID.
-    ///
-    /// # Arguments
-    ///
-    /// * `operation` - The operation being performed
-    /// * `cost` - Token cost of the operation (default: 1, expensive: 2-5)
-    /// * `client_id` - Optional client identifier (falls back to "unknown")
-    ///
-    /// # Returns
-    ///
-    /// * `Result<(), McpError>` - Ok if operation is allowed, error if rate limited
-    fn check_rate_limit(
-        &self,
-        _operation: &str,
-        _cost: u32,
-        _client_id: Option<&str>,
-    ) -> std::result::Result<(), McpError> {
-        // Skip rate limiting in test environment
-        #[cfg(test)]
-        {
-            Ok(())
-        }
-
-        #[cfg(not(test))]
-        {
-            let client = _client_id.unwrap_or("unknown");
-            let rate_limiter = get_rate_limiter();
-
-            rate_limiter
-                .check_rate_limit(client, _operation, _cost)
-                .map_err(|e| {
-                    tracing::warn!(
-                        "Rate limit exceeded for client '{}', operation '{}': {}",
-                        client,
-                        _operation,
-                        e
-                    );
-                    McpError::invalid_params(e.to_string(), None)
-                })
-        }
-    }
 }
 
 #[async_trait]
@@ -77,7 +30,7 @@ impl McpTool for CreateIssueTool {
 
     fn description(&self) -> &'static str {
         crate::mcp::tool_descriptions::get_tool_description("issues", "create")
-            .unwrap_or("Tool description not available")
+            .expect("Tool description should be available")
     }
 
     fn schema(&self) -> serde_json::Value {
@@ -105,7 +58,13 @@ impl McpTool for CreateIssueTool {
         let request: CreateIssueRequest = BaseToolImpl::parse_arguments(arguments)?;
 
         // Apply rate limiting for issue creation
-        self.check_rate_limit("issue_create", 1, None)?;
+        context
+            .rate_limiter
+            .check_rate_limit("unknown", "issue_create", 1)
+            .map_err(|e| {
+                tracing::warn!("Rate limit exceeded for issue creation: {}", e);
+                McpError::invalid_params(e.to_string(), None)
+            })?;
 
         tracing::debug!("Creating issue: {:?}", request.name);
 

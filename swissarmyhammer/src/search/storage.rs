@@ -1191,16 +1191,44 @@ mod tests {
     use crate::search::types::{ChunkType, FileId};
     use chrono::Utc;
 
-    fn create_test_config() -> SemanticConfig {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let db_path = format!("/tmp/test_semantic_{timestamp}.db");
+    /// Test helper that ensures database files are cleaned up
+    struct TestDatabaseGuard {
+        db_path: PathBuf,
+    }
 
-        SemanticConfig {
-            database_path: PathBuf::from(db_path),
+    impl TestDatabaseGuard {
+        fn new(db_path: PathBuf) -> Self {
+            Self { db_path }
+        }
+    }
+
+    impl Drop for TestDatabaseGuard {
+        fn drop(&mut self) {
+            // Clean up database file
+            let _ = std::fs::remove_file(&self.db_path);
+            // Also clean up any potential backup files DuckDB might create
+            let backup_path = self.db_path.with_extension("db.wal");
+            let _ = std::fs::remove_file(&backup_path);
+            let shm_path = self.db_path.with_extension("db-shm");
+            let _ = std::fs::remove_file(&shm_path);
+        }
+    }
+
+    fn create_test_config() -> (SemanticConfig, TestDatabaseGuard) {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        use std::thread;
+        static TEST_COUNTER: AtomicU64 = AtomicU64::new(1);
+        
+        // Use thread ID and atomic counter for better uniqueness
+        let thread_id = thread::current().id();
+        let counter = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let db_path = PathBuf::from(format!("/tmp/test_semantic_{:?}_{}.db", thread_id, counter));
+
+        // Ensure any existing file is removed before creating new one
+        let _ = std::fs::remove_file(&db_path);
+
+        let config = SemanticConfig {
+            database_path: db_path.clone(),
             embedding_model: "test-model".to_string(),
             chunk_size: 512,
             chunk_overlap: 64,
@@ -1214,7 +1242,10 @@ mod tests {
             max_chunk_size: 2000,
             max_chunks_per_file: 100,
             max_file_size_bytes: 10 * 1024 * 1024,
-        }
+        };
+
+        let guard = TestDatabaseGuard::new(db_path);
+        (config, guard)
     }
 
     fn create_test_chunk() -> CodeChunk {
@@ -1255,21 +1286,21 @@ mod tests {
 
     #[test]
     fn test_vector_storage_creation() {
-        let config = create_test_config();
+        let (config, _guard) = create_test_config();
         let storage = VectorStorage::new(config);
         assert!(storage.is_ok());
     }
 
     #[test]
     fn test_initialize() {
-        let config = create_test_config();
+        let (config, _guard) = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
         assert!(storage.initialize().is_ok());
     }
 
     #[test]
     fn test_store_chunk() {
-        let config = create_test_config();
+        let (config, _guard) = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
         storage.initialize().unwrap();
         let chunk = create_test_chunk();
@@ -1278,7 +1309,7 @@ mod tests {
 
     #[test]
     fn test_store_embedding() {
-        let config = create_test_config();
+        let (config, _guard) = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
         storage.initialize().unwrap();
         // First store the chunk that the embedding references
@@ -1291,7 +1322,7 @@ mod tests {
 
     #[test]
     fn test_store_indexed_file() {
-        let config = create_test_config();
+        let (config, _guard) = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
         storage.initialize().unwrap();
         let indexed_file = create_test_indexed_file();
@@ -1300,7 +1331,7 @@ mod tests {
 
     #[test]
     fn test_empty_search() {
-        let config = create_test_config();
+        let (config, _guard) = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
         storage.initialize().unwrap();
         let query = vec![0.1; 384]; // 384-dimensional query vector
@@ -1311,7 +1342,7 @@ mod tests {
 
     #[test]
     fn test_get_chunk() {
-        let config = create_test_config();
+        let (config, _guard) = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
         storage.initialize().unwrap();
         let result = storage.get_chunk("test-chunk-1");
@@ -1321,7 +1352,7 @@ mod tests {
 
     #[test]
     fn test_needs_reindexing() {
-        let config = create_test_config();
+        let (config, _guard) = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
         storage.initialize().unwrap();
         let path = Path::new("test.rs");
@@ -1333,7 +1364,7 @@ mod tests {
 
     #[test]
     fn test_is_file_indexed() {
-        let config = create_test_config();
+        let (config, _guard) = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
         storage.initialize().unwrap();
         let path = Path::new("test.rs");
@@ -1344,7 +1375,7 @@ mod tests {
 
     #[test]
     fn test_remove_file() {
-        let config = create_test_config();
+        let (config, _guard) = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
         storage.initialize().unwrap();
         let path = Path::new("test.rs");
@@ -1353,7 +1384,7 @@ mod tests {
 
     #[test]
     fn test_get_stats() {
-        let config = create_test_config();
+        let (config, _guard) = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
         storage.initialize().unwrap();
         let stats = storage.get_stats();
@@ -1366,7 +1397,7 @@ mod tests {
 
     #[test]
     fn test_get_chunks_by_language() {
-        let config = create_test_config();
+        let (config, _guard) = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
         storage.initialize().unwrap();
         let chunks = storage.get_chunks_by_language(&Language::Rust);
@@ -1376,7 +1407,7 @@ mod tests {
 
     #[test]
     fn test_maintenance() {
-        let config = create_test_config();
+        let (config, _guard) = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
         storage.initialize().unwrap();
         assert!(storage.maintenance().is_ok());
@@ -1393,7 +1424,7 @@ mod tests {
 
     #[test]
     fn test_get_file_chunks() {
-        let config = create_test_config();
+        let (config, _guard) = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
         storage.initialize().unwrap();
         let path = Path::new("test.rs");
@@ -1405,7 +1436,7 @@ mod tests {
     #[test]
     fn test_reproduce_similarity_search_failure() {
         // This test reproduces the exact failure scenario from the issue
-        let config = create_test_config();
+        let (config, _guard) = create_test_config();
         let storage = VectorStorage::new(config).unwrap();
         storage.initialize().unwrap();
 

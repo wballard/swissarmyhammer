@@ -2,7 +2,8 @@
 //!
 //! This module provides the NextIssueTool for getting the next issue to work on.
 
-use crate::mcp::responses::{create_error_response, create_success_response};
+use crate::mcp::responses::create_success_response;
+use crate::mcp::shared_utils::McpErrorHandler;
 use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 use crate::mcp::types::NextIssueRequest;
 use async_trait::async_trait;
@@ -28,7 +29,7 @@ impl McpTool for NextIssueTool {
 
     fn description(&self) -> &'static str {
         crate::mcp::tool_descriptions::get_tool_description("issues", "next")
-            .unwrap_or("Tool description not available")
+            .expect("Tool description should be available")
     }
 
     fn schema(&self) -> serde_json::Value {
@@ -50,25 +51,14 @@ impl McpTool for NextIssueTool {
 
         // Use the new get_next_issue method from storage
         match issue_storage.get_next_issue().await {
-            Ok(Some(next_issue)) => {
-                drop(issue_storage);
-                Ok(create_success_response(format!(
-                    "Next issue: {}",
-                    next_issue.name.as_str()
-                )))
-            }
-            Ok(None) => {
-                drop(issue_storage);
-                Ok(create_success_response(
-                    "No pending issues found. All issues are completed!".to_string(),
-                ))
-            }
-            Err(e) => {
-                drop(issue_storage);
-                Ok(create_error_response(format!(
-                    "Failed to get next issue: {e}"
-                )))
-            }
+            Ok(Some(next_issue)) => Ok(create_success_response(format!(
+                "Next issue: {}",
+                next_issue.name.as_str()
+            ))),
+            Ok(None) => Ok(create_success_response(
+                "No pending issues found. All issues are completed!".to_string(),
+            )),
+            Err(e) => Err(McpErrorHandler::handle_error(e, "get next issue")),
         }
     }
 }

@@ -2,7 +2,7 @@
 //!
 //! This module provides the UpdateIssueTool for updating existing issue content.
 
-use crate::mcp::responses::{create_error_response, create_success_response};
+use crate::mcp::responses::create_success_response;
 use crate::mcp::shared_utils::{McpErrorHandler, McpValidation};
 use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 use crate::mcp::types::UpdateIssueRequest;
@@ -29,7 +29,7 @@ impl McpTool for UpdateIssueTool {
 
     fn description(&self) -> &'static str {
         crate::mcp::tool_descriptions::get_tool_description("issues", "update")
-            .unwrap_or("Tool description not available")
+            .expect("Tool description should be available")
     }
 
     fn schema(&self) -> serde_json::Value {
@@ -94,9 +94,7 @@ impl McpTool for UpdateIssueTool {
                     "replace mode"
                 }
             ))),
-            Err(e) => Ok(create_error_response(format!(
-                "Failed to update issue: {e}"
-            ))),
+            Err(e) => Err(McpErrorHandler::handle_error(e, "update issue")),
         }
     }
 }

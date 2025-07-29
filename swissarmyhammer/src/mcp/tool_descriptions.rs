@@ -42,6 +42,7 @@ pub fn list_all_descriptions() -> Vec<(&'static str, &'static str)> {
 ///
 /// # Example
 /// ```rust
+/// use swissarmyhammer::mcp::tool_descriptions::get_tool_description;
 /// let desc = get_tool_description("issues", "create");
 /// assert!(desc.is_some());
 /// ```

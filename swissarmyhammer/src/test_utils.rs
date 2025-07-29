@@ -45,6 +45,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
 #[cfg(test)]
+use crate::common::rate_limiter::MockRateLimiter;
+#[cfg(test)]
 use crate::git::GitOperations;
 #[cfg(test)]
 use crate::issues::IssueStorage;
@@ -480,7 +482,13 @@ pub async fn create_test_context() -> ToolContext {
 
     let tool_handlers = Arc::new(ToolHandlers::new(memo_storage.clone()));
 
-    ToolContext::new(tool_handlers, issue_storage, git_ops, memo_storage)
+    ToolContext::new(
+        tool_handlers,
+        issue_storage,
+        git_ops,
+        memo_storage,
+        Arc::new(MockRateLimiter::default()),
+    )
 }
 
 #[cfg(test)]

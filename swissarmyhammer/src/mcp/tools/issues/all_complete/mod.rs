@@ -2,7 +2,8 @@
 //!
 //! This module provides the AllCompleteIssueTool for checking if all issues are completed.
 
-use crate::mcp::responses::{create_error_response, create_success_response};
+use crate::mcp::responses::create_success_response;
+use crate::mcp::shared_utils::McpErrorHandler;
 use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 use crate::mcp::types::AllCompleteRequest;
 use async_trait::async_trait;
@@ -28,7 +29,7 @@ impl McpTool for AllCompleteIssueTool {
 
     fn description(&self) -> &'static str {
         crate::mcp::tool_descriptions::get_tool_description("issues", "all_complete")
-            .unwrap_or("Tool description not available")
+            .expect("Tool description should be available")
     }
 
     fn schema(&self) -> serde_json::Value {
@@ -50,24 +51,12 @@ impl McpTool for AllCompleteIssueTool {
 
         // Get all issues with comprehensive error handling
         let all_issues = match issue_storage.list_issues().await {
-            Ok(issues) => {
-                drop(issue_storage);
-                issues
-            }
+            Ok(issues) => issues,
             Err(e) => {
-                drop(issue_storage);
-                let error_msg = match e.to_string() {
-                    msg if msg.contains("permission") => {
-                        "Permission denied: Unable to read issues directory. Check directory permissions.".to_string()
-                    }
-                    msg if msg.contains("No such file") => {
-                        "Issues directory not found. The project may not have issue tracking initialized.".to_string()
-                    }
-                    _ => {
-                        format!("Failed to check issue status: {e}")
-                    }
-                };
-                return Ok(create_error_response(error_msg));
+                return Err(McpErrorHandler::handle_error(
+                    e,
+                    "list issues for completion check",
+                ))
             }
         };
 

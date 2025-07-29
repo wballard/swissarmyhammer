@@ -4,6 +4,7 @@
 
 use crate::config::Config;
 use crate::mcp::responses::{create_error_response, create_success_response};
+use crate::mcp::shared_utils::McpErrorHandler;
 use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 use crate::mcp::types::CurrentIssueRequest;
 use async_trait::async_trait;
@@ -29,7 +30,7 @@ impl McpTool for CurrentIssueTool {
 
     fn description(&self) -> &'static str {
         crate::mcp::tool_descriptions::get_tool_description("issues", "current")
-            .unwrap_or("Tool description not available")
+            .expect("Tool description should be available")
     }
 
     fn schema(&self) -> serde_json::Value {
@@ -67,9 +68,7 @@ impl McpTool for CurrentIssueTool {
                         )))
                     }
                 }
-                Err(e) => Ok(create_error_response(format!(
-                    "Failed to get current branch: {e}"
-                ))),
+                Err(e) => Err(McpErrorHandler::handle_error(e, "get current branch")),
             },
             None => Ok(create_error_response(
                 "Git operations not available".to_string(),

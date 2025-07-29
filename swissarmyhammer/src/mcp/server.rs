@@ -1,5 +1,6 @@
 //! MCP server implementation for serving prompts and workflows
 
+use crate::common::rate_limiter::get_rate_limiter;
 use crate::file_watcher::{FileWatcher, FileWatcherCallback};
 use crate::git::GitOperations;
 use crate::issues::{FileSystemIssueStorage, IssueStorage};
@@ -124,6 +125,7 @@ impl McpServer {
             issue_storage.clone(),
             git_ops_arc.clone(),
             memo_storage_arc.clone(),
+            get_rate_limiter().clone(),
         ));
 
         // Register all available tools

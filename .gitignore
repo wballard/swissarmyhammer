@@ -19,6 +19,7 @@ Thumbs.db
 
 # Debug
 *.pdb
+semantic.db
 
 # Logs
 *.log
@@ -33,11 +34,11 @@ TEST_FAILURES.md
 # Test issue files
 swissarmyhammer/issues/
 
-# Runtime directories
-.swissarmyhammer/
-
 # PropTest regression files
 proptest-regressions/
 
 # FastEmbed cache
 .fastembed_cache/
+
+swissarmyhammer/.swissarmyhammer
+swissarmyhammer-cli/.swissarmyhammer

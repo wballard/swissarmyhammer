@@ -1190,42 +1190,34 @@ mod tests {
     use super::*;
     use crate::search::types::{ChunkType, FileId};
     use chrono::Utc;
+    use tempfile::TempDir;
 
     /// Test helper that ensures database files are cleaned up
     struct TestDatabaseGuard {
-        db_path: PathBuf,
+        _temp_dir: TempDir,
+        _db_path: PathBuf,
     }
 
     impl TestDatabaseGuard {
-        fn new(db_path: PathBuf) -> Self {
-            Self { db_path }
+        fn new(temp_dir: TempDir, db_path: PathBuf) -> Self {
+            Self {
+                _temp_dir: temp_dir,
+                _db_path: db_path,
+            }
         }
     }
 
     impl Drop for TestDatabaseGuard {
         fn drop(&mut self) {
-            // Clean up database file
-            let _ = std::fs::remove_file(&self.db_path);
-            // Also clean up any potential backup files DuckDB might create
-            let backup_path = self.db_path.with_extension("db.wal");
-            let _ = std::fs::remove_file(&backup_path);
-            let shm_path = self.db_path.with_extension("db-shm");
-            let _ = std::fs::remove_file(&shm_path);
+            // TempDir will automatically clean up all files when dropped
+            // No manual cleanup needed
         }
     }
 
     fn create_test_config() -> (SemanticConfig, TestDatabaseGuard) {
-        use std::sync::atomic::{AtomicU64, Ordering};
-        use std::thread;
-        static TEST_COUNTER: AtomicU64 = AtomicU64::new(1);
-        
-        // Use thread ID and atomic counter for better uniqueness
-        let thread_id = thread::current().id();
-        let counter = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let db_path = PathBuf::from(format!("/tmp/test_semantic_{:?}_{}.db", thread_id, counter));
-
-        // Ensure any existing file is removed before creating new one
-        let _ = std::fs::remove_file(&db_path);
+        // Create a temporary directory for the test database
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test_semantic.db");
 
         let config = SemanticConfig {
             database_path: db_path.clone(),
@@ -1244,7 +1236,7 @@ mod tests {
             max_file_size_bytes: 10 * 1024 * 1024,
         };
 
-        let guard = TestDatabaseGuard::new(db_path);
+        let guard = TestDatabaseGuard::new(temp_dir, db_path);
         (config, guard)
     }
 

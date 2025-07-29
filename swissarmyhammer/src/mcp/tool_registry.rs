@@ -604,7 +604,7 @@ mod tests {
             issue_storage,
             git_ops,
             memo_storage,
-            Arc::new(crate::common::rate_limiter::MockRateLimiter::default()),
+            Arc::new(crate::common::rate_limiter::MockRateLimiter),
         );
 
         let tool = MockTool {

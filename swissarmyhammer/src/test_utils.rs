@@ -487,7 +487,7 @@ pub async fn create_test_context() -> ToolContext {
         issue_storage,
         git_ops,
         memo_storage,
-        Arc::new(MockRateLimiter::default()),
+        Arc::new(MockRateLimiter),
     )
 }
 

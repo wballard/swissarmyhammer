@@ -27,7 +27,7 @@ impl McpTool for UpdateMemoTool {
 
     fn description(&self) -> &'static str {
         crate::mcp::tool_descriptions::get_tool_description("memoranda", "update")
-            .unwrap_or("Tool description not available")
+            .expect("Tool description should be available")
     }
 
     fn schema(&self) -> serde_json::Value {

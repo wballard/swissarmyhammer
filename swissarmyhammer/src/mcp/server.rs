@@ -1,5 +1,6 @@
 //! MCP server implementation for serving prompts and workflows
 
+use crate::common::rate_limiter::get_rate_limiter;
 use crate::file_watcher::{FileWatcher, FileWatcherCallback};
 use crate::git::GitOperations;
 use crate::issues::{FileSystemIssueStorage, IssueStorage};
@@ -114,12 +115,8 @@ impl McpServer {
         let memo_storage_arc = Arc::new(RwLock::new(memo_storage));
         let git_ops_arc = Arc::new(Mutex::new(git_ops));
 
-        // Initialize tool handlers with all storage instances
-        let tool_handlers = ToolHandlers::new(
-            issue_storage.clone(),
-            git_ops_arc.clone(),
-            memo_storage_arc.clone(),
-        );
+        // Initialize tool handlers with memo storage
+        let tool_handlers = ToolHandlers::new(memo_storage_arc.clone());
 
         // Initialize tool registry and context
         let mut tool_registry = ToolRegistry::new();
@@ -128,6 +125,7 @@ impl McpServer {
             issue_storage.clone(),
             git_ops_arc.clone(),
             memo_storage_arc.clone(),
+            get_rate_limiter().clone(),
         ));
 
         // Register all available tools

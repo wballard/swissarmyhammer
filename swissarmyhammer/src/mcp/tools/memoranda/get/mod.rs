@@ -27,7 +27,7 @@ impl McpTool for GetMemoTool {
 
     fn description(&self) -> &'static str {
         crate::mcp::tool_descriptions::get_tool_description("memoranda", "get")
-            .unwrap_or("Tool description not available")
+            .expect("Tool description should be available")
     }
 
     fn schema(&self) -> serde_json::Value {

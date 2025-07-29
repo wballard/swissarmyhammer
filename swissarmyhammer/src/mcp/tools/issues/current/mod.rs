@@ -2,6 +2,9 @@
 //!
 //! This module provides the CurrentIssueTool for getting the current issue being worked on.
 
+use crate::config::Config;
+use crate::mcp::responses::{create_error_response, create_success_response};
+use crate::mcp::shared_utils::McpErrorHandler;
 use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 use crate::mcp::types::CurrentIssueRequest;
 use async_trait::async_trait;
@@ -27,7 +30,7 @@ impl McpTool for CurrentIssueTool {
 
     fn description(&self) -> &'static str {
         crate::mcp::tool_descriptions::get_tool_description("issues", "current")
-            .unwrap_or("Tool description not available")
+            .expect("Tool description should be available")
     }
 
     fn schema(&self) -> serde_json::Value {
@@ -48,7 +51,28 @@ impl McpTool for CurrentIssueTool {
         arguments: serde_json::Map<String, serde_json::Value>,
         context: &ToolContext,
     ) -> std::result::Result<CallToolResult, McpError> {
-        let request: CurrentIssueRequest = BaseToolImpl::parse_arguments(arguments)?;
-        context.tool_handlers.handle_issue_current(request).await
+        let _request: CurrentIssueRequest = BaseToolImpl::parse_arguments(arguments)?;
+
+        let git_ops = context.git_ops.lock().await;
+        match git_ops.as_ref() {
+            Some(ops) => match ops.current_branch() {
+                Ok(branch) => {
+                    let config = Config::global();
+                    if let Some(issue_name) = branch.strip_prefix(&config.issue_branch_prefix) {
+                        Ok(create_success_response(format!(
+                            "Currently working on issue: {issue_name}"
+                        )))
+                    } else {
+                        Ok(create_success_response(format!(
+                            "Not on an issue branch. Current branch: {branch}"
+                        )))
+                    }
+                }
+                Err(e) => Err(McpErrorHandler::handle_error(e, "get current branch")),
+            },
+            None => Ok(create_error_response(
+                "Git operations not available".to_string(),
+            )),
+        }
     }
 }

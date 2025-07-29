@@ -2,6 +2,8 @@
 //!
 //! This module provides the WorkIssueTool for switching to work on a specific issue.
 
+use crate::mcp::responses::create_success_response;
+use crate::mcp::shared_utils::McpErrorHandler;
 use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 use crate::mcp::types::WorkIssueRequest;
 use async_trait::async_trait;
@@ -27,7 +29,7 @@ impl McpTool for WorkIssueTool {
 
     fn description(&self) -> &'static str {
         crate::mcp::tool_descriptions::get_tool_description("issues", "work")
-            .unwrap_or("Tool description not available")
+            .expect("Tool description should be available")
     }
 
     fn schema(&self) -> serde_json::Value {
@@ -49,6 +51,29 @@ impl McpTool for WorkIssueTool {
         context: &ToolContext,
     ) -> std::result::Result<CallToolResult, McpError> {
         let request: WorkIssueRequest = BaseToolImpl::parse_arguments(arguments)?;
-        context.tool_handlers.handle_issue_work(request).await
+
+        // Get the issue to determine its number for branch naming
+        let issue_storage = context.issue_storage.read().await;
+        let issue = match issue_storage.get_issue(request.name.as_str()).await {
+            Ok(issue) => issue,
+            Err(e) => return Err(McpErrorHandler::handle_error(e, "get issue")),
+        };
+
+        // Create work branch with format: number_name
+        let mut git_ops = context.git_ops.lock().await;
+        let branch_name = issue.name.clone();
+
+        match git_ops.as_mut() {
+            Some(ops) => match ops.create_work_branch(&branch_name) {
+                Ok(branch_name) => Ok(create_success_response(format!(
+                    "Switched to work branch: {branch_name}"
+                ))),
+                Err(e) => Err(McpErrorHandler::handle_error(e, "create work branch")),
+            },
+            None => Err(McpError::internal_error(
+                "Git operations not available".to_string(),
+                None,
+            )),
+        }
     }
 }

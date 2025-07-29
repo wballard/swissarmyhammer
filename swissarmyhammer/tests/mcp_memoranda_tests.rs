@@ -9,9 +9,9 @@
 //! - Large memo content handling
 
 use serde_json::json;
+use serial_test::serial;
 use std::io::BufReader;
 use std::time::Duration;
-use serial_test::serial;
 
 // Test utilities module
 mod test_utils {
@@ -37,7 +37,14 @@ mod test_utils {
         let memos_dir = temp_dir.path().join("memos");
 
         let child = Command::new("cargo")
-            .args(["run", "--release", "--bin", "swissarmyhammer", "--", "serve"])
+            .args([
+                "run",
+                "--release",
+                "--bin",
+                "swissarmyhammer",
+                "--",
+                "serve",
+            ])
             .current_dir("..") // Run from project root
             .env("SWISSARMYHAMMER_MEMOS_DIR", memos_dir)
             .stdin(Stdio::piped())

@@ -2,6 +2,8 @@
 //!
 //! This module provides the UpdateIssueTool for updating existing issue content.
 
+use crate::mcp::responses::create_success_response;
+use crate::mcp::shared_utils::{McpErrorHandler, McpValidation};
 use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
 use crate::mcp::types::UpdateIssueRequest;
 use async_trait::async_trait;
@@ -27,7 +29,7 @@ impl McpTool for UpdateIssueTool {
 
     fn description(&self) -> &'static str {
         crate::mcp::tool_descriptions::get_tool_description("issues", "update")
-            .unwrap_or("Tool description not available")
+            .expect("Tool description should be available")
     }
 
     fn schema(&self) -> serde_json::Value {
@@ -58,6 +60,41 @@ impl McpTool for UpdateIssueTool {
         context: &ToolContext,
     ) -> std::result::Result<CallToolResult, McpError> {
         let request: UpdateIssueRequest = BaseToolImpl::parse_arguments(arguments)?;
-        context.tool_handlers.handle_issue_update(request).await
+
+        // Validate issue name and content
+        McpValidation::validate_not_empty(request.name.as_str(), "issue name")
+            .map_err(|e| McpErrorHandler::handle_error(e, "validate issue name"))?;
+        McpValidation::validate_not_empty(&request.content, "issue content")
+            .map_err(|e| McpErrorHandler::handle_error(e, "validate issue content"))?;
+
+        let issue_storage = context.issue_storage.write().await;
+
+        // Handle append mode by reading existing content first
+        let final_content = if request.append {
+            match issue_storage.get_issue(request.name.as_str()).await {
+                Ok(existing_issue) => {
+                    format!("{}\n{}", existing_issue.content, request.content)
+                }
+                Err(_) => request.content, // If can't read existing, just use new content
+            }
+        } else {
+            request.content
+        };
+
+        match issue_storage
+            .update_issue(request.name.as_str(), final_content)
+            .await
+        {
+            Ok(issue) => Ok(create_success_response(format!(
+                "Updated issue {} ({})",
+                issue.name,
+                if request.append {
+                    "append mode"
+                } else {
+                    "replace mode"
+                }
+            ))),
+            Err(e) => Err(McpErrorHandler::handle_error(e, "update issue")),
+        }
     }
 }

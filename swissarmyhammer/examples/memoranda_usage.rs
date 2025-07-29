@@ -373,7 +373,7 @@ mod tests {
     #[tokio::test]
     async fn test_memo_content_analysis() {
         let memo = Memo {
-            id: "01TEST123456789012345678".to_string(),
+            id: MemoId::from_string("01TEST123456789012345678".to_string()).unwrap(),
             title: "Test Memo".to_string(),
             content: "# Header 1\n\nSome content\n\n## Header 2\n\n- [ ] Task 1\n- [x] Task 2"
                 .to_string(),

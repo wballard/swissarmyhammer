@@ -18,8 +18,9 @@
 //!
 //! Each tool follows the standard MCP pattern:
 //! ```rust
-//! use crate::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
-//! use crate::mcp::types::*;
+//! use async_trait::async_trait;
+//! use swissarmyhammer::mcp::tool_registry::{BaseToolImpl, McpTool, ToolContext};
+//! use swissarmyhammer::mcp::tool_descriptions;
 //!
 //! #[derive(Default)]
 //! pub struct ExampleIssueTool;
@@ -30,11 +31,26 @@
 //!
 //! #[async_trait]
 //! impl McpTool for ExampleIssueTool {
+//!     fn name(&self) -> &'static str {
+//!         "issue_example"
+//!     }
+//!     
 //!     fn description(&self) -> &'static str {
-//!         crate::mcp::tool_descriptions::get_tool_description("issues", "example")
+//!         tool_descriptions::get_tool_description("issues", "example")
 //!             .unwrap_or("Tool description not available")
 //!     }
-//!     // ... other trait methods
+//!     
+//!     fn schema(&self) -> serde_json::Value {
+//!         serde_json::json!({})
+//!     }
+//!     
+//!     async fn execute(
+//!         &self,
+//!         _arguments: serde_json::Map<String, serde_json::Value>,
+//!         _context: &ToolContext,
+//!     ) -> std::result::Result<rmcp::model::CallToolResult, rmcp::Error> {
+//!         Ok(BaseToolImpl::create_success_response("Example executed"))
+//!     }
 //! }
 //! ```
 //!

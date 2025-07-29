@@ -24,6 +24,7 @@ Thumbs.db
 *.log
 coverage_output.log
 test_output.log
+test_output.txt
 
 # Scratch files
 CODE_REVIEW.md

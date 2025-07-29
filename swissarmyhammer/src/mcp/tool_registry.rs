@@ -72,6 +72,7 @@
 //! ```
 
 use super::tool_handlers::ToolHandlers;
+use crate::common::rate_limiter::RateLimitChecker;
 use crate::git::GitOperations;
 use crate::issues::IssueStorage;
 use crate::memoranda::MemoStorage;
@@ -137,6 +138,12 @@ pub struct ToolContext {
     /// Provides thread-safe access to memoranda storage operations. Use `read()` for
     /// read operations and `write()` for write operations.
     pub memo_storage: Arc<RwLock<Box<dyn MemoStorage>>>,
+
+    /// Rate limiter for preventing denial of service attacks
+    ///
+    /// Provides configurable rate limiting for MCP operations. The trait-based
+    /// design allows for easy testing with mock implementations.
+    pub rate_limiter: Arc<dyn RateLimitChecker>,
 }
 
 impl ToolContext {
@@ -146,12 +153,14 @@ impl ToolContext {
         issue_storage: Arc<RwLock<Box<dyn IssueStorage>>>,
         git_ops: Arc<Mutex<Option<GitOperations>>>,
         memo_storage: Arc<RwLock<Box<dyn MemoStorage>>>,
+        rate_limiter: Arc<dyn RateLimitChecker>,
     ) -> Self {
         Self {
             tool_handlers,
             issue_storage,
             git_ops,
             memo_storage,
+            rate_limiter,
         }
     }
 }
@@ -589,12 +598,14 @@ mod tests {
         let memo_storage: Arc<RwLock<Box<dyn MemoStorage>>> =
             Arc::new(RwLock::new(Box::new(MockMemoStorage::new())));
 
-        let tool_handlers = Arc::new(ToolHandlers::new(
-            issue_storage.clone(),
-            git_ops.clone(),
-            memo_storage.clone(),
-        ));
-        let context = ToolContext::new(tool_handlers, issue_storage, git_ops, memo_storage);
+        let tool_handlers = Arc::new(ToolHandlers::new(memo_storage.clone()));
+        let context = ToolContext::new(
+            tool_handlers,
+            issue_storage,
+            git_ops,
+            memo_storage,
+            Arc::new(crate::common::rate_limiter::MockRateLimiter),
+        );
 
         let tool = MockTool {
             name: "exec_test",

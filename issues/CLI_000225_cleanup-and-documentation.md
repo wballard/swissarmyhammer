@@ -100,49 +100,14 @@ pub fn format_json_as_table(data: &Value) -> String {
 }
 ```
 
-### 2. Architecture Documentation Updates
-
-#### Update README Files
-
-**Update `swissarmyhammer-cli/README.md`:**
-
-```markdown
-# SwissArmyHammer CLI
-
-## Architecture
-
-The SwissArmyHammer CLI provides a command-line interface to SwissArmyHammer functionality through direct integration with MCP (Model Context Protocol) tools.
-
-### CLI-MCP Integration
-
-The CLI eliminates code duplication by calling MCP tools directly rather than implementing separate business logic:
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   CLI Command   │───▶│  CliToolContext │───▶│   MCP Tools     │
-│   (issue.rs)    │    │                 │    │  (IssueTools)   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│ CLI Formatting  │    │ Response Format │    │ Business Logic  │
-│ & Display       │◀───│ Conversion      │◀───│ Implementation  │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
-
-This architecture ensures:
-- **Single Source of Truth**: Business logic exists only in MCP tools
-- **Consistency**: CLI and MCP interfaces behave identically
-- **Maintainability**: Changes only need to be made in one place
-- **Testability**: Both CLI and MCP can be tested through the same code paths
-```
-
 #### Update Architecture Decision Records
 
 Create `docs/architecture/CLI-MCP-Integration.md`:
 
 ```markdown
 # Architecture Decision Record: CLI-MCP Integration
+
+Use a memo
 
 ## Status
 Accepted

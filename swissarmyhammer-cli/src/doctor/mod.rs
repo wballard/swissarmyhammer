@@ -144,7 +144,7 @@ impl Doctor {
             system_checks: self
                 .checks
                 .iter()
-                .filter(|c| c.name.contains("PATH") || c.name.contains("permissions"))
+                .filter(|c| c.name.contains("PATH") || c.name.contains("permissions") || c.name.contains("Binary") || c.name.contains("Installation"))
                 .collect(),
             config_checks: self
                 .checks
@@ -390,5 +390,40 @@ mod tests {
         assert_eq!(i32::from(ExitCode::Success), 0);
         assert_eq!(i32::from(ExitCode::Warning), 1);
         assert_eq!(i32::from(ExitCode::Error), 2);
+    }
+
+    #[test]
+    fn test_warning_checks_are_categorized() {
+        let mut doctor = Doctor::new();
+        
+        // Add a warning check that should be categorized
+        doctor.checks.push(Check {
+            name: "Binary Name".to_string(),
+            status: CheckStatus::Warning,
+            message: "Test warning message".to_string(),
+            fix: Some("Test fix".to_string()),
+        });
+
+        let check_groups = doctor.group_checks_by_category();
+        
+        // Verify that warning checks are included in appropriate categories
+        let all_categorized_checks: Vec<_> = check_groups.system_checks.iter()
+            .chain(check_groups.config_checks.iter())
+            .chain(check_groups.prompt_checks.iter())
+            .chain(check_groups.workflow_checks.iter())
+            .collect();
+
+        // All warning checks should be categorized
+        let warning_checks: Vec<_> = doctor.checks.iter()
+            .filter(|c| c.status == CheckStatus::Warning)
+            .collect();
+
+        for warning_check in &warning_checks {
+            assert!(
+                all_categorized_checks.iter().any(|&&c| std::ptr::eq(c, *warning_check)),
+                "Warning check '{}' should be categorized but was not found in any category",
+                warning_check.name
+            );
+        }
     }
 }

@@ -234,7 +234,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Install SwissArmyHammer
-        run: cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
+        run: cargo install --git https://github.com/swissarmyhammer/swissarmyhammer.git swissarmyhammer-cli
       - name: Test all prompts
         run: |
           for prompt in prompts/*.md; do

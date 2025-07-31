@@ -176,10 +176,10 @@ Example entry:
 
 ## Links
 
-- [GitHub Releases](https://github.com/wballard/swissarmyhammer/releases)
+- [GitHub Releases](https://github.com/swissarmyhammer/swissarmyhammer/releases)
 - [Release Process](./release-process.md)
 - [Contributing Guide](./contributing.md)
 
-[Unreleased]: https://github.com/wballard/swissarmyhammer/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/wballard/swissarmyhammer/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/wballard/swissarmyhammer/releases/tag/v0.1.0
+[Unreleased]: https://github.com/swissarmyhammer/swissarmyhammer/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/swissarmyhammer/swissarmyhammer/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/swissarmyhammer/swissarmyhammer/releases/tag/v0.1.0

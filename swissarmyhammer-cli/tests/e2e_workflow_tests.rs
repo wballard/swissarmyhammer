@@ -126,7 +126,7 @@ fn test_complete_issue_lifecycle() -> Result<()> {
 
     // Step 3: Show the issue details
     let show_output = Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "show", "000001_e2e_lifecycle_test"])
+        .args(["issue", "show", "e2e_lifecycle_test"])
         .current_dir(&temp_path)
         .assert()
         .success();
@@ -142,7 +142,7 @@ fn test_complete_issue_lifecycle() -> Result<()> {
         .args([
             "issue",
             "update",
-            "000001_e2e_lifecycle_test",
+            "e2e_lifecycle_test",
             "--content",
             "Updated content for e2e testing",
             "--append",
@@ -153,7 +153,7 @@ fn test_complete_issue_lifecycle() -> Result<()> {
 
     // Step 5: Verify the update
     let updated_show_output = Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "show", "000001_e2e_lifecycle_test"])
+        .args(["issue", "show", "e2e_lifecycle_test"])
         .current_dir(&temp_path)
         .assert()
         .success();
@@ -166,7 +166,7 @@ fn test_complete_issue_lifecycle() -> Result<()> {
 
     // Step 6: Work on the issue (creates git branch)
     Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "work", "000001_e2e_lifecycle_test"])
+        .args(["issue", "work", "e2e_lifecycle_test"])
         .current_dir(&temp_path)
         .assert()
         .success();
@@ -180,20 +180,20 @@ fn test_complete_issue_lifecycle() -> Result<()> {
 
     let current_stdout = String::from_utf8_lossy(&current_output.get_output().stdout);
     assert!(
-        current_stdout.contains("e2e_lifecycle_test") || current_stdout.contains("000001"),
+        current_stdout.contains("e2e_lifecycle_test"),
         "Current issue should show our issue: {current_stdout}"
     );
 
     // Step 8: Complete the issue
     Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "complete", "000001_e2e_lifecycle_test"])
+        .args(["issue", "complete", "e2e_lifecycle_test"])
         .current_dir(&temp_path)
         .assert()
         .success();
 
     // Step 9: Merge the issue
     Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "merge", "000001_e2e_lifecycle_test"])
+        .args(["issue", "merge", "e2e_lifecycle_test"])
         .current_dir(&temp_path)
         .assert()
         .success();
@@ -467,7 +467,7 @@ fn test_mixed_workflow() -> Result<()> {
 
     // Step 3: Work on the issue
     Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "work", "000001_implement_search_feature"])
+        .args(["issue", "work", "implement_search_feature"])
         .current_dir(&temp_path)
         .assert()
         .success();
@@ -498,7 +498,7 @@ fn test_mixed_workflow() -> Result<()> {
         .args([
             "issue",
             "update",
-            "000001_implement_search_feature",
+            "implement_search_feature",
             "--content",
             "\n\n## Progress Update\n\nSearch indexing is now working correctly. Ready for testing phase.",
             "--append"
@@ -529,7 +529,7 @@ fn test_mixed_workflow() -> Result<()> {
 
     // Step 9: Complete the issue
     Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "complete", "000001_implement_search_feature"])
+        .args(["issue", "complete", "implement_search_feature"])
         .current_dir(&temp_path)
         .assert()
         .success();
@@ -563,7 +563,7 @@ fn test_mixed_workflow() -> Result<()> {
 
     // Step 12: Merge the completed issue
     Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "merge", "000001_implement_search_feature"])
+        .args(["issue", "merge", "implement_search_feature"])
         .current_dir(&temp_path)
         .assert()
         .success();
@@ -598,7 +598,7 @@ fn test_error_recovery_workflow() -> Result<()> {
 
     // Step 3: Now work on the issue (should succeed)
     Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "work", "000001_error_recovery_test"])
+        .args(["issue", "work", "error_recovery_test"])
         .current_dir(&temp_path)
         .assert()
         .success();

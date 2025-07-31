@@ -132,7 +132,7 @@ Example attribution:
 
 ```
 This product includes software developed by the SwissArmyHammer project
-(https://github.com/wballard/swissarmyhammer), licensed under the MIT License.
+(https://github.com/swissarmyhammer/swissarmyhammer), licensed under the MIT License.
 ```
 
 ## Related Documents
@@ -140,4 +140,4 @@ This product includes software developed by the SwissArmyHammer project
 - [Contributing Guidelines](./contributing.md)
 - [Code of Conduct](https://www.rust-lang.org/policies/code-of-conduct)
 - [Security Policy](./security.md)
-- [Full License File](https://github.com/wballard/swissarmyhammer/blob/main/LICENSE)
+- [Full License File](https://github.com/swissarmyhammer/swissarmyhammer/blob/main/LICENSE)

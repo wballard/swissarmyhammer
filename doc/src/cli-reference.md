@@ -6,7 +6,7 @@ SwissArmyHammer provides a comprehensive command-line interface for managing pro
 
 ```bash
 # Install from Git repository (requires Rust)
-cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
+cargo install --git https://github.com/swissarmyhammer/swissarmyhammer.git swissarmyhammer-cli
 
 # Ensure ~/.cargo/bin is in your PATH
 export PATH="$HOME/.cargo/bin:$PATH"

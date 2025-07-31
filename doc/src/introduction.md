@@ -49,7 +49,7 @@ SwissArmyHammer transforms your prompt workflow through:
 
 ### Installation
 ```bash
-cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
+cargo install --git https://github.com/swissarmyhammer/swissarmyhammer.git swissarmyhammer-cli
 ```
 
 ### Basic Usage
@@ -171,10 +171,10 @@ SwissArmyHammer follows a simple but powerful architecture:
 
 ## Join the Community
 
-- **[GitHub Repository](https://github.com/wballard/swissarmyhammer)** - Source code, issues, and discussions
+- **[GitHub Repository](https://github.com/swissarmyhammer/swissarmyhammer)** - Source code, issues, and discussions
 - **[Contributing Guide](./contributing.md)** - How to contribute to the project
-- **[Issue Tracker](https://github.com/wballard/swissarmyhammer/issues)** - Report bugs and request features
-- **[Discussions](https://github.com/wballard/swissarmyhammer/discussions)** - Community Q&A and sharing
+- **[Issue Tracker](https://github.com/swissarmyhammer/swissarmyhammer/issues)** - Report bugs and request features
+- **[Discussions](https://github.com/swissarmyhammer/swissarmyhammer/discussions)** - Community Q&A and sharing
 
 ## License
 

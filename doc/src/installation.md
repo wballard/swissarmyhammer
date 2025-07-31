@@ -12,7 +12,7 @@ To update SwissArmyHammer to the latest version:
 
 ```bash
 # Update from git repository
-cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli --force
+cargo install --git https://github.com/swissarmyhammer/swissarmyhammer.git swissarmyhammer-cli --force
 ```
 
 The `--force` flag will overwrite the existing installation.
@@ -28,7 +28,7 @@ If you want to build from source or contribute to development:
 
 ```bash
 # Clone the repository
-git clone https://github.com/wballard/swissarmyhammer.git
+git clone https://github.com/swissarmyhammer/swissarmyhammer.git
 cd swissarmyhammer
 
 # Build the CLI (debug mode for development)

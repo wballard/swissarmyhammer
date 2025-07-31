@@ -1,6 +1,6 @@
 # Troubleshooting
 
-This guide helps you resolve common issues with SwissArmyHammer. For additional support, check the [GitHub Issues](https://github.com/wballard/swissarmyhammer/issues).
+This guide helps you resolve common issues with SwissArmyHammer. For additional support, check the [GitHub Issues](https://github.com/swissarmyhammer/swissarmyhammer/issues).
 
 ## Quick Diagnostics
 
@@ -59,14 +59,14 @@ sudo chmod +x /usr/local/bin/swissarmyhammer
 1. **Manual installation**:
    ```bash
    # Download binary directly
-   curl -L https://github.com/wballard/swissarmyhammer/releases/latest/download/swissarmyhammer-linux-x64 -o swissarmyhammer
+   curl -L https://github.com/swissarmyhammer/swissarmyhammer/releases/latest/download/swissarmyhammer-linux-x64 -o swissarmyhammer
    chmod +x swissarmyhammer
    sudo mv swissarmyhammer /usr/local/bin/
    ```
 
 2. **Build from source**:
    ```bash
-   git clone https://github.com/wballard/swissarmyhammer.git
+   git clone https://github.com/swissarmyhammer/swissarmyhammer.git
    cd swissarmyhammer
    cargo build --release
    sudo cp target/release/swissarmyhammer /usr/local/bin/
@@ -515,8 +515,8 @@ swissarmyhammer --debug serve | grep -E "(request|response)"
 
 ### Community Support
 
-- [GitHub Issues](https://github.com/wballard/swissarmyhammer/issues)
-- [Discussions](https://github.com/wballard/swissarmyhammer/discussions)
+- [GitHub Issues](https://github.com/swissarmyhammer/swissarmyhammer/issues)
+- [Discussions](https://github.com/swissarmyhammer/swissarmyhammer/discussions)
 - [Discord/Slack Community](#) (if available)
 
 ### Reporting Issues

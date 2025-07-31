@@ -10,7 +10,7 @@ Add SwissArmyHammer to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-swissarmyhammer = { git = "https://github.com/wballard/swissarmyhammer.git" }
+swissarmyhammer = { git = "https://github.com/swissarmyhammer/swissarmyhammer.git" }
 tokio = { version = "1", features = ["full"] }
 serde_json = "1"
 ```

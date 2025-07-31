@@ -135,7 +135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Updated dependencies to patch CVE-2024-XXXXX
 
-[1.2.3]: https://github.com/wballard/swissarmyhammer/compare/v1.2.2...v1.2.3
+[1.2.3]: https://github.com/swissarmyhammer/swissarmyhammer/compare/v1.2.2...v1.2.3
 ```
 
 ### 4. Update Documentation
@@ -422,12 +422,12 @@ We're excited to announce the release of SwissArmyHammer v1.2.3!
 cargo install swissarmyhammer
 
 # Or download binaries
-https://github.com/wballard/swissarmyhammer/releases/tag/v1.2.3
+https://github.com/swissarmyhammer/swissarmyhammer/releases/tag/v1.2.3
 ```
 
 ## What's Changed
 
-[Full changelog](https://github.com/wballard/swissarmyhammer/blob/main/CHANGELOG.md)
+[Full changelog](https://github.com/swissarmyhammer/swissarmyhammer/blob/main/CHANGELOG.md)
 
 ## Thank You
 
@@ -447,17 +447,17 @@ If maintaining Homebrew formula:
 ```ruby
 class Swissarmyhammer < Formula
   desc "MCP server for prompt management"
-  homepage "https://github.com/wballard/swissarmyhammer"
+  homepage "https://github.com/swissarmyhammer/swissarmyhammer"
   version "1.2.3"
   
   if OS.mac? && Hardware::CPU.intel?
-    url "https://github.com/wballard/swissarmyhammer/releases/download/v1.2.3/swissarmyhammer-v1.2.3-x86_64-apple-darwin.tar.gz"
+    url "https://github.com/swissarmyhammer/swissarmyhammer/releases/download/v1.2.3/swissarmyhammer-v1.2.3-x86_64-apple-darwin.tar.gz"
     sha256 "HASH_HERE"
   elsif OS.mac? && Hardware::CPU.arm?
-    url "https://github.com/wballard/swissarmyhammer/releases/download/v1.2.3/swissarmyhammer-v1.2.3-aarch64-apple-darwin.tar.gz"
+    url "https://github.com/swissarmyhammer/swissarmyhammer/releases/download/v1.2.3/swissarmyhammer-v1.2.3-aarch64-apple-darwin.tar.gz"
     sha256 "HASH_HERE"
   elsif OS.linux?
-    url "https://github.com/wballard/swissarmyhammer/releases/download/v1.2.3/swissarmyhammer-v1.2.3-x86_64-unknown-linux-gnu.tar.gz"
+    url "https://github.com/swissarmyhammer/swissarmyhammer/releases/download/v1.2.3/swissarmyhammer-v1.2.3-x86_64-unknown-linux-gnu.tar.gz"
     sha256 "HASH_HERE"
   end
 

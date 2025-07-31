@@ -6,7 +6,7 @@ Research the memoranda repository functionality and set up the foundation for im
 ## Tasks
 
 ### 1. Deep Analysis of Memoranda Repository
-- Analyze the original memoranda codebase at https://github.com/wballard/memoranda  
+- Analyze the original memoranda codebase at https://github.com/swissarmyhammer/memoranda  
 - Document the core data structures (Memo, MemoId, etc.)
 - Understand the API surface area and functionality
 - Document storage patterns and file formats used

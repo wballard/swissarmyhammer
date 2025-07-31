@@ -20,23 +20,22 @@ fn setup_benchmark_environment() -> (TempDir, std::path::PathBuf) {
     // Create sample issues for benchmarking
     for i in 1..=10 {
         std::fs::write(
-            issues_dir.join(format!("BENCH_{:03}_issue.md", i)),
+            issues_dir.join(format!("BENCH_{i:03}_issue.md")),
             format!(
-                r#"# Benchmark Issue {}
+                r#"# Benchmark Issue {i}
 
-This is benchmark issue number {} for performance testing.
+This is benchmark issue number {i} for performance testing.
 
 ## Details
 - Priority: Medium
 - Type: Performance Test
 - Created: 2024-01-01
-- Iteration: {}
+- Iteration: {i}
 
 ## Description
 This issue exists solely for benchmarking CLI performance.
 It contains sufficient content to make operations realistic.
-"#,
-                i, i, i
+"#
             ),
         )
         .expect("Failed to create benchmark issue");
@@ -44,7 +43,8 @@ It contains sufficient content to make operations realistic.
 
     // Create .swissarmyhammer directory
     let swissarmyhammer_dir = temp_path.join(".swissarmyhammer");
-    std::fs::create_dir_all(&swissarmyhammer_dir).expect("Failed to create .swissarmyhammer directory");
+    std::fs::create_dir_all(&swissarmyhammer_dir)
+        .expect("Failed to create .swissarmyhammer directory");
 
     // Create source files for search benchmarking
     let src_dir = temp_path.join("src");
@@ -52,33 +52,32 @@ It contains sufficient content to make operations realistic.
 
     for i in 1..=5 {
         std::fs::write(
-            src_dir.join(format!("benchmark_{}.rs", i)),
+            src_dir.join(format!("benchmark_{i}.rs")),
             format!(
                 r#"
-//! Benchmark source file {}
+//! Benchmark source file {i}
 
 use std::error::Error;
 
-/// Benchmark function {}
-pub fn benchmark_function_{}() -> Result<String, Box<dyn Error>> {{
-    println!("Running benchmark function {}", {});
-    Ok(format!("Benchmark {} completed", {}))
+/// Benchmark function {i}
+pub fn benchmark_function_{i}() -> Result<String, Box<dyn Error>> {{
+    println!("Running benchmark function {i}", {i});
+    Ok(format!("Benchmark {i} completed", {i}))
 }}
 
-/// Error handling for benchmark {}
-pub fn handle_benchmark_error_{}(error: &str) -> Result<(), String> {{
-    eprintln!("Benchmark error {}: {{}}", {}, error);
-    Err(format!("Benchmark error {} handled", {}))
+/// Error handling for benchmark {i}
+pub fn handle_benchmark_error_{i}(error: &str) -> Result<(), String> {{
+    eprintln!("Benchmark error {i}: {{}}", {i}, error);
+    Err(format!("Benchmark error {i} handled", {i}))
 }}
 
-/// Performance critical function {}
-pub fn performance_critical_{}() {{
+/// Performance critical function {i}
+pub fn performance_critical_{i}() {{
     for i in 0..1000 {{
         let _ = i * 2 + 1;
     }}
 }}
-"#,
-                i, i, i, i, i, i, i, i, i, i, i, i
+"#
             ),
         )
         .expect("Failed to create benchmark source file");
@@ -138,7 +137,7 @@ fn bench_issue_operations(c: &mut Criterion) {
                     "--",
                     "issue",
                     "create",
-                    &format!("bench_issue_{}", counter),
+                    &format!("bench_issue_{counter}"),
                     "--content",
                     "Benchmark issue content",
                 ])
@@ -192,7 +191,7 @@ fn bench_memo_operations(c: &mut Criterion) {
                     "--",
                     "memo",
                     "create",
-                    &format!("Benchmark Memo {}", counter),
+                    &format!("Benchmark Memo {counter}"),
                     "--content",
                     "This is benchmark memo content for performance testing.",
                 ])
@@ -216,9 +215,9 @@ fn bench_memo_operations(c: &mut Criterion) {
                     "--",
                     "memo",
                     "create",
-                    &format!("Pre-created Memo {}", i),
+                    &format!("Pre-created Memo {i}"),
                     "--content",
-                    &format!("Content for memo {}", i),
+                    &format!("Content for memo {i}"),
                 ])
                 .current_dir(&temp_path)
                 .output()
@@ -267,7 +266,7 @@ fn bench_search_operations(c: &mut Criterion) {
     // Benchmark search querying (after indexing)
     group.bench_function("search_query", |b| {
         let (_temp_dir, temp_path) = setup_benchmark_environment();
-        
+
         // Pre-index files
         Command::new("cargo")
             .args([
@@ -391,17 +390,16 @@ fn bench_data_scaling(c: &mut Criterion) {
                 // Create the specified number of issues
                 for i in 1..=size {
                     std::fs::write(
-                        issues_dir.join(format!("SCALE_{:03}_issue.md", i)),
+                        issues_dir.join(format!("SCALE_{i:03}_issue.md")),
                         format!(
-                            r#"# Scaling Issue {}
+                            r#"# Scaling Issue {i}
 
-This is scaling issue number {} for performance testing with {} total issues.
+This is scaling issue number {i} for performance testing with {size} total issues.
 
 ## Content
 This issue contains realistic content to test performance at scale.
 The goal is to measure how performance changes with data size.
-"#,
-                            i, i, size
+"#
                         ),
                     )
                     .expect("Failed to create scaling issue");
@@ -453,7 +451,14 @@ fn bench_error_handling(c: &mut Criterion) {
     group.bench_function("invalid_command_error", |b| {
         b.iter(|| {
             let output = Command::new("cargo")
-                .args(["run", "--bin", "swissarmyhammer", "--", "invalid", "command"])
+                .args([
+                    "run",
+                    "--bin",
+                    "swissarmyhammer",
+                    "--",
+                    "invalid",
+                    "command",
+                ])
                 .output()
                 .expect("Failed to run invalid command");
             black_box(output.status.code())
@@ -463,14 +468,130 @@ fn bench_error_handling(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark MCP-specific operations  
+fn bench_mcp_integration(c: &mut Criterion) {
+    let mut group = c.benchmark_group("mcp_integration");
+    group.measurement_time(Duration::from_secs(10));
+
+    // Benchmark MCP context initialization through CLI command
+    group.bench_function("mcp_context_init_via_cli", |b| {
+        let (_temp_dir, temp_path) = setup_benchmark_environment();
+        
+        b.iter(|| {
+            let output = Command::new("cargo")
+                .args([
+                    "run",
+                    "--bin", 
+                    "swissarmyhammer",
+                    "--",
+                    "memo",
+                    "list"
+                ])
+                .current_dir(black_box(&temp_path))
+                .output()
+                .expect("Failed to run memo list command");
+            black_box(output.status.code())
+        })
+    });
+
+    // Benchmark MCP tool execution through CLI
+    group.bench_function("mcp_tool_execution_via_cli", |b| {
+        let (_temp_dir, temp_path) = setup_benchmark_environment();
+        let mut counter = 0;
+        
+        b.iter(|| {
+            counter += 1;
+            let output = Command::new("cargo")
+                .args([
+                    "run",
+                    "--bin",
+                    "swissarmyhammer", 
+                    "--",
+                    "memo",
+                    "create",
+                    &format!("MCP Bench Memo {}", counter),
+                    "--content",
+                    "MCP benchmark content"
+                ])
+                .current_dir(black_box(&temp_path))
+                .output()
+                .expect("Failed to run MCP benchmark command");
+            black_box(output.status.success())
+        })
+    });
+
+    group.finish();
+}
+
+/// Benchmark memory usage patterns
+fn bench_memory_usage(c: &mut Criterion) {
+    let mut group = c.benchmark_group("memory_usage");
+    group.measurement_time(Duration::from_secs(5));
+
+    // Benchmark with large content
+    group.bench_function("large_content_handling", |b| {
+        let (_temp_dir, temp_path) = setup_benchmark_environment();
+        let large_content = "A".repeat(100_000); // 100KB content
+        
+        b.iter(|| {
+            let output = Command::new("cargo")
+                .args([
+                    "run",
+                    "--bin",
+                    "swissarmyhammer",
+                    "--",
+                    "issue",
+                    "create",
+                    "large_content_test",
+                    "--content",
+                    &large_content,
+                ])
+                .current_dir(black_box(&temp_path))
+                .output()
+                .expect("Failed to run large content command");
+            black_box(output.status.code())
+        })
+    });
+
+    // Benchmark with many small operations
+    group.bench_function("many_small_operations", |b| {
+        let (_temp_dir, temp_path) = setup_benchmark_environment();
+        let mut counter = 0;
+        
+        b.iter(|| {
+            counter += 1;
+            let output = Command::new("cargo")
+                .args([
+                    "run",
+                    "--bin",
+                    "swissarmyhammer",
+                    "--",
+                    "memo",
+                    "create",
+                    &format!("Small Memo {}", counter),
+                    "--content",
+                    "Small content",
+                ])
+                .current_dir(black_box(&temp_path))
+                .output()
+                .expect("Failed to run small operation");
+            black_box(output.status.success())
+        })
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_issue_operations,
-    bench_memo_operations,
+    bench_memo_operations, 
     bench_search_operations,
     bench_cli_startup,
     bench_output_formats,
     bench_data_scaling,
-    bench_error_handling
+    bench_error_handling,
+    bench_mcp_integration,
+    bench_memory_usage
 );
 criterion_main!(benches);

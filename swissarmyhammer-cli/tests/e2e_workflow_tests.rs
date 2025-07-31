@@ -99,7 +99,7 @@ fn test_complete_issue_lifecycle() -> Result<()> {
             "create",
             "e2e_lifecycle_test",
             "--content",
-            "# E2E Lifecycle Test\n\nThis issue tests the complete lifecycle workflow."
+            "# E2E Lifecycle Test\n\nThis issue tests the complete lifecycle workflow.",
         ])
         .current_dir(&temp_path)
         .assert()
@@ -121,8 +121,7 @@ fn test_complete_issue_lifecycle() -> Result<()> {
     let list_stdout = String::from_utf8_lossy(&list_output.get_output().stdout);
     assert!(
         list_stdout.contains("e2e_lifecycle_test"),
-        "Issue should appear in list: {}",
-        list_stdout
+        "Issue should appear in list: {list_stdout}"
     );
 
     // Step 3: Show the issue details
@@ -135,8 +134,7 @@ fn test_complete_issue_lifecycle() -> Result<()> {
     let show_stdout = String::from_utf8_lossy(&show_output.get_output().stdout);
     assert!(
         show_stdout.contains("E2E Lifecycle Test"),
-        "Issue details should contain title: {}",
-        show_stdout
+        "Issue details should contain title: {show_stdout}"
     );
 
     // Step 4: Update the issue
@@ -147,7 +145,7 @@ fn test_complete_issue_lifecycle() -> Result<()> {
             "000001_e2e_lifecycle_test",
             "--content",
             "Updated content for e2e testing",
-            "--append"
+            "--append",
         ])
         .current_dir(&temp_path)
         .assert()
@@ -163,8 +161,7 @@ fn test_complete_issue_lifecycle() -> Result<()> {
     let updated_stdout = String::from_utf8_lossy(&updated_show_output.get_output().stdout);
     assert!(
         updated_stdout.contains("Updated content"),
-        "Issue should contain updated content: {}",
-        updated_stdout
+        "Issue should contain updated content: {updated_stdout}"
     );
 
     // Step 6: Work on the issue (creates git branch)
@@ -184,8 +181,7 @@ fn test_complete_issue_lifecycle() -> Result<()> {
     let current_stdout = String::from_utf8_lossy(&current_output.get_output().stdout);
     assert!(
         current_stdout.contains("e2e_lifecycle_test") || current_stdout.contains("000001"),
-        "Current issue should show our issue: {}",
-        current_stdout
+        "Current issue should show our issue: {current_stdout}"
     );
 
     // Step 8: Complete the issue
@@ -211,7 +207,7 @@ fn test_complete_issue_lifecycle() -> Result<()> {
 
     let final_stdout = String::from_utf8_lossy(&final_list_output.get_output().stdout);
     assert!(
-        final_stdout.contains("e2e_lifecycle_test") || final_stdout.len() > 0,
+        final_stdout.contains("e2e_lifecycle_test") || !final_stdout.is_empty(),
         "Completed issue should appear in completed list"
     );
 
@@ -225,9 +221,18 @@ fn test_complete_memo_workflow() -> Result<()> {
 
     // Step 1: Create multiple memos
     let memo_data = vec![
-        ("Meeting Notes", "# Meeting Notes\n\nDiscussed project timeline and goals."),
-        ("Task List", "# Task List\n\n1. Complete testing\n2. Review documentation\n3. Deploy to production"),
-        ("Code Review Notes", "# Code Review\n\nReviewed PR #123:\n- Good error handling\n- Needs more tests"),
+        (
+            "Meeting Notes",
+            "# Meeting Notes\n\nDiscussed project timeline and goals.",
+        ),
+        (
+            "Task List",
+            "# Task List\n\n1. Complete testing\n2. Review documentation\n3. Deploy to production",
+        ),
+        (
+            "Code Review Notes",
+            "# Code Review\n\nReviewed PR #123:\n- Good error handling\n- Needs more tests",
+        ),
     ];
 
     let mut memo_ids = vec![];
@@ -240,7 +245,7 @@ fn test_complete_memo_workflow() -> Result<()> {
             .success();
 
         let create_stdout = String::from_utf8_lossy(&create_output.get_output().stdout);
-        
+
         // Extract memo ID from output (ULID pattern)
         if let Some(id) = extract_ulid_from_text(&create_stdout) {
             memo_ids.push(id);
@@ -257,8 +262,7 @@ fn test_complete_memo_workflow() -> Result<()> {
     let list_stdout = String::from_utf8_lossy(&list_output.get_output().stdout);
     assert!(
         list_stdout.contains("Meeting Notes") && list_stdout.contains("Task List"),
-        "All memos should appear in list: {}",
-        list_stdout
+        "All memos should appear in list: {list_stdout}"
     );
 
     // Step 3: Get specific memo details
@@ -272,8 +276,7 @@ fn test_complete_memo_workflow() -> Result<()> {
         let get_stdout = String::from_utf8_lossy(&get_output.get_output().stdout);
         assert!(
             get_stdout.contains("Meeting Notes") || get_stdout.contains("project timeline"),
-            "Memo details should contain expected content: {}",
-            get_stdout
+            "Memo details should contain expected content: {get_stdout}"
         );
     }
 
@@ -287,8 +290,7 @@ fn test_complete_memo_workflow() -> Result<()> {
     let search_stdout = String::from_utf8_lossy(&search_output.get_output().stdout);
     assert!(
         search_stdout.contains("Task List") || search_stdout.contains("Complete testing"),
-        "Search should find relevant memos: {}",
-        search_stdout
+        "Search should find relevant memos: {search_stdout}"
     );
 
     // Step 5: Update a memo
@@ -314,9 +316,9 @@ fn test_complete_memo_workflow() -> Result<()> {
 
         let updated_stdout = String::from_utf8_lossy(&updated_get_output.get_output().stdout);
         assert!(
-            updated_stdout.contains("Updated Task List") && updated_stdout.contains("Monitor deployment"),
-            "Updated memo should contain new content: {}",
-            updated_stdout
+            updated_stdout.contains("Updated Task List")
+                && updated_stdout.contains("Monitor deployment"),
+            "Updated memo should contain new content: {updated_stdout}"
         );
     }
 
@@ -367,9 +369,10 @@ fn test_complete_search_workflow() -> Result<()> {
 
     let index_stdout = String::from_utf8_lossy(&index_output.get_output().stdout);
     assert!(
-        index_stdout.contains("indexed") || index_stdout.contains("files") || index_stdout.chars().any(char::is_numeric),
-        "Indexing should show progress/results: {}",
-        index_stdout
+        index_stdout.contains("indexed")
+            || index_stdout.contains("files")
+            || index_stdout.chars().any(char::is_numeric),
+        "Indexing should show progress/results: {index_stdout}"
     );
 
     // Step 2: Query for functions
@@ -382,9 +385,8 @@ fn test_complete_search_workflow() -> Result<()> {
     let query_stdout = String::from_utf8_lossy(&query_output.get_output().stdout);
     // Should contain search results or indicate empty results gracefully
     assert!(
-        query_stdout.len() > 0, // Should have some output
-        "Query should produce some output: {}",
-        query_stdout
+        !query_stdout.is_empty(), // Should have some output
+        "Query should produce some output: {query_stdout}"
     );
 
     // Step 3: Query for specific functionality
@@ -522,8 +524,7 @@ fn test_mixed_workflow() -> Result<()> {
     let memo_search_stdout = String::from_utf8_lossy(&memo_search_output.get_output().stdout);
     assert!(
         memo_search_stdout.contains("Search") || memo_search_stdout.contains("Research"),
-        "Should find research memo: {}",
-        memo_search_stdout
+        "Should find research memo: {memo_search_stdout}"
     );
 
     // Step 9: Complete the issue
@@ -589,7 +590,7 @@ fn test_error_recovery_workflow() -> Result<()> {
             "create",
             "error_recovery_test",
             "--content",
-            "# Error Recovery Test\n\nTesting error recovery workflows."
+            "# Error Recovery Test\n\nTesting error recovery workflows.",
         ])
         .current_dir(&temp_path)
         .assert()
@@ -616,7 +617,7 @@ fn test_error_recovery_workflow() -> Result<()> {
             "create",
             "Error Recovery Notes",
             "--content",
-            "# Recovery Notes\n\nDocumenting error recovery procedures."
+            "# Recovery Notes\n\nDocumenting error recovery procedures.",
         ])
         .current_dir(&temp_path)
         .assert()
@@ -667,9 +668,9 @@ fn test_realistic_load_workflow() -> Result<()> {
             .args([
                 "issue",
                 "create",
-                &format!("load_test_issue_{}", i),
+                &format!("load_test_issue_{i}"),
                 "--content",
-                &format!("# Load Test Issue {}\n\nThis is issue {} for load testing.", i, i)
+                &format!("# Load Test Issue {i}\n\nThis is issue {i} for load testing."),
             ])
             .current_dir(&temp_path)
             .assert()
@@ -679,9 +680,9 @@ fn test_realistic_load_workflow() -> Result<()> {
             .args([
                 "memo",
                 "create",
-                &format!("Load Test Memo {}", i),
+                &format!("Load Test Memo {i}"),
                 "--content",
-                &format!("# Memo {}\n\nThis is memo {} for load testing.\n\n## Details\n- Priority: Medium\n- Category: Testing\n- Iteration: {}", i, i, i)
+                &format!("# Memo {i}\n\nThis is memo {i} for load testing.\n\n## Details\n- Priority: Medium\n- Category: Testing\n- Iteration: {i}")
             ])
             .current_dir(&temp_path)
             .assert()
@@ -711,12 +712,11 @@ fn test_realistic_load_workflow() -> Result<()> {
         .success();
 
     let elapsed = start_time.elapsed();
-    
+
     // Should complete in reasonable time (less than 60 seconds for this load)
     assert!(
         elapsed < Duration::from_secs(60),
-        "Workflow should complete in reasonable time: {:?}",
-        elapsed
+        "Workflow should complete in reasonable time: {elapsed:?}"
     );
 
     Ok(())
@@ -725,7 +725,7 @@ fn test_realistic_load_workflow() -> Result<()> {
 /// Helper function to extract ULID from text
 fn extract_ulid_from_text(text: &str) -> Option<String> {
     use regex::Regex;
-    
+
     // ULID pattern: 26 characters using Crockford's Base32
     let ulid_pattern = Regex::new(r"\b[0-9A-HJKMNP-TV-Z]{26}\b").ok()?;
     ulid_pattern.find(text).map(|m| m.as_str().to_string())

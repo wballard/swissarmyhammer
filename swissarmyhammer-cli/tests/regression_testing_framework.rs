@@ -66,32 +66,20 @@ impl RegressionTestSuite {
                     "error".to_string(),
                     "panic".to_string(),
                 ],
-                expected_stderr_not_contains: vec![
-                    "Error".to_string(),
-                    "panic".to_string(),
-                ],
+                expected_stderr_not_contains: vec!["Error".to_string(), "panic".to_string()],
                 description: "Help command shows expected sections and commands".to_string(),
                 requires_setup: false,
             },
-            
             ExpectedOutput {
                 command: vec!["--version".to_string()],
                 expected_exit_code: 0,
-                expected_stdout_contains: vec![
-                    "swissarmyhammer".to_string(),
-                ],
+                expected_stdout_contains: vec!["swissarmyhammer".to_string()],
                 expected_stderr_contains: vec![],
-                expected_stdout_not_contains: vec![
-                    "Error".to_string(),
-                    "error".to_string(),
-                ],
-                expected_stderr_not_contains: vec![
-                    "Error".to_string(),
-                ],
+                expected_stdout_not_contains: vec!["Error".to_string(), "error".to_string()],
+                expected_stderr_not_contains: vec!["Error".to_string()],
                 description: "Version command shows application name".to_string(),
                 requires_setup: false,
             },
-
             // Issue command help
             ExpectedOutput {
                 command: vec!["issue".to_string(), "--help".to_string()],
@@ -110,7 +98,6 @@ impl RegressionTestSuite {
                 description: "Issue help shows all major subcommands".to_string(),
                 requires_setup: false,
             },
-
             // Memo command help
             ExpectedOutput {
                 command: vec!["memo".to_string(), "--help".to_string()],
@@ -129,36 +116,28 @@ impl RegressionTestSuite {
                 description: "Memo help shows all major subcommands".to_string(),
                 requires_setup: false,
             },
-
             // Search command help
             ExpectedOutput {
                 command: vec!["search".to_string(), "--help".to_string()],
                 expected_exit_code: 0,
-                expected_stdout_contains: vec![
-                    "index".to_string(),
-                    "query".to_string(),
-                ],
+                expected_stdout_contains: vec!["index".to_string(), "query".to_string()],
                 expected_stderr_contains: vec![],
                 expected_stdout_not_contains: vec!["Error".to_string()],
                 expected_stderr_not_contains: vec!["Error".to_string()],
                 description: "Search help shows major subcommands".to_string(),
                 requires_setup: false,
             },
-
             // Error cases (consistent error behavior)
             ExpectedOutput {
                 command: vec!["invalid".to_string(), "command".to_string()],
                 expected_exit_code: 2,
                 expected_stdout_contains: vec![],
-                expected_stderr_contains: vec![
-                    "error".to_string(),
-                ],
+                expected_stderr_contains: vec!["error".to_string()],
                 expected_stdout_not_contains: vec![],
                 expected_stderr_not_contains: vec!["panic".to_string()],
                 description: "Invalid commands produce appropriate error messages".to_string(),
                 requires_setup: false,
             },
-
             // Issue operations with setup
             ExpectedOutput {
                 command: vec!["issue".to_string(), "list".to_string()],
@@ -170,7 +149,6 @@ impl RegressionTestSuite {
                 description: "Issue list command completes successfully".to_string(),
                 requires_setup: true,
             },
-
             ExpectedOutput {
                 command: vec!["memo".to_string(), "list".to_string()],
                 expected_exit_code: 0,
@@ -181,28 +159,30 @@ impl RegressionTestSuite {
                 description: "Memo list command completes successfully".to_string(),
                 requires_setup: true,
             },
-
             // Error cases with setup
             ExpectedOutput {
-                command: vec!["issue".to_string(), "show".to_string(), "nonexistent".to_string()],
+                command: vec![
+                    "issue".to_string(),
+                    "show".to_string(),
+                    "nonexistent".to_string(),
+                ],
                 expected_exit_code: 1,
                 expected_stdout_contains: vec![],
-                expected_stderr_contains: vec![
-                    "error".to_string(),
-                ],
+                expected_stderr_contains: vec!["error".to_string()],
                 expected_stdout_not_contains: vec!["panic".to_string()],
                 expected_stderr_not_contains: vec!["panic".to_string()],
                 description: "Non-existent issue produces appropriate error".to_string(),
                 requires_setup: true,
             },
-
             ExpectedOutput {
-                command: vec!["memo".to_string(), "get".to_string(), "invalid_id".to_string()],
+                command: vec![
+                    "memo".to_string(),
+                    "get".to_string(),
+                    "invalid_id".to_string(),
+                ],
                 expected_exit_code: 1,
                 expected_stdout_contains: vec![],
-                expected_stderr_contains: vec![
-                    "error".to_string(),
-                ],
+                expected_stderr_contains: vec!["error".to_string()],
                 expected_stdout_not_contains: vec!["panic".to_string()],
                 expected_stderr_not_contains: vec!["panic".to_string()],
                 description: "Invalid memo ID produces appropriate error".to_string(),
@@ -233,18 +213,23 @@ impl RegressionTestSuite {
 
     /// Execute all test cases and return results
     pub fn execute_all_tests(&self, working_dir: Option<&PathBuf>) -> Vec<RegressionTestResult> {
-        self.test_cases.iter().map(|test_case| {
-            self.execute_single_test(test_case, working_dir)
-        }).collect()
+        self.test_cases
+            .iter()
+            .map(|test_case| self.execute_single_test(test_case, working_dir))
+            .collect()
     }
 
     /// Execute a single test case
-    pub fn execute_single_test(&self, test_case: &ExpectedOutput, working_dir: Option<&PathBuf>) -> RegressionTestResult {
-        let mut cmd = Command::cargo_bin("swissarmyhammer")
-            .expect("Failed to find swissarmyhammer binary");
-        
+    pub fn execute_single_test(
+        &self,
+        test_case: &ExpectedOutput,
+        working_dir: Option<&PathBuf>,
+    ) -> RegressionTestResult {
+        let mut cmd =
+            Command::cargo_bin("swissarmyhammer").expect("Failed to find swissarmyhammer binary");
+
         cmd.args(&test_case.command);
-        
+
         if let Some(dir) = working_dir {
             cmd.current_dir(dir);
         }
@@ -258,7 +243,7 @@ impl RegressionTestSuite {
                     actual_exit_code: None,
                     actual_stdout: String::new(),
                     actual_stderr: String::new(),
-                    failure_reason: Some(format!("Failed to execute command: {}", e)),
+                    failure_reason: Some(format!("Failed to execute command: {e}")),
                 };
             }
         };
@@ -280,20 +265,14 @@ impl RegressionTestSuite {
         // Check stdout contains
         for expected in &test_case.expected_stdout_contains {
             if !actual_stdout.contains(expected) {
-                failure_reasons.push(format!(
-                    "Stdout missing expected content: '{}'",
-                    expected
-                ));
+                failure_reasons.push(format!("Stdout missing expected content: '{expected}'"));
             }
         }
 
         // Check stderr contains
         for expected in &test_case.expected_stderr_contains {
             if !actual_stderr.contains(expected) {
-                failure_reasons.push(format!(
-                    "Stderr missing expected content: '{}'",
-                    expected
-                ));
+                failure_reasons.push(format!("Stderr missing expected content: '{expected}'"));
             }
         }
 
@@ -301,8 +280,7 @@ impl RegressionTestSuite {
         for not_expected in &test_case.expected_stdout_not_contains {
             if actual_stdout.contains(not_expected) {
                 failure_reasons.push(format!(
-                    "Stdout contains forbidden content: '{}'",
-                    not_expected
+                    "Stdout contains forbidden content: '{not_expected}'"
                 ));
             }
         }
@@ -311,8 +289,7 @@ impl RegressionTestSuite {
         for not_expected in &test_case.expected_stderr_not_contains {
             if actual_stderr.contains(not_expected) {
                 failure_reasons.push(format!(
-                    "Stderr contains forbidden content: '{}'",
-                    not_expected
+                    "Stderr contains forbidden content: '{not_expected}'"
                 ));
             }
         }
@@ -372,8 +349,10 @@ impl RegressionTestReport {
         println!("Total tests: {}", self.total_tests);
         println!("Passed: {}", self.passed_tests);
         println!("Failed: {}", self.failed_tests);
-        println!("Success rate: {:.1}%", 
-                 (self.passed_tests as f64 / self.total_tests as f64) * 100.0);
+        println!(
+            "Success rate: {:.1}%",
+            (self.passed_tests as f64 / self.total_tests as f64) * 100.0
+        );
 
         if self.failed_tests > 0 {
             println!("\nFailed Tests:");
@@ -381,9 +360,12 @@ impl RegressionTestReport {
             for result in &self.results {
                 if !result.passed {
                     println!("❌ {}", result.test_case.description);
-                    println!("   Command: swissarmyhammer {}", result.test_case.command.join(" "));
+                    println!(
+                        "   Command: swissarmyhammer {}",
+                        result.test_case.command.join(" ")
+                    );
                     if let Some(reason) = &result.failure_reason {
-                        println!("   Reason: {}", reason);
+                        println!("   Reason: {reason}");
                     }
                     println!();
                 }
@@ -397,22 +379,36 @@ impl RegressionTestReport {
         report.push_str(&format!("**Total tests:** {}\n", self.total_tests));
         report.push_str(&format!("**Passed:** {}\n", self.passed_tests));
         report.push_str(&format!("**Failed:** {}\n", self.failed_tests));
-        report.push_str(&format!("**Success rate:** {:.1}%\n\n", 
-                                (self.passed_tests as f64 / self.total_tests as f64) * 100.0));
+        report.push_str(&format!(
+            "**Success rate:** {:.1}%\n\n",
+            (self.passed_tests as f64 / self.total_tests as f64) * 100.0
+        ));
 
         for result in &self.results {
-            let status = if result.passed { "✅ PASS" } else { "❌ FAIL" };
-            report.push_str(&format!("## {} {}\n\n", status, result.test_case.description));
-            report.push_str(&format!("**Command:** `swissarmyhammer {}`\n\n", result.test_case.command.join(" ")));
-            
+            let status = if result.passed {
+                "✅ PASS"
+            } else {
+                "❌ FAIL"
+            };
+            report.push_str(&format!(
+                "## {} {}\n\n",
+                status, result.test_case.description
+            ));
+            report.push_str(&format!(
+                "**Command:** `swissarmyhammer {}`\n\n",
+                result.test_case.command.join(" ")
+            ));
+
             if let Some(exit_code) = result.actual_exit_code {
-                report.push_str(&format!("**Exit code:** {} (expected: {})\n\n", 
-                                        exit_code, result.test_case.expected_exit_code));
+                report.push_str(&format!(
+                    "**Exit code:** {} (expected: {})\n\n",
+                    exit_code, result.test_case.expected_exit_code
+                ));
             }
 
             if !result.passed {
                 if let Some(reason) = &result.failure_reason {
-                    report.push_str(&format!("**Failure reason:** {}\n\n", reason));
+                    report.push_str(&format!("**Failure reason:** {reason}\n\n"));
                 }
             }
 
@@ -465,13 +461,15 @@ fn test_regression_framework() -> Result<()> {
 
     // The framework should work
     assert!(report.total_tests > 0, "Should have test cases");
-    
+
     // Most baseline tests should pass (allowing for some environment differences)
     let success_rate = report.passed_tests as f64 / report.total_tests as f64;
     assert!(
         success_rate > 0.7, // At least 70% should pass
         "Success rate too low: {:.1}% ({}/{})",
-        success_rate * 100.0, report.passed_tests, report.total_tests
+        success_rate * 100.0,
+        report.passed_tests,
+        report.total_tests
     );
 
     // Print report for debugging
@@ -496,7 +494,10 @@ fn test_suite_serialization() -> Result<()> {
     // Should be equivalent
     assert_eq!(original_suite.version, loaded_suite.version);
     assert_eq!(original_suite.description, loaded_suite.description);
-    assert_eq!(original_suite.test_cases.len(), loaded_suite.test_cases.len());
+    assert_eq!(
+        original_suite.test_cases.len(),
+        loaded_suite.test_cases.len()
+    );
 
     Ok(())
 }
@@ -512,7 +513,12 @@ fn test_custom_regression_suite() -> Result<()> {
         description: "Custom CLI behavior validation suite".to_string(),
         test_cases: vec![
             ExpectedOutput {
-                command: vec!["issue".to_string(), "list".to_string(), "--format".to_string(), "json".to_string()],
+                command: vec![
+                    "issue".to_string(),
+                    "list".to_string(),
+                    "--format".to_string(),
+                    "json".to_string(),
+                ],
                 expected_exit_code: 0,
                 expected_stdout_contains: vec![], // May be empty, that's ok
                 expected_stderr_contains: vec![],
@@ -539,7 +545,10 @@ fn test_custom_regression_suite() -> Result<()> {
 
     assert_eq!(report.total_tests, 2);
     // At least one should pass
-    assert!(report.passed_tests >= 1, "At least one custom test should pass");
+    assert!(
+        report.passed_tests >= 1,
+        "At least one custom test should pass"
+    );
 
     Ok(())
 }
@@ -551,6 +560,9 @@ fn generate_baseline_suite_file() -> Result<()> {
     let suite = RegressionTestSuite::create_baseline_suite();
     let output_path = PathBuf::from("regression_baseline.yaml");
     suite.save_to_file(&output_path)?;
-    println!("Generated baseline regression test suite: {}", output_path.display());
+    println!(
+        "Generated baseline regression test suite: {}",
+        output_path.display()
+    );
     Ok(())
 }

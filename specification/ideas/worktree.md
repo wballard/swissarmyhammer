@@ -44,6 +44,9 @@ project-root/
    - Remove worktree directory
    - Delete branch
 
+3. **Use Worktree** (`use_worktree`)
+    - Switch the current working directory to a specified worktree
+
 ### Implementation Changes
 
 #### New Git Commands
@@ -117,7 +120,8 @@ impl GitOperations {
 
 **WorkIssueTool** (`work/mod.rs:48-78`):
 - Replace `create_work_branch()` call with `create_work_worktree()`
-- Return worktree path instead of branch name
+- Return worktree path (new) and branch name (existing)
+- Set the current working directory to the worktree
 - Update success message to indicate worktree location
 
 **MergeIssueTool** (`merge/mod.rs:58-143`):
@@ -129,6 +133,7 @@ impl GitOperations {
 - Replace branch detection logic with `get_current_worktree()`
 - Return the first active worktree instead of current branch
 - Update response to show worktree path and issue name
+
 
 ### Benefits
 
@@ -177,3 +182,4 @@ pub struct WorktreeConfig {
 ```
 
 This specification provides a foundation for implementing worktree-based issue management that improves workspace isolation while maintaining the existing workflow patterns.
+

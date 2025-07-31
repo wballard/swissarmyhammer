@@ -51,8 +51,7 @@ fn test_invalid_issue_operations() -> Result<()> {
     let stderr = String::from_utf8_lossy(&output.get_output().stderr);
     assert!(
         stderr.contains("Error") || stderr.contains("error") || stderr.contains("not found"),
-        "Should show appropriate error message: {}",
-        stderr
+        "Should show appropriate error message: {stderr}"
     );
 
     // Test working on non-existent issue
@@ -65,8 +64,7 @@ fn test_invalid_issue_operations() -> Result<()> {
     let stderr = String::from_utf8_lossy(&output.get_output().stderr);
     assert!(
         stderr.contains("Error") || stderr.contains("error") || stderr.contains("not found"),
-        "Should show error for non-existent issue work: {}",
-        stderr
+        "Should show error for non-existent issue work: {stderr}"
     );
 
     // Test completing non-existent issue
@@ -79,8 +77,7 @@ fn test_invalid_issue_operations() -> Result<()> {
     let stderr = String::from_utf8_lossy(&output.get_output().stderr);
     assert!(
         stderr.contains("Error") || stderr.contains("error") || stderr.contains("not found"),
-        "Should show error for non-existent issue completion: {}",
-        stderr
+        "Should show error for non-existent issue completion: {stderr}"
     );
 
     // Test updating non-existent issue
@@ -90,7 +87,7 @@ fn test_invalid_issue_operations() -> Result<()> {
             "update",
             "nonexistent_issue",
             "--content",
-            "Updated content"
+            "Updated content",
         ])
         .current_dir(&temp_path)
         .assert()
@@ -99,8 +96,7 @@ fn test_invalid_issue_operations() -> Result<()> {
     let stderr = String::from_utf8_lossy(&output.get_output().stderr);
     assert!(
         stderr.contains("Error") || stderr.contains("error") || stderr.contains("not found"),
-        "Should show error for non-existent issue update: {}",
-        stderr
+        "Should show error for non-existent issue update: {stderr}"
     );
 
     Ok(())
@@ -120,9 +116,11 @@ fn test_invalid_memo_operations() -> Result<()> {
 
     let stderr = String::from_utf8_lossy(&output.get_output().stderr);
     assert!(
-        stderr.contains("Error") || stderr.contains("error") || stderr.contains("invalid") || stderr.contains("not found"),
-        "Should show error for invalid memo ID: {}",
-        stderr
+        stderr.contains("Error")
+            || stderr.contains("error")
+            || stderr.contains("invalid")
+            || stderr.contains("not found"),
+        "Should show error for invalid memo ID: {stderr}"
     );
 
     // Test updating memo with invalid ID
@@ -132,7 +130,7 @@ fn test_invalid_memo_operations() -> Result<()> {
             "update",
             "invalid_memo_id",
             "--content",
-            "Updated content"
+            "Updated content",
         ])
         .current_dir(&temp_path)
         .assert()
@@ -140,9 +138,11 @@ fn test_invalid_memo_operations() -> Result<()> {
 
     let stderr = String::from_utf8_lossy(&output.get_output().stderr);
     assert!(
-        stderr.contains("Error") || stderr.contains("error") || stderr.contains("invalid") || stderr.contains("not found"),
-        "Should show error for invalid memo update: {}",
-        stderr
+        stderr.contains("Error")
+            || stderr.contains("error")
+            || stderr.contains("invalid")
+            || stderr.contains("not found"),
+        "Should show error for invalid memo update: {stderr}"
     );
 
     // Test deleting memo with invalid ID
@@ -154,9 +154,11 @@ fn test_invalid_memo_operations() -> Result<()> {
 
     let stderr = String::from_utf8_lossy(&output.get_output().stderr);
     assert!(
-        stderr.contains("Error") || stderr.contains("error") || stderr.contains("invalid") || stderr.contains("not found"),
-        "Should show error for invalid memo deletion: {}",
-        stderr
+        stderr.contains("Error")
+            || stderr.contains("error")
+            || stderr.contains("invalid")
+            || stderr.contains("not found"),
+        "Should show error for invalid memo deletion: {stderr}"
     );
 
     // Test creating memo without title
@@ -169,8 +171,7 @@ fn test_invalid_memo_operations() -> Result<()> {
     let stderr = String::from_utf8_lossy(&output.get_output().stderr);
     assert!(
         stderr.contains("required") || stderr.contains("missing") || stderr.contains("title"),
-        "Should show error for missing memo title: {}",
-        stderr
+        "Should show error for missing memo title: {stderr}"
     );
 
     Ok(())
@@ -199,8 +200,7 @@ fn test_search_error_conditions() -> Result<()> {
     // Should indicate no files were found/indexed
     assert!(
         stdout.contains("0") || stdout.contains("No files") || stdout.contains("no files"),
-        "Should indicate no files were indexed: {}",
-        stdout
+        "Should indicate no files were indexed: {stdout}"
     );
 
     Ok(())
@@ -270,7 +270,7 @@ fn test_filesystem_permission_errors() -> Result<()> {
             "create",
             "permission_test",
             "--content",
-            "Test content"
+            "Test content",
         ])
         .current_dir(&readonly_dir)
         .assert()
@@ -279,9 +279,11 @@ fn test_filesystem_permission_errors() -> Result<()> {
     let stderr = String::from_utf8_lossy(&output.get_output().stderr);
     // Error message should be helpful for permission issues
     assert!(
-        stderr.contains("Error") || stderr.contains("error") || stderr.contains("permission") || stderr.contains("access"),
-        "Should show permission-related error: {}",
-        stderr
+        stderr.contains("Error")
+            || stderr.contains("error")
+            || stderr.contains("permission")
+            || stderr.contains("access"),
+        "Should show permission-related error: {stderr}"
     );
 
     Ok(())
@@ -306,9 +308,11 @@ fn test_storage_backend_errors() -> Result<()> {
 
     let stderr = String::from_utf8_lossy(&output.get_output().stderr);
     assert!(
-        stderr.contains("Error") || stderr.contains("error") || stderr.contains("directory") || stderr.contains("storage"),
-        "Should show storage-related error: {}",
-        stderr
+        stderr.contains("Error")
+            || stderr.contains("error")
+            || stderr.contains("directory")
+            || stderr.contains("storage"),
+        "Should show storage-related error: {stderr}"
     );
 
     Ok(())
@@ -338,9 +342,11 @@ fn test_git_related_errors() -> Result<()> {
 
     let stderr = String::from_utf8_lossy(&output.get_output().stderr);
     assert!(
-        stderr.contains("Error") || stderr.contains("error") || stderr.contains("git") || stderr.contains("repository"),
-        "Should show git-related error: {}",
-        stderr
+        stderr.contains("Error")
+            || stderr.contains("error")
+            || stderr.contains("git")
+            || stderr.contains("repository"),
+        "Should show git-related error: {stderr}"
     );
 
     Ok(())
@@ -363,9 +369,9 @@ fn test_concurrent_operation_errors() -> Result<()> {
                 .args([
                     "issue",
                     "create",
-                    &format!("concurrent_test_{}", i),
+                    &format!("concurrent_test_{i}"),
                     "--content",
-                    &format!("Concurrent test issue {}", i)
+                    &format!("Concurrent test issue {i}"),
                 ])
                 .current_dir(&temp_path_clone)
                 .output()
@@ -377,14 +383,13 @@ fn test_concurrent_operation_errors() -> Result<()> {
     for handle in handles {
         let result = handle.join().expect("Thread should complete");
         let output = result.expect("Command should execute");
-        
+
         // Either succeeds or fails with appropriate error message
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(
                 stderr.contains("Error") || stderr.contains("error"),
-                "Failed operations should have error messages: {}",
-                stderr
+                "Failed operations should have error messages: {stderr}"
             );
         }
     }
@@ -405,7 +410,7 @@ fn test_resource_exhaustion() -> Result<()> {
             "create",
             "large_content_test",
             "--content",
-            &large_content
+            &large_content,
         ])
         .current_dir(&temp_path)
         .assert();
@@ -414,9 +419,11 @@ fn test_resource_exhaustion() -> Result<()> {
     if !output.get_output().status.success() {
         let stderr = String::from_utf8_lossy(&output.get_output().stderr);
         assert!(
-            stderr.contains("Error") || stderr.contains("error") || stderr.contains("too large") || stderr.contains("memory"),
-            "Large content errors should be handled gracefully: {}",
-            stderr
+            stderr.contains("Error")
+                || stderr.contains("error")
+                || stderr.contains("too large")
+                || stderr.contains("memory"),
+            "Large content errors should be handled gracefully: {stderr}"
         );
     }
 
@@ -428,7 +435,7 @@ fn test_resource_exhaustion() -> Result<()> {
 fn test_network_related_errors() -> Result<()> {
     // This test is for any network operations in the CLI
     // Since swissarmyhammer is primarily local, this might be limited
-    
+
     // Test operations that might involve network (like downloading models for search)
     let (_temp_dir, temp_path) = setup_error_test_environment()?;
 
@@ -452,9 +459,11 @@ fn test_network_related_errors() -> Result<()> {
         let stderr = String::from_utf8_lossy(&output.get_output().stderr);
         // Network errors should be handled gracefully
         assert!(
-            stderr.contains("Error") || stderr.contains("error") || stderr.contains("network") || stderr.contains("download"),
-            "Network errors should be handled gracefully: {}",
-            stderr
+            stderr.contains("Error")
+                || stderr.contains("error")
+                || stderr.contains("network")
+                || stderr.contains("download"),
+            "Network errors should be handled gracefully: {stderr}"
         );
     }
 
@@ -469,7 +478,7 @@ fn test_malformed_input_handling() -> Result<()> {
     // Test with special characters in issue names
     let special_names = vec![
         "issue/with/slashes",
-        "issue\\with\\backslashes", 
+        "issue\\with\\backslashes",
         "issue with spaces",
         "issue..with..dots",
         "issue|with|pipes",
@@ -487,7 +496,7 @@ fn test_malformed_input_handling() -> Result<()> {
                 "create",
                 name,
                 "--content",
-                "Test content with special name"
+                "Test content with special name",
             ])
             .current_dir(&temp_path)
             .assert();
@@ -496,9 +505,11 @@ fn test_malformed_input_handling() -> Result<()> {
         if !output.get_output().status.success() {
             let stderr = String::from_utf8_lossy(&output.get_output().stderr);
             assert!(
-                stderr.contains("Error") || stderr.contains("error") || stderr.contains("invalid") || stderr.contains("name"),
-                "Invalid names should be handled gracefully: {}",
-                stderr
+                stderr.contains("Error")
+                    || stderr.contains("error")
+                    || stderr.contains("invalid")
+                    || stderr.contains("name"),
+                "Invalid names should be handled gracefully: {stderr}"
             );
         }
     }
@@ -513,7 +524,7 @@ fn test_timeout_scenarios() -> Result<()> {
 
     // Test operations with very short timeouts
     // Note: This is primarily for operations that might hang
-    
+
     let output = Command::cargo_bin("swissarmyhammer")?
         .args(["issue", "list"])
         .current_dir(&temp_path)
@@ -528,8 +539,7 @@ fn test_timeout_scenarios() -> Result<()> {
                 let stderr = String::from_utf8_lossy(&output.get_output().stderr);
                 assert!(
                     stderr.contains("Error") || stderr.contains("error"),
-                    "Errors should have appropriate messages: {}",
-                    stderr
+                    "Errors should have appropriate messages: {stderr}"
                 );
             }
         }
@@ -588,28 +598,27 @@ fn test_error_message_consistency() -> Result<()> {
         .failure();
 
     let stderr = String::from_utf8_lossy(&output.get_output().stderr);
-    
+
     // Error messages should be:
     // 1. Informative (tell user what went wrong)
     // 2. Actionable (suggest what to do)
     // 3. Consistent in format
     assert!(
         stderr.len() > 10, // Should have substantial error message
-        "Error messages should be informative: {}",
-        stderr
+        "Error messages should be informative: {stderr}"
     );
 
     assert!(
         stderr.contains("Error") || stderr.contains("error"),
-        "Error messages should be clearly marked as errors: {}",
-        stderr
+        "Error messages should be clearly marked as errors: {stderr}"
     );
 
     // Should not contain technical jargon that users won't understand
     assert!(
-        !stderr.contains("MCP") && !stderr.contains("toolContext") && !stderr.contains("NullPointer"),
-        "Error messages should be user-friendly, not technical: {}",
-        stderr
+        !stderr.contains("MCP")
+            && !stderr.contains("toolContext")
+            && !stderr.contains("NullPointer"),
+        "Error messages should be user-friendly, not technical: {stderr}"
     );
 
     Ok(())

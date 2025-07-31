@@ -191,8 +191,11 @@ pub fn setup_git_repo(dir: &Path) -> Result<()> {
         .output()?;
 
     // Create initial commit
-    std::fs::write(dir.join("README.md"), "# Test Repository\n\nThis is a test repository for CLI testing.")?;
-    
+    std::fs::write(
+        dir.join("README.md"),
+        "# Test Repository\n\nThis is a test repository for CLI testing.",
+    )?;
+
     Command::new("git")
         .args(["add", "."])
         .current_dir(dir)
@@ -223,7 +226,7 @@ pub fn create_sample_issues(issues_dir: &Path) -> Result<Vec<String>> {
     let mut created_issues = vec![];
 
     for (name, content) in issues {
-        let issue_file = issues_dir.join(format!("{}.md", name));
+        let issue_file = issues_dir.join(format!("{name}.md"));
         std::fs::write(&issue_file, content)?;
         created_issues.push(name.to_string());
     }
@@ -238,7 +241,9 @@ pub fn create_sample_issues(issues_dir: &Path) -> Result<Vec<String>> {
 #[allow(dead_code)]
 pub fn create_sample_source_files(src_dir: &Path) -> Result<Vec<String>> {
     let source_files = vec![
-        ("main.rs", r#"
+        (
+            "main.rs",
+            r#"
 //! Main application entry point
 
 use std::error::Error;
@@ -263,8 +268,11 @@ fn load_configuration() -> Result<Config, ConfigError> {
 fn initialize_application(config: Config) -> Result<Application, InitError> {
     Application::new(config)
 }
-"#),
-        ("lib.rs", r#"
+"#,
+        ),
+        (
+            "lib.rs",
+            r#"
 //! SwissArmyHammer library
 
 pub mod config;
@@ -284,8 +292,11 @@ pub fn init_logging() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     Ok(())
 }
-"#),
-        ("config.rs", r#"
+"#,
+        ),
+        (
+            "config.rs",
+            r#"
 //! Configuration management
 
 use serde::{Deserialize, Serialize};
@@ -326,8 +337,11 @@ impl Config {
         })
     }
 }
-"#),
-        ("error_handling.rs", r#"
+"#,
+        ),
+        (
+            "error_handling.rs",
+            r#"
 //! Error handling utilities
 
 use std::fmt;
@@ -395,8 +409,11 @@ impl fmt::Display for ErrorHandler {
 }
 
 impl std::error::Error for ErrorHandler {}
-"#),
-        ("utils.rs", r#"
+"#,
+        ),
+        (
+            "utils.rs",
+            r#"
 //! Utility functions
 
 use std::collections::HashMap;
@@ -526,7 +543,8 @@ mod tests {
         assert_eq!(doubled, vec![2, 4, 6, 8, 10]);
     }
 }
-"#),
+"#,
+        ),
     ];
 
     let mut created_files = vec![];
@@ -539,5 +557,3 @@ mod tests {
 
     Ok(created_files)
 }
-
-

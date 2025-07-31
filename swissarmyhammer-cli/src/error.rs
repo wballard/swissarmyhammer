@@ -6,7 +6,7 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::exit_codes::{EXIT_ERROR, EXIT_SUCCESS};
+use crate::exit_codes::{EXIT_ERROR, EXIT_SUCCESS, EXIT_WARNING};
 
 /// CLI-specific result type that preserves error information
 pub type CliResult<T> = Result<T, CliError>;
@@ -102,19 +102,18 @@ pub fn handle_cli_result<T>(result: CliResult<T>) -> i32 {
 impl From<rmcp::Error> for CliError {
     fn from(error: rmcp::Error) -> Self {
         let error_msg = error.to_string();
-        let exit_code = EXIT_ERROR;
 
         if Self::is_abort_error(&error_msg) {
             Self {
-                message: format!("MCP operation aborted: {error_msg}"),
+                message: format!("MCP error: {error_msg}"),
                 exit_code: EXIT_ERROR,
                 source: Some(Box::new(error)),
             }
         } else {
-            // Regular MCP error handling
+            // Regular MCP error handling - use EXIT_WARNING for standard MCP errors
             Self {
-                message: format!("MCP operation failed: {error_msg}"),
-                exit_code,
+                message: format!("MCP error: {error_msg}"),
+                exit_code: EXIT_WARNING,
                 source: Some(Box::new(error)),
             }
         }

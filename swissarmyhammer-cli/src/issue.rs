@@ -1,23 +1,13 @@
 use crate::cli::IssueCommands;
-use colored::*;
+use crate::mcp_integration::{response_formatting, CliToolContext};
+use serde_json::json;
 use std::io::{self, Read};
-use swissarmyhammer::git::GitOperations;
-use swissarmyhammer::issues::{FileSystemIssueStorage, IssueStorage};
-
-const NAMELESS_ISSUE_NAME: &str = "";
-
-fn format_issue_status(completed: bool) -> colored::ColoredString {
-    if completed {
-        "✅ Completed".green()
-    } else {
-        "🔄 Active".yellow()
-    }
-}
+use swissarmyhammer::config::Config;
 
 pub async fn handle_issue_command(
     command: IssueCommands,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let storage = FileSystemIssueStorage::new_default()?;
+    let context = CliToolContext::new().await?;
 
     match command {
         IssueCommands::Create {
@@ -25,17 +15,17 @@ pub async fn handle_issue_command(
             content,
             file,
         } => {
-            create_issue(storage, name, content, file).await?;
+            create_issue(&context, name, content, file).await?;
         }
         IssueCommands::List {
             completed,
             active,
             format,
         } => {
-            list_issues(storage, completed, active, format).await?;
+            list_issues(&context, completed, active, format).await?;
         }
         IssueCommands::Show { name, raw } => {
-            show_issue(storage, &name, raw).await?;
+            show_issue(&context, &name, raw).await?;
         }
         IssueCommands::Update {
             name,
@@ -43,25 +33,25 @@ pub async fn handle_issue_command(
             file,
             append,
         } => {
-            update_issue(storage, &name, content, file, append).await?;
+            update_issue(&context, &name, content, file, append).await?;
         }
         IssueCommands::Complete { name } => {
-            complete_issue(storage, &name).await?;
+            complete_issue(&context, &name).await?;
         }
         IssueCommands::Work { name } => {
-            work_issue(storage, &name).await?;
+            work_issue(&context, &name).await?;
         }
         IssueCommands::Merge { name, keep_branch } => {
-            merge_issue(storage, &name, keep_branch).await?;
+            merge_issue(&context, &name, keep_branch).await?;
         }
         IssueCommands::Current => {
-            show_current_issue(storage).await?;
+            show_current_issue(&context).await?;
         }
         IssueCommands::Status => {
-            show_status(storage).await?;
+            show_status(&context).await?;
         }
         IssueCommands::Next => {
-            show_next_issue(storage).await?;
+            show_next_issue(&context).await?;
         }
     }
 
@@ -69,182 +59,65 @@ pub async fn handle_issue_command(
 }
 
 async fn create_issue(
-    storage: FileSystemIssueStorage,
+    context: &CliToolContext,
     name: Option<String>,
     content: Option<String>,
     file: Option<std::path::PathBuf>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = get_content_from_args(content, file)?;
+    // Ensure content is not empty for MCP tool compatibility
+    let content = if content.is_empty() {
+        Config::global().default_issue_content.clone()
+    } else {
+        content
+    };
 
-    // Use empty string for nameless issues (matches MCP behavior)
-    let issue_name = name.unwrap_or(NAMELESS_ISSUE_NAME.to_string());
-    let issue = storage.create_issue(issue_name, content).await?;
+    let args = if let Some(issue_name) = name {
+        context.create_arguments(vec![
+            ("name", json!(issue_name)),
+            ("content", json!(content)),
+        ])
+    } else {
+        // For nameless issues, don't pass a name argument
+        context.create_arguments(vec![("content", json!(content))])
+    };
 
-    println!(
-        "{} Created issue: {}",
-        "✅".green(),
-        issue.name.as_str().bold()
-    );
-
-    println!("📁 File: {}", issue.file_path.display());
-
+    let result = context.execute_tool("issue_create", args).await?;
+    println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
 
 async fn list_issues(
-    storage: FileSystemIssueStorage,
+    context: &CliToolContext,
     show_completed: bool,
     show_active: bool,
     format: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let all_issues = storage.list_issues().await?;
+    let args = context.create_arguments(vec![
+        ("show_completed", json!(show_completed)),
+        ("show_active", json!(show_active)),
+        ("format", json!(format)),
+    ]);
 
-    let issues: Vec<_> = all_issues
-        .into_iter()
-        .filter(|issue| {
-            if show_completed && show_active {
-                true // show all
-            } else if show_completed {
-                issue.completed
-            } else if show_active {
-                !issue.completed
-            } else {
-                true // default: show all
-            }
-        })
-        .collect();
-
-    match format.as_str() {
-        "json" => {
-            println!("{}", serde_json::to_string_pretty(&issues)?);
-        }
-        "markdown" => {
-            print_issues_markdown(&issues).await?;
-        }
-        _ => {
-            print_issues_table(&issues).await?;
-        }
-    }
-
-    Ok(())
-}
-
-async fn print_issues_table(
-    issues: &[swissarmyhammer::issues::Issue],
-) -> Result<(), Box<dyn std::error::Error>> {
-    if issues.is_empty() {
-        println!("No issues found.");
-        return Ok(());
-    }
-
-    let active_issues: Vec<_> = issues.iter().filter(|i| !i.completed).collect();
-    let completed_issues: Vec<_> = issues.iter().filter(|i| i.completed).collect();
-
-    let total_issues = issues.len();
-    let completed_count = completed_issues.len();
-    let active_count = active_issues.len();
-    let completion_percentage = if total_issues > 0 {
-        (completed_count * 100) / total_issues
-    } else {
-        0
-    };
-
-    println!("📊 Issues: {total_issues} total");
-    println!("✅ Completed: {completed_count} ({completion_percentage}%)");
-    println!("🔄 Active: {active_count}");
-
-    if active_count > 0 {
-        println!();
-        println!("{}", "Active Issues:".bold());
-        for issue in active_issues {
-            println!("  🔄 {}", issue.name);
-        }
-    }
-
-    if completed_count > 0 {
-        println!();
-        println!("{}", "Recently Completed:".bold());
-        let mut sorted_completed = completed_issues;
-        sorted_completed.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-
-        for issue in sorted_completed.iter().take(5) {
-            println!("  ✅ {}", issue.name);
-        }
-    }
-
-    Ok(())
-}
-
-async fn print_issues_markdown(
-    issues: &[swissarmyhammer::issues::Issue],
-) -> Result<(), Box<dyn std::error::Error>> {
-    println!("# Issues");
-    println!();
-
-    if issues.is_empty() {
-        println!("No issues found.");
-        return Ok(());
-    }
-
-    for issue in issues {
-        let status = if issue.completed { "✅" } else { "🔄" };
-        println!("## {} - {}", status, issue.name);
-        println!();
-        println!(
-            "- **Status**: {}",
-            if issue.completed {
-                "Completed"
-            } else {
-                "Active"
-            }
-        );
-        println!("- **Created**: {}", issue.created_at.format("%Y-%m-%d"));
-        println!("- **File**: {}", issue.file_path.display());
-        println!();
-        if !issue.content.is_empty() {
-            println!("### Content");
-            println!();
-            println!("{}", issue.content);
-            println!();
-        }
-        println!("---");
-        println!();
-    }
-
+    let result = context.execute_tool("issue_list", args).await?;
+    println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
 
 async fn show_issue(
-    storage: FileSystemIssueStorage,
+    context: &CliToolContext,
     name: &str,
     raw: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let issues = storage.list_issues().await?;
-    let issue = issues
-        .into_iter()
-        .find(|i| i.name == name)
-        .ok_or_else(|| format!("Issue '{name}' not found"))?;
+    let args = context.create_arguments(vec![("name", json!(name)), ("raw", json!(raw))]);
 
-    if raw {
-        println!("{}", issue.content);
-    } else {
-        let status = format_issue_status(issue.completed);
-
-        println!("{} Issue: {}", status, issue.name.as_str().bold());
-        println!("📁 File: {}", issue.file_path.display());
-        println!(
-            "📅 Created: {}",
-            issue.created_at.format("%Y-%m-%d %H:%M:%S")
-        );
-        println!();
-        println!("{}", issue.content);
-    }
-
+    let result = context.execute_tool("issue_show", args).await?;
+    println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
 
 async fn update_issue(
-    storage: FileSystemIssueStorage,
+    context: &CliToolContext,
     name: &str,
     content: Option<String>,
     file: Option<std::path::PathBuf>,
@@ -252,172 +125,67 @@ async fn update_issue(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let new_content = get_content_from_args(content, file)?;
 
-    let issues = storage.list_issues().await?;
-    let issue = issues
-        .into_iter()
-        .find(|i| i.name == name)
-        .ok_or_else(|| format!("Issue '{name}' not found"))?;
+    let args = context.create_arguments(vec![
+        ("name", json!(name)),
+        ("content", json!(new_content)),
+        ("append", json!(append)),
+    ]);
 
-    let updated_content = if append {
-        if issue.content.is_empty() {
-            new_content
-        } else {
-            format!("{}\n\n{}", issue.content, new_content)
-        }
-    } else {
-        new_content
-    };
-
-    let updated_issue = storage.update_issue(name, updated_content).await?;
-
-    println!(
-        "{} Updated issue: {}",
-        "✅".green(),
-        updated_issue.name.as_str().bold()
-    );
-
+    let result = context.execute_tool("issue_update", args).await?;
+    println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
 
 async fn complete_issue(
-    storage: FileSystemIssueStorage,
+    context: &CliToolContext,
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let issues = storage.list_issues().await?;
-    let issue = issues
-        .into_iter()
-        .find(|i| i.name == name)
-        .ok_or_else(|| format!("Issue '{name}' not found"))?;
+    let args = context.create_arguments(vec![("name", json!(name))]);
+    let result = context.execute_tool("issue_mark_complete", args).await?;
 
-    if issue.completed {
-        println!("ℹ️ Issue '{}' is already completed", issue.name);
-        return Ok(());
-    }
-
-    let completed_issue = storage.mark_complete(name).await?;
-
-    println!(
-        "{} Marked issue '{}' as complete",
-        "✅".green(),
-        completed_issue.name.as_str().bold()
-    );
-
+    println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
 
 async fn work_issue(
-    storage: FileSystemIssueStorage,
+    context: &CliToolContext,
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let issues = storage.list_issues().await?;
-    let issue = issues
-        .into_iter()
-        .find(|i| i.name == name)
-        .ok_or_else(|| format!("Issue '{name}' not found"))?;
+    let args = context.create_arguments(vec![("name", json!(name))]);
+    let result = context.execute_tool("issue_work", args).await?;
 
-    if issue.completed {
-        println!("⚠️ Issue '{}' is already completed", issue.name);
-        return Ok(());
-    }
-
-    let git_ops = GitOperations::new()?;
-    let branch_name = git_ops.create_work_branch(&issue.name)?;
-
-    println!(
-        "{} Started working on issue: {}",
-        "🔄".yellow(),
-        issue.name.as_str().bold()
-    );
-
-    println!("🌿 Branch: {}", branch_name.bold());
-
+    println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
 
 async fn merge_issue(
-    storage: FileSystemIssueStorage,
+    context: &CliToolContext,
     name: &str,
     keep_branch: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let issues = storage.list_issues().await?;
-    let issue = issues
-        .into_iter()
-        .find(|i| i.name == name)
-        .ok_or_else(|| format!("Issue '{name}' not found"))?;
+    let args = context.create_arguments(vec![
+        ("name", json!(name)),
+        ("delete_branch", json!(!keep_branch)),
+    ]);
 
-    if !issue.completed {
-        println!("⚠️ Issue '{}' is not completed", issue.name);
-        println!("Complete the issue first with: swissarmyhammer issue complete {name}");
-        return Ok(());
-    }
-
-    let git_ops = GitOperations::new()?;
-
-    git_ops.merge_issue_branch(&issue.name)?;
-
-    if !keep_branch {
-        // Delete the branch
-        let branch_name = format!("issue/{}", issue.name);
-        if let Err(e) = git_ops.delete_branch(&branch_name) {
-            eprintln!("Warning: Failed to delete branch {branch_name}: {e}");
-        }
-    }
-
-    println!(
-        "{} Merged issue '{}' to main",
-        "✅".green(),
-        issue.name.as_str().bold()
-    );
-
+    let result = context.execute_tool("issue_merge", args).await?;
+    println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
 
-async fn show_current_issue(
-    storage: FileSystemIssueStorage,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let git_ops = GitOperations::new()?;
-    let current_branch = git_ops.current_branch()?;
+async fn show_current_issue(context: &CliToolContext) -> Result<(), Box<dyn std::error::Error>> {
+    let args = context.create_arguments(vec![]);
+    let result = context.execute_tool("issue_current", args).await?;
 
-    if current_branch.starts_with("issue/") {
-        let issue_name = current_branch.strip_prefix("issue/").unwrap();
-
-        let issues = storage.list_issues().await?;
-        match issues.into_iter().find(|i| i.name == issue_name) {
-            Some(issue) => {
-                let status = format_issue_status(issue.completed);
-
-                println!("{} Current issue: {}", status, issue.name.as_str().bold());
-                println!("🌿 Branch: {}", current_branch.bold());
-                println!("📁 File: {}", issue.file_path.display());
-            }
-            None => {
-                println!("⚠️ On issue branch '{current_branch}' but issue not found");
-            }
-        }
-    } else {
-        println!("ℹ️ Not currently working on a specific issue");
-        println!("🌿 Current branch: {}", current_branch.bold());
-    }
-
+    println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
 
-async fn show_status(storage: FileSystemIssueStorage) -> Result<(), Box<dyn std::error::Error>> {
-    let all_issues = storage.list_issues().await?;
-    let active_count = all_issues.iter().filter(|i| !i.completed).count();
-    let completed_count = all_issues.iter().filter(|i| i.completed).count();
-    let total = all_issues.len();
+async fn show_status(context: &CliToolContext) -> Result<(), Box<dyn std::error::Error>> {
+    let args = context.create_arguments(vec![]);
+    let result = context.execute_tool("issue_all_complete", args).await?;
 
-    println!("📊 Project Status");
-    println!("  Total issues: {total}");
-    println!("  🔄 Active: {active_count}");
-    println!("  ✅ Completed: {completed_count}");
-
-    if total > 0 {
-        let percentage = (completed_count * 100) / total;
-        println!("  📈 Completion: {percentage}%");
-    }
-
+    println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
 
@@ -448,26 +216,10 @@ fn get_content_from_args(
     }
 }
 
-async fn show_next_issue(
-    storage: FileSystemIssueStorage,
-) -> Result<(), Box<dyn std::error::Error>> {
-    match storage.get_next_issue().await? {
-        Some(issue) => {
-            let status = format_issue_status(issue.completed);
+async fn show_next_issue(context: &CliToolContext) -> Result<(), Box<dyn std::error::Error>> {
+    let args = context.create_arguments(vec![]);
+    let result = context.execute_tool("issue_next", args).await?;
 
-            println!("{} Next issue: {}", status, issue.name.as_str().bold());
-            println!("📁 File: {}", issue.file_path.display());
-            println!(
-                "📅 Created: {}",
-                issue.created_at.format("%Y-%m-%d %H:%M:%S")
-            );
-            println!();
-            println!("{}", issue.content);
-        }
-        None => {
-            println!("🎉 No pending issues found. All issues are completed!");
-        }
-    }
-
+    println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }

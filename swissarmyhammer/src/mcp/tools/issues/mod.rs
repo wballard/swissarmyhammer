@@ -57,6 +57,8 @@
 //! ## Available Tools
 //!
 //! - **create**: Create new issues with auto-assigned numbers
+//! - **list**: List all available issues with filtering and formatting options
+//! - **show**: Display details of a specific issue by name
 //! - **mark_complete**: Mark issues as completed and archive them
 //! - **all_complete**: Check if all pending issues are completed
 //! - **update**: Modify existing issue content and metadata
@@ -68,9 +70,11 @@
 pub mod all_complete;
 pub mod create;
 pub mod current;
+pub mod list;
 pub mod mark_complete;
 pub mod merge;
 pub mod next;
+pub mod show;
 pub mod update;
 pub mod work;
 
@@ -79,8 +83,10 @@ use crate::mcp::tool_registry::ToolRegistry;
 /// Register all issue-related tools with the registry
 pub fn register_issue_tools(registry: &mut ToolRegistry) {
     registry.register(create::CreateIssueTool::new());
+    registry.register(list::ListIssuesTool::new());
     registry.register(mark_complete::MarkCompleteIssueTool::new());
     registry.register(all_complete::AllCompleteIssueTool::new());
+    registry.register(show::ShowIssueTool::new());
     registry.register(update::UpdateIssueTool::new());
     registry.register(current::CurrentIssueTool::new());
     registry.register(work::WorkIssueTool::new());

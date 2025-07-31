@@ -100,49 +100,14 @@ pub fn format_json_as_table(data: &Value) -> String {
 }
 ```
 
-### 2. Architecture Documentation Updates
-
-#### Update README Files
-
-**Update `swissarmyhammer-cli/README.md`:**
-
-```markdown
-# SwissArmyHammer CLI
-
-## Architecture
-
-The SwissArmyHammer CLI provides a command-line interface to SwissArmyHammer functionality through direct integration with MCP (Model Context Protocol) tools.
-
-### CLI-MCP Integration
-
-The CLI eliminates code duplication by calling MCP tools directly rather than implementing separate business logic:
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   CLI Command   │───▶│  CliToolContext │───▶│   MCP Tools     │
-│   (issue.rs)    │    │                 │    │  (IssueTools)   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│ CLI Formatting  │    │ Response Format │    │ Business Logic  │
-│ & Display       │◀───│ Conversion      │◀───│ Implementation  │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
-
-This architecture ensures:
-- **Single Source of Truth**: Business logic exists only in MCP tools
-- **Consistency**: CLI and MCP interfaces behave identically
-- **Maintainability**: Changes only need to be made in one place
-- **Testability**: Both CLI and MCP can be tested through the same code paths
-```
-
 #### Update Architecture Decision Records
 
 Create `docs/architecture/CLI-MCP-Integration.md`:
 
 ```markdown
 # Architecture Decision Record: CLI-MCP Integration
+
+Use a memo
 
 ## Status
 Accepted
@@ -471,59 +436,3 @@ Upon completion:
 - Clear migration path for future development
 
 This final cleanup step completes the elimination of the CLI-MCP duplication "horrific blunder" and establishes a clean, maintainable architecture going forward.
-## Proposed Solution
-
-I have implemented a comprehensive cleanup and documentation update for the CLI-MCP integration refactoring:
-
-### 1. Code Cleanup and Dead Code Removal
-
-**Completed the following cleanup tasks:**
-
-- **Removed deprecated business logic** from CLI modules that duplicated MCP functionality
-- **Cleaned up unused imports** and dependencies in CLI modules  
-- **Refactored search.rs** to remove prompt search business logic and replace with deprecation notice pointing users to semantic search
-- **Created shared formatting module** (`formatting.rs`) with consistent utilities for CLI output
-
-**Key changes made:**
-- Removed duplicated prompt search business logic from `search.rs`
-- Added deprecation message for prompt search directing users to semantic search
-- Fixed related test to expect deprecation error instead of success
-- Cleaned up unused imports (`PromptSource`, table formatting imports)
-- Created comprehensive formatting utilities module with success/error/info/warning formatting
-
-### 2. Architecture Documentation Updates
-
-**Created comprehensive documentation:**
-
-- **New CLI README** (`swissarmyhammer-cli/README.md`) documenting the CLI-MCP integration architecture
-- **Architecture Decision Record** (`docs/architecture/CLI-MCP-Integration.md`) documenting the migration from direct storage access to MCP tools
-- **Updated library documentation** (`swissarmyhammer/src/lib.rs`) to reflect the new layered architecture
-
-**Documentation includes:**
-- Architecture diagrams showing CLI-MCP integration flow
-- Implementation patterns and examples
-- Migration guide from old direct storage pattern to new MCP pattern
-- Benefits and consequences analysis
-- Testing strategy and quality metrics
-
-### 3. Code Quality and Testing
-
-**Quality assurance completed:**
-- Ran `cargo fmt --all` to format all code consistently
-- Ran `cargo clippy` and resolved all linting issues
-- Updated failing test to expect deprecation error for prompt search
-- Verified all CLI tests pass (85 tests passed)
-- Created shared formatting utilities with comprehensive test coverage
-
-### 4. Architecture Benefits Achieved
-
-The completed cleanup successfully delivers on the goal of eliminating the "horrific blunder" of CLI-MCP duplication:
-
-✅ **Single Source of Truth**: Business logic exists only in MCP tools  
-✅ **Consistency**: CLI and MCP interfaces behave identically  
-✅ **Maintainability**: Changes only need to be made in one place  
-✅ **Testability**: Both CLI and MCP tested through same code paths  
-✅ **Clean Codebase**: No deprecated code or unused imports remain  
-✅ **Documentation**: Comprehensive architecture documentation created
-
-The CLI now successfully calls MCP tools directly through `CliToolContext`, eliminating all code duplication while maintaining full functionality and user experience.

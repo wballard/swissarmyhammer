@@ -409,80 +409,6 @@ impl FileSystemIssueStorage {
         Ok(())
     }
 
-    /// Move issue between directories by name
-    ///
-    /// This method handles moving issues between pending and completed states.
-    /// It includes automatic duplicate cleanup to prevent file conflicts:
-    ///
-    /// - If the issue is already in the target state, it still performs duplicate cleanup
-    /// - After moving the file, it cleans up any duplicates in the source directory
-    /// - Uses graceful error handling for cleanup operations to avoid disrupting the main flow
-    async fn move_issue_by_name(&self, name: &str, to_completed: bool) -> Result<Issue> {
-        debug!(
-            "Moving issue {} to {}",
-            name,
-            if to_completed { "completed" } else { "pending" }
-        );
-
-        // Find current issue
-        let mut issue = self.get_issue(name).await?;
-
-        // Check if already in target state
-        if issue.completed == to_completed {
-            debug!("Issue {} already in target state", name);
-            // Still clean up any duplicates that might exist from previous operations
-            let source_dir = if to_completed {
-                &self.state.issues_dir
-            } else {
-                &self.state.completed_dir
-            };
-            self.cleanup_duplicate_if_exists(&issue, source_dir)?;
-            return Ok(issue);
-        }
-
-        // Determine source and target paths
-        let target_dir = if to_completed {
-            &self.state.completed_dir
-        } else {
-            &self.state.issues_dir
-        };
-
-        // Create target path with same filename
-        let filename = issue
-            .file_path
-            .file_name()
-            .ok_or_else(|| SwissArmyHammerError::Other("Invalid file path".to_string()))?;
-        let target_path = target_dir.join(filename);
-
-
-        // Move file atomically
-        std::fs::rename(&issue.file_path, &target_path).map_err(SwissArmyHammerError::Io)?;
-
-        // Clean up any duplicate files in the source directory
-        let source_dir = if to_completed {
-            &self.state.issues_dir
-        } else {
-            &self.state.completed_dir
-        };
-        let temp_issue = Issue {
-            file_path: target_path.clone(),
-            ..issue.clone()
-        };
-        
-        self.cleanup_duplicate_if_exists(&temp_issue, source_dir)?;
-
-        // Update issue struct
-        issue.file_path = target_path.clone();
-        issue.completed = to_completed;
-
-        debug!(
-            "Successfully moved issue {} to {}",
-            name,
-            target_path.display()
-        );
-        Ok(issue)
-    }
-
     /// Check if all issues are completed
     pub async fn all_complete(&self) -> Result<bool> {
         let pending_issues = self.list_issues_in_dir(&self.state.issues_dir)?;
@@ -497,36 +423,41 @@ impl FileSystemIssueStorage {
     /// Get issue for mark_complete operation with deterministic duplicate handling
     async fn get_issue_for_mark_complete(&self, name: &str) -> Result<Issue> {
         let all_issues = self.list_issues().await?;
-        let matching_issues: Vec<_> = all_issues.into_iter().filter(|issue| issue.name == name).collect();
-        
+        let matching_issues: Vec<_> = all_issues
+            .into_iter()
+            .filter(|issue| issue.name == name)
+            .collect();
+
         if matching_issues.is_empty() {
             return Err(SwissArmyHammerError::IssueNotFound(name.to_string()));
         }
-        
+
         // For mark_complete, prioritize pending issues first (normal completion flow)
         if let Some(pending_issue) = matching_issues.iter().find(|issue| !issue.completed) {
             return Ok(pending_issue.clone());
         }
-        
+
         // If no pending issue, return completed issue (idempotent behavior)
         if let Some(completed_issue) = matching_issues.iter().find(|issue| issue.completed) {
             return Ok(completed_issue.clone());
         }
-        
+
         // Fallback (shouldn't happen)
         Err(SwissArmyHammerError::IssueNotFound(name.to_string()))
     }
 
     /// Move a specific issue to completed/pending state, avoiding duplicate lookup issues
     async fn move_issue_with_issue(&self, mut issue: Issue, to_completed: bool) -> Result<Issue> {
-
         // Special case for mark_complete: if we're trying to complete a pending issue,
-        // but there's already a completed version, use file timestamps to determine precedence  
+        // but there's already a completed version, use file timestamps to determine precedence
         if to_completed && !issue.completed {
             // Check if there's already a completed version
             let all_issues = self.list_issues().await?;
-            let matching_issues: Vec<_> = all_issues.into_iter().filter(|i| i.name == issue.name).collect();
-            
+            let matching_issues: Vec<_> = all_issues
+                .into_iter()
+                .filter(|i| i.name == issue.name)
+                .collect();
+
             if let Some(existing_completed) = matching_issues.iter().find(|i| i.completed) {
                 // Compare file modification times to determine which file was created first
                 let pending_mtime = std::fs::metadata(&issue.file_path)
@@ -535,19 +466,18 @@ impl FileSystemIssueStorage {
                 let completed_mtime = std::fs::metadata(&existing_completed.file_path)
                     .and_then(|m| m.modified())
                     .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-                
-                
+
                 // If the completed file is newer than the pending file, it likely means:
                 // - Pending file was created first (legitimate)
                 // - Completed file was created later (duplicate)
                 // So we should proceed with moving the pending file to overwrite the completed duplicate
-                
+
                 // If the pending file is newer than the completed file, it might be a stale duplicate
                 // created after legitimate completion, so we should keep the completed file
                 if pending_mtime > completed_mtime {
                     // Clean up the pending duplicate
                     let _ = std::fs::remove_file(&issue.file_path); // Ignore errors for cleanup
-                    
+
                     return Ok(existing_completed.clone());
                 }
             }
@@ -555,24 +485,24 @@ impl FileSystemIssueStorage {
 
         // Check if already in target state
         if issue.completed == to_completed {
-            
             // Clean up any duplicates that might exist in the opposite directory
             let opposite_dir = if to_completed {
-                &self.state.issues_dir  // Clean up any pending duplicates
+                &self.state.issues_dir // Clean up any pending duplicates
             } else {
-                &self.state.completed_dir  // Clean up any completed duplicates
+                &self.state.completed_dir // Clean up any completed duplicates
             };
-            
+
             // Find and remove duplicates in the opposite directory
-            let filename = issue.file_path.file_name().ok_or_else(|| {
-                SwissArmyHammerError::Other("Invalid file path".to_string())
-            })?;
+            let filename = issue
+                .file_path
+                .file_name()
+                .ok_or_else(|| SwissArmyHammerError::Other("Invalid file path".to_string()))?;
             let potential_duplicate = opposite_dir.join(filename);
-            
+
             if potential_duplicate.exists() && potential_duplicate != issue.file_path {
                 let _ = std::fs::remove_file(&potential_duplicate); // Ignore errors for cleanup
             }
-            
+
             return Ok(issue);
         }
 

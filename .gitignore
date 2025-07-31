@@ -42,3 +42,5 @@ proptest-regressions/
 
 swissarmyhammer/.swissarmyhammer
 swissarmyhammer-cli/.swissarmyhammer
+
+.work

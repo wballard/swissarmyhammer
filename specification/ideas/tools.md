@@ -58,7 +58,7 @@ tools:
       ```
   - File (this is a new tool group noun parallel to issues)
     - Read
-      - use https://github.com/cline/cline/blob/main/src/core/tools/readTool.ts for inspiration and description
+      - use https://github.com/QwenLM/qwen-code/blob/main/packages/core/src/tools/read-file.ts for inspiration and description
     - Edit
       - use https://github.com/cline/cline/blob/main/src/core/tools/editTool.ts for inspiration and description
     - Write

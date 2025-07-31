@@ -107,8 +107,10 @@ fn test_complete_issue_lifecycle() -> Result<()> {
 
     let create_stdout = String::from_utf8_lossy(&create_output.get_output().stdout);
     assert!(
-        create_stdout.contains("Created") || create_stdout.contains("created"),
-        "Issue creation should show success message"
+        create_stdout.contains("Created issue: e2e_lifecycle_test")
+            || create_stdout.contains("created issue: e2e_lifecycle_test")
+            || create_stdout.contains("e2e_lifecycle_test"),
+        "Issue creation should show success message with issue name: {create_stdout}"
     );
 
     // Step 2: List issues to verify creation
@@ -126,15 +128,15 @@ fn test_complete_issue_lifecycle() -> Result<()> {
 
     // Step 3: Show the issue details
     let show_output = Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "show", "000001_e2e_lifecycle_test"])
+        .args(["issue", "show", "e2e_lifecycle_test"])
         .current_dir(&temp_path)
         .assert()
         .success();
 
     let show_stdout = String::from_utf8_lossy(&show_output.get_output().stdout);
     assert!(
-        show_stdout.contains("E2E Lifecycle Test"),
-        "Issue details should contain title: {show_stdout}"
+        show_stdout.contains("E2E Lifecycle Test") && show_stdout.contains("comprehensive test"),
+        "Issue details should contain both title and description: {show_stdout}"
     );
 
     // Step 4: Update the issue
@@ -142,7 +144,7 @@ fn test_complete_issue_lifecycle() -> Result<()> {
         .args([
             "issue",
             "update",
-            "000001_e2e_lifecycle_test",
+            "e2e_lifecycle_test",
             "--content",
             "Updated content for e2e testing",
             "--append",
@@ -153,20 +155,20 @@ fn test_complete_issue_lifecycle() -> Result<()> {
 
     // Step 5: Verify the update
     let updated_show_output = Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "show", "000001_e2e_lifecycle_test"])
+        .args(["issue", "show", "e2e_lifecycle_test"])
         .current_dir(&temp_path)
         .assert()
         .success();
 
     let updated_stdout = String::from_utf8_lossy(&updated_show_output.get_output().stdout);
     assert!(
-        updated_stdout.contains("Updated content"),
-        "Issue should contain updated content: {updated_stdout}"
+        updated_stdout.contains("Updated content") && updated_stdout.contains("in progress"),
+        "Issue should contain both updated content and status indicators: {updated_stdout}"
     );
 
     // Step 6: Work on the issue (creates git branch)
     Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "work", "000001_e2e_lifecycle_test"])
+        .args(["issue", "work", "e2e_lifecycle_test"])
         .current_dir(&temp_path)
         .assert()
         .success();
@@ -180,20 +182,20 @@ fn test_complete_issue_lifecycle() -> Result<()> {
 
     let current_stdout = String::from_utf8_lossy(&current_output.get_output().stdout);
     assert!(
-        current_stdout.contains("e2e_lifecycle_test") || current_stdout.contains("000001"),
+        current_stdout.contains("e2e_lifecycle_test"),
         "Current issue should show our issue: {current_stdout}"
     );
 
     // Step 8: Complete the issue
     Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "complete", "000001_e2e_lifecycle_test"])
+        .args(["issue", "complete", "e2e_lifecycle_test"])
         .current_dir(&temp_path)
         .assert()
         .success();
 
     // Step 9: Merge the issue
     Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "merge", "000001_e2e_lifecycle_test"])
+        .args(["issue", "merge", "e2e_lifecycle_test"])
         .current_dir(&temp_path)
         .assert()
         .success();
@@ -207,8 +209,9 @@ fn test_complete_issue_lifecycle() -> Result<()> {
 
     let final_stdout = String::from_utf8_lossy(&final_list_output.get_output().stdout);
     assert!(
-        final_stdout.contains("e2e_lifecycle_test") || !final_stdout.is_empty(),
-        "Completed issue should appear in completed list"
+        final_stdout.contains("e2e_lifecycle_test")
+            && (final_stdout.contains("completed") || final_stdout.contains("✓")),
+        "Completed issue should appear with completion status indicator: {final_stdout}"
     );
 
     Ok(())
@@ -261,8 +264,10 @@ fn test_complete_memo_workflow() -> Result<()> {
 
     let list_stdout = String::from_utf8_lossy(&list_output.get_output().stdout);
     assert!(
-        list_stdout.contains("Meeting Notes") && list_stdout.contains("Task List"),
-        "All memos should appear in list: {list_stdout}"
+        list_stdout.contains("Meeting Notes")
+            && list_stdout.contains("Task List")
+            && (list_stdout.matches('\n').count() >= 2 || list_stdout.len() > 50),
+        "All memos should appear in list with proper formatting: {list_stdout}"
     );
 
     // Step 3: Get specific memo details
@@ -331,8 +336,11 @@ fn test_complete_memo_workflow() -> Result<()> {
 
     let context_stdout = String::from_utf8_lossy(&context_output.get_output().stdout);
     assert!(
-        context_stdout.len() > 100, // Should contain substantial content
-        "Context should contain all memo content"
+        context_stdout.len() > 100
+            && context_stdout.contains("Meeting Notes")
+            && context_stdout.contains("Task List"),
+        "Context should contain substantial content from all memos: length={}",
+        context_stdout.len()
     );
 
     // Step 7: Delete a memo
@@ -369,10 +377,9 @@ fn test_complete_search_workflow() -> Result<()> {
 
     let index_stdout = String::from_utf8_lossy(&index_output.get_output().stdout);
     assert!(
-        index_stdout.contains("indexed")
-            || index_stdout.contains("files")
-            || index_stdout.chars().any(char::is_numeric),
-        "Indexing should show progress/results: {index_stdout}"
+        (index_stdout.contains("indexed") && index_stdout.chars().any(char::is_numeric))
+            || (index_stdout.contains("files") && index_stdout.chars().any(char::is_numeric)),
+        "Indexing should show both action and numeric results (file count): {index_stdout}"
     );
 
     // Step 2: Query for functions
@@ -467,7 +474,7 @@ fn test_mixed_workflow() -> Result<()> {
 
     // Step 3: Work on the issue
     Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "work", "000001_implement_search_feature"])
+        .args(["issue", "work", "implement_search_feature"])
         .current_dir(&temp_path)
         .assert()
         .success();
@@ -498,7 +505,7 @@ fn test_mixed_workflow() -> Result<()> {
         .args([
             "issue",
             "update",
-            "000001_implement_search_feature",
+            "implement_search_feature",
             "--content",
             "\n\n## Progress Update\n\nSearch indexing is now working correctly. Ready for testing phase.",
             "--append"
@@ -529,7 +536,7 @@ fn test_mixed_workflow() -> Result<()> {
 
     // Step 9: Complete the issue
     Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "complete", "000001_implement_search_feature"])
+        .args(["issue", "complete", "implement_search_feature"])
         .current_dir(&temp_path)
         .assert()
         .success();
@@ -563,7 +570,7 @@ fn test_mixed_workflow() -> Result<()> {
 
     // Step 12: Merge the completed issue
     Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "merge", "000001_implement_search_feature"])
+        .args(["issue", "merge", "implement_search_feature"])
         .current_dir(&temp_path)
         .assert()
         .success();
@@ -598,7 +605,7 @@ fn test_error_recovery_workflow() -> Result<()> {
 
     // Step 3: Now work on the issue (should succeed)
     Command::cargo_bin("swissarmyhammer")?
-        .args(["issue", "work", "000001_error_recovery_test"])
+        .args(["issue", "work", "error_recovery_test"])
         .current_dir(&temp_path)
         .assert()
         .success();

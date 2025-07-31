@@ -980,7 +980,7 @@ jobs:
     
     - name: Install SwissArmyHammer
       run: |
-        cargo install --git https://github.com/wballard/swissarmyhammer.git swissarmyhammer-cli
+        cargo install --git https://github.com/swissarmyhammer/swissarmyhammer.git swissarmyhammer-cli
     
     - name: Create PR Memo
       if: github.event_name == 'pull_request' && github.event.action == 'opened'

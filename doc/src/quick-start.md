@@ -148,5 +148,5 @@ For more detailed troubleshooting, see the [Troubleshooting](./troubleshooting.m
 If you need help:
 - Check the [Troubleshooting](./troubleshooting.md) guide
 - Look at [Examples](./examples.md) for inspiration
-- Ask questions in [GitHub Discussions](https://github.com/wballard/swissarmyhammer/discussions)
-- Report bugs in [GitHub Issues](https://github.com/wballard/swissarmyhammer/issues)
+- Ask questions in [GitHub Discussions](https://github.com/swissarmyhammer/swissarmyhammer/discussions)
+- Report bugs in [GitHub Issues](https://github.com/swissarmyhammer/swissarmyhammer/issues)

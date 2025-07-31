@@ -38,7 +38,7 @@ cargo --version
 
 ```bash
 # Clone the repository
-git clone https://github.com/wballard/swissarmyhammer.git
+git clone https://github.com/swissarmyhammer/swissarmyhammer.git
 cd swissarmyhammer
 
 # Install development dependencies

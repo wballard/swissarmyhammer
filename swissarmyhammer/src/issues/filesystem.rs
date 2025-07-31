@@ -1,6 +1,7 @@
 use crate::common::generate_monotonic_ulid_string;
 use crate::config::Config;
 use crate::error::{Result, SwissArmyHammerError};
+use crate::mcp::types::IssueName;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -68,6 +69,32 @@ pub trait IssueStorage: Send + Sync {
     /// Get the next pending issue (first alphabetically)
     /// Returns None if no pending issues exist
     async fn get_next_issue(&self) -> Result<Option<Issue>>;
+
+    // Type-safe methods using IssueName
+
+    /// Get a specific issue by IssueName for better type safety
+    async fn get_issue_by_name(&self, name: &IssueName) -> Result<Issue>;
+
+    /// Create a new issue using IssueName for better type safety
+    async fn create_issue_with_name(&self, name: IssueName, content: String) -> Result<Issue>;
+
+    /// Update an existing issue's content by IssueName
+    async fn update_issue_by_name(&self, name: &IssueName, content: String) -> Result<Issue>;
+
+    /// Mark an issue as complete by IssueName
+    async fn mark_complete_by_name(&self, name: &IssueName) -> Result<Issue>;
+
+    /// Get multiple issues by their IssueName objects
+    async fn get_issues_batch_by_name(&self, names: Vec<&IssueName>) -> Result<Vec<Issue>>;
+
+    /// Update multiple issues at once by IssueName
+    async fn update_issues_batch_by_name(
+        &self,
+        updates: Vec<(&IssueName, String)>,
+    ) -> Result<Vec<Issue>>;
+
+    /// Mark multiple issues as complete by IssueName
+    async fn mark_complete_batch_by_name(&self, names: Vec<&IssueName>) -> Result<Vec<Issue>>;
 }
 
 /// File system implementation of issue storage
@@ -493,6 +520,45 @@ impl IssueStorage for FileSystemIssueStorage {
         let all_issues = self.list_issues().await?;
         let next_issue = all_issues.into_iter().find(|issue| !issue.completed);
         Ok(next_issue)
+    }
+
+    // Type-safe implementations using IssueName
+
+    async fn get_issue_by_name(&self, name: &IssueName) -> Result<Issue> {
+        self.get_issue(name.as_str()).await
+    }
+
+    async fn create_issue_with_name(&self, name: IssueName, content: String) -> Result<Issue> {
+        self.create_issue(name.get().to_string(), content).await
+    }
+
+    async fn update_issue_by_name(&self, name: &IssueName, content: String) -> Result<Issue> {
+        self.update_issue(name.as_str(), content).await
+    }
+
+    async fn mark_complete_by_name(&self, name: &IssueName) -> Result<Issue> {
+        self.mark_complete(name.as_str()).await
+    }
+
+    async fn get_issues_batch_by_name(&self, names: Vec<&IssueName>) -> Result<Vec<Issue>> {
+        let str_names: Vec<&str> = names.iter().map(|n| n.as_str()).collect();
+        self.get_issues_batch(str_names).await
+    }
+
+    async fn update_issues_batch_by_name(
+        &self,
+        updates: Vec<(&IssueName, String)>,
+    ) -> Result<Vec<Issue>> {
+        let str_updates: Vec<(&str, String)> = updates
+            .iter()
+            .map(|(name, content)| (name.as_str(), content.clone()))
+            .collect();
+        self.update_issues_batch(str_updates).await
+    }
+
+    async fn mark_complete_batch_by_name(&self, names: Vec<&IssueName>) -> Result<Vec<Issue>> {
+        let str_names: Vec<&str> = names.iter().map(|n| n.as_str()).collect();
+        self.mark_complete_batch(str_names).await
     }
 }
 
@@ -2908,17 +2974,20 @@ mod tests {
             .await
             .unwrap();
 
-        // TODO: These functions should work with IssueName instead of u32
-        // This test will fail until we implement the new API
+        // Test both old and new APIs work correctly
 
         // Current API uses name (String)
-        let retrieved_by_number = storage.get_issue(&issue.name).await.unwrap();
-        assert_eq!(retrieved_by_number.name.as_str(), "bug_fix");
+        let retrieved_by_string = storage.get_issue(&issue.name).await.unwrap();
+        assert_eq!(retrieved_by_string.name.as_str(), "bug_fix");
 
-        // NEW API should allow getting by name - this is what we want to implement
-        // let issue_name = IssueName::new("bug_fix".to_string()).unwrap();
-        // let retrieved_by_name = storage.get_issue_by_name(&issue_name).await.unwrap();
-        // assert_eq!(retrieved_by_name.name, "bug_fix");
+        // NEW type-safe API using IssueName
+        let issue_name = IssueName::new("bug_fix".to_string()).unwrap();
+        let retrieved_by_name = storage.get_issue_by_name(&issue_name).await.unwrap();
+        assert_eq!(retrieved_by_name.name.as_str(), "bug_fix");
+
+        // Verify both methods return the same issue
+        assert_eq!(retrieved_by_string.content, retrieved_by_name.content);
+        assert_eq!(retrieved_by_string.completed, retrieved_by_name.completed);
 
         // For now, let's verify that the issue name extraction works correctly
         // for different filename formats

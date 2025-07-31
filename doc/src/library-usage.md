@@ -8,7 +8,7 @@ Add SwissArmyHammer to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-swissarmyhammer = { git = "https://github.com/wballard/swissarmyhammer" }
+swissarmyhammer = { git = "https://github.com/swissarmyhammer/swissarmyhammer" }
 ```
 
 ## Quick Start

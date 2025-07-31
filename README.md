@@ -10,7 +10,7 @@
 
 🦀 **[Rust API Documentation](https://docs.rs/swissarmyhammer)** 🦀
 
-[![CI](https://github.com/wballard/swissarmyhammer/workflows/CI/badge.svg)](https://github.com/wballard/swissarmyhammer/actions)
+[![CI](https://github.com/swissarmyhammer/swissarmyhammer/workflows/CI/badge.svg)](https://github.com/swissarmyhammer/swissarmyhammer/actions)
 [![License](https://img.shields.io/badge/License-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![MCP](https://img.shields.io/badge/MCP-compatible-green.svg)](https://github.com/anthropics/model-context-protocol)
@@ -31,7 +31,7 @@ SwissArmyHammer transforms how you work with AI prompts and workflows by letting
 
 ## TLDR
 
-Follow the [Calcutron](https://github.com/wballard/calcutron) sample to get started.
+Follow the [Calcutron](https://github.com/swissarmyhammer/calcutron) sample to get started.
 
 ## 🎯 Key Features
 
@@ -146,6 +146,6 @@ See [https://wballard.github.io/swissarmyhammer/installation.html](https://wball
 
 <div align="center">
 
-**[⭐ Star this repo](https://github.com/wballard/swissarmyhammer/stargazers)** if you find SwissArmyHammer useful!
+**[⭐ Star this repo](https://github.com/swissarmyhammer/swissarmyhammer/stargazers)** if you find SwissArmyHammer useful!
 
 </div>

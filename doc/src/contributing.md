@@ -34,7 +34,7 @@ SwissArmyHammer welcomes contributions in many forms:
 
 3. Add upstream remote:
    ```bash
-   git remote add upstream https://github.com/wballard/swissarmyhammer.git
+   git remote add upstream https://github.com/swissarmyhammer/swissarmyhammer.git
    ```
 
 ### Development Setup

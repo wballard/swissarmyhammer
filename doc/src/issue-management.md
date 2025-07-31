@@ -883,7 +883,7 @@ To contribute to SwissArmyHammer's issue management system:
 
 ```bash
 # Clone the repository
-git clone https://github.com/wballard/swissarmyhammer.git
+git clone https://github.com/swissarmyhammer/swissarmyhammer.git
 cd swissarmyhammer
 
 # Install dependencies

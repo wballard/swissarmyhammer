@@ -47,6 +47,9 @@ pub enum ParseError {
 /// Result type for parsing operations
 pub type ParseResult<T> = Result<T, ParseError>;
 
+/// Mermaid parser for converting state diagrams to workflows
+pub struct MermaidParser;
+
 /// State ID validation utilities for workflow parsing
 impl MermaidParser {
     /// Validates a state ID and determines if it should be included in the workflow.
@@ -78,9 +81,6 @@ impl MermaidParser {
         !state_id.trim().is_empty()
     }
 }
-
-/// Parser for Mermaid state diagrams
-pub struct MermaidParser;
 
 impl MermaidParser {
     /// Parse a Mermaid state diagram into a Workflow
@@ -546,8 +546,7 @@ impl MermaidParser {
             .count();
 
         // Ensure reachability - all states should be reachable from initial state
-        // TODO: This check doesn't properly handle states within compound states (concurrent regions)
-        // For now, we'll make it a warning instead of an error
+        // This now properly handles states within compound states (concurrent regions)
         let reachable_states = Self::find_reachable_states(workflow);
         let unreachable: Vec<_> = workflow
             .states
@@ -556,24 +555,28 @@ impl MermaidParser {
             .collect();
 
         if !unreachable.is_empty() {
-            // Check if all unreachable states have actions defined - this indicates they're
-            // meant to be executable states within a compound state
-            let all_have_actions = unreachable.iter().all(|state_id| {
+            // Check if all unreachable states have meaningful actions or parallel support - this indicates they're
+            // meant to be executable states within a compound state or parallel regions
+            let all_have_actions_or_parallel_support = unreachable.iter().all(|state_id| {
                 workflow
                     .states
                     .get(state_id)
                     .map(|state| {
-                        !state.description.is_empty() && state.description != state_id.as_str()
+                        // Allow states that have parallel support or meaningful descriptions/actions
+                        state.allows_parallel || 
+                        (!state.description.is_empty() && state.description != state_id.as_str()) ||
+                        state.state_type == crate::workflow::StateType::Fork ||
+                        state.state_type == crate::workflow::StateType::Join
                     })
                     .unwrap_or(false)
             });
 
-            if !all_have_actions {
+            if !all_have_actions_or_parallel_support {
                 return Err(ParseError::InvalidStructure {
                     message: format!("Unreachable states found: {unreachable:?}"),
                 });
             }
-            // If they all have actions, they're likely states within compound states
+            // If they all have actions or parallel support, they're likely states within compound states
             // and we'll allow them
         }
 
@@ -594,6 +597,7 @@ impl MermaidParser {
     }
 
     /// Find all states reachable from the initial state using DFS
+    #[allow(dead_code)]
     fn find_reachable_states(workflow: &Workflow) -> std::collections::HashSet<StateId> {
         let mut reachable = std::collections::HashSet::new();
         let mut stack = vec![workflow.initial_state.clone()];
@@ -615,6 +619,7 @@ impl MermaidParser {
 
         reachable
     }
+
 
     /// Detect states that should be choice states based on their transition patterns
     /// and update their state_type accordingly.

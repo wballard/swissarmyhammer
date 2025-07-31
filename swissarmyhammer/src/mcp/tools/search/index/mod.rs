@@ -66,12 +66,26 @@ impl McpTool for SearchIndexTool {
             .initialize()
             .map_err(|e| McpErrorHandler::handle_error(e, "initialize storage database"))?;
 
-        let mut indexer = FileIndexer::new(storage).await.map_err(|e| {
-            McpErrorHandler::handle_error(
-                crate::SwissArmyHammerError::Semantic(e),
-                "create file indexer",
-            )
-        })?;
+        let mut indexer = {
+            #[cfg(test)]
+            {
+                FileIndexer::new_for_testing(storage).await.map_err(|e| {
+                    McpErrorHandler::handle_error(
+                        crate::SwissArmyHammerError::Semantic(e),
+                        "create file indexer for testing",
+                    )
+                })?
+            }
+            #[cfg(not(test))]
+            {
+                FileIndexer::new(storage).await.map_err(|e| {
+                    McpErrorHandler::handle_error(
+                        crate::SwissArmyHammerError::Semantic(e),
+                        "create file indexer",
+                    )
+                })?
+            }
+        };
 
         // Perform indexing for all patterns
         let mut combined_report = None;

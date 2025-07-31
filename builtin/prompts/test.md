@@ -15,6 +15,8 @@ The goal is to have:
 ## Guidelines
 
 - Always run tests using a command line tool appropriate for the project
+- Always have an extended timeout running tests of 10 minutes for the first try
+- If tests are taking longer than 10 minutes, identify the slow tests and speed them up
 - Corrections should be constructive, meaning 'just deleting code' is not an acceptable fix
 - YOU MUST debug the code to make all tests pass, only change tests as a last resort
 - Feel free to refactor

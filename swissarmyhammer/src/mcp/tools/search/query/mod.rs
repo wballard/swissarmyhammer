@@ -69,12 +69,26 @@ impl McpTool for SearchQueryTool {
             .initialize()
             .map_err(|e| McpErrorHandler::handle_error(e, "initialize storage database"))?;
 
-        let searcher = SemanticSearcher::new(storage, config).await.map_err(|e| {
-            McpErrorHandler::handle_error(
-                crate::SwissArmyHammerError::Semantic(e),
-                "create semantic searcher",
-            )
-        })?;
+        let searcher = {
+            #[cfg(test)]
+            {
+                SemanticSearcher::new_for_testing(storage, config).await.map_err(|e| {
+                    McpErrorHandler::handle_error(
+                        crate::SwissArmyHammerError::Semantic(e),
+                        "create semantic searcher for testing",
+                    )
+                })?
+            }
+            #[cfg(not(test))]
+            {
+                SemanticSearcher::new(storage, config).await.map_err(|e| {
+                    McpErrorHandler::handle_error(
+                        crate::SwissArmyHammerError::Semantic(e),
+                        "create semantic searcher",
+                    )
+                })?
+            }
+        };
 
         // Perform search
         let search_query = SearchQuery {

@@ -5,7 +5,7 @@ description: "Check if the plan is complete."
 
 ## Goal
 
-We want to know if we are fully finished will all issues.
+We want to know if we are fully finished with all issues.
 
 ## Rules
 

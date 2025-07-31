@@ -545,6 +545,10 @@ pub enum FlowSubcommand {
         /// Quiet mode - only show errors
         #[arg(short, long)]
         quiet: bool,
+
+        /// Run the development environment after implementation is complete
+        #[arg(long)]
+        run_on_completion: bool,
     },
     /// Resume a paused workflow run
     Resume {

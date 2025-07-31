@@ -33,6 +33,7 @@ pub async fn run_flow_command(subcommand: FlowSubcommand) -> Result<()> {
             test,
             timeout: timeout_str,
             quiet,
+            run_on_completion,
         } => {
             run_workflow_command(WorkflowCommandConfig {
                 workflow_name: workflow,
@@ -43,6 +44,7 @@ pub async fn run_flow_command(subcommand: FlowSubcommand) -> Result<()> {
                 test_mode: test,
                 timeout_str,
                 quiet,
+                run_on_completion,
             })
             .await
         }
@@ -100,6 +102,7 @@ pub async fn run_flow_command(subcommand: FlowSubcommand) -> Result<()> {
                 test_mode: true,
                 timeout_str,
                 quiet,
+                run_on_completion: false,
             })
             .await
         }
@@ -116,12 +119,21 @@ struct WorkflowCommandConfig {
     test_mode: bool,
     timeout_str: Option<String>,
     quiet: bool,
+    run_on_completion: bool,
 }
 
 /// Execute a workflow
 async fn run_workflow_command(config: WorkflowCommandConfig) -> Result<()> {
     let mut storage = WorkflowStorage::file_system()?;
-    let workflow_name_typed = WorkflowName::new(&config.workflow_name);
+    
+    // If run_on_completion is set and workflow is "implement", use "implement_and_run" instead
+    let workflow_name = if config.run_on_completion && config.workflow_name == "implement" {
+        "implement_and_run".to_string()
+    } else {
+        config.workflow_name.clone()
+    };
+    
+    let workflow_name_typed = WorkflowName::new(&workflow_name);
 
     // Get the workflow
     let workflow = storage.get_workflow(&workflow_name_typed)?;

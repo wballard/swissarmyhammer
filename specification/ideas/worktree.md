@@ -31,6 +31,15 @@ project-root/
 └── ... (main repo files)
 ```
 
+### New Workflow Actions
+
+1. ** Restore Current Working Directory**
+
+When swissarmyhammer starts, it needs to record its current working directory for later use. 
+Restoring the current working directory sets it back to this initial value.
+
+We need to use this in implement.md adding a step before are_issues_complete.
+
 ### New Git Operations
 
 1. **Create Worktree** (`create_work_worktree`)

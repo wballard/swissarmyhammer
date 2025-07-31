@@ -67,7 +67,7 @@ pub fn benchmark_function_{i}() -> Result<String, Box<dyn Error>> {{
 
 /// Error handling for benchmark {i}
 pub fn handle_benchmark_error_{i}(error: &str) -> Result<(), String> {{
-    eprintln!("Benchmark error {i}: {{}}", {i}, error);
+    eprintln!("Benchmark error {i}: {{}}", error);
     Err(format!("Benchmark error {i} handled", {i}))
 }}
 
@@ -476,17 +476,10 @@ fn bench_mcp_integration(c: &mut Criterion) {
     // Benchmark MCP context initialization through CLI command
     group.bench_function("mcp_context_init_via_cli", |b| {
         let (_temp_dir, temp_path) = setup_benchmark_environment();
-        
+
         b.iter(|| {
             let output = Command::new("cargo")
-                .args([
-                    "run",
-                    "--bin", 
-                    "swissarmyhammer",
-                    "--",
-                    "memo",
-                    "list"
-                ])
+                .args(["run", "--bin", "swissarmyhammer", "--", "memo", "list"])
                 .current_dir(black_box(&temp_path))
                 .output()
                 .expect("Failed to run memo list command");
@@ -498,20 +491,20 @@ fn bench_mcp_integration(c: &mut Criterion) {
     group.bench_function("mcp_tool_execution_via_cli", |b| {
         let (_temp_dir, temp_path) = setup_benchmark_environment();
         let mut counter = 0;
-        
+
         b.iter(|| {
             counter += 1;
             let output = Command::new("cargo")
                 .args([
                     "run",
                     "--bin",
-                    "swissarmyhammer", 
+                    "swissarmyhammer",
                     "--",
                     "memo",
                     "create",
-                    &format!("MCP Bench Memo {}", counter),
+                    &format!("MCP Bench Memo {counter}"),
                     "--content",
-                    "MCP benchmark content"
+                    "MCP benchmark content",
                 ])
                 .current_dir(black_box(&temp_path))
                 .output()
@@ -532,7 +525,7 @@ fn bench_memory_usage(c: &mut Criterion) {
     group.bench_function("large_content_handling", |b| {
         let (_temp_dir, temp_path) = setup_benchmark_environment();
         let large_content = "A".repeat(100_000); // 100KB content
-        
+
         b.iter(|| {
             let output = Command::new("cargo")
                 .args([
@@ -557,7 +550,7 @@ fn bench_memory_usage(c: &mut Criterion) {
     group.bench_function("many_small_operations", |b| {
         let (_temp_dir, temp_path) = setup_benchmark_environment();
         let mut counter = 0;
-        
+
         b.iter(|| {
             counter += 1;
             let output = Command::new("cargo")
@@ -568,7 +561,7 @@ fn bench_memory_usage(c: &mut Criterion) {
                     "--",
                     "memo",
                     "create",
-                    &format!("Small Memo {}", counter),
+                    &format!("Small Memo {counter}"),
                     "--content",
                     "Small content",
                 ])
@@ -585,7 +578,7 @@ fn bench_memory_usage(c: &mut Criterion) {
 criterion_group!(
     benches,
     bench_issue_operations,
-    bench_memo_operations, 
+    bench_memo_operations,
     bench_search_operations,
     bench_cli_startup,
     bench_output_formats,

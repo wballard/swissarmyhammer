@@ -554,7 +554,10 @@ async fn test_mcp_tool_stress_conditions() -> Result<()> {
             ("content", json!(format!("Stress test content {}", i))),
         ]);
         let result = context.execute_tool("memo_create", args).await;
-        assert!(result.is_ok(), "Rapid operations should succeed: {result:?}");
+        assert!(
+            result.is_ok(),
+            "Rapid operations should succeed: {result:?}"
+        );
     }
 
     // Test tool execution with minimal resources
@@ -580,7 +583,10 @@ async fn test_mcp_tool_state_consistency() -> Result<()> {
     // Create issue
     let create_args = context.create_arguments(vec![
         ("name", json!("state_consistency_test")),
-        ("content", json!("# State Test\n\nTesting state consistency.")),
+        (
+            "content",
+            json!("# State Test\n\nTesting state consistency."),
+        ),
     ]);
     let create_result = context.execute_tool("issue_create", create_args).await?;
     assert_eq!(create_result.is_error, Some(false));
@@ -588,12 +594,15 @@ async fn test_mcp_tool_state_consistency() -> Result<()> {
     // List issues - should include our created issue
     let list_args = context.create_arguments(vec![]);
     let list_result = context.execute_tool("issue_list", list_args).await;
-    
+
     // Even if issue_list tool doesn't exist, the call should be handled gracefully
     match list_result {
         Ok(result) => {
             // If successful, should show consistent state
-            let text_content = swissarmyhammer_cli::mcp_integration::response_formatting::extract_text_content(&result);
+            let text_content =
+                swissarmyhammer_cli::mcp_integration::response_formatting::extract_text_content(
+                    &result,
+                );
             if let Some(content) = text_content {
                 // If we get content, it should be consistent
                 assert!(!content.is_empty(), "List results should have content");
@@ -618,10 +627,11 @@ async fn test_mcp_error_boundaries() -> Result<()> {
 
     // Test malformed arguments (empty arguments when required fields are missing)
     let empty_args = serde_json::Map::new();
-    let result = context
-        .execute_tool("memo_create", empty_args)
-        .await;
-    assert!(result.is_err(), "Missing required arguments should be rejected");
+    let result = context.execute_tool("memo_create", empty_args).await;
+    assert!(
+        result.is_err(),
+        "Missing required arguments should be rejected"
+    );
 
     // Test context recovery after error
     let valid_args = context.create_arguments(vec![
@@ -629,7 +639,10 @@ async fn test_mcp_error_boundaries() -> Result<()> {
         ("content", json!("Testing recovery after error")),
     ]);
     let result = context.execute_tool("memo_create", valid_args).await;
-    assert!(result.is_ok(), "Context should recover after error: {result:?}");
+    assert!(
+        result.is_ok(),
+        "Context should recover after error: {result:?}"
+    );
 
     Ok(())
 }

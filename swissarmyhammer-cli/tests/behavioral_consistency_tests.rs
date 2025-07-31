@@ -599,7 +599,7 @@ fn test_output_stability_with_scale() -> Result<()> {
         .success();
 
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
-    
+
     // Should still contain expected structure with more data
     assert!(
         stdout.contains("TEST_001") && stdout.contains("SCALE_020"),

@@ -162,3 +162,34 @@ async fn test_cli_can_call_mcp_tools() {
 ## Follow-up Issues
 
 This foundational work enables the subsequent refactoring of individual CLI command modules (issues, memo, search) to use MCP tools directly.
+
+## Proposed Solution
+
+Based on the existing MCP infrastructure and codebase patterns, I'll implement a clean CLI-MCP integration layer that allows CLI commands to call MCP tools directly.
+
+### Implementation Approach
+
+1. **CliToolContext Structure**: Create a CLI-specific version of the existing ToolContext that can instantiate all necessary storage backends and MCP tools without requiring server initialization.
+
+2. **Direct Tool Registry Access**: Leverage the existing ToolRegistry pattern to allow CLI commands to call tools directly without going through the MCP protocol layer.
+
+3. **Response Formatting**: Create utilities to convert MCP CallToolResult responses into CLI-friendly output with proper formatting and error handling.
+
+4. **Error Integration**: Extend the existing CLI error handling to properly convert MCP errors using the established patterns.
+
+### Key Benefits
+
+- **Zero Duplication**: CLI commands will use identical business logic as MCP tools
+- **Consistent Behavior**: Same validation, error handling, and responses across interfaces
+- **Maintainable**: Single source of truth for all operations
+- **Testable**: Both CLI and MCP functionality tested through same code paths
+
+### Implementation Steps
+
+1. Create `mcp_integration.rs` module with CliToolContext
+2. Implement response formatting utilities with colored output
+3. Add MCP error conversion to CLI error system
+4. Create comprehensive integration tests
+5. Update build system and module exports
+
+This approach maintains the existing architecture patterns while enabling direct CLI-to-MCP tool communication.

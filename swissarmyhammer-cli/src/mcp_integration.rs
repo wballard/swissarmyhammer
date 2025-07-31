@@ -166,6 +166,26 @@ pub mod response_formatting {
                 _ => None,
             })
     }
+
+    /// Extract JSON data from CallToolResult
+    pub fn extract_json_data(
+        result: &CallToolResult,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        if result.is_error.unwrap_or(false) {
+            return Err(format!(
+                "MCP tool returned error: {}",
+                extract_text_content(result).unwrap_or_else(|| "Unknown error".to_string())
+            )
+            .into());
+        }
+
+        let text_content = extract_text_content(result).ok_or("No text content in MCP response")?;
+
+        let json_data: serde_json::Value = serde_json::from_str(&text_content)
+            .map_err(|e| format!("Failed to parse JSON response: {e}"))?;
+
+        Ok(json_data)
+    }
 }
 
 #[cfg(test)]

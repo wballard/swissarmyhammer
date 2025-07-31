@@ -75,6 +75,7 @@ textwrap = "0.16"
 csv = "1.3"
 rand = "0.8"
 syntect = "5.2"
+once_cell = "1.19"
 
 # Dev dependencies
 assert_cmd = "2.0"

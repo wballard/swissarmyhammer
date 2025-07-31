@@ -1,48 +1,33 @@
 use crate::cli::MemoCommands;
-use colored::*;
+use crate::mcp_integration::{response_formatting, CliToolContext};
+use rmcp::model::CallToolResult;
+use serde_json::json;
 use std::io::{self, Read};
-use swissarmyhammer::memoranda::{
-    AdvancedMemoSearchEngine, MarkdownMemoStorage, MemoId, MemoStorage, SearchOptions,
-};
-
-// Configurable preview length constants
-const DEFAULT_LIST_PREVIEW_LENGTH: usize = 100;
-const DEFAULT_SEARCH_PREVIEW_LENGTH: usize = 150;
-
-/// Format content preview with specified maximum length
-fn format_content_preview(content: &str, max_length: usize) -> String {
-    let preview = if content.len() > max_length {
-        format!("{}...", &content[..max_length])
-    } else {
-        content.to_string()
-    };
-    preview.replace('\n', " ")
-}
 
 pub async fn handle_memo_command(command: MemoCommands) -> Result<(), Box<dyn std::error::Error>> {
-    let storage = MarkdownMemoStorage::new_default()?;
+    let context = CliToolContext::new().await?;
 
     match command {
         MemoCommands::Create { title, content } => {
-            create_memo(storage, title, content).await?;
+            create_memo(&context, title, content).await?;
         }
         MemoCommands::List => {
-            list_memos(storage).await?;
+            list_memos(&context).await?;
         }
         MemoCommands::Get { id } => {
-            get_memo(storage, &id).await?;
+            get_memo(&context, &id).await?;
         }
         MemoCommands::Update { id, content } => {
-            update_memo(storage, &id, content).await?;
+            update_memo(&context, &id, content).await?;
         }
         MemoCommands::Delete { id } => {
-            delete_memo(storage, &id).await?;
+            delete_memo(&context, &id).await?;
         }
         MemoCommands::Search { query } => {
-            search_memos(storage, &query).await?;
+            search_memos(&context, &query).await?;
         }
         MemoCommands::Context => {
-            get_context(storage).await?;
+            get_context(&context).await?;
         }
     }
 
@@ -50,454 +35,75 @@ pub async fn handle_memo_command(command: MemoCommands) -> Result<(), Box<dyn st
 }
 
 async fn create_memo(
-    storage: MarkdownMemoStorage,
+    context: &CliToolContext,
     title: String,
     content: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = get_content_input(content)?;
 
-    let memo = storage.create_memo(title, content).await?;
+    let args = context.create_arguments(vec![("title", json!(title)), ("content", json!(content))]);
 
-    println!("{} Created memo: {}", "✅".green(), memo.title.bold());
+    let result = context.execute_tool("memo_create", args).await?;
 
-    println!("🆔 ID: {}", memo.id.as_str().blue());
-
-    println!(
-        "📅 Created: {}",
-        memo.created_at
-            .format("%Y-%m-%d %H:%M:%S UTC")
-            .to_string()
-            .dimmed()
-    );
-
+    println!("{}", format_create_memo_response(&result, &title));
     Ok(())
 }
 
-async fn list_memos(storage: MarkdownMemoStorage) -> Result<(), Box<dyn std::error::Error>> {
-    let memos = storage.list_memos().await?;
+async fn list_memos(context: &CliToolContext) -> Result<(), Box<dyn std::error::Error>> {
+    let args = context.create_arguments(vec![]);
+    let result = context.execute_tool("memo_list", args).await?;
 
-    if memos.is_empty() {
-        println!("{} No memos found", "ℹ️".blue());
-        return Ok(());
-    }
-
-    println!(
-        "{} Found {} memo{}",
-        "📝".green(),
-        memos.len().to_string().bold(),
-        if memos.len() == 1 { "" } else { "s" }
-    );
-    println!();
-
-    // Sort by creation time, newest first
-    let mut sorted_memos = memos;
-    sorted_memos.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-
-    for memo in sorted_memos {
-        println!("{} {}", "🆔".dimmed(), memo.id.as_str().blue());
-        println!("{} {}", "📄".dimmed(), memo.title.bold());
-        println!(
-            "{} {}",
-            "📅".dimmed(),
-            memo.created_at
-                .format("%Y-%m-%d %H:%M:%S UTC")
-                .to_string()
-                .dimmed()
-        );
-
-        // Show a preview of content
-        let preview = format_content_preview(&memo.content, DEFAULT_LIST_PREVIEW_LENGTH);
-        println!("{} {}", "💬".dimmed(), preview.dimmed());
-        println!();
-    }
-
+    println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
 
-async fn get_memo(
-    storage: MarkdownMemoStorage,
-    id: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let memo_id = MemoId::from_string(id.to_string())?;
-    let memo = storage.get_memo(&memo_id).await?;
+async fn get_memo(context: &CliToolContext, id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let args = context.create_arguments(vec![("id", json!(id))]);
+    let result = context.execute_tool("memo_get", args).await?;
 
-    println!("{} Memo: {}", "📝".green(), memo.title.bold());
-
-    println!("{} ID: {}", "🆔".dimmed(), memo.id.as_str().blue());
-
-    println!(
-        "{} Created: {}",
-        "📅".dimmed(),
-        memo.created_at
-            .format("%Y-%m-%d %H:%M:%S UTC")
-            .to_string()
-            .dimmed()
-    );
-
-    println!(
-        "{} Updated: {}",
-        "🔄".dimmed(),
-        memo.updated_at
-            .format("%Y-%m-%d %H:%M:%S UTC")
-            .to_string()
-            .dimmed()
-    );
-
-    println!();
-    println!("Content:");
-    println!("{}", memo.content);
-
+    println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
 
 async fn update_memo(
-    storage: MarkdownMemoStorage,
+    context: &CliToolContext,
     id: &str,
     content: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let memo_id = MemoId::from_string(id.to_string())?;
-
     let content = get_content_input(content)?;
 
-    let updated_memo = storage.update_memo(&memo_id, content).await?;
+    let args = context.create_arguments(vec![("id", json!(id)), ("content", json!(content))]);
 
-    println!(
-        "{} Updated memo: {}",
-        "✅".green(),
-        updated_memo.title.bold()
-    );
+    let result = context.execute_tool("memo_update", args).await?;
 
-    println!("🆔 ID: {}", updated_memo.id.as_str().blue());
-
-    println!(
-        "🔄 Updated: {}",
-        updated_memo
-            .updated_at
-            .format("%Y-%m-%d %H:%M:%S UTC")
-            .to_string()
-            .dimmed()
-    );
-
-    println!();
-    println!("Content:");
-    println!("{}", updated_memo.content);
-
+    println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
 
-async fn delete_memo(
-    storage: MarkdownMemoStorage,
-    id: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let memo_id = MemoId::from_string(id.to_string())?;
+async fn delete_memo(context: &CliToolContext, id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let args = context.create_arguments(vec![("id", json!(id))]);
+    let result = context.execute_tool("memo_delete", args).await?;
 
-    // Get memo first to show what we're deleting
-    let memo = storage.get_memo(&memo_id).await?;
-
-    storage.delete_memo(&memo_id).await?;
-
-    println!("{} Deleted memo: {}", "🗑️".red(), memo.title.bold());
-
-    println!("🆔 ID: {}", memo.id.as_str().blue());
-
+    println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
 
 async fn search_memos(
-    storage: MarkdownMemoStorage,
+    context: &CliToolContext,
     query: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Try to use advanced search for better highlighting and relevance scoring
-    match try_advanced_search(&storage, query).await {
-        Ok(()) => Ok(()),
-        Err(_) => {
-            // Fallback to basic search if advanced search fails
-            fallback_basic_search(&storage, query).await
-        }
-    }
-}
+    let args = context.create_arguments(vec![("query", json!(query))]);
+    let result = context.execute_tool("memo_search", args).await?;
 
-async fn try_advanced_search(
-    storage: &MarkdownMemoStorage,
-    query: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // Handle empty query by returning all memos
-    if query.trim().is_empty() {
-        let all_memos = storage.list_memos().await?;
-        if all_memos.is_empty() {
-            println!(
-                "{} No memos found matching '{}'",
-                "ℹ️".blue(),
-                query.yellow()
-            );
-            return Ok(());
-        }
-
-        println!(
-            "{} Found {} memo{} matching '{}'",
-            "🔍".green(),
-            all_memos.len().to_string().bold(),
-            if all_memos.len() == 1 { "" } else { "s" },
-            query.yellow()
-        );
-        println!();
-
-        for memo in all_memos {
-            println!("{} {}", "🆔".dimmed(), memo.id.as_str().blue());
-            println!("{} {}", "📄".dimmed(), memo.title.bold());
-            println!(
-                "{} {}",
-                "📅".dimmed(),
-                memo.created_at
-                    .format("%Y-%m-%d %H:%M:%S UTC")
-                    .to_string()
-                    .dimmed()
-            );
-
-            let preview = format_content_preview(&memo.content, DEFAULT_SEARCH_PREVIEW_LENGTH);
-            println!("{} {}", "💬".dimmed(), preview.dimmed());
-            println!();
-        }
-
-        return Ok(());
-    }
-    // Create advanced search engine
-    let search_engine = AdvancedMemoSearchEngine::new_in_memory().await?;
-
-    // Get all memos and index them
-    let all_memos = storage.list_memos().await?;
-    if !all_memos.is_empty() {
-        search_engine.index_memos(&all_memos).await?;
-    }
-
-    // Configure search options for better highlighting
-    let search_options = SearchOptions {
-        case_sensitive: false,
-        exact_phrase: false,
-        max_results: Some(50), // Reasonable limit
-        include_highlights: true,
-        excerpt_length: 60,
-    };
-
-    // Perform advanced search
-    let search_results = search_engine
-        .search(query, &search_options, &all_memos)
-        .await?;
-
-    if search_results.is_empty() {
-        println!(
-            "{} No memos found matching '{}'",
-            "ℹ️".blue(),
-            query.yellow()
-        );
-        return Ok(());
-    }
-
-    println!(
-        "{} Found {} memo{} matching '{}'",
-        "🔍".green(),
-        search_results.len().to_string().bold(),
-        if search_results.len() == 1 { "" } else { "s" },
-        query.yellow()
-    );
-    println!();
-
-    // Results are already sorted by relevance score from advanced search
-    for search_result in search_results {
-        let memo = &search_result.memo;
-
-        println!("{} {}", "🆔".dimmed(), memo.id.as_str().blue());
-        println!("{} {}", "📄".dimmed(), memo.title.bold());
-        println!(
-            "{} {}",
-            "📅".dimmed(),
-            memo.created_at
-                .format("%Y-%m-%d %H:%M:%S UTC")
-                .to_string()
-                .dimmed()
-        );
-
-        // Show relevance score
-        println!(
-            "{} {:.1}% relevance",
-            "⭐".dimmed(),
-            search_result.relevance_score.to_string().cyan()
-        );
-
-        // Use advanced highlighting if available, otherwise fall back to preview
-        if !search_result.highlights.is_empty() {
-            println!(
-                "{} {}",
-                "💬".dimmed(),
-                search_result.highlights.join(" ").dimmed()
-            );
-        } else {
-            let preview = format_content_preview(&memo.content, DEFAULT_SEARCH_PREVIEW_LENGTH);
-            // Enhanced highlighting - replace query with colored version (case insensitive)
-            let highlighted_preview = if search_options.case_sensitive {
-                preview.replace(query, &query.yellow().to_string())
-            } else {
-                replace_case_insensitive(&preview, query, &query.yellow().to_string())
-            };
-            println!("{} {}", "💬".dimmed(), highlighted_preview.dimmed());
-        }
-
-        println!();
-    }
-
+    println!("{}", format_search_memo_response(&result, query));
     Ok(())
 }
 
-async fn fallback_basic_search(
-    storage: &MarkdownMemoStorage,
-    query: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // Handle empty query by returning all memos
-    if query.trim().is_empty() {
-        let all_memos = storage.list_memos().await?;
-        if all_memos.is_empty() {
-            println!(
-                "{} No memos found matching '{}'",
-                "ℹ️".blue(),
-                query.yellow()
-            );
-            return Ok(());
-        }
+async fn get_context(context: &CliToolContext) -> Result<(), Box<dyn std::error::Error>> {
+    let args = context.create_arguments(vec![]);
+    let result = context.execute_tool("memo_get_all_context", args).await?;
 
-        println!(
-            "{} Found {} memo{} matching '{}'",
-            "🔍".green(),
-            all_memos.len().to_string().bold(),
-            if all_memos.len() == 1 { "" } else { "s" },
-            query.yellow()
-        );
-        println!();
-
-        for memo in all_memos {
-            println!("{} {}", "🆔".dimmed(), memo.id.as_str().blue());
-            println!("{} {}", "📄".dimmed(), memo.title.bold());
-            println!(
-                "{} {}",
-                "📅".dimmed(),
-                memo.created_at
-                    .format("%Y-%m-%d %H:%M:%S UTC")
-                    .to_string()
-                    .dimmed()
-            );
-
-            let preview = format_content_preview(&memo.content, DEFAULT_SEARCH_PREVIEW_LENGTH);
-            println!("{} {}", "💬".dimmed(), preview.dimmed());
-            println!();
-        }
-
-        return Ok(());
-    }
-    let results = storage.search_memos(query).await?;
-
-    if results.is_empty() {
-        println!(
-            "{} No memos found matching '{}'",
-            "ℹ️".blue(),
-            query.yellow()
-        );
-        return Ok(());
-    }
-
-    println!(
-        "{} Found {} memo{} matching '{}' (basic search)",
-        "🔍".yellow(),
-        results.len().to_string().bold(),
-        if results.len() == 1 { "" } else { "s" },
-        query.yellow()
-    );
-    println!();
-
-    // Sort by creation time, newest first
-    let mut sorted_results = results;
-    sorted_results.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-
-    for memo in sorted_results {
-        println!("{} {}", "🆔".dimmed(), memo.id.as_str().blue());
-        println!("{} {}", "📄".dimmed(), memo.title.bold());
-        println!(
-            "{} {}",
-            "📅".dimmed(),
-            memo.created_at
-                .format("%Y-%m-%d %H:%M:%S UTC")
-                .to_string()
-                .dimmed()
-        );
-
-        // Show a highlighted preview of content
-        let preview = format_content_preview(&memo.content, DEFAULT_SEARCH_PREVIEW_LENGTH);
-
-        // Enhanced highlighting - case insensitive replacement
-        let highlighted_preview =
-            replace_case_insensitive(&preview, query, &query.yellow().to_string());
-        println!("{} {}", "💬".dimmed(), highlighted_preview.dimmed());
-        println!();
-    }
-
-    Ok(())
-}
-
-/// Case-insensitive string replacement for highlighting
-fn replace_case_insensitive(text: &str, pattern: &str, replacement: &str) -> String {
-    let mut result = String::new();
-    let mut last_end = 0;
-    let pattern_lower = pattern.to_lowercase();
-    let text_lower = text.to_lowercase();
-
-    while let Some(start) = text_lower[last_end..].find(&pattern_lower) {
-        let absolute_start = last_end + start;
-        let absolute_end = absolute_start + pattern.len();
-
-        // Add text before the match
-        result.push_str(&text[last_end..absolute_start]);
-        // Add the replacement
-        result.push_str(replacement);
-
-        last_end = absolute_end;
-    }
-
-    // Add remaining text
-    result.push_str(&text[last_end..]);
-    result
-}
-
-async fn get_context(storage: MarkdownMemoStorage) -> Result<(), Box<dyn std::error::Error>> {
-    let memos = storage.list_memos().await?;
-
-    if memos.is_empty() {
-        println!("ℹ️ No memos available for context");
-        return Ok(());
-    }
-
-    println!("📄 All memo context ({} memos)", memos.len());
-    println!();
-
-    // Sort by creation time, newest first
-    let mut sorted_memos = memos;
-    sorted_memos.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-
-    for memo in sorted_memos {
-        println!("## {} (ID: {})", memo.title, memo.id.as_str());
-        println!();
-        println!(
-            "Created: {}",
-            memo.created_at.format("%Y-%m-%d %H:%M:%S UTC")
-        );
-        println!(
-            "Updated: {}",
-            memo.updated_at.format("%Y-%m-%d %H:%M:%S UTC")
-        );
-        println!();
-        println!("{}", memo.content);
-        println!();
-        println!("===");
-        println!();
-    }
-
+    println!("{}", format_context_memo_response(&result));
     Ok(())
 }
 
@@ -534,4 +140,134 @@ fn get_content_input(content: Option<String>) -> Result<String, Box<dyn std::err
             Ok(buffer.trim().to_string())
         }
     }
+}
+
+/// Custom response formatters for memo CLI commands to match expected test format
+mod memo_response_formatting {
+    use colored::*;
+    use once_cell::sync::Lazy;
+    use regex::Regex;
+    use rmcp::model::{CallToolResult, RawContent};
+
+    static MEMO_ID_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"with ID: ([A-Z0-9]+)").unwrap());
+    static SEARCH_COUNT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"Found (\d+) memo").unwrap());
+
+    /// Format memo create response to match CLI expectations
+    pub fn format_create_memo_response(result: &CallToolResult, title: &str) -> String {
+        if result.is_error.unwrap_or(false) {
+            return extract_text_content(result)
+                .unwrap_or_else(|| "An error occurred creating memo".to_string())
+                .red()
+                .to_string();
+        }
+
+        // Extract memo ID from the MCP response if available
+        let response_text = extract_text_content(result)
+            .unwrap_or_else(|| format!("Successfully created memo '{title}'"));
+
+        let memo_id = extract_memo_id(&response_text);
+
+        // Format in the expected CLI style
+        let mut output = format!("{} Created memo: {}", "✅".green(), title.bold());
+        if let Some(id) = memo_id {
+            output.push_str(&format!("\n🆔 ID: {}", id.blue()));
+
+            // Use current time since ULID parsing is complex
+            let timestamp = chrono::Utc::now();
+            output.push_str(&format!(
+                "\n📅 Created: {}",
+                timestamp.format("%Y-%m-%d %H:%M:%S UTC")
+            ));
+        }
+        output
+    }
+
+    /// Format memo search response to match CLI expectations  
+    pub fn format_search_memo_response(result: &CallToolResult, query: &str) -> String {
+        if result.is_error.unwrap_or(false) {
+            return extract_text_content(result)
+                .unwrap_or_else(|| "An error occurred searching memos".to_string())
+                .red()
+                .to_string();
+        }
+
+        let response_text =
+            extract_text_content(result).unwrap_or_else(|| "No results found".to_string());
+
+        // Extract the count from responses like "Found 2 memos matching 'query'"
+        if let Some(count) = extract_search_count(&response_text) {
+            if count == 0 {
+                format!("{} No memos found matching '{}'", "🔍".blue(), query)
+            } else {
+                // Replace the start of the response with emoji version
+                response_text.replace(
+                    &format!("Found {count} memo"),
+                    &format!("{} Found {count} memo", "🔍".blue()),
+                )
+            }
+        } else {
+            // If we can't parse the count, just add the emoji
+            format!("{} {}", "🔍".blue(), response_text)
+        }
+    }
+
+    /// Format memo context response to match CLI expectations
+    pub fn format_context_memo_response(result: &CallToolResult) -> String {
+        if result.is_error.unwrap_or(false) {
+            return extract_text_content(result)
+                .unwrap_or_else(|| "An error occurred getting context".to_string())
+                .red()
+                .to_string();
+        }
+
+        let response_text =
+            extract_text_content(result).unwrap_or_else(|| "No memos available".to_string());
+
+        // Handle empty context case
+        if response_text.contains("No memos available") {
+            format!("{} No memos available for context", "ℹ️".blue())
+        } else {
+            response_text
+        }
+    }
+
+    /// Extract text content from CallToolResult
+    fn extract_text_content(result: &CallToolResult) -> Option<String> {
+        result
+            .content
+            .first()
+            .and_then(|content| match &content.raw {
+                RawContent::Text(text_content) => Some(text_content.text.clone()),
+                _ => None,
+            })
+    }
+
+    /// Extract memo ID from response text using regex
+    fn extract_memo_id(text: &str) -> Option<String> {
+        MEMO_ID_REGEX
+            .captures(text)
+            .and_then(|caps| caps.get(1))
+            .map(|m| m.as_str().to_string())
+    }
+
+    /// Extract search result count from response text
+    fn extract_search_count(text: &str) -> Option<usize> {
+        SEARCH_COUNT_REGEX
+            .captures(text)
+            .and_then(|caps| caps.get(1))
+            .and_then(|m| m.as_str().parse().ok())
+    }
+}
+
+/// Use the custom formatting functions
+fn format_create_memo_response(result: &CallToolResult, title: &str) -> String {
+    memo_response_formatting::format_create_memo_response(result, title)
+}
+
+fn format_search_memo_response(result: &CallToolResult, query: &str) -> String {
+    memo_response_formatting::format_search_memo_response(result, query)
+}
+
+fn format_context_memo_response(result: &CallToolResult) -> String {
+    memo_response_formatting::format_context_memo_response(result)
 }

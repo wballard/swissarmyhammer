@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["SwissArmyHammer Team"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/wballard/swissarmyhammer"
+repository = "https://github.com/swissarmyhammer/swissarmyhammer"
 
 [workspace.dependencies]
 # Core dependencies
@@ -114,8 +114,8 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
 # Fast dev profile for quick iterations
 [profile.dev-fast]
 inherits = "dev"
-opt-level = 0       # No optimization for fastest builds
-debug = 0           # No debug info for fastest builds
+opt-level = 0           # No optimization for fastest builds
+debug = 0               # No debug info for fastest builds
 incremental = true
 codegen-units = 256
 split-debuginfo = "off"

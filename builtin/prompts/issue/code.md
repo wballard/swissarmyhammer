@@ -5,15 +5,14 @@ description: Code up an issue
 
 ## Goal
 
-Use a tool to get the current issue.
-
-You job is to do the work.
+You job is to resolve an issue by coding a solution.
 
 {% render "principals" %}
 {% render "coding_standards" %}
 
 ## Process
 
+- Use a tool to get the current issue
 - Look at the branch name, if this matches the name of an issue file like `issue/<issue_name>`
   - Good news, we are on a issue feature branch and all is well
   - This `<issue_name>` is the issue file we are working.

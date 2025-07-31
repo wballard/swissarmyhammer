@@ -29,13 +29,21 @@ impl CliError {
         }
     }
 
+    /// Check if an error message contains ABORT ERROR and log appropriately
+    fn is_abort_error(error_msg: &str) -> bool {
+        if error_msg.contains("ABORT ERROR") {
+            tracing::error!("Detected abort error, triggering immediate shutdown");
+            true
+        } else {
+            false
+        }
+    }
+
     /// Create a CLI error from a SwissArmyHammer error, with proper exit code handling for abort errors
     #[allow(dead_code)]
     pub fn from_swissarmyhammer_error(error: swissarmyhammer::SwissArmyHammerError) -> Self {
-        // Check if this is an abort error by examining the error message
         let error_msg = error.to_string();
-        if error_msg.contains("ABORT ERROR") {
-            tracing::error!("Detected abort error, triggering immediate shutdown");
+        if Self::is_abort_error(&error_msg) {
             Self {
                 message: format!("Execution aborted: {error_msg}"),
                 exit_code: EXIT_ERROR,
@@ -94,13 +102,9 @@ pub fn handle_cli_result<T>(result: CliResult<T>) -> i32 {
 impl From<rmcp::Error> for CliError {
     fn from(error: rmcp::Error) -> Self {
         let error_msg = error.to_string();
-        
-        // Check for specific error types that might require different exit codes
         let exit_code = EXIT_ERROR;
 
-        // Check if this is an abort error by examining the error message
-        if error_msg.contains("ABORT ERROR") {
-            tracing::error!("Detected abort error in MCP operation, triggering immediate shutdown");
+        if Self::is_abort_error(&error_msg) {
             Self {
                 message: format!("MCP operation aborted: {error_msg}"),
                 exit_code: EXIT_ERROR,

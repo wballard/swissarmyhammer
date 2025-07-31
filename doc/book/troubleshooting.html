@@ -1,5 +1,5 @@
 <!DOCTYPE HTML>
-<html lang="en" class="navy sidebar-visible" dir="ltr">
+<html lang="en" class="light sidebar-visible" dir="ltr">
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
@@ -29,12 +29,13 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="theme.css">
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
             const path_to_root = "";
-            const default_light_theme = "navy";
+            const default_light_theme = "light";
             const default_dark_theme = "navy";
         </script>
         <!-- Start loading toc.js asap -->
@@ -76,7 +77,7 @@
             try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
             if (theme === null || theme === undefined) { theme = default_theme; }
             const html = document.documentElement;
-            html.classList.remove('navy')
+            html.classList.remove('light')
             html.classList.add(theme);
             html.classList.add("js");
         </script>
@@ -140,10 +141,10 @@
                         <a href="print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/wballard/swissarmyhammer" title="Git repository" aria-label="Git repository">
+                        <a href="https://github.com/swissarmyhammer/swissarmyhammer" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/wballard/swissarmyhammer/edit/main/doc/src/src/troubleshooting.md" title="Suggest an edit" aria-label="Suggest an edit">
+                        <a href="https://github.com/swissarmyhammer/swissarmyhammer/edit/main/doc/src/src/troubleshooting.md" title="Suggest an edit" aria-label="Suggest an edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -173,7 +174,7 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h1>
-<p>This guide helps you resolve common issues with SwissArmyHammer. For additional support, check the <a href="https://github.com/wballard/swissarmyhammer/issues">GitHub Issues</a>.</p>
+<p>This guide helps you resolve common issues with SwissArmyHammer. For additional support, check the <a href="https://github.com/swissarmyhammer/swissarmyhammer/issues">GitHub Issues</a>.</p>
 <h2 id="quick-diagnostics"><a class="header" href="#quick-diagnostics">Quick Diagnostics</a></h2>
 <p>Run the doctor command for automated diagnosis:</p>
 <pre><code class="language-bash">swissarmyhammer doctor --verbose
@@ -218,14 +219,14 @@ sudo chmod +x /usr/local/bin/swissarmyhammer
 <li>
 <p><strong>Manual installation</strong>:</p>
 <pre><code class="language-bash"># Download binary directly
-curl -L https://github.com/wballard/swissarmyhammer/releases/latest/download/swissarmyhammer-linux-x64 -o swissarmyhammer
+curl -L https://github.com/swissarmyhammer/swissarmyhammer/releases/latest/download/swissarmyhammer-linux-x64 -o swissarmyhammer
 chmod +x swissarmyhammer
 sudo mv swissarmyhammer /usr/local/bin/
 </code></pre>
 </li>
 <li>
 <p><strong>Build from source</strong>:</p>
-<pre><code class="language-bash">git clone https://github.com/wballard/swissarmyhammer.git
+<pre><code class="language-bash">git clone https://github.com/swissarmyhammer/swissarmyhammer.git
 cd swissarmyhammer
 cargo build --release
 sudo cp target/release/swissarmyhammer /usr/local/bin/
@@ -648,8 +649,8 @@ swissarmyhammer --debug serve | grep -E "(request|response)"
 </ul>
 <h3 id="community-support"><a class="header" href="#community-support">Community Support</a></h3>
 <ul>
-<li><a href="https://github.com/wballard/swissarmyhammer/issues">GitHub Issues</a></li>
-<li><a href="https://github.com/wballard/swissarmyhammer/discussions">Discussions</a></li>
+<li><a href="https://github.com/swissarmyhammer/swissarmyhammer/issues">GitHub Issues</a></li>
+<li><a href="https://github.com/swissarmyhammer/swissarmyhammer/discussions">Discussions</a></li>
 <li><a href="#">Discord/Slack Community</a> (if available)</li>
 </ul>
 <h3 id="reporting-issues"><a class="header" href="#reporting-issues">Reporting Issues</a></h3>
@@ -765,9 +766,6 @@ swissarmyhammer --debug serve &gt; server.log 2&gt;&amp;1 &amp;
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="contributing.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <i class="fa fa-angle-right"></i>
-                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -779,13 +777,26 @@ swissarmyhammer --debug serve &gt; server.log 2&gt;&amp;1 &amp;
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="contributing.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <i class="fa fa-angle-right"></i>
-                    </a>
             </nav>
 
         </div>
 
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
 
 
 

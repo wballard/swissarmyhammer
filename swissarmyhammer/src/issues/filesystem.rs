@@ -352,6 +352,26 @@ impl FileSystemIssueStorage {
         // Check if already in target state
         if issue.completed == to_completed {
             debug!("Issue {} already in target state", name);
+            
+            // Even if already in target state, check for and clean up duplicates
+            let source_dir = if to_completed {
+                &self.state.issues_dir  // Clean up pending directory if moving to completed
+            } else {
+                &self.state.completed_dir  // Clean up completed directory if moving to pending
+            };
+            
+            // Check if there's a duplicate file in the source directory
+            let filename = issue
+                .file_path
+                .file_name()
+                .ok_or_else(|| SwissArmyHammerError::Other("Invalid file path".to_string()))?;
+            let potential_duplicate = source_dir.join(filename);
+            
+            if potential_duplicate.exists() && potential_duplicate != issue.file_path {
+                debug!("Found duplicate file at {}, removing it", potential_duplicate.display());
+                std::fs::remove_file(&potential_duplicate).map_err(SwissArmyHammerError::Io)?;
+            }
+            
             return Ok(issue);
         }
 
@@ -1877,6 +1897,38 @@ mod tests {
         // Try to mark as complete again - should be no-op
         let completed_again = storage.mark_complete(&issue.name).await.unwrap();
 
+        assert_eq!(completed_issue.file_path, completed_again.file_path);
+        assert!(completed_again.completed);
+    }
+
+    #[tokio::test]
+    async fn test_mark_complete_cleans_up_duplicate_files() {
+        use std::fs;
+        
+        let temp_dir = TempDir::new().unwrap();
+        let issues_dir = temp_dir.path().to_path_buf();
+        let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();
+
+        // Create and complete an issue normally
+        let issue = storage
+            .create_issue("test_issue".to_string(), "Test content".to_string())
+            .await
+            .unwrap();
+
+        let completed_issue = storage.mark_complete(&issue.name).await.unwrap();
+        assert!(completed_issue.completed);
+
+        // Simulate a duplicate file appearing in the original location
+        // This could happen due to external interference or failed cleanup
+        let duplicate_path = issues_dir.join("test_issue.md");
+        fs::write(&duplicate_path, "Duplicate content").unwrap();
+        assert!(duplicate_path.exists());
+
+        // Try to mark as complete again - should clean up the duplicate
+        let completed_again = storage.mark_complete(&issue.name).await.unwrap();
+
+        // Verify the duplicate file was cleaned up
+        assert!(!duplicate_path.exists());
         assert_eq!(completed_issue.file_path, completed_again.file_path);
         assert!(completed_again.completed);
     }

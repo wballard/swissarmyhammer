@@ -144,10 +144,13 @@ fn get_content_input(content: Option<String>) -> Result<String, Box<dyn std::err
 
 /// Custom response formatters for memo CLI commands to match expected test format
 mod memo_response_formatting {
-    use chrono::{DateTime, Utc};
     use colored::*;
-    use rmcp::model::{CallToolResult, RawContent};
+    use once_cell::sync::Lazy;
     use regex::Regex;
+    use rmcp::model::{CallToolResult, RawContent};
+
+    static MEMO_ID_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"with ID: ([A-Z0-9]+)").unwrap());
+    static SEARCH_COUNT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"Found (\d+) memo").unwrap());
 
     /// Format memo create response to match CLI expectations
     pub fn format_create_memo_response(result: &CallToolResult, title: &str) -> String {
@@ -160,20 +163,21 @@ mod memo_response_formatting {
 
         // Extract memo ID from the MCP response if available
         let response_text = extract_text_content(result)
-            .unwrap_or_else(|| format!("Successfully created memo '{}'", title));
-        
+            .unwrap_or_else(|| format!("Successfully created memo '{title}'"));
+
         let memo_id = extract_memo_id(&response_text);
-        
+
         // Format in the expected CLI style
         let mut output = format!("{} Created memo: {}", "✅".green(), title.bold());
         if let Some(id) = memo_id {
             output.push_str(&format!("\n🆔 ID: {}", id.blue()));
-            
-            // Extract timestamp from ULID or use current time
-            let timestamp = extract_timestamp_from_ulid(&id)
-                .unwrap_or_else(|| chrono::Utc::now());
-            output.push_str(&format!("\n📅 Created: {}", 
-                timestamp.format("%Y-%m-%d %H:%M:%S UTC")));
+
+            // Use current time since ULID parsing is complex
+            let timestamp = chrono::Utc::now();
+            output.push_str(&format!(
+                "\n📅 Created: {}",
+                timestamp.format("%Y-%m-%d %H:%M:%S UTC")
+            ));
         }
         output
     }
@@ -187,8 +191,8 @@ mod memo_response_formatting {
                 .to_string();
         }
 
-        let response_text = extract_text_content(result)
-            .unwrap_or_else(|| "No results found".to_string());
+        let response_text =
+            extract_text_content(result).unwrap_or_else(|| "No results found".to_string());
 
         // Extract the count from responses like "Found 2 memos matching 'query'"
         if let Some(count) = extract_search_count(&response_text) {
@@ -196,8 +200,10 @@ mod memo_response_formatting {
                 format!("{} No memos found matching '{}'", "🔍".blue(), query)
             } else {
                 // Replace the start of the response with emoji version
-                response_text.replace(&format!("Found {} memo", count), 
-                                    &format!("{} Found {} memo", "🔍".blue(), count))
+                response_text.replace(
+                    &format!("Found {count} memo"),
+                    &format!("{} Found {count} memo", "🔍".blue()),
+                )
             }
         } else {
             // If we can't parse the count, just add the emoji
@@ -214,8 +220,8 @@ mod memo_response_formatting {
                 .to_string();
         }
 
-        let response_text = extract_text_content(result)
-            .unwrap_or_else(|| "No memos available".to_string());
+        let response_text =
+            extract_text_content(result).unwrap_or_else(|| "No memos available".to_string());
 
         // Handle empty context case
         if response_text.contains("No memos available") {
@@ -238,26 +244,18 @@ mod memo_response_formatting {
 
     /// Extract memo ID from response text using regex
     fn extract_memo_id(text: &str) -> Option<String> {
-        let re = Regex::new(r"with ID: ([A-Z0-9]+)").ok()?;
-        re.captures(text)
+        MEMO_ID_REGEX
+            .captures(text)
             .and_then(|caps| caps.get(1))
             .map(|m| m.as_str().to_string())
     }
 
     /// Extract search result count from response text
     fn extract_search_count(text: &str) -> Option<usize> {
-        let re = Regex::new(r"Found (\d+) memo").ok()?;
-        re.captures(text)
+        SEARCH_COUNT_REGEX
+            .captures(text)
             .and_then(|caps| caps.get(1))
             .and_then(|m| m.as_str().parse().ok())
-    }
-
-    /// Extract timestamp from ULID
-    fn extract_timestamp_from_ulid(_ulid: &str) -> Option<DateTime<Utc>> {
-        // ULIDs have 48-bit timestamp (first 10 characters in base32)
-        // For simplicity, we'll just use current time since ULID parsing is complex
-        // In production, you would use the `ulid` crate to properly parse this
-        None // This will fall back to current time
     }
 }
 

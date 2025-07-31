@@ -5146,6 +5146,7 @@ dependencies = [
  "is-terminal",
  "nix",
  "notify",
+ "once_cell",
  "predicates",
  "rand 0.8.5",
  "regex",

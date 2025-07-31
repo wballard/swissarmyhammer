@@ -1,6 +1,7 @@
 use super::filesystem::{Issue, IssueStorage};
 use super::metrics::{MetricsSnapshot, Operation, PerformanceMetrics};
 use crate::error::Result;
+use crate::mcp::types::IssueName;
 use async_trait::async_trait;
 use tokio::time::Instant;
 
@@ -166,6 +167,71 @@ impl IssueStorage for InstrumentedIssueStorage {
         // Record as a read operation
         self.metrics.record_operation(Operation::Read, duration);
 
+        result
+    }
+
+    // Type-safe implementations using IssueName
+    
+    async fn get_issue_by_name(&self, name: &IssueName) -> Result<Issue> {
+        let start = Instant::now();
+        let result = self.storage.get_issue_by_name(name).await;
+        let duration = start.elapsed();
+
+        self.metrics.record_operation(Operation::Read, duration);
+        result
+    }
+    
+    async fn create_issue_with_name(&self, name: IssueName, content: String) -> Result<Issue> {
+        let start = Instant::now();
+        let result = self.storage.create_issue_with_name(name, content).await;
+        let duration = start.elapsed();
+
+        self.metrics.record_operation(Operation::Create, duration);
+        result
+    }
+    
+    async fn update_issue_by_name(&self, name: &IssueName, content: String) -> Result<Issue> {
+        let start = Instant::now();
+        let result = self.storage.update_issue_by_name(name, content).await;
+        let duration = start.elapsed();
+
+        self.metrics.record_operation(Operation::Update, duration);
+        result
+    }
+    
+    async fn mark_complete_by_name(&self, name: &IssueName) -> Result<Issue> {
+        let start = Instant::now();
+        let result = self.storage.mark_complete_by_name(name).await;
+        let duration = start.elapsed();
+
+        self.metrics.record_operation(Operation::Update, duration);
+        result
+    }
+    
+    async fn get_issues_batch_by_name(&self, names: Vec<&IssueName>) -> Result<Vec<Issue>> {
+        let start = Instant::now();
+        let result = self.storage.get_issues_batch_by_name(names).await;
+        let duration = start.elapsed();
+
+        self.metrics.record_operation(Operation::Read, duration);
+        result
+    }
+    
+    async fn update_issues_batch_by_name(&self, updates: Vec<(&IssueName, String)>) -> Result<Vec<Issue>> {
+        let start = Instant::now();
+        let result = self.storage.update_issues_batch_by_name(updates).await;
+        let duration = start.elapsed();
+
+        self.metrics.record_operation(Operation::Update, duration);
+        result
+    }
+    
+    async fn mark_complete_batch_by_name(&self, names: Vec<&IssueName>) -> Result<Vec<Issue>> {
+        let start = Instant::now();
+        let result = self.storage.mark_complete_batch_by_name(names).await;
+        let duration = start.elapsed();
+
+        self.metrics.record_operation(Operation::Update, duration);
         result
     }
 }

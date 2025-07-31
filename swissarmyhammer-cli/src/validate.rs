@@ -3,7 +3,8 @@ use colored::*;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use swissarmyhammer::validation::{
-    Validatable, ValidationConfig, ValidationIssue, ValidationLevel, ValidationResult,
+    Validatable, ValidationConfig, ValidationIssue, ValidationLevel, ValidationManager,
+    ValidationResult,
 };
 use swissarmyhammer::workflow::{
     MemoryWorkflowStorage, MermaidParser, Workflow, WorkflowResolver, WorkflowStorageBackend,
@@ -32,15 +33,18 @@ struct JsonValidationIssue {
 
 pub struct Validator {
     quiet: bool,
-    #[allow(dead_code)] // TODO: Use config to control validation behavior
     config: ValidationConfig,
+    validation_manager: ValidationManager,
 }
 
 impl Validator {
     pub fn new(quiet: bool) -> Self {
+        let config = ValidationConfig::default();
+        let validation_manager = ValidationManager::new(config.clone());
         Self {
             quiet,
-            config: ValidationConfig::default(),
+            config,
+            validation_manager,
         }
     }
 
@@ -198,6 +202,25 @@ impl Validator {
         workflow_path: &Path,
         result: &mut ValidationResult,
     ) {
+        // Check workflow complexity using config
+        let complexity = workflow.states.len() + workflow.transitions.len();
+        if complexity > self.config.max_workflow_complexity {
+            result.add_issue(ValidationIssue {
+                level: ValidationLevel::Warning,
+                file_path: workflow_path.to_path_buf(),
+                content_title: Some(workflow.name.as_str().to_string()),
+                line: None,
+                column: None,
+                message: format!(
+                    "Workflow complexity ({complexity}) exceeds maximum ({})",
+                    self.config.max_workflow_complexity
+                ),
+                suggestion: Some(
+                    "Consider breaking down the workflow into smaller components".to_string(),
+                ),
+            });
+        }
+
         // Delegate to the workflow's self-validation
         let issues = workflow.validate(Some(workflow_path));
         for issue in issues {
@@ -270,6 +293,14 @@ impl Validator {
         result: &mut ValidationResult,
         content_title: Option<String>,
     ) {
+        // First validate content using the validation manager
+        let content_validation_result = self.validation_manager.validate_content(
+            &prompt.template,
+            file_path,
+            content_title.clone(),
+        );
+        result.merge(content_validation_result);
+
         // Try to render the template with partials support using the same path as test/serve
         let empty_args = std::collections::HashMap::new();
 

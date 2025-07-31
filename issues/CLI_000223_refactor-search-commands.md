@@ -350,3 +350,61 @@ Upon completion, this issue will:
 - Provide a template for future CLI command development
 
 This issue represents the final major refactoring in the CLI-MCP integration effort.
+## Proposed Solution
+
+Based on analysis of the current `search.rs` implementation and the MCP tools structure, here is my implementation plan:
+
+### Current State Analysis
+
+The current `search.rs` file (~592 lines) contains:
+1. **Prompt Search Logic** (lines 54-267): Advanced search for prompts with filtering, scoring, and formatting
+2. **Semantic Search Logic** (lines 272-444): Direct usage of `SemanticSearchEngine`, `FileIndexer`, and `SemanticSearcher`
+3. **Mixed Responsibilities**: Both prompt search and semantic file search in same module
+
+### MCP Tools Available
+
+From analysis of the MCP tools:
+- `search_index` tool returns: `SearchIndexResponse` with `indexed_files`, `skipped_files`, `total_chunks`, `execution_time_ms`
+- `search_query` tool returns: `SearchQueryResponse` with array of `SearchResult` objects containing `file_path`, `similarity_score`, `line_start/end`, `excerpt`, etc.
+
+### Implementation Strategy
+
+#### Phase 1: Refactor Semantic Search Commands Only
+The current `SearchCommands` enum has two variants:
+- `Index { patterns, force }` - maps to `search_index` MCP tool
+- `Query { query, limit, format }` - maps to `search_query` MCP tool
+
+**Keep the prompt search logic intact** since it doesn't have corresponding MCP tools and serves a different purpose.
+
+#### Phase 2: Create Response Formatting Module
+Create specialized formatting functions that:
+- Extract JSON data from MCP `CallToolResult`
+- Format for CLI display with colors and tables
+- Handle all output formats (table, JSON, YAML)
+- Preserve exact current CLI behavior and formatting
+
+#### Phase 3: Replace Direct Engine Usage
+Replace the `run_semantic_index` and `run_semantic_query` functions to:
+- Use `CliToolContext` and MCP tool execution
+- Maintain identical CLI output formatting
+- Preserve error handling and progress reporting
+
+### Detailed Implementation Plan
+
+1. **Extract JSON Response Helper**: Add `extract_json_data()` function to `response_formatting` module
+2. **Create Search Response Formatting**: New module with `format_index_response()` and `format_query_response()`
+3. **Refactor Semantic Commands**: Replace direct engine calls with MCP tool calls
+4. **Preserve CLI Features**: Keep output format selection, color coding, and terminal detection
+
+### Risk Mitigation
+
+- **Behavior Preservation**: Ensure identical CLI output by matching current formatting exactly
+- **Error Handling**: Map MCP errors to user-friendly CLI messages
+- **Performance**: Monitor that MCP layer doesn't introduce significant latency
+- **Testing**: Update existing tests to work with MCP tool execution
+
+This approach will:
+- Eliminate ~172 lines of direct search engine usage (lines 272-444)
+- Keep prompt search functionality unchanged (lines 54-267)
+- Add ~100 lines of MCP integration and response formatting
+- Result in significant code reduction and elimination of duplication

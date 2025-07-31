@@ -8,14 +8,14 @@ use tabled::{
 };
 
 use crate::cli::{OutputFormat, PromptSource, PromptSourceArg, SearchCommands};
+use crate::mcp_integration::{response_formatting, CliToolContext};
+use serde_json::json;
 use swissarmyhammer::{
     prelude::{AdvancedSearchEngine, AdvancedSearchOptions},
-    search::{FileIndexer, SearchQuery, SemanticConfig, SemanticSearcher, VectorStorage},
     PromptFilter, PromptLibrary, PromptResolver,
 };
 
-// UI constants
-const PROCESSING_PATTERN_MESSAGE: &str = "Processing pattern:";
+// UI constants (kept for potential future use)
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SearchResult {
@@ -286,8 +286,8 @@ pub async fn run_search(subcommand: SearchCommands) -> i32 {
         SearchCommands::Query {
             query,
             limit,
-            format: _format,
-        } => match run_semantic_query(&query, limit).await {
+            format,
+        } => match run_semantic_query_with_format(&query, limit, format).await {
             Ok(()) => EXIT_SUCCESS,
             Err(e) => {
                 eprintln!("{}", format!("❌ Search failed: {e}").red());
@@ -297,7 +297,7 @@ pub async fn run_search(subcommand: SearchCommands) -> i32 {
     }
 }
 
-/// Run semantic indexing for the given patterns (globs or individual files)
+/// Run semantic indexing for the given patterns using MCP tools
 async fn run_semantic_index(patterns: &[String], force: bool) -> Result<()> {
     println!("{}", "🔍 Starting semantic search indexing...".cyan());
 
@@ -320,127 +320,49 @@ async fn run_semantic_index(patterns: &[String], force: bool) -> Result<()> {
         println!("{}", "Force re-indexing: enabled".yellow());
     }
 
-    // Initialize semantic search components
-    let config = SemanticConfig::default();
-    let storage = VectorStorage::new(config.clone())?;
-    storage.initialize()?;
+    // Use MCP tool for indexing
+    let context = CliToolContext::new()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to create CLI context: {}", e))?;
+    let args =
+        context.create_arguments(vec![("patterns", json!(patterns)), ("force", json!(force))]);
 
-    let mut indexer = FileIndexer::new(storage).await?;
-
-    // Perform indexing for all patterns
-    let start_time = std::time::Instant::now();
-    let mut combined_report = None;
-
-    for pattern in patterns {
-        println!("{} {}", PROCESSING_PATTERN_MESSAGE, pattern.bright_cyan());
-        let report = indexer.index_glob(pattern, force).await?;
-
-        match combined_report {
-            None => combined_report = Some(report),
-            Some(mut existing_report) => {
-                // Merge reports (combine all statistics and errors)
-                existing_report.merge_report(report);
-                combined_report = Some(existing_report);
-            }
-        }
-    }
-
-    let report = combined_report.expect("Should have at least one report");
-    let duration = start_time.elapsed();
-
-    // Display results
-    println!("\n{}", "✅ Indexing completed!".green().bold());
-    println!("Duration: {:.2}s", duration.as_secs_f32());
-    println!("{}", report.summary().bright_cyan());
-
-    if !report.errors.is_empty() {
-        println!(
-            "\n{}",
-            format!("⚠️  {} errors occurred:", report.errors.len()).yellow()
-        );
-        for (path, error) in &report.errors {
-            println!(
-                "  {} {}",
-                "•".red(),
-                format!("{}: {}", path.display(), error).dimmed()
-            );
-        }
-    }
+    let result = context
+        .execute_tool("search_index", args)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to execute search_index: {}", e))?;
+    search_response_formatting::format_index_response(&result)
+        .map_err(|e| anyhow::anyhow!("Failed to format response: {}", e))?;
 
     Ok(())
 }
 
-/// Run semantic query search
-async fn run_semantic_query(query: &str, limit: usize) -> Result<()> {
-    println!("{}", "🔍 Starting semantic search query...".cyan());
-    println!("Searching for: {}", query.bright_yellow());
-    println!("Result limit: {}", limit.to_string().bright_yellow());
+/// Run semantic query search using MCP tools with format
+async fn run_semantic_query_with_format(
+    query: &str,
+    limit: usize,
+    format: OutputFormat,
+) -> Result<()> {
+    // Use MCP tool for querying
+    let context = CliToolContext::new()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to create CLI context: {}", e))?;
+    let args = context.create_arguments(vec![("query", json!(query)), ("limit", json!(limit))]);
 
-    // Initialize semantic search components
-    let config = SemanticConfig::default();
-    let storage = VectorStorage::new(config.clone())?;
-    storage.initialize()?;
-
-    let searcher = SemanticSearcher::new(storage, config).await?;
-
-    // Perform search
-    let search_query = SearchQuery {
-        text: query.to_string(),
-        limit,
-        similarity_threshold: 0.5, // Use lower threshold for more results
-        language_filter: None,
-    };
-
-    let start_time = std::time::Instant::now();
-    let results = searcher.search(&search_query).await?;
-    let duration = start_time.elapsed();
-
-    // Display results
-    if results.is_empty() {
-        println!("\n{}", "No matches found.".yellow());
-    } else {
-        println!(
-            "\n{}",
-            format!("✅ Found {} results!", results.len())
-                .green()
-                .bold()
-        );
-        println!("Search duration: {:.2}s", duration.as_secs_f32());
-        println!();
-
-        for (i, result) in results.iter().enumerate() {
-            let score_color = if result.similarity_score > 0.8 {
-                "green"
-            } else if result.similarity_score > 0.6 {
-                "yellow"
-            } else {
-                "white"
-            };
-
-            println!(
-                "{}",
-                format!(
-                    "{}. {}:{} (score: {:.3})",
-                    i + 1,
-                    result.chunk.file_path.display(),
-                    result.chunk.start_line,
-                    result.similarity_score
-                )
-                .color(score_color)
-            );
-
-            // Show excerpt with syntax highlighting context
-            let excerpt = result.excerpt.trim();
-            if !excerpt.is_empty() {
-                for line in excerpt.lines() {
-                    println!("   {}", line.dimmed());
-                }
-            }
-            println!();
-        }
-    }
+    let result = context
+        .execute_tool("search_query", args)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to execute search_query: {}", e))?;
+    search_response_formatting::format_query_results(&result, format)
+        .map_err(|e| anyhow::anyhow!("Failed to format response: {}", e))?;
 
     Ok(())
+}
+
+/// Run semantic query search using MCP tools (backward compatibility)
+#[allow(dead_code)]
+async fn run_semantic_query(query: &str, limit: usize) -> Result<()> {
+    run_semantic_query_with_format(query, limit, OutputFormat::Table).await
 }
 
 #[cfg(test)]
@@ -587,5 +509,163 @@ mod tests {
 
         let formatted_result2 = format!("{}:{}", chunk2.file_path.display(), chunk2.start_line);
         assert_eq!(formatted_result2, "tests/integration.rs:123");
+    }
+}
+
+/// Search-specific response formatting for MCP tool results
+mod search_response_formatting {
+    use super::*;
+    use rmcp::model::CallToolResult;
+
+    /// Format index response from MCP search_index tool
+    pub fn format_index_response(
+        result: &CallToolResult,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let json_data = response_formatting::extract_json_data(result)?;
+
+        let indexed_files = json_data
+            .get("indexed_files")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let skipped_files = json_data
+            .get("skipped_files")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let total_chunks = json_data
+            .get("total_chunks")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let execution_time = json_data
+            .get("execution_time_ms")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
+        // Match the exact formatting from the original implementation
+        println!("\n{}", "✅ Indexing completed!".green().bold());
+        println!("Duration: {:.2}s", (execution_time as f32) / 1000.0);
+
+        // Create summary matching original format
+        let mut summary_parts = Vec::new();
+        if indexed_files > 0 {
+            summary_parts.push(format!("{} files indexed", indexed_files));
+        }
+        if total_chunks > 0 {
+            summary_parts.push(format!("{} chunks generated", total_chunks));
+        }
+        if skipped_files > 0 {
+            summary_parts.push(format!("{} files skipped", skipped_files));
+        }
+
+        if !summary_parts.is_empty() {
+            println!("{}", summary_parts.join(", ").bright_cyan());
+        }
+
+        Ok(())
+    }
+
+    /// Format query results from MCP search_query tool
+    pub fn format_query_results(
+        result: &CallToolResult,
+        format: OutputFormat,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let json_data = response_formatting::extract_json_data(result)?;
+
+        match format {
+            OutputFormat::Json => {
+                println!("{}", serde_json::to_string_pretty(&json_data)?);
+            }
+            OutputFormat::Yaml => {
+                println!("{}", serde_yaml::to_string(&json_data)?);
+            }
+            OutputFormat::Table => {
+                format_query_results_table(&json_data)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Format query results as table matching original CLI behavior
+    fn format_query_results_table(
+        data: &serde_json::Value,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let empty_vec = vec![];
+        let results = data
+            .get("results")
+            .and_then(|v| v.as_array())
+            .unwrap_or(&empty_vec);
+        let query = data.get("query").and_then(|v| v.as_str()).unwrap_or("");
+        let execution_time = data
+            .get("execution_time_ms")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
+        // Match original formatting exactly
+        println!("{}", "🔍 Starting semantic search query...".cyan());
+        println!("Searching for: {}", query.bright_yellow());
+
+        if results.is_empty() {
+            println!("\n{}", "No matches found.".yellow());
+        } else {
+            println!(
+                "\n{}",
+                format!("✅ Found {} results!", results.len())
+                    .green()
+                    .bold()
+            );
+            println!("Search duration: {:.2}s", (execution_time as f32) / 1000.0);
+            println!();
+
+            for (i, result) in results.iter().enumerate() {
+                if let Some(result_obj) = result.as_object() {
+                    let file_path = result_obj
+                        .get("file_path")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown");
+                    let similarity = result_obj
+                        .get("similarity_score")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0);
+                    let line_start = result_obj
+                        .get("line_start")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+
+                    // Match original color coding logic
+                    let score_color = if similarity > 0.8 {
+                        "green"
+                    } else if similarity > 0.6 {
+                        "yellow"
+                    } else {
+                        "white"
+                    };
+
+                    println!(
+                        "{}",
+                        format!(
+                            "{}. {}:{} (score: {:.3})",
+                            i + 1,
+                            file_path,
+                            line_start,
+                            similarity
+                        )
+                        .color(score_color)
+                    );
+
+                    // Show excerpt matching original format
+                    if let Some(excerpt) = result_obj.get("excerpt").and_then(|v| v.as_str()) {
+                        let excerpt = excerpt.trim();
+                        if !excerpt.is_empty() {
+                            for line in excerpt.lines() {
+                                println!("   {}", line.dimmed());
+                            }
+                        }
+                    }
+                    println!();
+                }
+            }
+        }
+
+        Ok(())
     }
 }

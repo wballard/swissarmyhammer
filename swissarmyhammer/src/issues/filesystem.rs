@@ -352,26 +352,31 @@ impl FileSystemIssueStorage {
         // Check if already in target state
         if issue.completed == to_completed {
             debug!("Issue {} already in target state", name);
-            
+
             // Even if already in target state, check for and clean up duplicates
             let source_dir = if to_completed {
-                &self.state.issues_dir  // Clean up pending directory if moving to completed
+                &self.state.issues_dir // Clean up pending directory if moving to completed
             } else {
-                &self.state.completed_dir  // Clean up completed directory if moving to pending
+                &self.state.completed_dir // Clean up completed directory if moving to pending
             };
-            
+
             // Check if there's a duplicate file in the source directory
-            let filename = issue
-                .file_path
-                .file_name()
-                .ok_or_else(|| SwissArmyHammerError::Other("Invalid file path".to_string()))?;
+            let filename = issue.file_path.file_name().ok_or_else(|| {
+                SwissArmyHammerError::Other(format!(
+                    "Invalid file path: cannot extract filename from {}",
+                    issue.file_path.display()
+                ))
+            })?;
             let potential_duplicate = source_dir.join(filename);
-            
+
             if potential_duplicate.exists() && potential_duplicate != issue.file_path {
-                debug!("Found duplicate file at {}, removing it", potential_duplicate.display());
+                debug!(
+                    "Found duplicate file at {}, removing it",
+                    potential_duplicate.display()
+                );
                 std::fs::remove_file(&potential_duplicate).map_err(SwissArmyHammerError::Io)?;
             }
-            
+
             return Ok(issue);
         }
 
@@ -1904,7 +1909,7 @@ mod tests {
     #[tokio::test]
     async fn test_mark_complete_cleans_up_duplicate_files() {
         use std::fs;
-        
+
         let temp_dir = TempDir::new().unwrap();
         let issues_dir = temp_dir.path().to_path_buf();
         let storage = FileSystemIssueStorage::new(issues_dir.clone()).unwrap();

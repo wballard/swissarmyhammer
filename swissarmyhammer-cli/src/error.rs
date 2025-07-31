@@ -89,3 +89,30 @@ pub fn handle_cli_result<T>(result: CliResult<T>) -> i32 {
         }
     }
 }
+
+/// Convert MCP errors to CLI errors with appropriate exit codes
+impl From<rmcp::Error> for CliError {
+    fn from(error: rmcp::Error) -> Self {
+        let error_msg = error.to_string();
+        
+        // Check for specific error types that might require different exit codes
+        let exit_code = EXIT_ERROR;
+
+        // Check if this is an abort error by examining the error message
+        if error_msg.contains("ABORT ERROR") {
+            tracing::error!("Detected abort error in MCP operation, triggering immediate shutdown");
+            Self {
+                message: format!("MCP operation aborted: {error_msg}"),
+                exit_code: EXIT_ERROR,
+                source: Some(Box::new(error)),
+            }
+        } else {
+            // Regular MCP error handling
+            Self {
+                message: format!("MCP operation failed: {error_msg}"),
+                exit_code,
+                source: Some(Box::new(error)),
+            }
+        }
+    }
+}

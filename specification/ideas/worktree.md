@@ -158,20 +158,13 @@ impl GitOperations {
    - Update response messages
 
 3. **CLI Integration** (`swissarmyhammer-cli/src/issue.rs`)
-   - Update CLI commands to use worktree operations
+   - CLI needs to 'just work' as it is calling the MCP tools
    - Handle worktree path display
 
 4. **Tests**
    - Update integration tests for worktree operations
    - Add worktree-specific test cases
 
-### Implementation Phase
-
-1. **Phase 1**: Add worktree methods to `GitOperations`
-2. **Phase 2**: Update MCP tools to use worktree operations
-3. **Phase 3**: Update CLI integration
-4. **Phase 4**: Add comprehensive tests
-5. **Phase 5**: Update documentation
 
 ### Configuration
 

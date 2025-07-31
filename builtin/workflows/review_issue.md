@@ -5,13 +5,6 @@ tags:
   - auto
 ---
 
-## Usage
-
-```bash
-swissarmyhammer flow run review_branch
-
-```
-
 ## States
 
 ```mermaid

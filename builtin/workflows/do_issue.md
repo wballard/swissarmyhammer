@@ -5,12 +5,6 @@ tags:
   - auto
 ---
 
-## Usage
-
-```bash
-swissarmyhammer flow run do_issue
-```
-
 ## States
 
 ```mermaid

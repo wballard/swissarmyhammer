@@ -1,5 +1,5 @@
 ---
-title: do_issue
+title: issue_code
 description: Code up an issue
 ---
 

@@ -40,13 +40,10 @@ async fn create_memo(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = get_content_input(content)?;
 
-    let args = context.create_arguments(vec![
-        ("title", json!(title)),
-        ("content", json!(content)),
-    ]);
+    let args = context.create_arguments(vec![("title", json!(title)), ("content", json!(content))]);
 
     let result = context.execute_tool("memo_create", args).await?;
-    
+
     println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
@@ -54,18 +51,15 @@ async fn create_memo(
 async fn list_memos(context: &CliToolContext) -> Result<(), Box<dyn std::error::Error>> {
     let args = context.create_arguments(vec![]);
     let result = context.execute_tool("memo_list", args).await?;
-    
+
     println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
 
-async fn get_memo(
-    context: &CliToolContext,
-    id: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn get_memo(context: &CliToolContext, id: &str) -> Result<(), Box<dyn std::error::Error>> {
     let args = context.create_arguments(vec![("id", json!(id))]);
     let result = context.execute_tool("memo_get", args).await?;
-    
+
     println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
@@ -77,24 +71,18 @@ async fn update_memo(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = get_content_input(content)?;
 
-    let args = context.create_arguments(vec![
-        ("id", json!(id)),
-        ("content", json!(content)),
-    ]);
+    let args = context.create_arguments(vec![("id", json!(id)), ("content", json!(content))]);
 
     let result = context.execute_tool("memo_update", args).await?;
-    
+
     println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
 
-async fn delete_memo(
-    context: &CliToolContext,
-    id: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn delete_memo(context: &CliToolContext, id: &str) -> Result<(), Box<dyn std::error::Error>> {
     let args = context.create_arguments(vec![("id", json!(id))]);
     let result = context.execute_tool("memo_delete", args).await?;
-    
+
     println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
@@ -105,18 +93,15 @@ async fn search_memos(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let args = context.create_arguments(vec![("query", json!(query))]);
     let result = context.execute_tool("memo_search", args).await?;
-    
+
     println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }
 
-
-
-
 async fn get_context(context: &CliToolContext) -> Result<(), Box<dyn std::error::Error>> {
     let args = context.create_arguments(vec![]);
     let result = context.execute_tool("memo_get_all_context", args).await?;
-    
+
     println!("{}", response_formatting::format_success_response(&result));
     Ok(())
 }

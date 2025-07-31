@@ -157,7 +157,7 @@ pub mod response_formatting {
     }
 
     /// Extract text content from CallToolResult
-    fn extract_text_content(result: &CallToolResult) -> Option<String> {
+    pub fn extract_text_content(result: &CallToolResult) -> Option<String> {
         result
             .content
             .first()

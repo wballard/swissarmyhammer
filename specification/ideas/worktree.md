@@ -42,7 +42,7 @@ project-root/
    - Switch to main branch in main repo
    - Merge branch `issue/<issue_name>` to main
    - Remove worktree directory
-   - Delete branch (if requested)
+   - Delete branch
 
 ### Implementation Changes
 

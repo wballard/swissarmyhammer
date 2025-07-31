@@ -563,10 +563,11 @@ impl MermaidParser {
                     .get(state_id)
                     .map(|state| {
                         // Allow states that have parallel support or meaningful descriptions/actions
-                        state.allows_parallel || 
-                        (!state.description.is_empty() && state.description != state_id.as_str()) ||
-                        state.state_type == crate::workflow::StateType::Fork ||
-                        state.state_type == crate::workflow::StateType::Join
+                        state.allows_parallel
+                            || (!state.description.is_empty()
+                                && state.description != state_id.as_str())
+                            || state.state_type == crate::workflow::StateType::Fork
+                            || state.state_type == crate::workflow::StateType::Join
                     })
                     .unwrap_or(false)
             });
@@ -619,7 +620,6 @@ impl MermaidParser {
 
         reachable
     }
-
 
     /// Detect states that should be choice states based on their transition patterns
     /// and update their state_type accordingly.

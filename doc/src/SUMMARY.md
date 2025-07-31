@@ -24,15 +24,6 @@
   - [completion](./cli-completion.md)
   - [memoranda](./cli-memoranda.md)
 
-# Library Usage
-
-- [Rust Library Guide](./library-usage.md)
-- [API Guide](./api-guide.md)
-- [Library API Reference](./library-api.md)
-- [Integration Examples](./library-examples.md)
-- [🔗 Rustdoc API Documentation](./api/swissarmyhammer/index.html)
-- [📚 docs.rs API Reference](https://docs.rs/swissarmyhammer)
-
 # Advanced Usage
 
 - [Advanced Prompt Techniques](./advanced-prompts.md)
@@ -44,27 +35,11 @@
 - [Search Architecture](./search-architecture.md)
 - [Index Management](./index-management.md)
 - [Testing and Debugging](./testing-guide.md)
-- [Sharing and Collaboration](./sharing-guide.md)
-- [MCP Protocol](./mcp-protocol.md)
 - [Configuration](./configuration.md)
-- [File Watching](./file-watching.md)
 - [Prompt Overrides](./prompt-overrides.md)
 
 # Reference
 
 - [Built-in Prompts](./builtin-prompts.md)
-- [Custom Filters Reference](./filters-reference.md)
 - [Examples](./examples.md)
 - [Troubleshooting](./troubleshooting.md)
-
-# Development
-
-- [Contributing](./contributing.md)
-- [Development Setup](./development.md)
-- [Testing](./testing.md)
-- [Release Process](./release-process.md)
-
-# Appendix
-
-- [Changelog](./changelog.md)
-- [License](./license.md)

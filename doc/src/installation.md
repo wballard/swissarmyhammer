@@ -41,7 +41,7 @@ cargo build --release
 cargo install --path swissarmyhammer-cli
 
 # Or run directly without installing
-cargo run --bin swissarmyhammer -- --help
+cargo run -- --help
 ```
 
 ## Verification
@@ -105,19 +105,6 @@ swissarmyhammer completion fish > ~/.config/fish/completions/swissarmyhammer.fis
 mkdir -p ~/.config/fish/completions
 swissarmyhammer completion fish > ~/.config/fish/completions/swissarmyhammer.fish
 ```
-
-### PowerShell
-
-```powershell
-# Add to PowerShell profile
-swissarmyhammer completion powershell >> $PROFILE
-
-# Or create profile directory if it doesn't exist
-New-Item -ItemType Directory -Path (Split-Path $PROFILE) -Force
-swissarmyhammer completion powershell >> $PROFILE
-```
-
-Remember to reload your shell or start a new terminal session for completions to take effect.
 
 ## Next Steps
 

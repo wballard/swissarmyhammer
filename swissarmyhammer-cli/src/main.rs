@@ -8,6 +8,7 @@ mod flow;
 mod issue;
 mod list;
 mod logging;
+mod mcp_integration;
 mod memo;
 // prompt_loader module removed - using SDK's PromptResolver directly
 mod prompt;

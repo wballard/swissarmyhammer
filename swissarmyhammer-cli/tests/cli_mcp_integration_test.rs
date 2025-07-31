@@ -300,7 +300,7 @@ fn test_response_formatting_utilities() {
 #[test]
 fn test_error_conversion() {
     use rmcp::Error as McpError;
-    use swissarmyhammer_cli::mcp_integration::CliError;
+    use swissarmyhammer_cli::error::CliError;
 
     // Test basic MCP error conversion
     let mcp_error = McpError::internal_error("test error".to_string(), None);

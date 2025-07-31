@@ -179,3 +179,38 @@ Handle commands that combine multiple operations:
 ## Follow-up Issues
 
 Success here enables similar refactoring of `memo.rs` and `search.rs` modules.
+
+## Proposed Solution
+
+After analyzing the current `issue.rs` implementation (474 lines) and the `CliToolContext` integration layer, I will implement the refactoring in phases:
+
+### Implementation Strategy
+
+**Phase 1: Simple 1:1 Command Mappings**
+- `complete_issue()` → `issue_mark_complete` MCP tool
+- `work_issue()` → `issue_work` MCP tool  
+- `show_current_issue()` → `issue_current` MCP tool
+- `show_next_issue()` → `issue_next` MCP tool
+
+**Phase 2: Complex Commands**
+- `create_issue()` → `issue_create` MCP tool + CLI formatting
+- `update_issue()` → `issue_update` MCP tool + CLI formatting
+- `merge_issue()` → `issue_merge` MCP tool + CLI formatting
+
+**Phase 3: Composite Commands**
+- `list_issues()` → Multiple MCP tools + existing CLI formatting logic
+- `show_issue()` → List + filter + existing CLI formatting
+- `show_status()` → `issue_all_complete` MCP tool + CLI formatting
+
+### Key Implementation Decisions
+
+1. **Keep CLI-Specific Functions**: Preserve `get_content_from_args()`, `format_issue_status()`, and printing functions
+2. **Use CliToolContext**: Replace `FileSystemIssueStorage` with `CliToolContext` and MCP tool calls
+3. **Maintain Identical Output**: Ensure all CLI behavior and formatting remains exactly the same
+4. **Error Handling**: Map MCP errors to user-friendly CLI messages using `response_formatting` utilities
+
+### Expected Outcome
+- Reduce code from ~474 lines to <200 lines
+- Eliminate duplicate business logic
+- Maintain identical CLI user experience
+- Enable easier maintenance through single source of truth

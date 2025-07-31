@@ -127,11 +127,13 @@ impl CliToolContext {
     }
 
     /// Get the list of available tools
+    #[allow(dead_code)]
     pub fn list_tools(&self) -> Vec<String> {
         self.tool_registry.list_tool_names()
     }
 
     /// Check if a tool exists
+    #[allow(dead_code)]
     pub fn has_tool(&self, tool_name: &str) -> bool {
         self.tool_registry.get_tool(tool_name).is_some()
     }
@@ -175,6 +177,7 @@ pub mod response_formatting {
     }
 
     /// Format structured data as CLI table
+    #[allow(dead_code)]
     pub fn format_as_table(data: &Value) -> String {
         match data {
             Value::Array(items) => {
@@ -202,12 +205,13 @@ pub mod response_formatting {
     }
 
     /// Format an array of JSON objects as a CLI table
-    /// 
+    ///
     /// This function creates a simple table representation by:
     /// 1. Using keys from the first object as column headers
     /// 2. Creating a separator line with dashes
     /// 3. Formatting each object's values as table rows
     /// 4. Handling missing values with empty strings
+    #[allow(dead_code)]
     fn format_object_array(items: &[Value]) -> String {
         if items.is_empty() {
             return "No items found".to_string();
@@ -260,6 +264,7 @@ pub mod response_formatting {
         }
     }
 
+    #[allow(dead_code)]
     fn format_single_object(obj: &serde_json::Map<String, Value>) -> String {
         obj.iter()
             .map(|(key, value)| format!("{}: {}", key.bold(), format_value_for_table(value)))
@@ -268,9 +273,10 @@ pub mod response_formatting {
     }
 
     /// Convert a JSON value to a table-friendly string representation
-    /// 
+    ///
     /// Simple values (string, number, bool) are displayed as-is,
     /// while complex values (arrays, objects) show their size/count
+    #[allow(dead_code)]
     fn format_value_for_table(value: &Value) -> String {
         match value {
             Value::String(s) => s.clone(),
@@ -285,6 +291,7 @@ pub mod response_formatting {
     }
 
     /// Format CLI-friendly output with optional colors
+    #[allow(dead_code)]
     pub fn format_cli_output(message: &str, success: bool, use_colors: bool) -> String {
         if use_colors {
             if success {
@@ -298,6 +305,7 @@ pub mod response_formatting {
     }
 
     /// Create a formatted status message
+    #[allow(dead_code)]
     pub fn create_status_message(operation: &str, success: bool, details: Option<&str>) -> String {
         let status_icon = if success { "✅" } else { "❌" };
         let status_text = if success { "SUCCESS" } else { "ERROR" };
@@ -315,6 +323,7 @@ pub mod response_formatting {
 /// Helper trait for CLI commands to easily call MCP tools
 pub trait McpToolRunner {
     /// Execute an MCP tool and return a CLI-formatted result
+    #[allow(dead_code)]
     fn run_mcp_tool(
         &self,
         context: &CliToolContext,
@@ -430,19 +439,22 @@ mod tests {
     #[tokio::test]
     async fn test_rate_limiter_integration() {
         let context = CliToolContext::new().await.unwrap();
-        
+
         // Test that rate limiter is properly created and functional
         // We can verify this by checking that the CliToolContext was created successfully
         // which means all components including the rate limiter were initialized
-        assert!(!context.list_tools().is_empty(), "Tools should be available");
-        
+        assert!(
+            !context.list_tools().is_empty(),
+            "Tools should be available"
+        );
+
         // Test that the rate limiter allows normal operations
         // by checking that we can execute a tool (this will use the rate limiter internally)
         let args = context.create_arguments(vec![("content", json!("Test memo"))]);
-        
+
         // This should succeed if rate limiter is working properly
         let result = context.execute_tool("memo_create", args).await;
-        
+
         // We expect this to either succeed or fail with a normal error (not a rate limit error)
         // Rate limit errors would be specific MCP errors about rate limiting
         match result {
@@ -452,41 +464,43 @@ mod tests {
             Err(e) => {
                 // Ensure it's not a rate limiting error
                 let error_str = e.to_string();
-                assert!(!error_str.contains("rate limit"), 
-                    "Should not fail due to rate limiting in normal usage: {}", error_str);
+                assert!(
+                    !error_str.contains("rate limit"),
+                    "Should not fail due to rate limiting in normal usage: {}",
+                    error_str
+                );
             }
         }
     }
 
-    #[test] 
+    #[test]
     fn test_rate_limiter_creation() {
         // Test that rate limiter can be created independently
         let rate_limiter1 = CliToolContext::create_rate_limiter();
         let rate_limiter2 = CliToolContext::create_rate_limiter();
-        
+
         // Both rate limiters should be created successfully
         // This tests that the rate limiter creation is working properly
         // without the complexity of full context creation
-        
+
         // We can't easily test the internals, but we can verify they exist
         // and that the creation doesn't panic or fail
-        
+
         // Use Arc::ptr_eq to check they are different instances
-        assert!(!Arc::ptr_eq(&rate_limiter1, &rate_limiter2), 
-                "Rate limiters should be different instances");
+        assert!(
+            !Arc::ptr_eq(&rate_limiter1, &rate_limiter2),
+            "Rate limiters should be different instances"
+        );
     }
 
     // Helper function for tests
     fn create_mock_tool_context() -> ToolContext {
         use std::path::PathBuf;
 
-        let issue_storage: IssueStorageArc =
-            Arc::new(RwLock::new(Box::new(
-                swissarmyhammer::issues::FileSystemIssueStorage::new(PathBuf::from(
-                    "./test_issues",
-                ))
+        let issue_storage: IssueStorageArc = Arc::new(RwLock::new(Box::new(
+            swissarmyhammer::issues::FileSystemIssueStorage::new(PathBuf::from("./test_issues"))
                 .unwrap(),
-            )));
+        )));
 
         let git_ops: Arc<Mutex<Option<swissarmyhammer::git::GitOperations>>> =
             Arc::new(Mutex::new(None));

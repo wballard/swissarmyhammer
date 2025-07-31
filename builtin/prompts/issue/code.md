@@ -5,18 +5,12 @@ description: Code up an issue
 
 ## Goal
 
-The issue file markdown describes work to do with additional context.
+Use a tool to get the current issue.
 
 You job is to do the work.
 
 {% render "principals" %}
 {% render "coding_standards" %}
-
-## Guidelines
-
-- Issues will be markdown files in the `./issues/` directory
-- Use Test Driven Development to work the issue and make the tests pass
-- Work on one issue at a time
 
 ## Process
 

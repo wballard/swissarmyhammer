@@ -25,7 +25,7 @@ stateDiagram-v2
 ## Actions
 
 - start: log "Coding an issue"
-- issue: execute prompt "code/issue"
+- issue: execute prompt "issue/code"
 - test: run workflow "tdd"
 - commit: execute prompt "commit"
 

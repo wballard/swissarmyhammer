@@ -5,6 +5,7 @@ use crate::mcp::types::IssueName;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use tokio::sync::Mutex;
 use tracing::debug;
@@ -338,6 +339,31 @@ impl FileSystemIssueStorage {
         Ok(Issue { content, ..issue })
     }
 
+    /// Cleanup duplicate files that may exist in the source directory
+    fn cleanup_duplicate_if_exists(&self, issue: &Issue, source_dir: &Path) -> Result<()> {
+        let filename = issue.file_path.file_name().ok_or_else(|| {
+            SwissArmyHammerError::Other(format!(
+                "Invalid file path: cannot extract filename from {}",
+                issue.file_path.display()
+            ))
+        })?;
+        let potential_duplicate = source_dir.join(filename);
+
+        if potential_duplicate.exists() && potential_duplicate != issue.file_path {
+            debug!(
+                "Found duplicate file at {}, removing it",
+                potential_duplicate.display()
+            );
+            if let Err(e) = std::fs::remove_file(&potential_duplicate) {
+                if e.kind() != io::ErrorKind::NotFound {
+                    return Err(SwissArmyHammerError::Io(e));
+                }
+                // File was already deleted by another process - this is fine
+            }
+        }
+        Ok(())
+    }
+
     /// Move issue between directories by name
     async fn move_issue_by_name(&self, name: &str, to_completed: bool) -> Result<Issue> {
         debug!(
@@ -371,6 +397,18 @@ impl FileSystemIssueStorage {
 
         // Move file atomically
         std::fs::rename(&issue.file_path, &target_path).map_err(SwissArmyHammerError::Io)?;
+
+        // Clean up any duplicate files in the source directory
+        let source_dir = if to_completed {
+            &self.state.issues_dir
+        } else {
+            &self.state.completed_dir
+        };
+        let temp_issue = Issue {
+            file_path: target_path.clone(),
+            ..issue.clone()
+        };
+        self.cleanup_duplicate_if_exists(&temp_issue, source_dir)?;
 
         // Update issue struct
         issue.file_path = target_path.clone();

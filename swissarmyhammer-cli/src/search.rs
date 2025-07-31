@@ -330,7 +330,7 @@ async fn run_semantic_index(patterns: &[String], force: bool) -> Result<()> {
     let result = context
         .execute_tool("search_index", args)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to execute search_index: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to execute search_index MCP tool: {}. Ensure the swissarmyhammer MCP server is running and accessible.", e))?;
     search_response_formatting::format_index_response(&result)
         .map_err(|e| anyhow::anyhow!("Failed to format response: {}", e))?;
 
@@ -352,7 +352,7 @@ async fn run_semantic_query_with_format(
     let result = context
         .execute_tool("search_query", args)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to execute search_query: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to execute search_query MCP tool: {}. Ensure the search index exists (run 'sh search index' first) and the swissarmyhammer MCP server is running.", e))?;
     search_response_formatting::format_query_results(&result, format)
         .map_err(|e| anyhow::anyhow!("Failed to format response: {}", e))?;
 

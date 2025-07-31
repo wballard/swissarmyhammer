@@ -547,13 +547,13 @@ mod search_response_formatting {
         // Create summary matching original format
         let mut summary_parts = Vec::new();
         if indexed_files > 0 {
-            summary_parts.push(format!("{} files indexed", indexed_files));
+            summary_parts.push(format!("{indexed_files} files indexed"));
         }
         if total_chunks > 0 {
-            summary_parts.push(format!("{} chunks generated", total_chunks));
+            summary_parts.push(format!("{total_chunks} chunks generated"));
         }
         if skipped_files > 0 {
-            summary_parts.push(format!("{} files skipped", skipped_files));
+            summary_parts.push(format!("{skipped_files} files skipped"));
         }
 
         if !summary_parts.is_empty() {

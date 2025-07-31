@@ -37,6 +37,12 @@ pub mod checks;
 pub mod types;
 pub mod utils;
 
+/// System check category keywords
+const SYSTEM_CHECK_KEYWORDS: &[&str] = &["PATH", "permissions", "Binary", "Installation"];
+const CONFIG_CHECK_KEYWORDS: &[&str] = &["Claude", "config"];
+const PROMPT_CHECK_KEYWORDS: &[&str] = &["prompt", "YAML"];
+const WORKFLOW_CHECK_KEYWORDS: &[&str] = &["Workflow", "workflow"];
+
 /// Main diagnostic tool for SwissArmyHammer system health checks
 ///
 /// The Doctor struct accumulates diagnostic results and provides a summary
@@ -144,23 +150,43 @@ impl Doctor {
             system_checks: self
                 .checks
                 .iter()
-                .filter(|c| c.name.contains("PATH") || c.name.contains("permissions") || c.name.contains("Binary") || c.name.contains("Installation"))
+                .filter(|c| {
+                    SYSTEM_CHECK_KEYWORDS
+                        .iter()
+                        .any(|&keyword| c.name.contains(keyword))
+                })
                 .collect(),
             config_checks: self
                 .checks
                 .iter()
-                .filter(|c| c.name.contains("Claude") || c.name.contains("config"))
+                .filter(|c| {
+                    CONFIG_CHECK_KEYWORDS
+                        .iter()
+                        .any(|&keyword| c.name.contains(keyword))
+                })
                 .collect(),
             prompt_checks: self
                 .checks
                 .iter()
-                .filter(|c| c.name.contains("prompt") || c.name.contains("YAML"))
-                .filter(|c| !c.name.contains("Workflow"))
+                .filter(|c| {
+                    PROMPT_CHECK_KEYWORDS
+                        .iter()
+                        .any(|&keyword| c.name.contains(keyword))
+                })
+                .filter(|c| {
+                    !WORKFLOW_CHECK_KEYWORDS
+                        .iter()
+                        .any(|&keyword| c.name.contains(keyword))
+                })
                 .collect(),
             workflow_checks: self
                 .checks
                 .iter()
-                .filter(|c| c.name.contains("Workflow") || c.name.contains("workflow"))
+                .filter(|c| {
+                    WORKFLOW_CHECK_KEYWORDS
+                        .iter()
+                        .any(|&keyword| c.name.contains(keyword))
+                })
                 .collect(),
         }
     }
@@ -395,7 +421,7 @@ mod tests {
     #[test]
     fn test_warning_checks_are_categorized() {
         let mut doctor = Doctor::new();
-        
+
         // Add a warning check that should be categorized
         doctor.checks.push(Check {
             name: "Binary Name".to_string(),
@@ -405,22 +431,28 @@ mod tests {
         });
 
         let check_groups = doctor.group_checks_by_category();
-        
+
         // Verify that warning checks are included in appropriate categories
-        let all_categorized_checks: Vec<_> = check_groups.system_checks.iter()
+        let all_categorized_checks: Vec<_> = check_groups
+            .system_checks
+            .iter()
             .chain(check_groups.config_checks.iter())
             .chain(check_groups.prompt_checks.iter())
             .chain(check_groups.workflow_checks.iter())
             .collect();
 
         // All warning checks should be categorized
-        let warning_checks: Vec<_> = doctor.checks.iter()
+        let warning_checks: Vec<_> = doctor
+            .checks
+            .iter()
             .filter(|c| c.status == CheckStatus::Warning)
             .collect();
 
         for warning_check in &warning_checks {
             assert!(
-                all_categorized_checks.iter().any(|&&c| std::ptr::eq(c, *warning_check)),
+                all_categorized_checks
+                    .iter()
+                    .any(|&&c| std::ptr::eq(c, *warning_check)),
                 "Warning check '{}' should be categorized but was not found in any category",
                 warning_check.name
             );

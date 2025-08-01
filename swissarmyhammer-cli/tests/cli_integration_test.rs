@@ -39,9 +39,7 @@ fn run_command_check_stdout_contains(cmd: &mut Command, expected_content: &[&str
     for content in expected_content {
         assert!(
             stdout_content.contains(content),
-            "Output should contain '{}': {}",
-            content,
-            stdout_content
+            "Output should contain '{content}': {stdout_content}",
         );
     }
     Ok(())

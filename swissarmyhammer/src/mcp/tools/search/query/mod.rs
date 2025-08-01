@@ -39,7 +39,7 @@ impl SearchQueryTool {
         );
 
         let persistent_path =
-            std::env::temp_dir().join(format!("swissarmyhammer_test_{}", unique_id));
+            std::env::temp_dir().join(format!("swissarmyhammer_test_{unique_id}"));
         std::fs::create_dir_all(&persistent_path).expect("Failed to create persistent test dir");
         let db_path = persistent_path.join("semantic.db");
 

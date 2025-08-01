@@ -277,6 +277,15 @@ impl TestRunner {
             println!("{}", "─".repeat(50));
         }
 
+        // Check for ABORT ERROR pattern in the rendered output
+        if rendered.contains("ABORT ERROR") {
+            tracing::error!("Detected ABORT ERROR in prompt output, triggering immediate shutdown");
+            return Err(anyhow!(
+                "ABORT ERROR: Found ABORT ERROR in output: {}",
+                rendered.trim()
+            ));
+        }
+
         // Copy to clipboard if requested
         if copy {
             match arboard::Clipboard::new() {

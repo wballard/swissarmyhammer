@@ -80,3 +80,6 @@ mod simple_state_pollution_test;
 
 #[cfg(test)]
 mod prompt_action_tests;
+
+#[cfg(test)]
+mod shell_action_tests;

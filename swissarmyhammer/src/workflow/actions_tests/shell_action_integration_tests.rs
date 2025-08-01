@@ -182,7 +182,7 @@ async fn test_shell_action_environment_variable_integration() {
 
     // On some platforms, environment variables may not expand or may expand differently
     // The key test is that the command executed successfully with custom environment
-    println!("Environment test output: {}", output);
+    println!("Environment test output: {output}");
 }
 
 #[tokio::test]
@@ -251,8 +251,8 @@ async fn test_shell_action_performance_with_sequential_execution() {
 
     // Execute multiple shell actions sequentially
     for i in 1..=5 {
-        let cmd = ShellAction::new(format!("echo 'test{}'", i))
-            .with_result_variable(format!("result{}", i));
+        let cmd =
+            ShellAction::new(format!("echo 'test{i}'")).with_result_variable(format!("result{i}"));
         let _result = cmd.execute(&mut context).await.unwrap();
     }
 
@@ -264,10 +264,10 @@ async fn test_shell_action_performance_with_sequential_execution() {
 
     // Verify all results are present
     for i in 1..=5 {
-        let result_key = format!("result{}", i);
+        let result_key = format!("result{i}");
         assert!(context.contains_key(&result_key));
         let result = context.get(&result_key).unwrap().as_str().unwrap();
-        assert!(result.contains(&format!("test{}", i)));
+        assert!(result.contains(&format!("test{i}")));
     }
 }
 
@@ -384,7 +384,7 @@ async fn test_shell_action_concurrent_execution_safety() {
     for i in 1..=3 {
         let handle = task::spawn(async move {
             let mut context = HashMap::new();
-            let shell_action = ShellAction::new(format!("echo 'Task {}'", i))
+            let shell_action = ShellAction::new(format!("echo 'Task {i}'"))
                 .with_result_variable("task_output".to_string());
 
             let result = shell_action.execute(&mut context).await;

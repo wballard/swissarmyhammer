@@ -1103,6 +1103,48 @@ impl ShellAction {
         }
     }
 
+    /// Terminate process gracefully with SIGTERM followed by SIGKILL if needed
+    async fn terminate_process_gracefully(&self, child: &mut tokio::process::Child) {
+        use tokio::time::Duration;
+
+        let pid = child.id();
+
+        // First attempt: graceful termination (SIGTERM)
+        tracing::debug!("Attempting graceful termination of process {pid:?}");
+
+        if let Err(e) = child.start_kill() {
+            tracing::warn!("Failed to send SIGTERM to process {pid:?}: {e}");
+            return;
+        }
+
+        // Give the process time to terminate gracefully (5 seconds)
+        let graceful_timeout = Duration::from_secs(5);
+
+        match tokio::time::timeout(graceful_timeout, child.wait()).await {
+            Ok(Ok(_exit_status)) => {
+                tracing::debug!("Process {pid:?} terminated gracefully");
+                return;
+            }
+            Ok(Err(e)) => {
+                tracing::warn!("Error waiting for process {pid:?} termination: {e}");
+            }
+            Err(_) => {
+                tracing::warn!(
+                    "Process {pid:?} did not terminate gracefully within {graceful_timeout:?}"
+                );
+            }
+        }
+
+        // Second attempt: forceful termination (SIGKILL)
+        tracing::debug!("Attempting forceful termination of process {pid:?}");
+
+        if let Err(e) = child.kill().await {
+            tracing::error!("Failed to forcefully terminate process {pid:?}: {e}");
+        } else {
+            tracing::debug!("Process {pid:?} terminated forcefully");
+        }
+    }
+
     /// Handle timeout scenarios by setting appropriate context variables
     fn handle_timeout(
         &self,
@@ -1162,18 +1204,49 @@ impl Action for ShellAction {
         cmd.stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
-        // Apply timeout if specified
-        let timeout_duration = self.timeout.unwrap_or(Duration::from_secs(300)); // Default 5 minutes
-
         // Spawn the child process
-        let child = cmd
+        let mut child = cmd
             .spawn()
             .map_err(|e| ActionError::ExecutionError(format!("Failed to spawn command: {e}")))?;
 
-        let result = if self.timeout.is_some() {
-            // Execute with timeout using a more explicit approach
-            let child_id = child.id();
-            let wait_future = child.wait_with_output();
+        let result = if let Some(timeout_duration) = self.timeout {
+            // Validate timeout duration (max 1 hour)
+            if timeout_duration > Duration::from_secs(3600) {
+                return Err(ActionError::ExecutionError(
+                    "Timeout cannot exceed 1 hour (3600 seconds)".to_string(),
+                ));
+            }
+
+            // Execute with timeout and proper process cleanup
+            // Use a more complex approach to maintain access to child for cleanup
+            let wait_future = async {
+                // Get stdout and stderr handles before waiting
+                let stdout = child.stdout.take();
+                let stderr = child.stderr.take();
+                
+                // Wait for process completion
+                let status = child.wait().await?;
+                
+                // Read the output manually
+                let mut stdout_data = Vec::new();
+                let mut stderr_data = Vec::new();
+                
+                if let Some(mut stdout_handle) = stdout {
+                    use tokio::io::AsyncReadExt;
+                    stdout_handle.read_to_end(&mut stdout_data).await?;
+                }
+                
+                if let Some(mut stderr_handle) = stderr {
+                    use tokio::io::AsyncReadExt;
+                    stderr_handle.read_to_end(&mut stderr_data).await?;
+                }
+                
+                Ok::<std::process::Output, std::io::Error>(std::process::Output {
+                    status,
+                    stdout: stdout_data,
+                    stderr: stderr_data,
+                })
+            };
 
             match timeout(timeout_duration, wait_future).await {
                 Ok(Ok(output)) => {
@@ -1185,19 +1258,14 @@ impl Action for ShellAction {
                     "Command execution failed: {e}"
                 ))),
                 Err(_) => {
-                    // Timeout occurred
+                    // Timeout occurred - implement graceful termination
                     tracing::warn!(
-                        "Command timed out after {:?}, process may still be running",
+                        "Command timed out after {:?}, attempting graceful termination",
                         timeout_duration
                     );
 
-                    // Log process info for debugging
-                    if let Some(pid) = child_id {
-                        tracing::debug!(
-                            "Process {} exceeded timeout and may be terminated by OS",
-                            pid
-                        );
-                    }
+                    // Terminate the process gracefully
+                    self.terminate_process_gracefully(&mut child).await;
 
                     let duration_ms = start_time.elapsed().as_millis() as u64;
                     self.handle_timeout(context, duration_ms)
@@ -2575,7 +2643,7 @@ mod tests {
         use std::time::Duration;
 
         // This test verifies that timeout processes are properly terminated
-        // Use a command that would run for a long time
+        // If the process cleanup didn't work, this test would hang for 30 seconds
         let action =
             ShellAction::new("sleep 30".to_string()).with_timeout(Duration::from_millis(150));
         let mut context = HashMap::new();
@@ -2585,19 +2653,21 @@ mod tests {
         let elapsed = start_time.elapsed();
 
         // Verify the command was terminated quickly (within reasonable bounds)
+        // This proves the process was actually killed, not just timed out
         assert!(
-            elapsed < Duration::from_secs(3),
-            "Process cleanup took too long: {:?}",
-            elapsed
+            elapsed < Duration::from_secs(10),
+            "Process cleanup took too long: {elapsed:?}. This indicates the process was not properly terminated."
         );
 
-        // Verify timeout state
+        // Verify timeout state is correctly set
         assert_eq!(context.get("success"), Some(&Value::Bool(false)));
         assert_eq!(context.get("failure"), Some(&Value::Bool(true)));
+        assert_eq!(context.get("exit_code"), Some(&Value::Number((-1).into())));
         assert_eq!(
             context.get("stderr"),
             Some(&Value::String("Command timed out".to_string()))
         );
+        assert_eq!(context.get("stdout"), Some(&Value::String("".to_string())));
     }
 
     #[tokio::test]

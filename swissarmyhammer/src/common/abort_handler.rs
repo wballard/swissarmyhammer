@@ -75,6 +75,48 @@ fn extract_abort_context(output: &str) -> String {
     }
 }
 
+/// Check for abort error and handle appropriately based on compilation mode
+/// 
+/// This function provides different behavior based on compilation mode:
+/// - In production/release: Immediately calls `std::process::exit(2)` for hard shutdown if error found
+/// - In test mode: Returns ActionError::AbortError for testability
+/// 
+/// # Arguments
+/// * `output` - The text to scan for abort errors
+/// 
+/// # Returns
+/// * `Ok(())` if no abort error is found
+/// * `Err(ActionError::AbortError)` if abort error found in test mode
+/// * Never returns in production mode if abort error found (calls exit)
+pub fn check_for_abort_error_and_exit(output: &str) -> Result<(), ActionError> {
+    match check_for_abort_error(output) {
+        Ok(()) => Ok(()),
+        Err(action_error) => {
+            if let ActionError::AbortError(msg) = &action_error {
+                // In test mode, return the error for testability
+                #[cfg(test)]
+                {
+                    return Err(action_error);
+                }
+                
+                // In all non-test builds (including debug), exit immediately
+                #[cfg(not(test))]
+                {
+                    tracing::error!("ABORT ERROR detected - immediate shutdown: {}", msg);
+                    std::process::exit(2);
+                }
+            }
+            
+            // This should never be reached in non-test builds due to exit above
+            #[cfg(test)]
+            return Err(action_error);
+            
+            #[cfg(not(test))]
+            unreachable!("Should have exited above")
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,5 +241,24 @@ mod tests {
                 "Should not trigger abort for: {error_output}"
             );
         }
+    }
+
+    #[test]
+    fn test_check_for_abort_error_and_exit_in_test_mode() {
+        // In test mode, should return errors instead of exiting
+        let output_with_abort = "ABORT ERROR: Something went wrong";
+        let result = check_for_abort_error_and_exit(output_with_abort);
+        assert!(result.is_err(), "Should return error in test mode");
+        
+        if let Err(ActionError::AbortError(msg)) = result {
+            assert!(msg.contains("ABORT ERROR"));
+        } else {
+            panic!("Expected AbortError in test mode");
+        }
+
+        // Should still work for normal output
+        let normal_output = "Everything is fine";
+        let result = check_for_abort_error_and_exit(normal_output);
+        assert!(result.is_ok(), "Should return Ok for normal output");
     }
 }

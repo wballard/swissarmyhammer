@@ -370,10 +370,49 @@ mod tests {
         assert_eq!(remaining.len(), 0);
     }
 
+    /// Analyze memo content and return statistics
+    async fn analyze_memo_content(
+        memo: &swissarmyhammer::memoranda::Memo,
+    ) -> std::collections::HashMap<&'static str, usize> {
+        let mut stats = std::collections::HashMap::new();
+
+        // Count headers (lines starting with #)
+        let headers = memo
+            .content
+            .lines()
+            .filter(|line| line.trim_start().starts_with('#'))
+            .count();
+        stats.insert("headers", headers);
+
+        // Count action items (checkbox items)
+        let action_items = memo
+            .content
+            .lines()
+            .filter(|line| {
+                let trimmed = line.trim();
+                trimmed.contains("- [ ]") || trimmed.contains("- [x]") || trimmed.contains("- [X]")
+            })
+            .count();
+        stats.insert("action_items", action_items);
+
+        // Count words
+        let words = memo.content.split_whitespace().count();
+        stats.insert("words", words);
+
+        // Count lines
+        let lines = memo.content.lines().count();
+        stats.insert("lines", lines);
+
+        stats
+    }
+
     #[tokio::test]
     async fn test_memo_content_analysis() {
-        let memo = Memo {
-            id: MemoId::from_string("01TEST123456789012345678".to_string()).unwrap(),
+        let memo = swissarmyhammer::memoranda::Memo {
+            id: swissarmyhammer::memoranda::MemoId::from_string(
+                "01TEST123456789012345678".to_string(),
+            )
+            .unwrap(),
             title: "Test Memo".to_string(),
             content: "# Header 1\n\nSome content\n\n## Header 2\n\n- [ ] Task 1\n- [x] Task 2"
                 .to_string(),

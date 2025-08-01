@@ -977,6 +977,88 @@ impl SubWorkflowAction {
 
 impl VariableSubstitution for SubWorkflowAction {}
 
+/// Shell action for executing shell commands in workflows
+#[derive(Debug, Clone)]
+pub struct ShellAction {
+    /// The shell command to execute
+    pub command: String,
+    /// Optional timeout for command execution
+    #[allow(dead_code)]
+    pub timeout: Option<Duration>,
+    /// Optional variable name to store command output
+    #[allow(dead_code)]
+    pub result_variable: Option<String>,
+    /// Optional working directory for command execution
+    #[allow(dead_code)]
+    pub working_dir: Option<String>,
+    /// Optional environment variables for the command
+    #[allow(dead_code)]
+    pub environment: HashMap<String, String>,
+}
+
+impl ShellAction {
+    /// Create a new shell action
+    #[allow(dead_code)]
+    pub fn new(command: String) -> Self {
+        Self {
+            command,
+            timeout: None, // No timeout by default as per specification
+            result_variable: None,
+            working_dir: None,
+            environment: HashMap::new(),
+        }
+    }
+
+    /// Set the timeout for command execution
+    #[allow(dead_code)]
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    /// Set the result variable name
+    #[allow(dead_code)]
+    pub fn with_result_variable(mut self, variable: String) -> Self {
+        self.result_variable = Some(variable);
+        self
+    }
+
+    /// Set the working directory for command execution
+    #[allow(dead_code)]
+    pub fn with_working_dir(mut self, dir: String) -> Self {
+        self.working_dir = Some(dir);
+        self
+    }
+
+    /// Set environment variables for the command
+    #[allow(dead_code)]
+    pub fn with_environment(mut self, env: HashMap<String, String>) -> Self {
+        self.environment = env;
+        self
+    }
+}
+
+impl VariableSubstitution for ShellAction {}
+
+#[async_trait::async_trait]
+impl Action for ShellAction {
+    async fn execute(&self, _context: &mut HashMap<String, Value>) -> ActionResult<Value> {
+        // TODO: Implement shell command execution
+        // For now, return a placeholder to avoid dead code warnings
+        unimplemented!("Shell action execution to be implemented in next phase")
+    }
+
+    fn description(&self) -> String {
+        format!("Execute shell command: {}", self.command)
+    }
+
+    fn action_type(&self) -> &'static str {
+        "shell"
+    }
+
+    impl_as_any!();
+}
+
 #[async_trait::async_trait]
 impl Action for SubWorkflowAction {
     async fn execute(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
@@ -1856,5 +1938,108 @@ mod tests {
         // Check that the abort action was executed - the context should contain the error
         // The abort action should have been executed and the workflow should have been marked as failed
         // This validates that the error propagation is working correctly
+    }
+
+    #[test]
+    fn test_shell_action_new() {
+        let action = ShellAction::new("echo hello".to_string());
+
+        assert_eq!(action.command, "echo hello");
+        assert!(action.timeout.is_none());
+        assert!(action.result_variable.is_none());
+        assert!(action.working_dir.is_none());
+        assert!(action.environment.is_empty());
+    }
+
+    #[test]
+    fn test_shell_action_builder_methods() {
+        let mut env = HashMap::new();
+        env.insert("KEY".to_string(), "value".to_string());
+
+        let action = ShellAction::new("ls -la".to_string())
+            .with_timeout(Duration::from_secs(30))
+            .with_result_variable("output".to_string())
+            .with_working_dir("/tmp".to_string())
+            .with_environment(env.clone());
+
+        assert_eq!(action.command, "ls -la");
+        assert_eq!(action.timeout, Some(Duration::from_secs(30)));
+        assert_eq!(action.result_variable, Some("output".to_string()));
+        assert_eq!(action.working_dir, Some("/tmp".to_string()));
+        assert_eq!(action.environment, env);
+    }
+
+    #[test]
+    fn test_shell_action_description() {
+        let action = ShellAction::new("git status".to_string());
+        assert_eq!(action.description(), "Execute shell command: git status");
+    }
+
+    #[test]
+    fn test_shell_action_type() {
+        let action = ShellAction::new("pwd".to_string());
+        assert_eq!(action.action_type(), "shell");
+    }
+
+    #[test]
+    fn test_shell_action_variable_substitution() {
+        let action = ShellAction::new("echo ${name}".to_string());
+        let mut context = HashMap::new();
+        context.insert("name".to_string(), Value::String("world".to_string()));
+
+        let substituted_command = action.substitute_string(&action.command, &context);
+        assert_eq!(substituted_command, "echo world");
+    }
+
+    #[test]
+    fn test_shell_action_environment_variable_substitution() {
+        let mut env = HashMap::new();
+        env.insert("PATH".to_string(), "/usr/bin:${custom_path}".to_string());
+        env.insert("USER".to_string(), "${current_user}".to_string());
+
+        let action = ShellAction::new("env".to_string()).with_environment(env);
+
+        let mut context = HashMap::new();
+        context.insert(
+            "custom_path".to_string(),
+            Value::String("/opt/bin".to_string()),
+        );
+        context.insert(
+            "current_user".to_string(),
+            Value::String("testuser".to_string()),
+        );
+
+        let substituted_env = action.substitute_map(&action.environment, &context);
+        assert_eq!(
+            substituted_env.get("PATH"),
+            Some(&"/usr/bin:/opt/bin".to_string())
+        );
+        assert_eq!(substituted_env.get("USER"), Some(&"testuser".to_string()));
+    }
+
+    #[test]
+    fn test_shell_action_working_dir_substitution() {
+        let action = ShellAction::new("ls".to_string())
+            .with_working_dir("/home/${username}/projects".to_string());
+
+        let mut context = HashMap::new();
+        context.insert("username".to_string(), Value::String("alice".to_string()));
+
+        let substituted_dir =
+            action.substitute_string(action.working_dir.as_ref().unwrap(), &context);
+        assert_eq!(substituted_dir, "/home/alice/projects");
+    }
+
+    #[test]
+    fn test_shell_action_chaining_builder_methods() {
+        let action = ShellAction::new("cargo build".to_string())
+            .with_timeout(Duration::from_secs(120))
+            .with_result_variable("build_output".to_string())
+            .with_working_dir("./project".to_string());
+
+        assert_eq!(action.command, "cargo build");
+        assert_eq!(action.timeout, Some(Duration::from_secs(120)));
+        assert_eq!(action.result_variable, Some("build_output".to_string()));
+        assert_eq!(action.working_dir, Some("./project".to_string()));
     }
 }

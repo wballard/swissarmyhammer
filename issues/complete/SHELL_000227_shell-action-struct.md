@@ -107,3 +107,54 @@ Write basic unit tests to verify:
 ## Next Steps
 
 After completing this step, proceed to implementing the shell command parser integration.
+## Proposed Solution
+
+After analyzing the existing codebase patterns and the shell specification, I will implement the `ShellAction` struct by following these established patterns:
+
+### Implementation Steps
+
+1. **Define the ShellAction struct** following the pattern of `PromptAction`:
+   - All required and optional fields from the specification
+   - Use `Duration` for timeout (matching existing patterns)
+   - Use `HashMap<String, String>` for environment variables
+   - Use `Option<String>` for optional fields
+
+2. **Implement constructor and builder methods**:
+   - `new(command: String)` - Basic constructor with sensible defaults
+   - Fluent builder methods matching existing patterns:
+     - `with_timeout()`, `with_result_variable()`, `with_working_dir()`, `with_environment()`
+
+3. **Implement VariableSubstitution trait**:
+   - Enable variable substitution in command strings, working directory, and environment values
+   - Follow the exact pattern used by other actions
+
+4. **Implement Action trait**:
+   - Stub implementation with `unimplemented!()` for the execute method
+   - Proper `description()` and `action_type()` methods
+   - Use `impl_as_any!()` macro
+
+5. **Add comprehensive unit tests**:
+   - Test struct construction and builder methods
+   - Test variable substitution functionality
+   - Test description and action type methods
+
+### Code Structure
+
+```rust
+/// Shell action for executing shell commands in workflows
+#[derive(Debug, Clone)]
+pub struct ShellAction {
+    /// The shell command to execute
+    pub command: String,
+    /// Optional timeout for command execution (default: no timeout)
+    pub timeout: Option<Duration>,
+    /// Optional variable name to store command output
+    pub result_variable: Option<String>,
+    /// Optional working directory for command execution
+    pub working_dir: Option<String>,
+    /// Optional environment variables for the command
+    pub environment: HashMap<String, String>,
+}
+```
+
+This structure matches the specification requirements and follows the established codebase patterns exactly.

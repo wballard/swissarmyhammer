@@ -216,3 +216,22 @@ async fn test_shell_action_timeout() {
 ## Next Steps
 
 After completing this step, proceed to implementing working directory and environment variable support.
+## Proposed Solution
+
+After reviewing the current implementation in `actions.rs:1057-1170`, I can see that a basic shell action exists but lacks proper timeout handling and process cleanup. The current timeout implementation is incomplete and doesn't handle process termination gracefully.
+
+My implementation will:
+
+1. **Enhance timeout mechanism**: Replace the basic timeout with proper process spawning and termination
+2. **Implement graceful process cleanup**: Add proper SIGTERM/SIGKILL handling with grace periods
+3. **Improve duration tracking**: Ensure accurate timing for both successful and timeout scenarios
+4. **Add proper context variable handling**: Set all required variables for timeout scenarios
+5. **Test thoroughly**: Add comprehensive tests for timeout scenarios
+
+The key changes will be in the `ShellAction::execute` method to:
+- Use `tokio::process::Child` for better process control
+- Implement graceful termination with `child.kill()` and cleanup
+- Set proper context variables for timeout scenarios
+- Ensure resources are cleaned up properly
+
+This follows the existing patterns in the codebase while adding the missing timeout and cleanup functionality.

@@ -181,3 +181,149 @@ fn test_shell_action_debug() {
     assert!(debug_str.contains("ShellAction"));
     assert!(debug_str.contains("echo test"));
 }
+
+#[tokio::test]
+async fn test_shell_action_working_directory_validation() {
+    // Test with valid existing directory
+    let action = ShellAction::new("pwd".to_string()).with_working_dir("/tmp".to_string());
+    let mut context = HashMap::new();
+
+    let result = action.execute(&mut context).await;
+    assert!(result.is_ok());
+
+    // Test with non-existent directory
+    let action =
+        ShellAction::new("pwd".to_string()).with_working_dir("/nonexistent/directory".to_string());
+    let mut context = HashMap::new();
+
+    let result = action.execute(&mut context).await;
+    assert!(result.is_err());
+    let error_msg = result.unwrap_err().to_string();
+    assert!(error_msg.contains("Working directory does not exist"));
+}
+
+#[tokio::test]
+async fn test_shell_action_working_directory_path_traversal_prevention() {
+    // Test path traversal attempts
+    let action = ShellAction::new("pwd".to_string()).with_working_dir("../../../etc".to_string());
+    let mut context = HashMap::new();
+
+    let result = action.execute(&mut context).await;
+    assert!(result.is_err());
+    let error_msg = result.unwrap_err().to_string();
+    assert!(error_msg.contains("cannot contain parent directory references"));
+}
+
+#[tokio::test]
+async fn test_shell_action_environment_variable_validation() {
+    // Test with valid environment variable names
+    let mut env = HashMap::new();
+    env.insert("VALID_VAR".to_string(), "value".to_string());
+    env.insert("_UNDERSCORE_VAR".to_string(), "value".to_string());
+    env.insert("VAR123".to_string(), "value".to_string());
+
+    let action = ShellAction::new("echo $VALID_VAR".to_string()).with_environment(env);
+    let mut context = HashMap::new();
+
+    let result = action.execute(&mut context).await;
+    assert!(result.is_ok());
+
+    // Test with invalid environment variable names
+    let mut env = HashMap::new();
+    env.insert("123INVALID".to_string(), "value".to_string()); // starts with number
+
+    let action = ShellAction::new("echo test".to_string()).with_environment(env);
+    let mut context = HashMap::new();
+
+    let result = action.execute(&mut context).await;
+    assert!(result.is_err());
+    let error_msg = result.unwrap_err().to_string();
+    assert!(error_msg.contains("Invalid environment variable name"));
+}
+
+#[tokio::test]
+async fn test_shell_action_environment_variable_special_characters() {
+    // Test with invalid characters in environment variable names
+    let mut env = HashMap::new();
+    env.insert("INVALID-VAR".to_string(), "value".to_string()); // hyphen not allowed
+
+    let action = ShellAction::new("echo test".to_string()).with_environment(env);
+    let mut context = HashMap::new();
+
+    let result = action.execute(&mut context).await;
+    assert!(result.is_err());
+    let error_msg = result.unwrap_err().to_string();
+    assert!(error_msg.contains("Invalid environment variable name"));
+}
+
+#[tokio::test]
+async fn test_shell_action_working_directory_variable_substitution() {
+    // Test variable substitution in working directory
+    let action = ShellAction::new("pwd".to_string()).with_working_dir("${work_dir}".to_string());
+    let mut context = HashMap::new();
+    context.insert(
+        "work_dir".to_string(),
+        serde_json::Value::String("/tmp".to_string()),
+    );
+
+    let result = action.execute(&mut context).await;
+    assert!(result.is_ok());
+
+    let stdout = context.get("stdout").unwrap().as_str().unwrap();
+    assert!(stdout.contains("/tmp"));
+}
+
+#[tokio::test]
+async fn test_shell_action_environment_variable_substitution() {
+    // Test variable substitution in environment variables
+    let mut env = HashMap::new();
+    env.insert("TEST_VAR".to_string(), "${test_value}".to_string());
+
+    let action = ShellAction::new("echo $TEST_VAR".to_string()).with_environment(env);
+    let mut context = HashMap::new();
+    context.insert(
+        "test_value".to_string(),
+        serde_json::Value::String("substituted_value".to_string()),
+    );
+
+    let result = action.execute(&mut context).await;
+    assert!(result.is_ok());
+
+    let stdout = context.get("stdout").unwrap().as_str().unwrap();
+    assert!(stdout.contains("substituted_value"));
+}
+
+#[test]
+fn test_environment_variable_name_validation() {
+    use crate::workflow::actions::is_valid_env_var_name;
+
+    // Valid names
+    assert!(is_valid_env_var_name("VAR"));
+    assert!(is_valid_env_var_name("_VAR"));
+    assert!(is_valid_env_var_name("VAR123"));
+    assert!(is_valid_env_var_name("VAR_NAME"));
+    assert!(is_valid_env_var_name("_123"));
+
+    // Invalid names
+    assert!(!is_valid_env_var_name(""));
+    assert!(!is_valid_env_var_name("123VAR"));
+    assert!(!is_valid_env_var_name("VAR-NAME"));
+    assert!(!is_valid_env_var_name("VAR NAME"));
+    assert!(!is_valid_env_var_name("VAR.NAME"));
+    assert!(!is_valid_env_var_name("VAR@NAME"));
+}
+
+#[test]
+fn test_working_directory_validation() {
+    use crate::workflow::actions::validate_working_directory;
+
+    // Valid paths
+    assert!(validate_working_directory("/tmp").is_ok());
+    assert!(validate_working_directory("relative/path").is_ok());
+    assert!(validate_working_directory("/absolute/path").is_ok());
+
+    // Invalid paths with parent directory references
+    assert!(validate_working_directory("../parent").is_err());
+    assert!(validate_working_directory("path/../parent").is_err());
+    assert!(validate_working_directory("/absolute/../parent").is_err());
+}

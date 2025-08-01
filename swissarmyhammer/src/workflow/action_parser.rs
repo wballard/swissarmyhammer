@@ -472,13 +472,29 @@ impl ActionParser {
                             }
                             "env" => {
                                 // Parse the JSON environment variables
-                                let env_map: HashMap<String, String> = serde_json::from_str(&value)
+                                let json_value: serde_json::Value = serde_json::from_str(&value)
                                     .map_err(|e| {
                                         ActionError::ParseError(format!(
                                             "Invalid environment variables JSON: {e}"
                                         ))
                                     })?;
-                                env_vars.extend(env_map);
+
+                                if let serde_json::Value::Object(obj) = json_value {
+                                    for (key, val) in obj {
+                                        if let serde_json::Value::String(string_val) = val {
+                                            env_vars.insert(key, string_val);
+                                        } else {
+                                            return Err(ActionError::ParseError(
+                                                format!("Environment variable values must be strings, found: {val:?}")
+                                            ));
+                                        }
+                                    }
+                                } else {
+                                    return Err(ActionError::ParseError(
+                                        "Environment variables must be specified as a JSON object"
+                                            .to_string(),
+                                    ));
+                                }
                             }
                             _ => {
                                 return Err(ActionError::ParseError(format!(
@@ -946,6 +962,22 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("Invalid environment variables JSON"));
+
+        // Test non-string values in environment JSON
+        let result = parser.parse_shell_action("Shell \"env\" with env={\"NUM_VAR\":123}");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Environment variable values must be strings"));
+
+        // Test non-object JSON for environment
+        let result = parser.parse_shell_action("Shell \"env\" with env=[\"array\"]");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Environment variables must be specified as a JSON object"));
     }
 
     #[test]

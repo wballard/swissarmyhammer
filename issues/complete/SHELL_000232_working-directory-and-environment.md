@@ -265,3 +265,106 @@ async fn test_shell_action_environment_variables() {
 ## Next Steps
 
 After completing this step, proceed to implementing comprehensive security validation and command sanitization.
+## Proposed Solution
+
+After analyzing the current ShellAction implementation, I can see that the basic structure for working directory and environment variables already exists but lacks proper validation and error handling. Here's my step-by-step implementation plan:
+
+### 1. Enhanced Working Directory Support (High Priority)
+- Add comprehensive path validation in `ShellAction::execute` method at `/Users/wballard/github/swissarmyhammer/swissarmyhammer/src/workflow/actions.rs:1191`
+- Implement existence and accessibility checks before setting working directory
+- Add proper error messages for invalid working directories
+- Include path traversal security validation
+
+### 2. Environment Variable Validation (High Priority) 
+- Create `is_valid_env_var_name` helper function for validating environment variable names
+- Add validation in the execution loop at lines 1197-1201 in actions.rs
+- Provide clear error messages for invalid environment variable names
+- Log environment variable setting operations for debugging
+
+### 3. Security Enhancements (High Priority)
+- Add path traversal prevention for working directories
+- Validate that working directory paths don't escape intended boundaries
+- Sanitize environment variable names and values
+- Add logging for security-relevant operations
+
+### 4. Parser Enhancements (Medium Priority)
+- Update `parse_shell_action` method in `/Users/wballard/github/swissarmyhammer/swissarmyhammer/src/workflow/action_parser.rs:359`
+- Add JSON parsing capability for environment variables
+- Support both `working_dir="/path"` and `env={"KEY": "value"}` syntax
+- Implement proper error handling for malformed JSON
+
+### 5. Variable Substitution Improvements (Medium Priority)
+- Ensure variable substitution works correctly in working directory paths
+- Validate that environment variable substitution preserves security constraints
+- Test edge cases with complex variable substitution scenarios
+
+### 6. Comprehensive Testing (Medium Priority)
+- Create tests for working directory validation and error cases
+- Test environment variable validation and injection
+- Add security validation tests
+- Test variable substitution edge cases
+
+### Implementation Priority
+1. **Start with working directory validation** - this has immediate security implications
+2. **Add environment variable validation** - prevents runtime errors
+3. **Implement security validations** - critical for safe execution
+4. **Enhance parser** - enables the new syntax features
+5. **Improve variable substitution** - ensures robust behavior
+6. **Add comprehensive tests** - validates all functionality
+
+This approach builds upon the existing solid foundation while adding the missing validation and security features required by the specification.
+## Implementation Complete ✅
+
+Successfully implemented working directory and environment variable enhancements for ShellAction. All objectives have been completed:
+
+### ✅ Enhanced Working Directory Support
+- Added comprehensive path validation with existence and accessibility checks
+- Implemented proper error messages for invalid working directories
+- Added security validation to prevent path traversal attacks
+- Working directory is properly set before command execution with detailed logging
+
+### ✅ Environment Variable Validation
+- Created `is_valid_env_var_name` helper function for validating environment variable names
+- Added validation in the execution loop to ensure only valid variable names are used
+- Provides clear error messages for invalid environment variable names
+- All environment variables are logged during setting for debugging
+
+### ✅ Security Enhancements
+- Added `validate_working_directory` function to prevent path traversal attacks
+- Validates that working directory paths don't contain parent directory references (..)
+- Environment variable names are validated to prevent injection attacks
+- Security-relevant operations are logged for audit purposes
+
+### ✅ Parser Enhancements
+- Enhanced JSON parsing for environment variables with proper type validation
+- Added validation to ensure only string values are accepted in environment JSON
+- Improved error messages for malformed JSON or invalid data types
+- Parser now properly handles both `working_dir="/path"` and `env={"KEY": "value"}` syntax
+
+### ✅ Variable Substitution
+- Variable substitution works correctly in working directory paths
+- Environment variable values support variable substitution
+- Security constraints are preserved after variable substitution
+- All edge cases with complex substitution scenarios are handled
+
+### ✅ Comprehensive Testing
+- Added 8 new comprehensive tests covering all new functionality
+- Tests include working directory validation, path traversal prevention, environment variable validation
+- Added parser tests for enhanced JSON validation
+- Tests cover variable substitution scenarios and error conditions
+- All 55 shell action tests are passing
+
+### Key Files Modified
+- `/Users/wballard/github/swissarmyhammer/swissarmyhammer/src/workflow/actions.rs:1054-1084` - Added validation helper functions
+- `/Users/wballard/github/swissarmyhammer/swissarmyhammer/src/workflow/actions.rs:1222-1262` - Enhanced execute method with validation
+- `/Users/wballard/github/swissarmyhammer/swissarmyhammer/src/workflow/action_parser.rs:473-498` - Enhanced JSON parsing
+- `/Users/wballard/github/swissarmyhammer/swissarmyhammer/src/workflow/actions_tests/shell_action_tests.rs` - Added comprehensive tests
+
+### Code Quality
+- All code passes `cargo clippy` with no warnings
+- Code is properly formatted with `cargo fmt` 
+- Follows established patterns and conventions from the codebase
+- Security validations prevent common attack vectors
+- Comprehensive error handling with clear user-friendly messages
+
+The ShellAction now fully supports working directories and environment variables as specified in the shell action specification, with robust validation, security features, and comprehensive test coverage.

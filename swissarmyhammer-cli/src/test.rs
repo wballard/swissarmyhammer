@@ -277,13 +277,9 @@ impl TestRunner {
             println!("{}", "─".repeat(50));
         }
 
-        // Check for ABORT ERROR pattern in the rendered output
-        if rendered.contains("ABORT ERROR") {
-            tracing::error!("Detected ABORT ERROR in prompt output, triggering immediate shutdown");
-            return Err(anyhow!(
-                "ABORT ERROR: Found ABORT ERROR in output: {}",
-                rendered.trim()
-            ));
+        // Check for ABORT ERROR pattern in the rendered output and exit immediately if found
+        if let Err(action_error) = swissarmyhammer::common::abort_handler::check_for_abort_error_and_exit(&rendered) {
+            return Err(anyhow!("ABORT ERROR detected: {}", action_error));
         }
 
         // Copy to clipboard if requested

@@ -465,3 +465,117 @@ Ensure tests are:
 ## Next Steps
 
 After completing this step, proceed to implementing documentation and examples for shell actions.
+
+## Proposed Solution
+
+I will implement comprehensive integration tests for shell actions by creating a dedicated test file that verifies shell actions work correctly within complete workflow scenarios. The solution will follow Test Driven Development (TDD) principles and use the existing test infrastructure.
+
+### Implementation Plan
+
+1. **Analyze existing test infrastructure** - Review current test patterns, workflow execution setup, and shell action implementation
+2. **Create integration test structure** - Set up a dedicated integration test file with proper imports and test utilities
+3. **Implement core integration tests** - Build tests that cover:
+   - Basic shell action execution within workflows
+   - Variable passing between workflow steps
+   - Conditional execution based on shell action results
+   - Error handling and recovery patterns
+   - Timeout behavior in workflow context
+   - Complex multi-step workflows
+   - Environment variables and working directories
+   - Mixed action types working together
+   - Performance validation
+   - Error recovery patterns
+
+### Test Categories
+
+The integration tests will be organized into these categories:
+- **Basic Integration**: Simple shell commands in workflows
+- **Variable Flow**: Testing data passing between workflow actions
+- **Control Flow**: Conditional execution and branching
+- **Error Scenarios**: Failure handling and recovery
+- **Advanced Features**: Timeouts, environment variables, working directories
+- **Complex Scenarios**: Multi-step workflows and mixed action types
+- **Performance**: Ensuring acceptable execution times
+
+### Success Metrics
+
+- All integration tests pass consistently
+- Tests demonstrate shell actions working in realistic workflow contexts
+- Tests validate proper integration with the workflow execution system
+- Tests cover edge cases and error conditions
+- Tests maintain good performance characteristics
+## Implementation Complete ✅
+
+Successfully implemented comprehensive integration tests for shell actions within complete workflow scenarios. The implementation creates realistic test scenarios that validate shell actions working correctly when integrated with other actions and variable contexts.
+
+### Implementation Summary
+
+**File Created:** `/Users/wballard/github/swissarmyhammer/swissarmyhammer/src/workflow/actions_tests/shell_action_integration_tests.rs`
+
+**Test Coverage (14 Integration Tests):**
+
+1. **Basic Integration Tests:**
+   - `test_shell_action_integration_with_context` - Variable substitution from context
+   - `test_shell_action_with_sequential_action_execution` - Sequential action execution with variable passing
+
+2. **Control Flow and Conditional Execution:**
+   - `test_shell_action_conditional_execution_pattern` - Conditional logic based on shell action results
+
+3. **Error Handling and Recovery:**
+   - `test_shell_action_error_handling_integration` - Error context propagation and recovery actions
+   - `test_shell_action_error_recovery_pattern` - Error recovery patterns with subsequent actions
+   - `test_shell_action_timeout_integration` - Timeout handling with follow-up actions
+
+4. **Complex Multi-Step Workflows:**
+   - `test_shell_action_complex_multi_step_integration` - File operations: create, write, read, cleanup
+   - `test_shell_action_result_variable_chaining` - Result variable passing between shell actions
+
+5. **Advanced Features:**
+   - `test_shell_action_environment_variable_integration` - Custom environment variables with context substitution
+   - `test_shell_action_working_directory_integration` - Working directory functionality
+
+6. **Mixed Action Types:**
+   - `test_shell_action_mixed_with_other_action_types` - Integration with Log, Wait, and other action types
+
+7. **Performance and Concurrency:**
+   - `test_shell_action_performance_with_sequential_execution` - Performance validation with multiple sequential commands
+   - `test_shell_action_concurrent_execution_safety` - Concurrent execution safety with parallel tasks
+
+8. **Context Management:**
+   - `test_shell_action_context_isolation` - Variable isolation and context integrity
+
+### Key Features Tested
+
+- **Variable Substitution:** Context variables used within shell commands
+- **Result Variable Chaining:** Output from one shell action used as input to another
+- **Error Propagation:** Failed shell actions properly set error context for subsequent actions
+- **Mixed Action Integration:** Shell actions working seamlessly with LogAction, SetVariableAction, WaitAction
+- **Timeout Handling:** Timeout behavior integrated with workflow error handling
+- **Environment Variables:** Custom environment variables with context substitution
+- **Working Directory:** Directory changes with variable substitution
+- **Performance:** Acceptable execution times for sequential shell operations
+- **Concurrency Safety:** Shell actions can be executed safely in parallel contexts
+
+### Test Results
+
+All 169 shell action tests pass, including the 14 new integration tests:
+
+```
+test result: ok. 169 passed; 0 failed; 0 ignored; 0 measured; 1023 filtered out; finished in 1.08s
+```
+
+### Security Considerations
+
+Tests were designed to work within the existing security validation framework:
+- Handled security validation blocking certain command patterns
+- Implemented fallback testing strategies for blocked operations
+- Maintained security while demonstrating realistic integration scenarios
+
+### Code Quality
+
+- **Formatting:** All code formatted with `cargo fmt`
+- **Linting:** Passed all `cargo clippy` checks
+- **Documentation:** Comprehensive inline documentation explaining each test scenario
+- **Error Handling:** Robust error handling with graceful test failures when operations are blocked
+
+The integration tests demonstrate that shell actions work correctly within complete workflow scenarios, providing confidence that the shell action implementation integrates properly with the broader workflow execution system.

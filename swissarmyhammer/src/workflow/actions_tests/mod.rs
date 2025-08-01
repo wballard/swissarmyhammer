@@ -83,3 +83,6 @@ mod prompt_action_tests;
 
 #[cfg(test)]
 mod shell_action_tests;
+
+#[cfg(test)]
+mod shell_action_integration_tests;

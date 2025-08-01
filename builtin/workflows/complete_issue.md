@@ -17,7 +17,7 @@ stateDiagram-v2
 
 ## Actions
 
-- start: log "Coding an issue"
+- start: log "Completing an issue"
 - issue: execute prompt "issue/complete"
 - commit: execute prompt "commit"
 

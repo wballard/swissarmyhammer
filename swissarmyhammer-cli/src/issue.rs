@@ -1,4 +1,4 @@
-use crate::cli::IssueCommands;
+use crate::cli::{IssueCommands, OutputFormat};
 use crate::mcp_integration::{response_formatting, CliToolContext};
 use serde_json::json;
 use std::io::{self, Read};
@@ -91,12 +91,17 @@ async fn list_issues(
     context: &CliToolContext,
     show_completed: bool,
     show_active: bool,
-    format: String,
+    format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let format_str = match format {
+        OutputFormat::Table => "table",
+        OutputFormat::Json => "json",
+        OutputFormat::Yaml => "markdown", // MCP tool uses "markdown" for YAML-like output
+    };
     let args = context.create_arguments(vec![
         ("show_completed", json!(show_completed)),
         ("show_active", json!(show_active)),
-        ("format", json!(format)),
+        ("format", json!(format_str)),
     ]);
 
     let result = context.execute_tool("issue_list", args).await?;

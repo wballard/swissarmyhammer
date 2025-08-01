@@ -83,20 +83,5 @@ proptest = "1.0"
 criterion = "0.5"
 serial_test = "3.0"
 
-[profile.release]
-opt-level = 3
-codegen-units = 128
-panic = "abort"
-
-[profile.dev]
-# No LTO for fastest debug builds
-lto = false
-# Maximum parallelization for debug builds
-codegen-units = 256
-# No optimization for fastest compilation
-opt-level = 0
-# Minimal debug info for faster builds
-debug = 1
-
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }

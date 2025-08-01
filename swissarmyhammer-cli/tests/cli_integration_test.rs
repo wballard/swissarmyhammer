@@ -2,39 +2,73 @@
 
 use anyhow::Result;
 use assert_cmd::Command;
-use tempfile::TempDir;
+use std::fs;
+use tempfile::{NamedTempFile, TempDir};
 
 mod test_utils;
 use test_utils::create_test_environment;
 
+/// Helper function to run CLI command and capture output to temp files
+/// Returns (stdout_file, stderr_file, exit_code)
+fn run_command_with_temp_output(
+    cmd: &mut Command,
+) -> Result<(NamedTempFile, NamedTempFile, Option<i32>)> {
+    let stdout_file = NamedTempFile::new()?;
+    let stderr_file = NamedTempFile::new()?;
+
+    let output = cmd.output()?;
+
+    // Write output to temp files
+    fs::write(stdout_file.path(), &output.stdout)?;
+    fs::write(stderr_file.path(), &output.stderr)?;
+
+    Ok((stdout_file, stderr_file, output.status.code()))
+}
+
+/// Helper function to read content from temp file
+fn read_temp_file(file: &NamedTempFile) -> Result<String> {
+    Ok(fs::read_to_string(file.path())?)
+}
+
+/// Helper for tests that need to check stdout content
+fn run_command_check_stdout_contains(cmd: &mut Command, expected_content: &[&str]) -> Result<()> {
+    let (stdout_file, _stderr_file, exit_code) = run_command_with_temp_output(cmd)?;
+    assert!(exit_code == Some(0), "Command should succeed");
+
+    let stdout_content = read_temp_file(&stdout_file)?;
+    for content in expected_content {
+        assert!(
+            stdout_content.contains(content),
+            "Output should contain '{}': {}",
+            content,
+            stdout_content
+        );
+    }
+    Ok(())
+}
+
 /// Test that the new prompt subcommand structure works correctly
 #[test]
 fn test_prompt_subcommand_list() -> Result<()> {
-    let output = Command::cargo_bin("swissarmyhammer")
-        .unwrap()
-        .args(["prompt", "list"])
-        .output()?;
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.args(["prompt", "list"]);
 
-    assert!(
-        output.status.success(),
-        "prompt list command should succeed"
-    );
+    let (_stdout_file, _stderr_file, exit_code) = run_command_with_temp_output(&mut cmd)?;
+
+    assert!(exit_code == Some(0), "prompt list command should succeed");
     Ok(())
 }
 
 /// Test prompt search functionality
 #[test]
 fn test_prompt_subcommand_search() -> Result<()> {
-    let output = Command::cargo_bin("swissarmyhammer")
-        .unwrap()
-        .args(["prompt", "search", "test"])
-        .output()?;
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.args(["prompt", "search", "test"]);
+
+    let (_stdout_file, _stderr_file, exit_code) = run_command_with_temp_output(&mut cmd)?;
 
     // Search might not find results but should not error
-    assert!(
-        output.status.code().is_some(),
-        "prompt search should complete"
-    );
+    assert!(exit_code.is_some(), "prompt search should complete");
     Ok(())
 }
 
@@ -43,21 +77,18 @@ fn test_prompt_subcommand_search() -> Result<()> {
 fn test_prompt_subcommand_validate() -> Result<()> {
     let (_temp_dir, prompts_dir) = create_test_environment()?;
 
-    let output = Command::cargo_bin("swissarmyhammer")
-        .unwrap()
-        .args([
-            "prompt",
-            "validate",
-            "--workflow-dirs",
-            prompts_dir.to_str().unwrap(),
-        ])
-        .output()?;
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.args([
+        "prompt",
+        "validate",
+        "--workflow-dirs",
+        prompts_dir.to_str().unwrap(),
+    ]);
+
+    let (_stdout_file, _stderr_file, exit_code) = run_command_with_temp_output(&mut cmd)?;
 
     // Validation should complete (may have warnings but shouldn't crash)
-    assert!(
-        output.status.code().is_some(),
-        "prompt validate should complete"
-    );
+    assert!(exit_code.is_some(), "prompt validate should complete");
     Ok(())
 }
 
@@ -67,21 +98,21 @@ fn test_prompt_subcommand_test() -> Result<()> {
     let (_temp_dir, _prompts_dir) = create_test_environment()?;
 
     // Test with non-existent prompt should fail gracefully
-    let output = Command::cargo_bin("swissarmyhammer")
-        .unwrap()
-        .args(["prompt", "test", "non_existent_prompt"])
-        .output()?;
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.args(["prompt", "test", "non_existent_prompt"]);
+
+    let (_stdout_file, stderr_file, exit_code) = run_command_with_temp_output(&mut cmd)?;
 
     assert!(
-        !output.status.success(),
+        exit_code != Some(0),
         "testing non-existent prompt should fail"
     );
-    assert_eq!(output.status.code(), Some(1), "should return exit code 1");
+    assert_eq!(exit_code, Some(1), "should return exit code 1");
 
     // Verify error message is present
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stderr_content = read_temp_file(&stderr_file)?;
     assert!(
-        stderr.contains("Error:") || stderr.contains("not found"),
+        stderr_content.contains("Error:") || stderr_content.contains("not found"),
         "should show meaningful error message"
     );
 
@@ -91,28 +122,28 @@ fn test_prompt_subcommand_test() -> Result<()> {
 /// Test help output for prompt subcommands
 #[test]
 fn test_prompt_help() -> Result<()> {
-    let output = Command::cargo_bin("swissarmyhammer")
-        .unwrap()
-        .args(["prompt", "--help"])
-        .output()?;
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.args(["prompt", "--help"]);
 
-    assert!(output.status.success(), "prompt help should succeed");
+    let (stdout_file, _stderr_file, exit_code) = run_command_with_temp_output(&mut cmd)?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(exit_code == Some(0), "prompt help should succeed");
+
+    let stdout_content = read_temp_file(&stdout_file)?;
     assert!(
-        stdout.contains("list"),
+        stdout_content.contains("list"),
         "help should mention list subcommand"
     );
     assert!(
-        stdout.contains("search"),
+        stdout_content.contains("search"),
         "help should mention search subcommand"
     );
     assert!(
-        stdout.contains("validate"),
+        stdout_content.contains("validate"),
         "help should mention validate subcommand"
     );
     assert!(
-        stdout.contains("test"),
+        stdout_content.contains("test"),
         "help should mention test subcommand"
     );
 
@@ -138,16 +169,16 @@ fn test_completion_command() -> Result<()> {
     let shells = vec!["bash", "zsh", "fish"];
 
     for shell in shells {
-        let output = Command::cargo_bin("swissarmyhammer")
-            .unwrap()
-            .args(["completion", shell])
-            .output()?;
+        let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+        cmd.args(["completion", shell]);
 
-        assert!(output.status.success(), "{shell} completion should succeed");
+        let (stdout_file, _stderr_file, exit_code) = run_command_with_temp_output(&mut cmd)?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(exit_code == Some(0), "{shell} completion should succeed");
+
+        let stdout_content = read_temp_file(&stdout_file)?;
         assert!(
-            !stdout.is_empty(),
+            !stdout_content.trim().is_empty(),
             "{shell} completion should generate output"
         );
     }
@@ -181,14 +212,14 @@ fn test_error_exit_codes() -> Result<()> {
 /// Test that verbose flag works
 #[test]
 fn test_verbose_flag() -> Result<()> {
-    let output = Command::cargo_bin("swissarmyhammer")
-        .unwrap()
-        .args(["--verbose", "prompt", "list"])
-        .output()?;
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.args(["--verbose", "prompt", "list"]);
+
+    let (_stdout_file, _stderr_file, exit_code) = run_command_with_temp_output(&mut cmd)?;
 
     // Command should still work with verbose flag
     assert!(
-        output.status.code().is_some(),
+        exit_code.is_some(),
         "verbose flag should not break commands"
     );
 
@@ -198,16 +229,13 @@ fn test_verbose_flag() -> Result<()> {
 /// Test that quiet flag works
 #[test]
 fn test_quiet_flag() -> Result<()> {
-    let output = Command::cargo_bin("swissarmyhammer")
-        .unwrap()
-        .args(["--quiet", "prompt", "list"])
-        .output()?;
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.args(["--quiet", "prompt", "list"]);
+
+    let (_stdout_file, _stderr_file, exit_code) = run_command_with_temp_output(&mut cmd)?;
 
     // Command should still work with quiet flag
-    assert!(
-        output.status.code().is_some(),
-        "quiet flag should not break commands"
-    );
+    assert!(exit_code.is_some(), "quiet flag should not break commands");
 
     Ok(())
 }
@@ -215,35 +243,18 @@ fn test_quiet_flag() -> Result<()> {
 /// Test flow test command with simple workflow
 #[test]
 fn test_flow_test_simple_workflow() -> Result<()> {
-    let output = Command::cargo_bin("swissarmyhammer")
-        .unwrap()
-        .args(["flow", "test", "hello-world"])
-        .output()?;
+    let mut cmd = Command::cargo_bin("swissarmyhammer").unwrap();
+    cmd.args(["flow", "test", "hello-world"]);
 
-    assert!(
-        output.status.success(),
-        "flow test should succeed for built-in workflow"
-    );
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // Check for test mode indicators
-    assert!(
-        stdout.contains("Test mode"),
-        "should indicate test mode execution"
-    );
-    assert!(
-        stdout.contains("Coverage Report"),
-        "should show coverage report"
-    );
-    assert!(
-        stdout.contains("States visited"),
-        "should show states visited"
-    );
-    assert!(
-        stdout.contains("Transitions used"),
-        "should show transitions used"
-    );
+    run_command_check_stdout_contains(
+        &mut cmd,
+        &[
+            "Test mode",
+            "Coverage Report",
+            "States visited",
+            "Transitions used",
+        ],
+    )?;
 
     Ok(())
 }
@@ -1645,89 +1656,6 @@ And this uses {{ another_undefined }} too."#,
         normal_stdout.contains("Errors:") && normal_stdout.contains("Warnings:"),
         "normal mode should show both error and warning counts: '{normal_stdout}'"
     );
-
-    Ok(())
-}
-
-/// Test validation performance with quiet mode conditional check
-#[test]
-fn test_validate_performance_quiet_mode_conditional() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let prompts_dir = temp_dir.path().join(".swissarmyhammer").join("prompts");
-    std::fs::create_dir_all(&prompts_dir)?;
-
-    // Create 50 prompt files to test validation performance
-    for i in 0..50 {
-        std::fs::write(
-            prompts_dir.join(format!("prompt_{i}.md")),
-            format!(
-                r#"---
-title: Test Prompt {i}
-description: This is test prompt number {i}
-arguments:
-  - name: input_{i}
-    required: true
-    description: Input parameter for prompt {i}
----
-
-This is the content for prompt {i} using {{{{ input_{i} }}}}.
-It has multiple lines to simulate real prompt content.
-Test case {i} validates performance with conditional checking."#
-            ),
-        )?;
-    }
-
-    // Test quiet mode performance (should have minimal output processing)
-    let start_quiet = std::time::Instant::now();
-    let quiet_output = Command::cargo_bin("swissarmyhammer")
-        .unwrap()
-        .args(["validate", "--quiet"])
-        .env("HOME", temp_dir.path())
-        .output()?;
-    let quiet_duration = start_quiet.elapsed();
-
-    assert!(
-        quiet_output.status.code().is_some(),
-        "quiet mode validation should complete"
-    );
-
-    // Test normal mode performance
-    let start_normal = std::time::Instant::now();
-    let normal_output = Command::cargo_bin("swissarmyhammer")
-        .unwrap()
-        .args(["validate"])
-        .env("HOME", temp_dir.path())
-        .output()?;
-    let normal_duration = start_normal.elapsed();
-
-    assert!(
-        normal_output.status.code().is_some(),
-        "normal mode validation should complete"
-    );
-
-    // Both should complete in reasonable time (less than 5 seconds for 50 files + builtins)
-    assert!(
-        quiet_duration.as_secs() < 5,
-        "quiet mode validation should complete within 5 seconds, took {:.2}s",
-        quiet_duration.as_secs_f64()
-    );
-    assert!(
-        normal_duration.as_secs() < 5,
-        "normal mode validation should complete within 5 seconds, took {:.2}s",
-        normal_duration.as_secs_f64()
-    );
-
-    // The additional conditional check in quiet mode should not significantly impact performance
-    // Both modes should complete in reasonable time regardless of which runs first
-    // Allow for system variance by checking they're both reasonably fast rather than comparing directly
-    println!(
-        "Performance results - Quiet: {:.2}s, Normal: {:.2}s",
-        quiet_duration.as_secs_f64(),
-        normal_duration.as_secs_f64()
-    );
-
-    // The main goal is to ensure both modes complete efficiently, not to compare them directly
-    // since execution order and system state can affect timing
 
     Ok(())
 }

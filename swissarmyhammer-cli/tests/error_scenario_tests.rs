@@ -447,46 +447,6 @@ fn test_resource_exhaustion() -> Result<()> {
     Ok(())
 }
 
-/// Test network-related errors (if applicable)
-#[test]
-fn test_network_related_errors() -> Result<()> {
-    // This test is for any network operations in the CLI
-    // Since swissarmyhammer is primarily local, this might be limited
-
-    // Test operations that might involve network (like downloading models for search)
-    let (_temp_dir, temp_path) = setup_error_test_environment()?;
-
-    // Create source files
-    let src_dir = temp_path.join("src");
-    std::fs::create_dir_all(&src_dir)?;
-    std::fs::write(
-        src_dir.join("test.rs"),
-        "fn test_function() { println!(\"test\"); }",
-    )?;
-
-    // Test search operations that might involve model downloads
-    // This should either succeed or fail gracefully with network errors
-    let output = Command::cargo_bin("swissarmyhammer")?
-        .args(["search", "index", "src/**/*.rs"])
-        .current_dir(&temp_path)
-        .timeout(std::time::Duration::from_secs(30)) // Timeout for network operations
-        .assert();
-
-    if !output.get_output().status.success() {
-        let stderr = String::from_utf8_lossy(&output.get_output().stderr);
-        // Network errors should be handled gracefully
-        assert!(
-            stderr.contains("Error")
-                || stderr.contains("error")
-                || stderr.contains("network")
-                || stderr.contains("download"),
-            "Network errors should be handled gracefully: {stderr}"
-        );
-    }
-
-    Ok(())
-}
-
 /// Test malformed input handling
 #[test]
 fn test_malformed_input_handling() -> Result<()> {

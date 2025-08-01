@@ -231,62 +231,6 @@ fn test_duplicate_plugin_registration_fails() {
 }
 
 #[test]
-#[ignore] // Plugin integration with liquid parser not yet fully implemented
-fn test_template_engine_with_plugins() {
-    let mut registry = PluginRegistry::new();
-
-    // Register the reverse filter plugin
-    let plugin = ReverseFilterPlugin::new();
-    registry
-        .register_plugin(Box::new(plugin))
-        .expect("Failed to register plugin");
-
-    // Create template engine with plugins
-    let engine = TemplateEngine::with_plugins(registry);
-
-    // Test that the custom filter works in templates
-    let template = "Original: {{ text }}, Reversed: {{ text | reverse }}";
-    let mut args = HashMap::new();
-    args.insert("text".to_string(), "hello".to_string());
-
-    let result = engine
-        .render(template, &args)
-        .expect("Template should render");
-    assert_eq!(result, "Original: hello, Reversed: olleh");
-}
-
-#[test]
-#[ignore] // Plugin integration with liquid parser not yet fully implemented
-fn test_template_engine_with_multiple_custom_filters() {
-    let mut registry = PluginRegistry::new();
-
-    // Register both plugins
-    let reverse_plugin = ReverseFilterPlugin::new();
-    let uppercase_plugin = UppercaseFilterPlugin::new();
-
-    registry
-        .register_plugin(Box::new(reverse_plugin))
-        .expect("Failed to register reverse plugin");
-    registry
-        .register_plugin(Box::new(uppercase_plugin))
-        .expect("Failed to register uppercase plugin");
-
-    // Create template engine with plugins
-    let engine = TemplateEngine::with_plugins(registry);
-
-    // Test that both custom filters work in templates
-    let template =
-        "Original: {{ text }}, Reversed: {{ text | reverse }}, Uppercase: {{ text | uppercase }}";
-    let mut args = HashMap::new();
-    args.insert("text".to_string(), "hello".to_string());
-
-    let result = engine
-        .render(template, &args)
-        .expect("Template should render");
-    assert_eq!(result, "Original: hello, Reversed: olleh, Uppercase: HELLO");
-}
-
-#[test]
 fn test_template_engine_plugin_registry_access() {
     let mut registry = PluginRegistry::new();
 

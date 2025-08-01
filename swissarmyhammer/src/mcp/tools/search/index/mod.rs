@@ -11,6 +11,7 @@ use rmcp::model::CallToolResult;
 use rmcp::Error as McpError;
 use std::time::Instant;
 
+
 /// Tool for indexing files for semantic search
 #[derive(Default)]
 pub struct SearchIndexTool;
@@ -19,6 +20,38 @@ impl SearchIndexTool {
     /// Creates a new instance of the SearchIndexTool
     pub fn new() -> Self {
         Self
+    }
+
+    #[cfg(test)]
+    fn create_test_config() -> SemanticConfig {
+        // Create a unique temporary database path for each test execution
+        use std::thread;
+        use std::time::{SystemTime, UNIX_EPOCH};
+        
+        let thread_id = format!("{:?}", thread::current().id());
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let unique_id = format!("{}_{}", thread_id.replace("ThreadId(", "").replace(")", ""), timestamp);
+        
+        let persistent_path = std::env::temp_dir().join(format!("swissarmyhammer_test_{}", unique_id));
+        std::fs::create_dir_all(&persistent_path).expect("Failed to create persistent test dir");
+        let db_path = persistent_path.join("semantic.db");
+        
+        SemanticConfig {
+            database_path: db_path,
+            embedding_model: "test-model".to_string(),
+            chunk_size: 512,
+            chunk_overlap: 64,
+            similarity_threshold: 0.7,
+            excerpt_length: 200,
+            context_lines: 2,
+            simple_search_threshold: 0.5,
+            code_similarity_threshold: 0.7,
+            content_preview_length: 100,
+            min_chunk_size: 50,
+            max_chunk_size: 2000,
+            max_chunks_per_file: 100,
+            max_file_size_bytes: 10 * 1024 * 1024,
+        }
     }
 }
 
@@ -58,7 +91,16 @@ impl McpTool for SearchIndexTool {
         let start_time = Instant::now();
 
         // Initialize semantic search components
-        let config = SemanticConfig::default();
+        let config = {
+            #[cfg(test)]
+            {
+                Self::create_test_config()
+            }
+            #[cfg(not(test))]
+            {
+                SemanticConfig::default()
+            }
+        };
         let storage = VectorStorage::new(config.clone())
             .map_err(|e| McpErrorHandler::handle_error(e, "initialize vector storage"))?;
 
@@ -183,10 +225,27 @@ mod tests {
         let tool = SearchIndexTool::new();
         let context = create_test_context().await;
 
+        // Create a temporary directory with test files
+        let temp_dir = tempfile::TempDir::new().expect("Failed to create temp dir");
+        let test_dir = temp_dir.path();
+        
+        // Create test Rust file
+        let test_file = test_dir.join("test.rs");
+        std::fs::write(&test_file, r#"fn main() {
+    println!("Hello, world!");
+}
+
+fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+"#).expect("Failed to write test file");
+        
+        // Use the test file path in the pattern
+        let pattern = format!("{}/*.rs", test_dir.display());
         let mut arguments = serde_json::Map::new();
         arguments.insert(
             "patterns".to_string(),
-            serde_json::Value::Array(vec![serde_json::Value::String("**/*.rs".to_string())]),
+            serde_json::Value::Array(vec![serde_json::Value::String(pattern)]),
         );
         arguments.insert("force".to_string(), serde_json::Value::Bool(false));
 
@@ -196,6 +255,13 @@ mod tests {
             Ok(result) => {
                 assert_eq!(result.is_error, Some(false));
                 assert!(!result.content.is_empty());
+                // Verify the response indicates successful indexing
+                let content_str = if let rmcp::model::RawContent::Text(text) = &result.content[0].raw {
+                    &text.text
+                } else {
+                    panic!("Expected text content");
+                };
+                assert!(content_str.contains("indexed_files"));
             }
             Err(e) => {
                 let error_msg = e.to_string();

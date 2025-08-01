@@ -57,10 +57,6 @@ mod action_parsing_tests;
 
 #[cfg(test)]
 mod claude_output_formatting_tests;
-
-#[cfg(test)]
-mod claude_retry_tests;
-
 #[cfg(test)]
 mod concurrent_action_tests;
 

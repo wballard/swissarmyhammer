@@ -12,17 +12,21 @@ The goal is to have:
 {% render "principals" %}
 {% render "coding_standards" %}
 
-## Guidelines
+## Rules
 
 - Always run tests using a command line tool appropriate for the project
-- Always have an extended timeout running tests of 10 minutes for the first try
-- If tests are taking longer than 10 minutes, identify the slow tests and speed them up
-- Corrections should be constructive, meaning 'just deleting code' is not an acceptable fix
 - YOU MUST debug the code to make all tests pass, only change tests as a last resort
-- Feel free to refactor
-- If tests take a 'long time' -- more than 2 minutes
+- Always have an extended timeout running tests of 10 minutes for the first try
+- If individual tests are taking longer than 10 seconds, identify the slow tests and speed them up
   - check if any tests are hanging and correct them
   - identify the slowest test and speed it up
+  - DO NOT just put a timeout in a test, make it pass and be faster. think.
+- Corrections should be constructive, meaning 'just deleting code' is not an acceptable fix
+- Feel free to refactor
+
+### Rust
+
+- Run tests with `cargo nextest run`
 
 ## Process
 

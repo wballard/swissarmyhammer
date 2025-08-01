@@ -1451,22 +1451,12 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Temporarily disabled due to DuckDB crash during cleanup
     async fn test_reproduce_full_search_integration() {
-        use crate::search::{EmbeddingEngine, SearchQuery, SemanticConfig, SemanticSearcher};
+        use crate::search::{EmbeddingEngine, SearchQuery, SemanticSearcher};
         use std::error::Error;
-        use std::time::{SystemTime, UNIX_EPOCH};
 
-        // Use test config to avoid trying to download real embedding models
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let db_path = format!("/tmp/test_semantic_integration_{timestamp}.db");
-        let config = SemanticConfig {
-            database_path: std::path::PathBuf::from(db_path),
-            ..SemanticConfig::default()
-        };
+        // Use proper test config for unique temp directories and avoid trying to download real embedding models
+        let (config, _guard) = create_test_config();
 
         let storage = VectorStorage::new(config.clone()).unwrap();
         storage.initialize().unwrap();

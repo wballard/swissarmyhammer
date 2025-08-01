@@ -997,6 +997,9 @@ pub struct ShellAction {
 }
 
 impl ShellAction {
+    const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300); // 5 minutes
+    const MAX_TIMEOUT: Duration = Duration::from_secs(3600); // 1 hour
+
     /// Create a new shell action
     #[allow(dead_code)]
     pub fn new(command: String) -> Self {
@@ -1032,6 +1035,26 @@ impl ShellAction {
     pub fn with_environment(mut self, env: HashMap<String, String>) -> Self {
         self.environment = env;
         self
+    }
+
+    /// Validate timeout duration according to security limits
+    pub fn validate_timeout(&self) -> ActionResult<Duration> {
+        let timeout = self.timeout.unwrap_or(Self::DEFAULT_TIMEOUT);
+
+        if timeout > Self::MAX_TIMEOUT {
+            return Err(ActionError::ExecutionError(format!(
+                "Timeout too large: maximum is {} seconds",
+                Self::MAX_TIMEOUT.as_secs()
+            )));
+        }
+
+        if timeout.as_millis() == 0 {
+            return Err(ActionError::ExecutionError(
+                "Timeout must be greater than 0".to_string(),
+            ));
+        }
+
+        Ok(timeout)
     }
 }
 
@@ -1084,6 +1107,244 @@ pub fn validate_working_directory(path: &str) -> ActionResult<()> {
     }
 
     Ok(())
+}
+
+/// Validate shell command for security issues
+pub fn validate_command(command: &str) -> ActionResult<()> {
+    // Check for obviously dangerous patterns
+    if command.trim().is_empty() {
+        return Err(ActionError::ExecutionError(
+            "Shell command cannot be empty".to_string(),
+        ));
+    }
+
+    // Check command length (prevent extremely long commands)
+    if command.len() > 4096 {
+        return Err(ActionError::ExecutionError(
+            "Shell command too long (maximum 4096 characters)".to_string(),
+        ));
+    }
+
+    // Detect dangerous command patterns
+    validate_dangerous_patterns(command)?;
+
+    // Validate command structure
+    validate_command_structure(command)?;
+
+    Ok(())
+}
+
+/// Detect dangerous command patterns as specified in security requirements
+pub fn validate_dangerous_patterns(command: &str) -> ActionResult<()> {
+    let dangerous_patterns = [
+        // System modification commands
+        ("rm -rf", "Recursive file deletion"),
+        ("format", "Disk formatting"),
+        ("fdisk", "Disk partitioning"),
+        ("mkfs", "Filesystem creation"),
+        // Network/security operations
+        ("nc -l", "Network listener"),
+        ("ncat -l", "Network listener"),
+        ("socat", "Network relay"),
+        ("ssh", "Remote shell access"),
+        ("scp", "Remote file copy"),
+        ("rsync", "Remote sync"),
+        // Package management
+        ("apt install", "Package installation"),
+        ("yum install", "Package installation"),
+        ("pip install", "Python package installation"),
+        ("npm install", "Node package installation"),
+        ("cargo install", "Rust package installation"),
+        // Privilege escalation
+        ("sudo", "Privilege escalation"),
+        ("su ", "User switching"),
+        ("chmod +s", "Setuid bit"),
+        ("chown root", "Root ownership change"),
+        // System configuration
+        ("/etc/", "System configuration access"),
+        ("systemctl", "System service control"),
+        ("service ", "Service control"),
+        ("crontab", "Scheduled task modification"),
+        // Dangerous shell features
+        ("|(", "Subshell execution"),
+        ("eval", "Dynamic code execution"),
+        ("exec", "Process replacement"),
+    ];
+
+    let command_lower = command.to_lowercase();
+
+    for (pattern, description) in &dangerous_patterns {
+        if command_lower.contains(pattern) {
+            tracing::warn!(
+                "Potentially dangerous command pattern detected: {} in command: {}",
+                description,
+                command
+            );
+
+            // Log security event
+            log_security_event("DANGEROUS_PATTERN", description, command);
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate command structure to prevent injection
+pub fn validate_command_structure(command: &str) -> ActionResult<()> {
+    // Check for command injection patterns
+    let injection_patterns = [";", "&&", "||", "|", "`", "$(", "\n", "\r", "\0"];
+
+    for pattern in &injection_patterns {
+        if command.contains(pattern) {
+            // Allow some patterns in specific contexts
+            if validate_safe_usage(command, pattern)? {
+                continue;
+            }
+
+            return Err(ActionError::ExecutionError(format!(
+                "Potentially unsafe command pattern '{pattern}' detected"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// Check if a potentially dangerous pattern is being used safely
+pub fn validate_safe_usage(command: &str, pattern: &str) -> ActionResult<bool> {
+    match pattern {
+        "|" => {
+            // Allow simple pipes for common operations
+            if command.matches('|').count() == 1 && !command.contains("nc ") {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        }
+        "&&" | "||" | ";" => {
+            // These are generally unsafe for automated execution
+            Ok(false)
+        }
+        _ => Ok(false),
+    }
+}
+
+/// Enhanced working directory validation with security checks
+pub fn validate_working_directory_security(path: &str) -> ActionResult<()> {
+    // First run the existing validation
+    validate_working_directory(path)?;
+
+    // Prevent access to sensitive system directories
+    let sensitive_dirs = [
+        "/etc",
+        "/sys",
+        "/proc",
+        "/dev",
+        "/boot",
+        "/root",
+        "/var/lib",
+        "/usr/lib",
+        "C:\\Windows",
+        "C:\\Program Files",
+        "C:\\System32",
+    ];
+
+    let path_str = path.to_string().to_lowercase();
+    for sensitive in &sensitive_dirs {
+        if path_str.starts_with(&sensitive.to_lowercase()) {
+            tracing::warn!("Attempting to use sensitive directory: {}", path_str);
+            log_security_event(
+                "SENSITIVE_DIRECTORY",
+                &format!("Access to {sensitive}"),
+                path,
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate environment variables for security issues
+pub fn validate_environment_variables_security(env: &HashMap<String, String>) -> ActionResult<()> {
+    // List of sensitive environment variables that shouldn't be overridden
+    let protected_vars = [
+        "PATH",
+        "LD_LIBRARY_PATH",
+        "DYLD_LIBRARY_PATH",
+        "HOME",
+        "USER",
+        "USERNAME",
+        "SHELL",
+        "SSH_AUTH_SOCK",
+        "SSH_AGENT_PID",
+        "SUDO_USER",
+        "SUDO_UID",
+        "SUDO_GID",
+    ];
+
+    for (key, value) in env {
+        // Validate variable name (use existing function)
+        if !is_valid_env_var_name(key) {
+            return Err(ActionError::ExecutionError(format!(
+                "Invalid environment variable name: {key}"
+            )));
+        }
+
+        // Check for protected variables
+        if protected_vars.contains(&key.to_uppercase().as_str()) {
+            tracing::warn!(
+                "Attempting to override protected environment variable: {}",
+                key
+            );
+            log_security_event("PROTECTED_ENV_VAR", &format!("Override of {key}"), "");
+        }
+
+        // Validate variable value length
+        if value.len() > 1024 {
+            return Err(ActionError::ExecutionError(format!(
+                "Environment variable value too long: {key}"
+            )));
+        }
+
+        // Check for injection in environment values
+        if value.contains('\0') || value.contains('\n') {
+            return Err(ActionError::ExecutionError(format!(
+                "Invalid characters in environment variable: {key}"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// Log security-related events for audit purposes
+pub fn log_security_event(event_type: &str, details: &str, command: &str) {
+    tracing::warn!(
+        "Security event: {} - {} - Command: {}",
+        event_type,
+        details,
+        command
+    );
+}
+
+/// Log command execution with security context
+pub fn log_command_execution(
+    command: &str,
+    working_dir: Option<&str>,
+    env: &HashMap<String, String>,
+) {
+    tracing::info!(
+        "Executing shell command: {} (working_dir: {:?}, env_vars: {})",
+        command,
+        working_dir,
+        env.len()
+    );
+
+    // Log environment variables (but not their values for security)
+    if !env.is_empty() {
+        let env_keys: Vec<&String> = env.keys().collect();
+        tracing::debug!("Environment variables set: {:?}", env_keys);
+    }
 }
 
 impl VariableSubstitution for ShellAction {}
@@ -1214,6 +1475,18 @@ impl Action for ShellAction {
         // Substitute variables in command string
         let command = self.substitute_string(&self.command, context);
 
+        // Security validation
+        validate_command(&command)?;
+
+        // Validate environment variables for security
+        validate_environment_variables_security(&self.environment)?;
+
+        // Validate timeout
+        let _validated_timeout = self.validate_timeout()?;
+
+        // Log security-relevant execution
+        log_command_execution(&command, self.working_dir.as_deref(), &self.environment);
+
         tracing::info!("Executing shell command: {}", command);
 
         // Record start time for duration calculation
@@ -1227,7 +1500,7 @@ impl Action for ShellAction {
             let substituted_dir = self.substitute_string(working_dir, context);
 
             // Validate working directory for security
-            validate_working_directory(&substituted_dir)?;
+            validate_working_directory_security(&substituted_dir)?;
 
             let path = std::path::Path::new(&substituted_dir);
 
@@ -1278,12 +1551,7 @@ impl Action for ShellAction {
             .map_err(|e| ActionError::ExecutionError(format!("Failed to spawn command: {e}")))?;
 
         let result = if let Some(timeout_duration) = self.timeout {
-            // Validate timeout duration (max 1 hour)
-            if timeout_duration > Duration::from_secs(3600) {
-                return Err(ActionError::ExecutionError(
-                    "Timeout cannot exceed 1 hour (3600 seconds)".to_string(),
-                ));
-            }
+            // Timeout already validated in security checks above
 
             // Execute with timeout and proper process cleanup
             // Use a more complex approach to maintain access to child for cleanup

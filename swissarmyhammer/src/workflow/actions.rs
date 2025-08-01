@@ -983,17 +983,22 @@ pub struct ShellAction {
     /// The shell command to execute
     pub command: String,
     /// Optional timeout for command execution
+    #[allow(dead_code)]
     pub timeout: Option<Duration>,
     /// Optional variable name to store command output
+    #[allow(dead_code)]
     pub result_variable: Option<String>,
     /// Optional working directory for command execution
+    #[allow(dead_code)]
     pub working_dir: Option<String>,
     /// Optional environment variables for the command
+    #[allow(dead_code)]
     pub environment: HashMap<String, String>,
 }
 
 impl ShellAction {
     /// Create a new shell action
+    #[allow(dead_code)]
     pub fn new(command: String) -> Self {
         Self {
             command,
@@ -1005,24 +1010,28 @@ impl ShellAction {
     }
 
     /// Set the timeout for command execution
+    #[allow(dead_code)]
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
         self
     }
 
     /// Set the result variable name
+    #[allow(dead_code)]
     pub fn with_result_variable(mut self, variable: String) -> Self {
         self.result_variable = Some(variable);
         self
     }
 
     /// Set the working directory for command execution
+    #[allow(dead_code)]
     pub fn with_working_dir(mut self, dir: String) -> Self {
         self.working_dir = Some(dir);
         self
     }
 
     /// Set environment variables for the command
+    #[allow(dead_code)]
     pub fn with_environment(mut self, env: HashMap<String, String>) -> Self {
         self.environment = env;
         self
@@ -1243,7 +1252,6 @@ impl Action for SubWorkflowAction {
 
     impl_as_any!();
 }
-
 
 /// Format Claude output JSON line as YAML for better readability
 #[cfg_attr(test, allow(dead_code))]

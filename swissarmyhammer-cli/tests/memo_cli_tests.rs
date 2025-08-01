@@ -435,12 +435,12 @@ fn test_cli_memo_search_empty_query() {
         .assert()
         .success();
 
-    // Search with empty query should match all
+    // Search with empty query should fail
     memo_cmd_with_dir(&temp_dir)
         .args(["memo", "search", ""])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("🔍 Found 1 memo matching ''"));
+        .failure()
+        .stderr(predicate::str::contains("Search query cannot be empty"));
 }
 
 #[test]

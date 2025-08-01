@@ -70,13 +70,17 @@ impl CliToolContext {
 
     /// Create memo storage backend
     fn create_memo_storage(
-        current_dir: &std::path::Path,
+        _current_dir: &std::path::Path,
     ) -> Arc<RwLock<Box<dyn swissarmyhammer::memoranda::MemoStorage>>> {
-        Arc::new(RwLock::new(Box::new(
-            swissarmyhammer::memoranda::storage::FileSystemMemoStorage::new(
-                current_dir.to_path_buf(),
-            ),
-        )))
+        // Use new_default() to respect SWISSARMYHAMMER_MEMOS_DIR environment variable
+        let storage = swissarmyhammer::memoranda::storage::FileSystemMemoStorage::new_default()
+            .unwrap_or_else(|_| {
+                // Fallback to current directory if new_default() fails
+                swissarmyhammer::memoranda::storage::FileSystemMemoStorage::new(
+                    _current_dir.to_path_buf(),
+                )
+            });
+        Arc::new(RwLock::new(Box::new(storage)))
     }
 
     /// Create tool handlers for backward compatibility
@@ -304,9 +308,12 @@ mod tests {
 
         let memo_storage: Arc<RwLock<Box<dyn swissarmyhammer::memoranda::MemoStorage>>> =
             Arc::new(RwLock::new(Box::new(
-                swissarmyhammer::memoranda::storage::FileSystemMemoStorage::new(PathBuf::from(
-                    "./test_issues",
-                )),
+                swissarmyhammer::memoranda::storage::FileSystemMemoStorage::new_default()
+                    .unwrap_or_else(|_| {
+                        swissarmyhammer::memoranda::storage::FileSystemMemoStorage::new(
+                            PathBuf::from("./test_issues"),
+                        )
+                    }),
             )));
 
         let tool_handlers = Arc::new(swissarmyhammer::mcp::tool_handlers::ToolHandlers::new(

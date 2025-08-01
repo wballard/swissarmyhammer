@@ -366,7 +366,7 @@ impl ActionParser {
                     .filter(|c: &char| c.is_alphanumeric())
                     .repeated()
                     .at_least(1)
-                    .collect::<String>()
+                    .collect::<String>(),
             )
             .map(|v| ("timeout".to_string(), v));
 
@@ -387,26 +387,17 @@ impl ActionParser {
             .then_ignore(just('='))
             .ignore_then(
                 just('{')
-                    .ignore_then(
-                        none_of('}')
-                            .repeated()
-                            .collect::<String>()
-                    )
-                    .then_ignore(just('}'))
+                    .ignore_then(none_of('}').repeated().collect::<String>())
+                    .then_ignore(just('}')),
             )
             .map(|content| ("env".to_string(), format!("{{{content}}}")));
 
         // Generic parameter parser for unknown parameters
-        let generic_param_parser = Self::argument_key()
-            .then_ignore(just('='))
-            .then(choice((
-                Self::quoted_string(),
-                // For env parameters or other complex values, capture everything until whitespace or end
-                none_of(' ')
-                    .repeated()
-                    .at_least(1)
-                    .collect::<String>()
-            )));
+        let generic_param_parser = Self::argument_key().then_ignore(just('=')).then(choice((
+            Self::quoted_string(),
+            // For env parameters or other complex values, capture everything until whitespace or end
+            none_of(' ').repeated().at_least(1).collect::<String>(),
+        )));
 
         // Combine all parameter parsers
         let param_parser = choice((

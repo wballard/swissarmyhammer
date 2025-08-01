@@ -245,7 +245,11 @@ impl ContentValidator for YamlTypoValidator {
                 let words: Vec<&str> = line.split_whitespace().collect();
                 for word in words {
                     // Remove common punctuation to check the actual word
-                    let clean_word = word.trim_matches(&[',', '.', ':', ';', '!', '?', '"', '\'', '(', ')', '[', ']', '{', '}'][..]);
+                    let clean_word = word.trim_matches(
+                        &[
+                            ',', '.', ':', ';', '!', '?', '"', '\'', '(', ')', '[', ']', '{', '}',
+                        ][..],
+                    );
                     if clean_word == *typo {
                         result.add_issue(ValidationIssue {
                             level: ValidationLevel::Warning,
@@ -429,8 +433,16 @@ mod tests {
         // Test that substrings don't match (like "tage" in "staged")
         let mut result2 = ValidationResult::new();
         let content_with_substring = "These files are staged and ready";
-        validator.validate_content(content_with_substring, Path::new("test.txt"), &mut result2, None);
-        assert_eq!(result2.warnings, 0, "Should not match 'tage' within 'staged'");
+        validator.validate_content(
+            content_with_substring,
+            Path::new("test.txt"),
+            &mut result2,
+            None,
+        );
+        assert_eq!(
+            result2.warnings, 0,
+            "Should not match 'tage' within 'staged'"
+        );
     }
 
     #[test]

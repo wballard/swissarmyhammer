@@ -135,7 +135,8 @@ fn test_complete_issue_lifecycle() -> Result<()> {
 
     let show_stdout = String::from_utf8_lossy(&show_output.get_output().stdout);
     assert!(
-        show_stdout.contains("E2E Lifecycle Test") && show_stdout.contains("complete lifecycle workflow"),
+        show_stdout.contains("E2E Lifecycle Test")
+            && show_stdout.contains("complete lifecycle workflow"),
         "Issue details should contain both title and description: {show_stdout}"
     );
 
@@ -210,7 +211,9 @@ fn test_complete_issue_lifecycle() -> Result<()> {
     let final_stdout = String::from_utf8_lossy(&final_list_output.get_output().stdout);
     assert!(
         final_stdout.contains("e2e_lifecycle_test")
-            && (final_stdout.contains("completed") || final_stdout.contains("✓") || final_stdout.contains("✅")),
+            && (final_stdout.contains("completed")
+                || final_stdout.contains("✓")
+                || final_stdout.contains("✅")),
         "Completed issue should appear with completion status indicator: {final_stdout}"
     );
 

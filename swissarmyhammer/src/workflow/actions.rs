@@ -1080,9 +1080,7 @@ impl Action for ShellAction {
         // Execute command with optional timeout
         let execution_future = async {
             let child = cmd.spawn().map_err(|e| {
-                ActionError::ExecutionError(format!(
-                    "Failed to spawn command '{cmd_name}': {e}"
-                ))
+                ActionError::ExecutionError(format!("Failed to spawn command '{cmd_name}': {e}"))
             })?;
 
             let output = child.wait_with_output().await.map_err(|e| {
@@ -2178,16 +2176,26 @@ mod tests {
         let test_cases = vec![
             ("Shell \"echo hello\"", "echo hello", None),
             ("Shell \"pwd\"", "pwd", None),
-            ("Shell \"ls -la\" with timeout=60", "ls -la", Some(Duration::from_secs(60))),
+            (
+                "Shell \"ls -la\" with timeout=60",
+                "ls -la",
+                Some(Duration::from_secs(60)),
+            ),
         ];
 
         for (description, expected_command, expected_timeout) in test_cases {
             let action = parse_action_from_description(description).unwrap().unwrap();
-            assert_eq!(action.action_type(), "shell", "Failed for: {}", description);
-            
+            assert_eq!(action.action_type(), "shell", "Failed for: {description}");
+
             let shell_action = action.as_any().downcast_ref::<ShellAction>().unwrap();
-            assert_eq!(shell_action.command, expected_command, "Command mismatch for: {}", description);
-            assert_eq!(shell_action.timeout, expected_timeout, "Timeout mismatch for: {}", description);
+            assert_eq!(
+                shell_action.command, expected_command,
+                "Command mismatch for: {description}"
+            );
+            assert_eq!(
+                shell_action.timeout, expected_timeout,
+                "Timeout mismatch for: {description}"
+            );
         }
     }
 
@@ -2195,11 +2203,11 @@ mod tests {
     fn test_shell_action_module_export() {
         // Test that ShellAction can be imported via the workflow module
         use crate::workflow::ShellAction as WorkflowShellAction;
-        
+
         let action = WorkflowShellAction::new("echo test".to_string());
         assert_eq!(action.command, "echo test");
         assert_eq!(action.action_type(), "shell");
-        
+
         // Verify it can be used through the trait
         let trait_action: &dyn Action = &action;
         assert_eq!(trait_action.action_type(), "shell");

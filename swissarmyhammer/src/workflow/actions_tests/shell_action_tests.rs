@@ -327,3 +327,274 @@ fn test_working_directory_validation() {
     assert!(validate_working_directory("path/../parent").is_err());
     assert!(validate_working_directory("/absolute/../parent").is_err());
 }
+
+// Security validation tests
+#[test]
+fn test_command_validation_empty_command() {
+    use crate::workflow::actions::validate_command;
+
+    let result = validate_command("");
+    assert!(result.is_err());
+    let error_msg = result.unwrap_err().to_string();
+    assert!(error_msg.contains("cannot be empty"));
+}
+
+#[test]
+fn test_command_validation_long_command() {
+    use crate::workflow::actions::validate_command;
+
+    let long_command = "a".repeat(5000); // Exceeds 4096 character limit
+    let result = validate_command(&long_command);
+    assert!(result.is_err());
+    let error_msg = result.unwrap_err().to_string();
+    assert!(error_msg.contains("too long"));
+}
+
+#[test]
+fn test_dangerous_pattern_detection() {
+    use crate::workflow::actions::validate_dangerous_patterns;
+
+    // Test dangerous patterns - these should log warnings but not fail
+    assert!(validate_dangerous_patterns("rm -rf /").is_ok());
+    assert!(validate_dangerous_patterns("sudo apt install package").is_ok());
+    assert!(validate_dangerous_patterns("ssh user@host").is_ok());
+    assert!(validate_dangerous_patterns("eval 'dangerous code'").is_ok());
+
+    // All should pass but generate warnings in logs
+}
+
+#[test]
+fn test_command_structure_validation_injection_patterns() {
+    use crate::workflow::actions::validate_command_structure;
+
+    // Test command injection patterns that should be blocked
+    assert!(validate_command_structure("echo hello; rm -rf /").is_err());
+    assert!(validate_command_structure("echo hello && rm file").is_err());
+    assert!(validate_command_structure("echo hello || rm file").is_err());
+    assert!(validate_command_structure("echo `dangerous`").is_err());
+    assert!(validate_command_structure("echo $(dangerous)").is_err());
+    assert!(validate_command_structure("echo hello\nrm file").is_err());
+    assert!(validate_command_structure("echo hello\0rm file").is_err());
+
+    // Test safe command
+    assert!(validate_command_structure("echo hello world").is_ok());
+}
+
+#[test]
+fn test_command_structure_validation_safe_pipes() {
+    use crate::workflow::actions::validate_command_structure;
+
+    // Test that simple pipes are allowed
+    assert!(validate_command_structure("ls | grep test").is_ok());
+
+    // Test that dangerous pipe combinations are blocked
+    assert!(validate_command_structure("ls | nc -l 8080").is_err());
+}
+
+#[test]
+fn test_safe_usage_validation() {
+    use crate::workflow::actions::validate_safe_usage;
+
+    // Test pipe validation
+    assert!(validate_safe_usage("ls | grep test", "|").unwrap());
+    assert!(!validate_safe_usage("ls | nc -l 8080", "|").unwrap());
+    assert!(!validate_safe_usage("ls | grep | sort", "|").unwrap()); // Multiple pipes
+
+    // Test that dangerous operators are not considered safe
+    assert!(!validate_safe_usage("echo hello && rm file", "&&").unwrap());
+    assert!(!validate_safe_usage("echo hello || rm file", "||").unwrap());
+    assert!(!validate_safe_usage("echo hello; rm file", ";").unwrap());
+}
+
+#[test]
+fn test_working_directory_security_validation() {
+    use crate::workflow::actions::validate_working_directory_security;
+
+    // Test normal directories
+    assert!(validate_working_directory_security("/tmp").is_ok());
+    assert!(validate_working_directory_security("relative/path").is_ok());
+
+    // Test path traversal prevention (inherited from base validation)
+    assert!(validate_working_directory_security("../parent").is_err());
+
+    // Test sensitive directory warnings (should succeed but log warnings)
+    assert!(validate_working_directory_security("/etc/passwd").is_ok()); // Logs warning
+    assert!(validate_working_directory_security("/root/secret").is_ok()); // Logs warning
+}
+
+#[test]
+fn test_environment_variables_security_validation() {
+    use crate::workflow::actions::validate_environment_variables_security;
+    use std::collections::HashMap;
+
+    // Test valid environment variables
+    let mut env = HashMap::new();
+    env.insert("VALID_VAR".to_string(), "value".to_string());
+    assert!(validate_environment_variables_security(&env).is_ok());
+
+    // Test invalid variable names
+    let mut env = HashMap::new();
+    env.insert("123INVALID".to_string(), "value".to_string());
+    assert!(validate_environment_variables_security(&env).is_err());
+
+    // Test protected variables (should succeed but log warnings)
+    let mut env = HashMap::new();
+    env.insert("PATH".to_string(), "/custom/path".to_string());
+    assert!(validate_environment_variables_security(&env).is_ok()); // Logs warning
+
+    // Test value too long
+    let mut env = HashMap::new();
+    env.insert("TEST_VAR".to_string(), "x".repeat(2000));
+    assert!(validate_environment_variables_security(&env).is_err());
+
+    // Test invalid characters in values
+    let mut env = HashMap::new();
+    env.insert("TEST_VAR".to_string(), "value\0with\nnull".to_string());
+    assert!(validate_environment_variables_security(&env).is_err());
+}
+
+#[test]
+fn test_shell_action_timeout_validation() {
+    use std::time::Duration;
+
+    // Test valid timeout
+    let action = ShellAction::new("echo test".to_string()).with_timeout(Duration::from_secs(300));
+    assert!(action.validate_timeout().is_ok());
+
+    // Test timeout too large
+    let action = ShellAction::new("echo test".to_string()).with_timeout(Duration::from_secs(4000)); // Exceeds 1 hour limit
+    assert!(action.validate_timeout().is_err());
+
+    // Test zero timeout
+    let action = ShellAction::new("echo test".to_string()).with_timeout(Duration::from_millis(0));
+    assert!(action.validate_timeout().is_err());
+
+    // Test default timeout when none specified
+    let action = ShellAction::new("echo test".to_string());
+    let timeout = action.validate_timeout().unwrap();
+    assert_eq!(timeout, Duration::from_secs(300)); // DEFAULT_TIMEOUT
+}
+
+// Integration tests for security validation in execute method
+#[tokio::test]
+async fn test_shell_action_security_command_injection_prevention() {
+    // Test that command injection patterns are blocked
+    let action = ShellAction::new("echo hello; rm -rf /".to_string());
+    let mut context = HashMap::new();
+
+    let result = action.execute(&mut context).await;
+    assert!(result.is_err());
+    let error_msg = result.unwrap_err().to_string();
+    assert!(error_msg.contains("unsafe command pattern"));
+}
+
+#[tokio::test]
+async fn test_shell_action_security_empty_command() {
+    let action = ShellAction::new("".to_string());
+    let mut context = HashMap::new();
+
+    let result = action.execute(&mut context).await;
+    assert!(result.is_err());
+    let error_msg = result.unwrap_err().to_string();
+    assert!(error_msg.contains("cannot be empty"));
+}
+
+#[tokio::test]
+async fn test_shell_action_security_long_command() {
+    let long_command = "echo ".to_string() + &"a".repeat(5000);
+    let action = ShellAction::new(long_command);
+    let mut context = HashMap::new();
+
+    let result = action.execute(&mut context).await;
+    assert!(result.is_err());
+    let error_msg = result.unwrap_err().to_string();
+    assert!(error_msg.contains("too long"));
+}
+
+#[tokio::test]
+async fn test_shell_action_security_environment_variable_validation() {
+    // Test invalid environment variable names
+    let mut env = HashMap::new();
+    env.insert("123INVALID".to_string(), "value".to_string());
+
+    let action = ShellAction::new("echo test".to_string()).with_environment(env);
+    let mut context = HashMap::new();
+
+    let result = action.execute(&mut context).await;
+    assert!(result.is_err());
+    let error_msg = result.unwrap_err().to_string();
+    assert!(error_msg.contains("Invalid environment variable name"));
+}
+
+#[tokio::test]
+async fn test_shell_action_security_environment_variable_too_long() {
+    let mut env = HashMap::new();
+    env.insert("TEST_VAR".to_string(), "x".repeat(2000));
+
+    let action = ShellAction::new("echo test".to_string()).with_environment(env);
+    let mut context = HashMap::new();
+
+    let result = action.execute(&mut context).await;
+    assert!(result.is_err());
+    let error_msg = result.unwrap_err().to_string();
+    assert!(error_msg.contains("value too long"));
+}
+
+#[tokio::test]
+async fn test_shell_action_security_timeout_too_large() {
+    let action = ShellAction::new("echo test".to_string()).with_timeout(Duration::from_secs(4000)); // Exceeds limit
+    let mut context = HashMap::new();
+
+    let result = action.execute(&mut context).await;
+    assert!(result.is_err());
+    let error_msg = result.unwrap_err().to_string();
+    assert!(error_msg.contains("Timeout too large"));
+}
+
+#[tokio::test]
+async fn test_shell_action_security_sensitive_directory_warning() {
+    // This should succeed but generate warnings in logs
+    let action = ShellAction::new("ls".to_string()).with_working_dir("/etc".to_string());
+    let mut context = HashMap::new();
+
+    // This test would need the /etc directory to exist, so we expect it to either:
+    // 1. Succeed with warnings logged, or
+    // 2. Fail due to directory not existing (but not due to security validation)
+    let result = action.execute(&mut context).await;
+    if let Err(error) = result {
+        let error_msg = error.to_string();
+        // Should not fail due to security validation, only due to directory existence
+        assert!(!error_msg.contains("unsafe command pattern"));
+        assert!(!error_msg.contains("cannot contain parent"));
+    }
+}
+
+#[tokio::test]
+async fn test_shell_action_security_dangerous_pattern_warning() {
+    // These should execute but generate security warnings in logs
+    let dangerous_commands = [
+        "sudo echo test",
+        "rm file.txt", // Not rm -rf which is more dangerous
+        "ssh-keygen -t rsa",
+    ];
+
+    for cmd in &dangerous_commands {
+        let action = ShellAction::new(cmd.to_string());
+        let mut context = HashMap::new();
+
+        // These should succeed (dangerous patterns only generate warnings)
+        // but we can't test the actual execution without the commands being available
+        // So we test that security validation doesn't block them
+        let result = action.execute(&mut context).await;
+        if let Err(error) = result {
+            let error_msg = error.to_string();
+            // Should not fail due to dangerous pattern detection
+            assert!(
+                !error_msg.contains("dangerous command pattern"),
+                "Command '{}' was blocked by dangerous pattern detection: {}",
+                cmd,
+                error_msg
+            );
+        }
+    }
+}

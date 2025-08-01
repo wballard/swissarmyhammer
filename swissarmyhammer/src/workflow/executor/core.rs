@@ -510,7 +510,7 @@ impl WorkflowExecutor {
 
                 self.log_event(
                     ExecutionEventType::StateExecution,
-                    format!("Action completed successfully with result: {result_value}"),
+                    "Action completed successfully".to_string(),
                 );
                 Ok(())
             }

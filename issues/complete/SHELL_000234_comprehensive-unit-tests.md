@@ -474,3 +474,38 @@ Add performance tests if needed:
 ## Next Steps
 
 After completing this step, proceed to implementing integration tests with real workflow scenarios.
+
+## Proposed Solution
+
+After analyzing the existing shell action test suite in `/Users/wballard/github/swissarmyhammer/swissarmyhammer/src/workflow/actions_tests/shell_action_tests.rs`, I've identified that there's already substantial test coverage but some comprehensive areas can be expanded according to the issue specification.
+
+### Current Test Coverage Analysis
+The existing test file has 599 lines and covers:
+- Basic functionality (creation, builder pattern, execution)
+- Security validation (command injection, environment variables, timeouts)  
+- Error handling (invalid commands, directories, environment variables)
+- Variable substitution (command, working directory, environment)
+- Integration (action system, parsing)
+
+### Missing Test Coverage to Add
+
+1. **Enhanced Parser Tests**: Add comprehensive parser tests for all syntax variations and edge cases
+2. **Timeout Process Management**: Add tests for graceful process termination scenarios
+3. **Cross-Platform Tests**: Add platform-specific command tests
+4. **Integration Tests**: Add more comprehensive action system integration tests
+5. **Variable Substitution Edge Cases**: Test complex substitution scenarios
+6. **Performance Considerations**: Add tests for various execution times and resource usage
+
+### Implementation Approach
+
+I will extend the existing test file with additional test modules to provide comprehensive coverage as specified in the issue, following the established testing patterns in the codebase and ensuring all test cases are deterministic and reliable.
+
+The tests will be organized in modules matching the issue specification:
+- Enhanced basic functionality tests
+- Comprehensive parser tests 
+- Expanded variable substitution tests
+- Timeout and process management tests
+- Additional error handling tests
+- Extended security tests
+- Integration tests
+- Cross-platform tests

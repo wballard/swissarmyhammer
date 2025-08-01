@@ -5,9 +5,15 @@ description: "Check if all tests are passing."
 
 ## Goal
 
-We want to know if all unit tests are passing.
+We want to know if unit tests are passing.
 
 ## Rules
 
-If you run all tests, on any failure, respond only with NO.
-If you run all tests, and they all pass, respond only with YES.
+If you run tests, on any failure, respond with:
+  - the word NO on a single line
+  - a yaml list of the failing test names
+If you run tests, and they all pass, respond only with YES.
+
+### Rust
+
+- Run tests with `cargo nextest run`

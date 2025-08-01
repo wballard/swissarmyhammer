@@ -278,7 +278,9 @@ impl TestRunner {
         }
 
         // Check for ABORT ERROR pattern in the rendered output and exit immediately if found
-        if let Err(action_error) = swissarmyhammer::common::abort_handler::check_for_abort_error_and_exit(&rendered) {
+        if let Err(action_error) =
+            swissarmyhammer::common::abort_handler::check_for_abort_error_and_exit(rendered)
+        {
             return Err(anyhow!("ABORT ERROR detected: {}", action_error));
         }
 

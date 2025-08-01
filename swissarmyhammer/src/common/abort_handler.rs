@@ -76,14 +76,14 @@ fn extract_abort_context(output: &str) -> String {
 }
 
 /// Check for abort error and handle appropriately based on compilation mode
-/// 
+///
 /// This function provides different behavior based on compilation mode:
 /// - In production/release: Immediately calls `std::process::exit(2)` for hard shutdown if error found
 /// - In test mode: Returns ActionError::AbortError for testability
-/// 
+///
 /// # Arguments
 /// * `output` - The text to scan for abort errors
-/// 
+///
 /// # Returns
 /// * `Ok(())` if no abort error is found
 /// * `Err(ActionError::AbortError)` if abort error found in test mode
@@ -96,9 +96,11 @@ pub fn check_for_abort_error_and_exit(output: &str) -> Result<(), ActionError> {
                 // In test mode, return the error for testability
                 #[cfg(test)]
                 {
+                    #[allow(unused_variables)]
+                    let _ = msg; // Variable used only in non-test builds
                     return Err(action_error);
                 }
-                
+
                 // In all non-test builds (including debug), exit immediately
                 #[cfg(not(test))]
                 {
@@ -106,11 +108,11 @@ pub fn check_for_abort_error_and_exit(output: &str) -> Result<(), ActionError> {
                     std::process::exit(2);
                 }
             }
-            
+
             // This should never be reached in non-test builds due to exit above
             #[cfg(test)]
             return Err(action_error);
-            
+
             #[cfg(not(test))]
             unreachable!("Should have exited above")
         }
@@ -249,7 +251,7 @@ mod tests {
         let output_with_abort = "ABORT ERROR: Something went wrong";
         let result = check_for_abort_error_and_exit(output_with_abort);
         assert!(result.is_err(), "Should return error in test mode");
-        
+
         if let Err(ActionError::AbortError(msg)) = result {
             assert!(msg.contains("ABORT ERROR"));
         } else {

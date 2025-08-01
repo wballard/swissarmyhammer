@@ -83,6 +83,9 @@ Focus on understanding the problem requirements and coding tests that prove the 
 - YOU MUST NEVER ignore system or test output -- logs and messages often contain CRITICAL information
 - Test output MUST BE PRISTINE TO PASS -- if logs are expected to contain errors, these MUST be captured and tested
 - YOU MUST NEVER stop work when you still have failing tests -- get those tests passing
+- YOU MUST NEVER write performance tests while doing TDD, only write performance tests if explicitly asked
+- YOU MUST NEVER run tests with any timeout parameters to the tests, let them run
+- YOU MUST make tests that are too slow (> 10s) run faster
 
 ## Systematic Debugging Process
 
@@ -125,6 +128,9 @@ YOU MUST follow this debugging framework for ANY technical issue:
 
 - Always format your files with `cargo fmt`
   - Format all files with `cargo fmt --all`
+- Test with https://nexte.st
+  - `cargo nextest run` is the way
+  - if `cargo nextest` is not available, install with `cargo install cargo-nextest`
 - Always lint your files with `cargo clippy`
   - All lint errors and warnings should be included as todo items in code review
 - Use `tracing` not `eprintln`

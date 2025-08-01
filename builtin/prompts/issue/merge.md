@@ -1,6 +1,6 @@
 ---
 title: merge
-description: Merge your work into the main branch.
+description: Merge the current issue back to the main branch.
 ---
 
 ## Goals
@@ -9,6 +9,6 @@ The goal is to merge your code into the main branch.
 
 ## Process
 
-- note your current branch, let's call this the work branch
+- Use a tool to get the current issue
 - use the issue_merge tool to merge the issue working branch back to main
 - report your progress

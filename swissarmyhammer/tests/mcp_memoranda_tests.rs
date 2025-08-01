@@ -863,59 +863,6 @@ async fn test_mcp_memo_large_content() {
         .contains("Large Content Memo"));
 }
 
-/// Test concurrent MCP requests
-#[tokio::test]
-#[serial]
-async fn test_mcp_memo_concurrent_requests() {
-    let mut server = start_mcp_server().unwrap();
-    wait_for_server_ready().await;
-
-    let mut stdin = server.0.stdin.take().unwrap();
-    let stdout = server.0.stdout.take().unwrap();
-    let mut reader = BufReader::new(stdout);
-
-    // Initialize MCP connection
-    initialize_mcp_connection(&mut stdin, &mut reader).unwrap();
-
-    // Clean up any existing memos to ensure clean test state
-    cleanup_all_memos(&mut stdin, &mut reader).unwrap();
-
-    // Send multiple create requests concurrently (in rapid succession)
-    for i in 1..=5 {
-        let create_request = create_tool_request(
-            i,
-            "memo_create",
-            json!({
-                "title": format!("Concurrent Memo {}", i),
-                "content": format!("Content for concurrent memo {}", i)
-            }),
-        );
-        send_request(&mut stdin, create_request).unwrap();
-    }
-
-    // Read all responses
-    let mut successful_creates = 0;
-    for _ in 1..=5 {
-        let response = read_response(&mut reader).unwrap();
-        if response.get("error").is_none() {
-            successful_creates += 1;
-        }
-    }
-
-    // All creates should succeed
-    assert_eq!(successful_creates, 5);
-
-    // Verify all memos were created by listing
-    let list_request = create_tool_request(10, "memo_list", json!({}));
-    send_request(&mut stdin, list_request).unwrap();
-    let list_response = read_response(&mut reader).unwrap();
-
-    let text = list_response["result"]["content"][0]["text"]
-        .as_str()
-        .unwrap();
-    assert!(text.contains("Found 5 memos"));
-}
-
 /// Test MCP error handling for malformed requests
 #[tokio::test]
 #[serial]

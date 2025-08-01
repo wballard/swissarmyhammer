@@ -33,7 +33,6 @@ glob = "0.3"
 ignore = "0.4"
 
 # Semantic Search Dependencies
-# mistralrs = { git = "https://github.com/EricLBuehler/mistral.rs.git" } # Disabled - doesn't support embeddings
 ort = "2.0.0-rc.10"
 tokenizers = "0.20"
 hf-hub = { version = "0.3", features = ["tokio"] }
@@ -84,46 +83,5 @@ proptest = "1.0"
 criterion = "0.5"
 serial_test = "3.0"
 
-[profile.release]
-# Optimize for speed over size
-opt-level = 3
-# Disable LTO for faster builds
-lto = false
-# More codegen units for faster compilation
-codegen-units = 256
-# Abort on panic for smaller binary size
-panic = "abort"
-# Enable incremental compilation for faster rebuilds
-incremental = true
-
-[profile.dev]
-# No LTO for fastest debug builds
-lto = false
-# Maximum parallelization for debug builds
-codegen-units = 256
-# No optimization for fastest compilation
-opt-level = 0
-# Enable incremental compilation
-incremental = true
-# Minimal debug info for faster builds
-debug = 1
-
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
-
-# Fast dev profile for quick iterations
-[profile.dev-fast]
-inherits = "dev"
-opt-level = 0           # No optimization for fastest builds
-debug = 0               # No debug info for fastest builds
-incremental = true
-codegen-units = 256
-split-debuginfo = "off"
-
-# Optimized dev profile with some performance
-[profile.dev-opt]
-inherits = "dev"
-opt-level = 1       # Slight optimization
-debug = 1           # Minimal debug info
-incremental = true
-codegen-units = 256

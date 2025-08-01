@@ -1166,6 +1166,7 @@ stateDiagram-v2
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_validate_command_loads_same_workflows_as_flow_list() {
         // This test ensures consistency between validate and flow list commands
         // Both should load workflows from the same standard locations

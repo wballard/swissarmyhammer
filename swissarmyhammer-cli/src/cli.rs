@@ -723,9 +723,9 @@ pub enum IssueCommands {
         /// Show active issues only
         #[arg(short, long)]
         active: bool,
-        /// Output format (table, json, markdown)
-        #[arg(short, long, default_value = "table")]
-        format: String,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "table")]
+        format: OutputFormat,
     },
     /// Show issue details
     Show {

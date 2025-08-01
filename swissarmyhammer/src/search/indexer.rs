@@ -517,6 +517,13 @@ impl FileIndexer {
     pub async fn full_reindex(&mut self, pattern: &str) -> Result<IndexingReport> {
         self.index_glob(pattern, true).await
     }
+
+    #[cfg(test)]
+    /// Create a FileIndexer for testing with mock embedding engine (no network required)
+    pub async fn new_for_testing(storage: VectorStorage) -> Result<Self> {
+        let embedding_engine = EmbeddingEngine::new_for_testing().await?;
+        Self::with_custom_embedding_engine(storage, embedding_engine).await
+    }
 }
 
 /// Statistics from an indexing operation

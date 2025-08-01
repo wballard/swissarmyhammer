@@ -20,8 +20,8 @@ stateDiagram-v2
 ## Actions
 
 - start: log "Reviewing an issue"
-- review: execute prompt "review/branch"
-- correct: execute prompt "code/review"
+- review: execute prompt "issue/review"
+- correct: execute prompt "issue/code_review"
 - test: run workflow "tdd"
 - commit: execute prompt "commit"
 

@@ -16,8 +16,7 @@ DO NOT code now, the goal is just to create `./CODE_REVIEW.md` todo items.
 
 ## Process
 
-- If you are on the main branch
-  - return an ABORT ERROR: branch review is not available on the main branch
+{% render "issue/on_worktree" %}
 - If there is an existing ./CODE_REVIEW.md
   - Remove any done todo items
 - Focus on the files that have changed just on the current branch, this is your working set

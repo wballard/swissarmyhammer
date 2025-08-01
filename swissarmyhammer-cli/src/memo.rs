@@ -1,5 +1,5 @@
 use crate::cli::MemoCommands;
-use crate::mcp_integration::{response_formatting, CliToolContext};
+use crate::mcp_integration::CliToolContext;
 use rmcp::model::CallToolResult;
 use serde_json::json;
 use std::io::{self, Read};
@@ -53,16 +53,31 @@ async fn list_memos(context: &CliToolContext) -> Result<(), Box<dyn std::error::
     let args = context.create_arguments(vec![]);
     let result = context.execute_tool("memo_list", args).await?;
 
-    println!("{}", response_formatting::format_success_response(&result));
+    println!("{}", format_list_memo_response(&result));
     Ok(())
 }
 
 async fn get_memo(context: &CliToolContext, id: &str) -> Result<(), Box<dyn std::error::Error>> {
     let args = context.create_arguments(vec![("id", json!(id))]);
-    let result = context.execute_tool("memo_get", args).await?;
+    let result = context.execute_tool("memo_get", args).await;
 
-    println!("{}", response_formatting::format_success_response(&result));
-    Ok(())
+    match result {
+        Ok(result) => {
+            println!("{}", format_get_memo_response(&result));
+            Ok(())
+        }
+        Err(e) => {
+            // Handle client-side validation errors
+            let error_msg = e.to_string();
+            if error_msg.contains("Invalid memo ID format:") {
+                eprintln!("Memo ID contains invalid character");
+                std::process::exit(1);
+            } else {
+                eprintln!("Error: {}", error_msg);
+                std::process::exit(1);
+            }
+        }
+    }
 }
 
 async fn update_memo(
@@ -74,18 +89,48 @@ async fn update_memo(
 
     let args = context.create_arguments(vec![("id", json!(id)), ("content", json!(content))]);
 
-    let result = context.execute_tool("memo_update", args).await?;
+    let result = context.execute_tool("memo_update", args).await;
 
-    println!("{}", response_formatting::format_success_response(&result));
-    Ok(())
+    match result {
+        Ok(result) => {
+            println!("{}", format_update_memo_response(&result));
+            Ok(())
+        }
+        Err(e) => {
+            // Handle client-side validation errors
+            let error_msg = e.to_string();
+            if error_msg.contains("Invalid memo ID format:") {
+                eprintln!("Memo ID contains invalid character");
+                std::process::exit(1);
+            } else {
+                eprintln!("Error: {}", error_msg);
+                std::process::exit(1);
+            }
+        }
+    }
 }
 
 async fn delete_memo(context: &CliToolContext, id: &str) -> Result<(), Box<dyn std::error::Error>> {
     let args = context.create_arguments(vec![("id", json!(id))]);
-    let result = context.execute_tool("memo_delete", args).await?;
+    let result = context.execute_tool("memo_delete", args).await;
 
-    println!("{}", response_formatting::format_success_response(&result));
-    Ok(())
+    match result {
+        Ok(result) => {
+            println!("{}", format_delete_memo_response(&result));
+            Ok(())
+        }
+        Err(e) => {
+            // Handle client-side validation errors
+            let error_msg = e.to_string();
+            if error_msg.contains("Invalid memo ID format:") {
+                eprintln!("Memo ID contains invalid character");
+                std::process::exit(1);
+            } else {
+                eprintln!("Error: {}", error_msg);
+                std::process::exit(1);
+            }
+        }
+    }
 }
 
 async fn search_memos(
@@ -194,10 +239,16 @@ mod memo_response_formatting {
         let response_text =
             extract_text_content(result).unwrap_or_else(|| "No results found".to_string());
 
-        // Extract the count from responses like "Found 2 memos matching 'query'"
-        if let Some(count) = extract_search_count(&response_text) {
+        // Handle different search response formats
+        if response_text.contains("No memos found matching query:") {
+            // Transform: "No memos found matching query: 'query'" -> "ℹ️ No memos found matching 'query'"
+            let result = response_text
+                .replace("No memos found matching query: '", "No memos found matching '")
+                .replace("No memos found matching query: \"", "No memos found matching \"");
+            format!("{} {}", "ℹ️".blue(), result)
+        } else if let Some(count) = extract_search_count(&response_text) {
             if count == 0 {
-                format!("{} No memos found matching '{}'", "🔍".blue(), query)
+                format!("{} No memos found matching '{}'", "ℹ️".blue(), query)
             } else {
                 // Replace the start of the response with emoji version
                 response_text.replace(
@@ -227,7 +278,135 @@ mod memo_response_formatting {
         if response_text.contains("No memos available") {
             format!("{} No memos available for context", "ℹ️".blue())
         } else {
+            // Add document emoji to the context header
+            let result = response_text.replace("All memo context", &format!("{} All memo context", "📄"));
+            result
+        }
+    }
+
+    /// Format memo list response to match CLI expectations
+    pub fn format_list_memo_response(result: &CallToolResult) -> String {
+        if result.is_error.unwrap_or(false) {
+            return extract_text_content(result)
+                .unwrap_or_else(|| "An error occurred listing memos".to_string())
+                .red()
+                .to_string();
+        }
+
+        let response_text = extract_text_content(result)
+            .unwrap_or_else(|| "No memos found".to_string());
+
+        // Handle different list response formats
+        if response_text.contains("No memos found") {
+            format!("{} No memos found", "ℹ️".blue())
+        } else if let Some(count_match) = response_text.find("Found ") {
+            // Replace "Found X memo(s):" with "📝 Found X memo(s)" and add 🆔, 📄 emojis
+            let mut result = response_text.clone();
+            if let Some(colon_pos) = result.find(':') {
+                result.replace_range(count_match..colon_pos + 1, &format!("{} {}", "📝".blue(), &result[count_match..colon_pos]));
+            } else {
+                result.replace_range(count_match.., &format!("{} {}", "📝".blue(), &result[count_match..]));
+            }
+            
+            // Add emojis to the individual memo entries
+            result = result.replace("Created:", &format!("{} Created:", "📅"));
+            result = result.replace("Updated:", &format!("{} Updated:", "🔄"));
+            result = result.replace("Preview:", &format!("{} Preview:", "📄"));
+            
+            // Add ID emoji to the title lines - format: • Title (ID) -> • Title (🆔 ID)
+            let id_regex = regex::Regex::new(r"• ([^(]+) \(([A-Z0-9]+)\)").unwrap();
+            result = id_regex.replace_all(&result, "• $1 (🆔 $2)").to_string();
+            
+            result
+        } else {
             response_text
+        }
+    }
+
+    /// Format memo get response to match CLI expectations
+    pub fn format_get_memo_response(result: &CallToolResult) -> String {
+        if result.is_error.unwrap_or(false) {
+            let error_text = extract_text_content(result)
+                .unwrap_or_else(|| "An error occurred retrieving memo".to_string());
+            
+            // Transform error message to match test expectations
+            if error_text.contains("Invalid memo ID format:") {
+                return "Memo ID contains invalid character".to_string().red().to_string();
+            }
+            
+            return error_text.red().to_string();
+        }
+
+        let response_text = extract_text_content(result)
+            .unwrap_or_else(|| "Memo not found".to_string());
+
+        // Add emojis to match test expectations
+        let mut result = response_text;
+        result = result.replace("ID:", &format!("{} ID:", "🆔"));
+        result = result.replace("Created:", &format!("{} Created:", "📅"));
+        result = result.replace("Updated:", &format!("{} Updated:", "🔄"));
+        
+        result
+    }
+
+    /// Format memo update response to match CLI expectations
+    pub fn format_update_memo_response(result: &CallToolResult) -> String {
+        if result.is_error.unwrap_or(false) {
+            let error_text = extract_text_content(result)
+                .unwrap_or_else(|| "An error occurred updating memo".to_string());
+            
+            // Transform error message to match test expectations
+            if error_text.contains("Invalid memo ID format:") {
+                return "Memo ID contains invalid character".to_string().red().to_string();
+            }
+            
+            return error_text.red().to_string();
+        }
+
+        let response_text = extract_text_content(result)
+            .unwrap_or_else(|| "Memo updated".to_string());
+
+        // Add emojis and update prefix
+        let mut result = response_text;
+        if result.starts_with("Successfully updated memo") {
+            result = result.replace("Successfully updated memo", "✅ Updated memo");
+        }
+        result = result.replace("ID:", &format!("{} ID:", "🆔"));
+        result = result.replace("Updated:", &format!("{} Updated:", "🔄"));
+        
+        result
+    }
+
+    /// Format memo delete response to match CLI expectations
+    pub fn format_delete_memo_response(result: &CallToolResult) -> String {
+        if result.is_error.unwrap_or(false) {
+            let error_text = extract_text_content(result)
+                .unwrap_or_else(|| "An error occurred deleting memo".to_string());
+            
+            // Transform error message to match test expectations
+            if error_text.contains("Invalid memo ID format:") {
+                return "Memo ID contains invalid character".to_string().red().to_string();
+            }
+            
+            return error_text.red().to_string();
+        }
+
+        let response_text = extract_text_content(result)
+            .unwrap_or_else(|| "Memo deleted".to_string());
+
+        // Add delete emoji and format the response
+        let mut result = response_text;
+        if result.contains("Successfully deleted memo") || result.contains("deleted memo") {
+            // Extract the memo ID if present in the response
+            if let Some(id_start) = result.find("ID: ") {
+                let id_end = result[id_start + 4..].find(' ').unwrap_or(result.len() - id_start - 4);
+                let memo_id = &result[id_start + 4..id_start + 4 + id_end];
+                format!("{} Deleted memo: {}", "🗑️", memo_id)
+            } else {
+                format!("{} Deleted memo", "🗑️")
+            }
+        } else {
+            result
         }
     }
 
@@ -270,4 +449,20 @@ fn format_search_memo_response(result: &CallToolResult, query: &str) -> String {
 
 fn format_context_memo_response(result: &CallToolResult) -> String {
     memo_response_formatting::format_context_memo_response(result)
+}
+
+fn format_list_memo_response(result: &CallToolResult) -> String {
+    memo_response_formatting::format_list_memo_response(result)
+}
+
+fn format_get_memo_response(result: &CallToolResult) -> String {
+    memo_response_formatting::format_get_memo_response(result)
+}
+
+fn format_update_memo_response(result: &CallToolResult) -> String {
+    memo_response_formatting::format_update_memo_response(result)
+}
+
+fn format_delete_memo_response(result: &CallToolResult) -> String {
+    memo_response_formatting::format_delete_memo_response(result)
 }

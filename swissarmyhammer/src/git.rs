@@ -231,7 +231,13 @@ impl GitOperations {
         // Merge the issue branch
         let output = Command::new("git")
             .current_dir(&self.work_dir)
-            .args(["merge", "--ff-only", &branch_name])
+            .args([
+                "merge",
+                "--no-ff",
+                &branch_name,
+                "-m",
+                &format!("Merge {branch_name}"),
+            ])
             .output()?;
 
         if !output.status.success() {

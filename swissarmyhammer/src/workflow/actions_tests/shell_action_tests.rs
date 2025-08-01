@@ -591,9 +591,7 @@ async fn test_shell_action_security_dangerous_pattern_warning() {
             // Should not fail due to dangerous pattern detection
             assert!(
                 !error_msg.contains("dangerous command pattern"),
-                "Command '{}' was blocked by dangerous pattern detection: {}",
-                cmd,
-                error_msg
+                "Command '{cmd}' was blocked by dangerous pattern detection: {error_msg}"
             );
         }
     }

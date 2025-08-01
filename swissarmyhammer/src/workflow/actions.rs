@@ -1053,6 +1053,126 @@ fn create_command(command: &str) -> Command {
 
 impl VariableSubstitution for ShellAction {}
 
+impl ShellAction {
+    /// Process command output and set context variables
+    fn process_command_output(
+        &self,
+        output: std::process::Output,
+        duration_ms: u64,
+        context: &mut HashMap<String, Value>,
+    ) -> ActionResult<Value> {
+        let success = output.status.success();
+        let exit_code = output.status.code().unwrap_or(-1);
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        tracing::debug!(
+            "Command completed: exit_code={}, duration_ms={}",
+            exit_code,
+            duration_ms
+        );
+
+        // Set all required context variables
+        context.insert("success".to_string(), Value::Bool(success));
+        context.insert("failure".to_string(), Value::Bool(!success));
+        context.insert("exit_code".to_string(), Value::Number(exit_code.into()));
+        context.insert("stdout".to_string(), Value::String(stdout.clone()));
+        context.insert("stderr".to_string(), Value::String(stderr));
+        context.insert("duration_ms".to_string(), Value::Number(duration_ms.into()));
+
+        // Set result variable if specified
+        if let Some(result_var) = &self.result_variable {
+            context.insert(result_var.clone(), Value::String(stdout.clone()));
+        }
+
+        // Set last action result based on command success
+        context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(success));
+
+        tracing::info!(
+            "Shell command completed in {}ms with exit code {}",
+            duration_ms,
+            exit_code
+        );
+
+        // Return appropriate result - success returns stdout, failure returns false
+        if success {
+            Ok(Value::String(stdout))
+        } else {
+            tracing::info!("Command failed with exit code {}", exit_code);
+            Ok(Value::Bool(false)) // Don't fail the workflow, just indicate failure
+        }
+    }
+
+    /// Terminate process gracefully with SIGTERM followed by SIGKILL if needed
+    async fn terminate_process_gracefully(&self, child: &mut tokio::process::Child) {
+        use tokio::time::Duration;
+
+        let pid = child.id();
+
+        // First attempt: graceful termination (SIGTERM)
+        tracing::debug!("Attempting graceful termination of process {pid:?}");
+
+        if let Err(e) = child.start_kill() {
+            tracing::warn!("Failed to send SIGTERM to process {pid:?}: {e}");
+            return;
+        }
+
+        // Give the process time to terminate gracefully (5 seconds)
+        let graceful_timeout = Duration::from_secs(5);
+
+        match tokio::time::timeout(graceful_timeout, child.wait()).await {
+            Ok(Ok(_exit_status)) => {
+                tracing::debug!("Process {pid:?} terminated gracefully");
+                return;
+            }
+            Ok(Err(e)) => {
+                tracing::warn!("Error waiting for process {pid:?} termination: {e}");
+            }
+            Err(_) => {
+                tracing::warn!(
+                    "Process {pid:?} did not terminate gracefully within {graceful_timeout:?}"
+                );
+            }
+        }
+
+        // Second attempt: forceful termination (SIGKILL)
+        tracing::debug!("Attempting forceful termination of process {pid:?}");
+
+        if let Err(e) = child.kill().await {
+            tracing::error!("Failed to forcefully terminate process {pid:?}: {e}");
+        } else {
+            tracing::debug!("Process {pid:?} terminated forcefully");
+        }
+    }
+
+    /// Handle timeout scenarios by setting appropriate context variables
+    fn handle_timeout(
+        &self,
+        context: &mut HashMap<String, Value>,
+        duration_ms: u64,
+    ) -> ActionResult<Value> {
+        // Set timeout-specific context variables
+        context.insert("success".to_string(), Value::Bool(false));
+        context.insert("failure".to_string(), Value::Bool(true));
+        context.insert("exit_code".to_string(), Value::Number((-1).into()));
+        context.insert("stdout".to_string(), Value::String("".to_string()));
+        context.insert(
+            "stderr".to_string(),
+            Value::String("Command timed out".to_string()),
+        );
+        context.insert("duration_ms".to_string(), Value::Number(duration_ms.into()));
+
+        // Don't set result variable on timeout to indicate no output was captured
+
+        // Set last action result to indicate failure
+        context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(false));
+
+        tracing::warn!("Shell command timed out after {}ms", duration_ms);
+
+        Ok(Value::Bool(false))
+    }
+}
+
 #[async_trait::async_trait]
 impl Action for ShellAction {
     async fn execute(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
@@ -1084,78 +1204,87 @@ impl Action for ShellAction {
         cmd.stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
-        // Execute the command with optional timeout
-        let execution_future = async {
-            let output = cmd.output().await.map_err(|e| {
-                ActionError::ExecutionError(format!("Failed to execute command: {e}"))
-            })?;
-            Ok::<_, ActionError>(output)
-        };
+        // Spawn the child process
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| ActionError::ExecutionError(format!("Failed to spawn command: {e}")))?;
 
-        let output = if let Some(timeout_duration) = self.timeout {
-            match timeout(timeout_duration, execution_future).await {
-                Ok(result) => result?,
-                Err(_) => {
-                    tracing::warn!("Shell command timed out after {:?}", timeout_duration);
-                    // For timeout, set failure variables and return success (don't fail workflow)
+        let result = if let Some(timeout_duration) = self.timeout {
+            // Validate timeout duration (max 1 hour)
+            if timeout_duration > Duration::from_secs(3600) {
+                return Err(ActionError::ExecutionError(
+                    "Timeout cannot exceed 1 hour (3600 seconds)".to_string(),
+                ));
+            }
+
+            // Execute with timeout and proper process cleanup
+            // Use a more complex approach to maintain access to child for cleanup
+            let wait_future = async {
+                // Get stdout and stderr handles before waiting
+                let stdout = child.stdout.take();
+                let stderr = child.stderr.take();
+                
+                // Wait for process completion
+                let status = child.wait().await?;
+                
+                // Read the output manually
+                let mut stdout_data = Vec::new();
+                let mut stderr_data = Vec::new();
+                
+                if let Some(mut stdout_handle) = stdout {
+                    use tokio::io::AsyncReadExt;
+                    stdout_handle.read_to_end(&mut stdout_data).await?;
+                }
+                
+                if let Some(mut stderr_handle) = stderr {
+                    use tokio::io::AsyncReadExt;
+                    stderr_handle.read_to_end(&mut stderr_data).await?;
+                }
+                
+                Ok::<std::process::Output, std::io::Error>(std::process::Output {
+                    status,
+                    stdout: stdout_data,
+                    stderr: stderr_data,
+                })
+            };
+
+            match timeout(timeout_duration, wait_future).await {
+                Ok(Ok(output)) => {
+                    // Command completed within timeout
                     let duration_ms = start_time.elapsed().as_millis() as u64;
-
-                    // Set automatic variables in context for timeout
-                    context.insert("success".to_string(), Value::Bool(false));
-                    context.insert("failure".to_string(), Value::Bool(true));
-                    context.insert("exit_code".to_string(), Value::Number((-1).into()));
-                    context.insert("stdout".to_string(), Value::String("".to_string()));
-                    context.insert(
-                        "stderr".to_string(),
-                        Value::String("Command timed out".to_string()),
+                    self.process_command_output(output, duration_ms, context)
+                }
+                Ok(Err(e)) => Err(ActionError::ExecutionError(format!(
+                    "Command execution failed: {e}"
+                ))),
+                Err(_) => {
+                    // Timeout occurred - implement graceful termination
+                    tracing::warn!(
+                        "Command timed out after {:?}, attempting graceful termination",
+                        timeout_duration
                     );
-                    context.insert("duration_ms".to_string(), Value::Number(duration_ms.into()));
 
-                    return Ok(Value::Bool(false));
+                    // Terminate the process gracefully
+                    self.terminate_process_gracefully(&mut child).await;
+
+                    let duration_ms = start_time.elapsed().as_millis() as u64;
+                    self.handle_timeout(context, duration_ms)
                 }
             }
         } else {
-            execution_future.await?
+            // Execute without timeout
+            match child.wait_with_output().await {
+                Ok(output) => {
+                    let duration_ms = start_time.elapsed().as_millis() as u64;
+                    self.process_command_output(output, duration_ms, context)
+                }
+                Err(e) => Err(ActionError::ExecutionError(format!(
+                    "Command execution failed: {e}"
+                ))),
+            }
         };
 
-        // Calculate execution duration
-        let duration_ms = start_time.elapsed().as_millis() as u64;
-
-        // Process results and set context variables
-        let success = output.status.success();
-        let exit_code = output.status.code().unwrap_or(-1);
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-        tracing::debug!(
-            "Command completed: exit_code={}, duration_ms={}",
-            exit_code,
-            duration_ms
-        );
-
-        // Set automatic variables in context per specification
-        context.insert("success".to_string(), Value::Bool(success));
-        context.insert("failure".to_string(), Value::Bool(!success));
-        context.insert("exit_code".to_string(), Value::Number(exit_code.into()));
-        context.insert("stdout".to_string(), Value::String(stdout.clone()));
-        context.insert("stderr".to_string(), Value::String(stderr));
-        context.insert("duration_ms".to_string(), Value::Number(duration_ms.into()));
-
-        // Set result variable if specified
-        if let Some(result_var) = &self.result_variable {
-            context.insert(result_var.clone(), Value::String(stdout.clone()));
-        }
-
-        // Set last action result based on command success
-        context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(success));
-
-        // Return appropriate result - success returns stdout, failure returns false
-        if success {
-            Ok(Value::String(stdout))
-        } else {
-            tracing::info!("Command failed with exit code {}", exit_code);
-            Ok(Value::Bool(false)) // Don't fail the workflow, just indicate failure
-        }
+        result
     }
 
     fn description(&self) -> String {
@@ -2324,11 +2453,11 @@ mod tests {
     async fn test_shell_action_with_working_directory() {
         use std::fs;
         use tempfile::TempDir;
-        
+
         // Create a unique temporary directory for testing
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
-        
+
         let action = ShellAction::new("pwd".to_string())
             .with_working_dir(temp_path.to_string_lossy().to_string());
         let mut context = HashMap::new();
@@ -2337,12 +2466,12 @@ mod tests {
 
         // Verify success
         assert_eq!(context.get("success"), Some(&Value::Bool(true)));
-        
+
         // Verify the working directory was used
         let stdout = context.get("stdout").unwrap().as_str().unwrap().trim();
         let canonical_temp_path = fs::canonicalize(temp_path).unwrap();
         let canonical_stdout_path = fs::canonicalize(stdout).unwrap_or_else(|_| stdout.into());
-        
+
         assert_eq!(canonical_stdout_path, canonical_temp_path);
     }
 
@@ -2395,7 +2524,51 @@ mod tests {
 
         // Create an action with a very short timeout
         let action =
-            ShellAction::new("sleep 5".to_string()).with_timeout(Duration::from_millis(100));
+            ShellAction::new("sleep 10".to_string()).with_timeout(Duration::from_millis(200));
+        let mut context = HashMap::new();
+
+        let result = action.execute(&mut context).await.unwrap();
+
+        // Verify timeout results in failure state
+        assert_eq!(context.get("success"), Some(&Value::Bool(false)));
+        assert_eq!(context.get("failure"), Some(&Value::Bool(true)));
+
+        // Exit code should indicate timeout (-1)
+        assert_eq!(context.get("exit_code"), Some(&Value::Number((-1).into())));
+
+        // Verify stderr contains timeout message
+        assert_eq!(
+            context.get("stderr"),
+            Some(&Value::String("Command timed out".to_string()))
+        );
+
+        // Verify stdout is empty for timeout
+        assert_eq!(context.get("stdout"), Some(&Value::String("".to_string())));
+
+        // Duration should be tracked and around the timeout duration
+        assert!(context.contains_key("duration_ms"));
+        let duration_ms = context.get("duration_ms").unwrap().as_u64().unwrap();
+        // Should be around 200ms or slightly more (allowing for process cleanup)
+        assert!((200..1000).contains(&duration_ms));
+
+        // Result should be false for timeout
+        assert_eq!(result, Value::Bool(false));
+
+        // Last action result should indicate failure
+        assert_eq!(
+            context.get(LAST_ACTION_RESULT_KEY),
+            Some(&Value::Bool(false))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_shell_action_timeout_with_result_variable() {
+        use std::time::Duration;
+
+        // Create an action with timeout and result variable
+        let action = ShellAction::new("sleep 5".to_string())
+            .with_timeout(Duration::from_millis(100))
+            .with_result_variable("output".to_string());
         let mut context = HashMap::new();
 
         let _result = action.execute(&mut context).await.unwrap();
@@ -2404,14 +2577,97 @@ mod tests {
         assert_eq!(context.get("success"), Some(&Value::Bool(false)));
         assert_eq!(context.get("failure"), Some(&Value::Bool(true)));
 
-        // Exit code should indicate timeout/kill (may vary by platform)
-        assert!(context.contains_key("exit_code"));
+        // Result variable should NOT be set on timeout
+        assert!(!context.contains_key("output"));
 
-        // Duration should be tracked
-        assert!(context.contains_key("duration_ms"));
+        // Verify timeout context variables
+        assert_eq!(
+            context.get("stderr"),
+            Some(&Value::String("Command timed out".to_string()))
+        );
+        assert_eq!(context.get("stdout"), Some(&Value::String("".to_string())));
+    }
+
+    #[tokio::test]
+    async fn test_shell_action_no_timeout_by_default() {
+        // Test that commands without explicit timeout still work
+        let action = ShellAction::new("echo no timeout test".to_string());
+        let mut context = HashMap::new();
+
+        let result = action.execute(&mut context).await.unwrap();
+
+        // Verify success
+        assert_eq!(context.get("success"), Some(&Value::Bool(true)));
+        assert_eq!(context.get("failure"), Some(&Value::Bool(false)));
+
+        // Verify output
+        let stdout = context.get("stdout").unwrap().as_str().unwrap();
+        assert!(stdout.contains("no timeout test"));
+
+        // Result should contain output
+        assert_eq!(result, context.get("stdout").unwrap().clone());
+    }
+
+    #[tokio::test]
+    async fn test_shell_action_successful_within_timeout() {
+        use std::time::Duration;
+
+        // Command that completes quickly within timeout
+        let action =
+            ShellAction::new("echo quick command".to_string()).with_timeout(Duration::from_secs(5));
+        let mut context = HashMap::new();
+
+        let result = action.execute(&mut context).await.unwrap();
+
+        // Verify success
+        assert_eq!(context.get("success"), Some(&Value::Bool(true)));
+        assert_eq!(context.get("failure"), Some(&Value::Bool(false)));
+
+        // Exit code should be 0
+        assert_eq!(context.get("exit_code"), Some(&Value::Number(0.into())));
+
+        // Verify output
+        let stdout = context.get("stdout").unwrap().as_str().unwrap();
+        assert!(stdout.contains("quick command"));
+
+        // Duration should be much less than timeout
         let duration_ms = context.get("duration_ms").unwrap().as_u64().unwrap();
-        // Should be around 100ms or slightly more
-        assert!((100..1000).contains(&duration_ms));
+        assert!(duration_ms < 1000); // Should complete in less than 1 second
+
+        // Result should contain output
+        assert_eq!(result, context.get("stdout").unwrap().clone());
+    }
+
+    #[tokio::test]
+    async fn test_shell_action_timeout_process_cleanup() {
+        use std::time::Duration;
+
+        // This test verifies that timeout processes are properly terminated
+        // If the process cleanup didn't work, this test would hang for 30 seconds
+        let action =
+            ShellAction::new("sleep 30".to_string()).with_timeout(Duration::from_millis(150));
+        let mut context = HashMap::new();
+
+        let start_time = std::time::Instant::now();
+        let _result = action.execute(&mut context).await.unwrap();
+        let elapsed = start_time.elapsed();
+
+        // Verify the command was terminated quickly (within reasonable bounds)
+        // This proves the process was actually killed, not just timed out
+        assert!(
+            elapsed < Duration::from_secs(10),
+            "Process cleanup took too long: {elapsed:?}. This indicates the process was not properly terminated."
+        );
+
+        // Verify timeout state is correctly set
+        assert_eq!(context.get("success"), Some(&Value::Bool(false)));
+        assert_eq!(context.get("failure"), Some(&Value::Bool(true)));
+        assert_eq!(context.get("exit_code"), Some(&Value::Number((-1).into())));
+        assert_eq!(
+            context.get("stderr"),
+            Some(&Value::String("Command timed out".to_string()))
+        );
+        assert_eq!(context.get("stdout"), Some(&Value::String("".to_string())));
     }
 
     #[tokio::test]

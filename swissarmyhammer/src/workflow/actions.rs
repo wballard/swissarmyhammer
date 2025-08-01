@@ -1051,6 +1051,41 @@ fn create_command(command: &str) -> Command {
     cmd
 }
 
+/// Validate environment variable names
+/// Environment variable names should start with letter or underscore
+/// and contain only letters, digits, and underscores
+pub fn is_valid_env_var_name(name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+
+    let mut chars = name.chars();
+    if let Some(first) = chars.next() {
+        if !first.is_ascii_alphabetic() && first != '_' {
+            return false;
+        }
+    }
+
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Validate working directory path for security
+pub fn validate_working_directory(path: &str) -> ActionResult<()> {
+    let path = std::path::Path::new(path);
+
+    // Check for path traversal attempts
+    if path
+        .components()
+        .any(|comp| matches!(comp, std::path::Component::ParentDir))
+    {
+        return Err(ActionError::ExecutionError(
+            "Working directory cannot contain parent directory references (..)".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
 impl VariableSubstitution for ShellAction {}
 
 impl ShellAction {
@@ -1190,14 +1225,47 @@ impl Action for ShellAction {
         // Set working directory if specified
         if let Some(working_dir) = &self.working_dir {
             let substituted_dir = self.substitute_string(working_dir, context);
-            cmd.current_dir(substituted_dir);
+
+            // Validate working directory for security
+            validate_working_directory(&substituted_dir)?;
+
+            let path = std::path::Path::new(&substituted_dir);
+
+            // Validate working directory exists and is accessible
+            if !path.exists() {
+                return Err(ActionError::ExecutionError(format!(
+                    "Working directory does not exist: {substituted_dir}"
+                )));
+            }
+
+            if !path.is_dir() {
+                return Err(ActionError::ExecutionError(format!(
+                    "Working directory is not a directory: {substituted_dir}"
+                )));
+            }
+
+            cmd.current_dir(path);
+            tracing::debug!("Set working directory to: {}", substituted_dir);
         }
 
         // Set environment variables if specified
         for (key, value) in &self.environment {
             let substituted_key = self.substitute_string(key, context);
             let substituted_value = self.substitute_string(value, context);
-            cmd.env(substituted_key, substituted_value);
+
+            // Validate environment variable names
+            if !is_valid_env_var_name(&substituted_key) {
+                return Err(ActionError::ExecutionError(format!(
+                    "Invalid environment variable name: {substituted_key}"
+                )));
+            }
+
+            cmd.env(&substituted_key, &substituted_value);
+            tracing::debug!(
+                "Set environment variable: {}={}",
+                substituted_key,
+                substituted_value
+            );
         }
 
         // Configure output capture
@@ -1223,24 +1291,24 @@ impl Action for ShellAction {
                 // Get stdout and stderr handles before waiting
                 let stdout = child.stdout.take();
                 let stderr = child.stderr.take();
-                
+
                 // Wait for process completion
                 let status = child.wait().await?;
-                
+
                 // Read the output manually
                 let mut stdout_data = Vec::new();
                 let mut stderr_data = Vec::new();
-                
+
                 if let Some(mut stdout_handle) = stdout {
                     use tokio::io::AsyncReadExt;
                     stdout_handle.read_to_end(&mut stdout_data).await?;
                 }
-                
+
                 if let Some(mut stderr_handle) = stderr {
                     use tokio::io::AsyncReadExt;
                     stderr_handle.read_to_end(&mut stderr_data).await?;
                 }
-                
+
                 Ok::<std::process::Output, std::io::Error>(std::process::Output {
                     status,
                     stdout: stdout_data,

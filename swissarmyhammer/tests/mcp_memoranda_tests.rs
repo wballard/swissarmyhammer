@@ -30,26 +30,28 @@ mod test_utils {
         }
     }
 
-    /// Start MCP server for testing
+    /// Start MCP server for testing with optimized binary path resolution
     pub fn start_mcp_server() -> std::io::Result<ProcessGuard> {
         // Create unique temporary directory for memo storage to ensure test isolation
         let temp_dir = tempfile::tempdir()?;
         let memos_dir = temp_dir.path().join("memos");
 
-        let child = Command::new("cargo")
-            .args([
-                "run",
-                "--release",
-                "--bin",
-                "swissarmyhammer",
-                "--",
-                "serve",
-            ])
-            .current_dir("..") // Run from project root
+        // Optimize binary path resolution - prefer debug binary, fallback to release
+        let binary_path = std::env::var("CARGO_BIN_EXE_swissarmyhammer")
+            .or_else(|_| {
+                std::env::var("CARGO_TARGET_DIR").map(|dir| format!("{dir}/debug/swissarmyhammer"))
+            })
+            .unwrap_or_else(|_| "../target/debug/swissarmyhammer".to_string());
+
+        // Set test mode environment to skip heavy dependencies if possible
+        let child = Command::new(&binary_path)
+            .args(["serve"])
             .env("SWISSARMYHAMMER_MEMOS_DIR", memos_dir)
+            .env("SWISSARMYHAMMER_TEST_MODE", "1")
+            .env("RUST_LOG", "error")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::null()) // Reduce stderr noise in tests
             .spawn()?;
 
         // Keep temp_dir alive by storing it in the ProcessGuard
@@ -143,9 +145,9 @@ mod test_utils {
         Ok(())
     }
 
-    /// Wait for server to be ready
+    /// Wait for server to be ready with optimized timing
     pub async fn wait_for_server_ready() {
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
     }
 
     /// Send JSON-RPC request to MCP server
@@ -984,7 +986,7 @@ mod stress_tests {
 
     /// Stress test: Create, update, and delete many memos rapidly
     #[tokio::test]
-    #[ignore] // Run only when specifically requested due to time
+    #[ignore = "Slow stress test - run with --ignored"]
     async fn test_mcp_memo_stress_operations() {
         let mut server = start_mcp_server().unwrap();
         wait_for_server_ready().await;
@@ -1067,7 +1069,7 @@ mod stress_tests {
 
     /// Stress test: Search performance with many memos
     #[tokio::test]
-    #[ignore] // Run only when specifically requested due to time
+    #[ignore = "Slow stress test - run with --ignored"]
     async fn test_mcp_memo_search_performance() {
         let mut server = start_mcp_server().unwrap();
         wait_for_server_ready().await;

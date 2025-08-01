@@ -1038,27 +1038,37 @@ impl ShellAction {
     }
 }
 
+/// Create a platform-specific command for shell execution
+#[cfg(target_os = "windows")]
+fn create_command(command: &str) -> Command {
+    let mut cmd = Command::new("cmd");
+    cmd.args(["/C", command]);
+    cmd
+}
+
+/// Create a platform-specific command for shell execution
+#[cfg(not(target_os = "windows"))]
+fn create_command(command: &str) -> Command {
+    let mut cmd = Command::new("sh");
+    cmd.args(["-c", command]);
+    cmd
+}
+
 impl VariableSubstitution for ShellAction {}
 
 #[async_trait::async_trait]
 impl Action for ShellAction {
     async fn execute(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
-        // Substitute variables in command
+        // Substitute variables in command string
         let command = self.substitute_string(&self.command, context);
 
-        // Parse command into command and arguments
-        let parts: Vec<&str> = command.split_whitespace().collect();
-        if parts.is_empty() {
-            return Err(ActionError::ExecutionError(
-                "Command cannot be empty".to_string(),
-            ));
-        }
+        tracing::info!("Executing shell command: {}", command);
 
-        let (cmd_name, args) = parts.split_first().unwrap();
+        // Record start time for duration calculation
+        let start_time = std::time::Instant::now();
 
-        // Create the command
-        let mut cmd = Command::new(cmd_name);
-        cmd.args(args);
+        // Create platform-specific command
+        let mut cmd = create_command(&command);
 
         // Set working directory if specified
         if let Some(working_dir) = &self.working_dir {
@@ -1077,16 +1087,11 @@ impl Action for ShellAction {
         cmd.stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
-        // Execute command with optional timeout
+        // Execute the command with optional timeout
         let execution_future = async {
-            let child = cmd.spawn().map_err(|e| {
-                ActionError::ExecutionError(format!("Failed to spawn command '{cmd_name}': {e}"))
+            let output = cmd.output().await.map_err(|e| {
+                ActionError::ExecutionError(format!("Failed to execute command: {e}"))
             })?;
-
-            let output = child.wait_with_output().await.map_err(|e| {
-                ActionError::ExecutionError(format!("Failed to wait for command completion: {e}"))
-            })?;
-
             Ok::<_, ActionError>(output)
         };
 
@@ -1094,58 +1099,66 @@ impl Action for ShellAction {
             match timeout(timeout_duration, execution_future).await {
                 Ok(result) => result?,
                 Err(_) => {
-                    return Err(ActionError::Timeout {
-                        timeout: timeout_duration,
-                    });
+                    tracing::warn!("Shell command timed out after {:?}", timeout_duration);
+                    // For timeout, set failure variables and return success (don't fail workflow)
+                    let duration_ms = start_time.elapsed().as_millis() as u64;
+
+                    // Set automatic variables in context for timeout
+                    context.insert("success".to_string(), Value::Bool(false));
+                    context.insert("failure".to_string(), Value::Bool(true));
+                    context.insert("exit_code".to_string(), Value::Number((-1).into()));
+                    context.insert("stdout".to_string(), Value::String("".to_string()));
+                    context.insert(
+                        "stderr".to_string(),
+                        Value::String("Command timed out".to_string()),
+                    );
+                    context.insert("duration_ms".to_string(), Value::Number(duration_ms.into()));
+
+                    return Ok(Value::Bool(false));
                 }
             }
         } else {
             execution_future.await?
         };
 
-        // Process the output
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
+        // Calculate execution duration
+        let duration_ms = start_time.elapsed().as_millis() as u64;
 
-        // Create result object
-        let result = serde_json::json!({
-            "stdout": stdout.trim(),
-            "stderr": stderr.trim(),
-            "exit_code": output.status.code().unwrap_or(-1),
-            "success": output.status.success()
-        });
+        // Process results and set context variables
+        let success = output.status.success();
+        let exit_code = output.status.code().unwrap_or(-1);
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
-        // Store result in context if result variable is specified
-        if let Some(result_var) = &self.result_variable {
-            context.insert(result_var.clone(), result.clone());
-        }
-
-        // Mark action as successful/failed based on exit code
-        context.insert(
-            "LAST_ACTION_RESULT".to_string(),
-            Value::Bool(output.status.success()),
+        tracing::debug!(
+            "Command completed: exit_code={}, duration_ms={}",
+            exit_code,
+            duration_ms
         );
 
-        // Return error if command failed, otherwise return the result
-        if !output.status.success() {
-            let error_msg = if stderr.is_empty() {
-                format!(
-                    "Command '{}' failed with exit code {}",
-                    command,
-                    output.status.code().unwrap_or(-1)
-                )
-            } else {
-                format!(
-                    "Command '{}' failed with exit code {}: {}",
-                    command,
-                    output.status.code().unwrap_or(-1),
-                    stderr.trim()
-                )
-            };
-            return Err(ActionError::ExecutionError(error_msg));
+        // Set automatic variables in context per specification
+        context.insert("success".to_string(), Value::Bool(success));
+        context.insert("failure".to_string(), Value::Bool(!success));
+        context.insert("exit_code".to_string(), Value::Number(exit_code.into()));
+        context.insert("stdout".to_string(), Value::String(stdout.clone()));
+        context.insert("stderr".to_string(), Value::String(stderr));
+        context.insert("duration_ms".to_string(), Value::Number(duration_ms.into()));
+
+        // Set result variable if specified
+        if let Some(result_var) = &self.result_variable {
+            context.insert(result_var.clone(), Value::String(stdout.clone()));
         }
 
-        Ok(result)
+        // Always mark action as successful in workflow terms - command failures don't fail the workflow
+        context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
+
+        // Return appropriate result - success returns stdout, failure returns false
+        if success {
+            Ok(Value::String(stdout))
+        } else {
+            tracing::info!("Command failed with exit code {}", exit_code);
+            Ok(Value::Bool(false)) // Don't fail the workflow, just indicate failure
+        }
     }
 
     fn description(&self) -> String {

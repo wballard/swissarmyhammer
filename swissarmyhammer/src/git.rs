@@ -221,7 +221,7 @@ impl GitOperations {
         // Ensure the branch exists
         if !self.branch_exists(&branch_name)? {
             return Err(SwissArmyHammerError::Other(format!(
-                "Issue branch '{branch_name}' does not exist"
+                "ABORT ERROR: Issue branch '{branch_name}' does not exist"
             )));
         }
 
@@ -247,19 +247,19 @@ impl GitOperations {
             // Check for merge conflicts
             if stderr.contains("CONFLICT") || stdout.contains("CONFLICT") {
                 return Err(SwissArmyHammerError::Other(format!(
-                    "Merge conflict detected while merging branch '{branch_name}'. Please resolve conflicts manually:\n{stderr}"
+                    "ABORT ERROR: Merge conflict detected while merging branch '{branch_name}'. Please resolve conflicts manually:\n{stderr}"
                 )));
             }
 
             // Check for other merge issues
             if stderr.contains("Automatic merge failed") {
                 return Err(SwissArmyHammerError::Other(format!(
-                    "Automatic merge failed for branch '{branch_name}'. Manual intervention required:\n{stderr}"
+                    "ABORT ERROR: Automatic merge failed for branch '{branch_name}'. Manual intervention required:\n{stderr}"
                 )));
             }
 
             return Err(SwissArmyHammerError::Other(format!(
-                "Failed to merge branch '{branch_name}': {stderr}"
+                "ABORT ERROR: Failed to merge branch '{branch_name}': {stderr}"
             )));
         }
 

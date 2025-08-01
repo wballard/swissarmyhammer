@@ -30,8 +30,6 @@ mod test_utils {
         }
     }
 
-
-
     /// Start MCP server for testing with optimized binary path resolution
     pub fn start_mcp_server() -> std::io::Result<ProcessGuard> {
         // Create unique temporary directory for memo storage to ensure test isolation
@@ -40,7 +38,9 @@ mod test_utils {
 
         // Optimize binary path resolution - prefer debug binary, fallback to release
         let binary_path = std::env::var("CARGO_BIN_EXE_swissarmyhammer")
-            .or_else(|_| std::env::var("CARGO_TARGET_DIR").map(|dir| format!("{}/debug/swissarmyhammer", dir)))
+            .or_else(|_| {
+                std::env::var("CARGO_TARGET_DIR").map(|dir| format!("{dir}/debug/swissarmyhammer"))
+            })
             .unwrap_or_else(|_| "../target/debug/swissarmyhammer".to_string());
 
         // Set test mode environment to skip heavy dependencies if possible

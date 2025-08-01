@@ -11,16 +11,18 @@ use tempfile::TempDir;
 mod test_utils;
 use test_utils::setup_git_repo;
 
-use std::sync::LazyLock;
+use once_cell::sync::Lazy;
 use std::path::PathBuf;
 
 /// Global cache for search model downloads
-static MODEL_CACHE_DIR: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
+static MODEL_CACHE_DIR: Lazy<Option<PathBuf>> = Lazy::new(|| {
     std::env::var("SWISSARMYHAMMER_MODEL_CACHE")
         .ok()
         .map(PathBuf::from)
         .or_else(|| {
-            std::env::temp_dir().join(".swissarmyhammer_test_cache").into()
+            std::env::temp_dir()
+                .join(".swissarmyhammer_test_cache")
+                .into()
         })
 });
 
@@ -42,13 +44,13 @@ fn try_search_index(
         .current_dir(temp_path)
         .timeout(Duration::from_secs(timeout_secs))
         .env("SWISSARMYHAMMER_TEST_MODE", "1");
-    
+
     // Set global model cache to avoid repeated downloads
     if let Some(cache_dir) = MODEL_CACHE_DIR.as_ref() {
         std::fs::create_dir_all(cache_dir).ok();
         cmd.env("SWISSARMYHAMMER_MODEL_CACHE", cache_dir);
     }
-    
+
     let index_result = cmd.ok();
 
     match index_result {
@@ -74,7 +76,7 @@ fn try_search_index(
 fn setup_e2e_test_environment() -> Result<(TempDir, std::path::PathBuf)> {
     // Use thread ID to create unique temp directories for parallel test execution
     let thread_id = std::thread::current().id();
-    let temp_dir = TempDir::with_prefix(&format!("e2e_test_{thread_id:?}_"))?;
+    let temp_dir = TempDir::with_prefix(format!("e2e_test_{thread_id:?}_"))?;
     let temp_path = temp_dir.path().to_path_buf();
 
     // Create comprehensive directory structure

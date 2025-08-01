@@ -11,7 +11,6 @@ use rmcp::model::CallToolResult;
 use rmcp::Error as McpError;
 use std::time::Instant;
 
-
 /// Tool for indexing files for semantic search
 #[derive(Default)]
 pub struct SearchIndexTool;
@@ -27,15 +26,23 @@ impl SearchIndexTool {
         // Create a unique temporary database path for each test execution
         use std::thread;
         use std::time::{SystemTime, UNIX_EPOCH};
-        
+
         let thread_id = format!("{:?}", thread::current().id());
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let unique_id = format!("{}_{}", thread_id.replace("ThreadId(", "").replace(")", ""), timestamp);
-        
-        let persistent_path = std::env::temp_dir().join(format!("swissarmyhammer_test_{}", unique_id));
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let unique_id = format!(
+            "{}_{}",
+            thread_id.replace("ThreadId(", "").replace(")", ""),
+            timestamp
+        );
+
+        let persistent_path =
+            std::env::temp_dir().join(format!("swissarmyhammer_test_{unique_id}"));
         std::fs::create_dir_all(&persistent_path).expect("Failed to create persistent test dir");
         let db_path = persistent_path.join("semantic.db");
-        
+
         SemanticConfig {
             database_path: db_path,
             embedding_model: "test-model".to_string(),
@@ -228,18 +235,22 @@ mod tests {
         // Create a temporary directory with test files
         let temp_dir = tempfile::TempDir::new().expect("Failed to create temp dir");
         let test_dir = temp_dir.path();
-        
+
         // Create test Rust file
         let test_file = test_dir.join("test.rs");
-        std::fs::write(&test_file, r#"fn main() {
+        std::fs::write(
+            &test_file,
+            r#"fn main() {
     println!("Hello, world!");
 }
 
 fn add(a: i32, b: i32) -> i32 {
     a + b
 }
-"#).expect("Failed to write test file");
-        
+"#,
+        )
+        .expect("Failed to write test file");
+
         // Use the test file path in the pattern
         let pattern = format!("{}/*.rs", test_dir.display());
         let mut arguments = serde_json::Map::new();
@@ -256,11 +267,12 @@ fn add(a: i32, b: i32) -> i32 {
                 assert_eq!(result.is_error, Some(false));
                 assert!(!result.content.is_empty());
                 // Verify the response indicates successful indexing
-                let content_str = if let rmcp::model::RawContent::Text(text) = &result.content[0].raw {
-                    &text.text
-                } else {
-                    panic!("Expected text content");
-                };
+                let content_str =
+                    if let rmcp::model::RawContent::Text(text) = &result.content[0].raw {
+                        &text.text
+                    } else {
+                        panic!("Expected text content");
+                    };
                 assert!(content_str.contains("indexed_files"));
             }
             Err(e) => {

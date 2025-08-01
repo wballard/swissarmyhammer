@@ -23,6 +23,8 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
       - uses: Swatinem/rust-cache@v2
+      - name: Install dependencies
+        run: cargo install cargo-nextest
       - name: Run tests
         run: cargo test --verbose
 

@@ -11,7 +11,6 @@ use rmcp::model::CallToolResult;
 use rmcp::Error as McpError;
 use std::time::Instant;
 
-
 /// Tool for performing semantic search queries
 #[derive(Default)]
 pub struct SearchQueryTool;
@@ -27,15 +26,23 @@ impl SearchQueryTool {
         // Create a unique temporary database path for each test execution
         use std::thread;
         use std::time::{SystemTime, UNIX_EPOCH};
-        
+
         let thread_id = format!("{:?}", thread::current().id());
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let unique_id = format!("{}_{}", thread_id.replace("ThreadId(", "").replace(")", ""), timestamp);
-        
-        let persistent_path = std::env::temp_dir().join(format!("swissarmyhammer_test_{}", unique_id));
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let unique_id = format!(
+            "{}_{}",
+            thread_id.replace("ThreadId(", "").replace(")", ""),
+            timestamp
+        );
+
+        let persistent_path =
+            std::env::temp_dir().join(format!("swissarmyhammer_test_{unique_id}"));
         std::fs::create_dir_all(&persistent_path).expect("Failed to create persistent test dir");
         let db_path = persistent_path.join("semantic.db");
-        
+
         SemanticConfig {
             database_path: db_path,
             embedding_model: "test-model".to_string(),

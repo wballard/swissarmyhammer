@@ -49,8 +49,8 @@ The Actions section maps state names to their actions. Format: `- StateName: Act
 - HandleError: Log "Error has been handled"
 - WaitExample: Wait 2 seconds
 - BranchDecision: Set branch_value="${example_var}"
-- Branch1: Log "Branch 1 selected: ${branch_value} contains Hello"
-- Branch2: Log "Branch 2 selected: ${branch_value} is error state"
+- Branch1: Log "Branch 1 selected: {{branch_value}} contains Hello"
+- Branch2: Log "Branch 2 selected: {{branch_value}} is error state"
 - DefaultBranch: Log "Default branch selected"
 - Complete: Log "Workflow complete! Greeting was: ${greeting}"
 

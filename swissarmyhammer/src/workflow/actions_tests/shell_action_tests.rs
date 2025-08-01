@@ -571,7 +571,8 @@ async fn test_shell_action_security_sensitive_directory_warning() {
 
 #[tokio::test]
 async fn test_shell_action_security_dangerous_pattern_warning() {
-    // These should execute but generate security warnings in logs
+    // Test that dangerous patterns don't get blocked by security validation
+    // Use lightweight commands that don't actually execute potentially slow operations
     let dangerous_commands = [
         "sudo echo test",
         "rm file.txt", // Not rm -rf which is more dangerous
@@ -580,20 +581,23 @@ async fn test_shell_action_security_dangerous_pattern_warning() {
 
     for cmd in &dangerous_commands {
         let action = ShellAction::new(cmd.to_string());
-        let mut context = HashMap::new();
 
-        // These should succeed (dangerous patterns only generate warnings)
-        // but we can't test the actual execution without the commands being available
-        // So we test that security validation doesn't block them
-        let result = action.execute(&mut context).await;
-        if let Err(error) = result {
-            let error_msg = error.to_string();
-            // Should not fail due to dangerous pattern detection
-            assert!(
-                !error_msg.contains("dangerous command pattern"),
-                "Command '{cmd}' was blocked by dangerous pattern detection: {error_msg}"
-            );
-        }
+        // Test security validation directly without executing the command
+        // The validate_dangerous_patterns function should allow these but log warnings
+        use crate::workflow::actions::validate_dangerous_patterns;
+        let validation_result = validate_dangerous_patterns(cmd);
+        assert!(
+            validation_result.is_ok(),
+            "Command '{cmd}' should not be blocked by dangerous pattern detection"
+        );
+
+        // Also test that command structure validation doesn't block them
+        use crate::workflow::actions::validate_command_structure;
+        let structure_result = validate_command_structure(cmd);
+        assert!(
+            structure_result.is_ok(),
+            "Command '{cmd}' should not be blocked by command structure validation"
+        );
     }
 }
 

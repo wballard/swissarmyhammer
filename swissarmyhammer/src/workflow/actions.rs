@@ -1042,10 +1042,112 @@ impl VariableSubstitution for ShellAction {}
 
 #[async_trait::async_trait]
 impl Action for ShellAction {
-    async fn execute(&self, _context: &mut HashMap<String, Value>) -> ActionResult<Value> {
-        // TODO: Implement shell command execution
-        // For now, return a placeholder to avoid dead code warnings
-        unimplemented!("Shell action execution to be implemented in next phase")
+    async fn execute(&self, context: &mut HashMap<String, Value>) -> ActionResult<Value> {
+        // Substitute variables in command
+        let command = self.substitute_string(&self.command, context);
+
+        // Parse command into command and arguments
+        let parts: Vec<&str> = command.split_whitespace().collect();
+        if parts.is_empty() {
+            return Err(ActionError::ExecutionError(
+                "Command cannot be empty".to_string(),
+            ));
+        }
+
+        let (cmd_name, args) = parts.split_first().unwrap();
+
+        // Create the command
+        let mut cmd = Command::new(cmd_name);
+        cmd.args(args);
+
+        // Set working directory if specified
+        if let Some(working_dir) = &self.working_dir {
+            let substituted_dir = self.substitute_string(working_dir, context);
+            cmd.current_dir(substituted_dir);
+        }
+
+        // Set environment variables if specified
+        for (key, value) in &self.environment {
+            let substituted_key = self.substitute_string(key, context);
+            let substituted_value = self.substitute_string(value, context);
+            cmd.env(substituted_key, substituted_value);
+        }
+
+        // Configure output capture
+        cmd.stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+
+        // Execute command with optional timeout
+        let execution_future = async {
+            let child = cmd.spawn().map_err(|e| {
+                ActionError::ExecutionError(format!(
+                    "Failed to spawn command '{cmd_name}': {e}"
+                ))
+            })?;
+
+            let output = child.wait_with_output().await.map_err(|e| {
+                ActionError::ExecutionError(format!("Failed to wait for command completion: {e}"))
+            })?;
+
+            Ok::<_, ActionError>(output)
+        };
+
+        let output = if let Some(timeout_duration) = self.timeout {
+            match timeout(timeout_duration, execution_future).await {
+                Ok(result) => result?,
+                Err(_) => {
+                    return Err(ActionError::Timeout {
+                        timeout: timeout_duration,
+                    });
+                }
+            }
+        } else {
+            execution_future.await?
+        };
+
+        // Process the output
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        // Create result object
+        let result = serde_json::json!({
+            "stdout": stdout.trim(),
+            "stderr": stderr.trim(),
+            "exit_code": output.status.code().unwrap_or(-1),
+            "success": output.status.success()
+        });
+
+        // Store result in context if result variable is specified
+        if let Some(result_var) = &self.result_variable {
+            context.insert(result_var.clone(), result.clone());
+        }
+
+        // Mark action as successful/failed based on exit code
+        context.insert(
+            "LAST_ACTION_RESULT".to_string(),
+            Value::Bool(output.status.success()),
+        );
+
+        // Return error if command failed, otherwise return the result
+        if !output.status.success() {
+            let error_msg = if stderr.is_empty() {
+                format!(
+                    "Command '{}' failed with exit code {}",
+                    command,
+                    output.status.code().unwrap_or(-1)
+                )
+            } else {
+                format!(
+                    "Command '{}' failed with exit code {}: {}",
+                    command,
+                    output.status.code().unwrap_or(-1),
+                    stderr.trim()
+                )
+            };
+            return Err(ActionError::ExecutionError(error_msg));
+        }
+
+        Ok(result)
     }
 
     fn description(&self) -> String {
@@ -1588,6 +1690,10 @@ pub fn parse_action_from_description(description: &str) -> ActionResult<Option<B
         return Ok(Some(Box::new(abort_action)));
     }
 
+    if let Some(shell_action) = parser.parse_shell_action(description)? {
+        return Ok(Some(Box::new(shell_action)));
+    }
+
     Ok(None)
 }
 
@@ -2041,5 +2147,28 @@ mod tests {
         assert_eq!(action.timeout, Some(Duration::from_secs(120)));
         assert_eq!(action.result_variable, Some("build_output".to_string()));
         assert_eq!(action.working_dir, Some("./project".to_string()));
+    }
+
+    #[test]
+    fn test_parse_shell_action_integration() {
+        // Test that shell actions are recognized by the main parser
+        let action = parse_action_from_description("Shell \"echo hello\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.action_type(), "shell");
+        assert_eq!(action.description(), "Execute shell command: echo hello");
+
+        // Test with parameters
+        let action =
+            parse_action_from_description("Shell \"ls -la\" with timeout=30 result=\"files\"")
+                .unwrap()
+                .unwrap();
+        assert_eq!(action.action_type(), "shell");
+
+        // Downcast to ShellAction to verify parameters
+        let shell_action = action.as_any().downcast_ref::<ShellAction>().unwrap();
+        assert_eq!(shell_action.command, "ls -la");
+        assert_eq!(shell_action.timeout, Some(Duration::from_secs(30)));
+        assert_eq!(shell_action.result_variable, Some("files".to_string()));
     }
 }

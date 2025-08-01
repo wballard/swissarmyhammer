@@ -2,7 +2,7 @@
 
 use crate::workflow::actions::{
     AbortAction, ActionError, ActionResult, LogAction, LogLevel, PromptAction, SetVariableAction,
-    SubWorkflowAction, WaitAction,
+    ShellAction, SubWorkflowAction, WaitAction,
 };
 use chumsky::prelude::*;
 use regex::Regex;
@@ -354,6 +354,151 @@ impl ActionParser {
         }
     }
 
+    /// Parse a shell action from description
+    /// Format: Shell "command" [with timeout=N] [result="variable"] [working_dir="path"] [env={"KEY": "value"}]
+    pub fn parse_shell_action(&self, description: &str) -> ActionResult<Option<ShellAction>> {
+        // Parse individual parameters
+        let timeout_parser = Self::argument_key()
+            .filter(|key| key == "timeout")
+            .then_ignore(just('='))
+            .ignore_then(
+                any()
+                    .filter(|c: &char| c.is_alphanumeric())
+                    .repeated()
+                    .at_least(1)
+                    .collect::<String>(),
+            )
+            .map(|v| ("timeout".to_string(), v));
+
+        let result_parser = Self::argument_key()
+            .filter(|key| key == "result")
+            .then_ignore(just('='))
+            .ignore_then(Self::quoted_string())
+            .map(|v| ("result".to_string(), v));
+
+        let working_dir_parser = Self::argument_key()
+            .filter(|key| key == "working_dir" || key == "working-dir")
+            .then_ignore(just('='))
+            .ignore_then(Self::quoted_string())
+            .map(|v| ("working_dir".to_string(), v));
+
+        // Parse environment as a special case - capture everything between braces
+        let env_as_param = just("env")
+            .then_ignore(just('='))
+            .ignore_then(
+                just('{')
+                    .ignore_then(none_of('}').repeated().collect::<String>())
+                    .then_ignore(just('}')),
+            )
+            .map(|content| ("env".to_string(), format!("{{{content}}}")));
+
+        // Generic parameter parser for unknown parameters
+        let generic_param_parser = Self::argument_key().then_ignore(just('=')).then(choice((
+            Self::quoted_string(),
+            // For env parameters or other complex values, capture everything until whitespace or end
+            none_of(' ').repeated().at_least(1).collect::<String>(),
+        )));
+
+        // Combine all parameter parsers
+        let param_parser = choice((
+            timeout_parser,
+            result_parser,
+            working_dir_parser,
+            env_as_param,
+            generic_param_parser,
+        ));
+
+        // Main parser for shell action
+        let parser = Self::case_insensitive("shell")
+            .then_ignore(Self::whitespace())
+            .ignore_then(Self::quoted_string())
+            .then(
+                Self::whitespace()
+                    .ignore_then(Self::case_insensitive("with"))
+                    .ignore_then(Self::whitespace())
+                    .ignore_then(
+                        param_parser
+                            .separated_by(Self::whitespace())
+                            .collect::<Vec<(String, String)>>(),
+                    )
+                    .or_not(),
+            );
+
+        match parser.parse(description.trim()).into_result() {
+            Ok((command, params)) => {
+                // Validate command is not empty
+                if command.is_empty() {
+                    return Err(ActionError::ParseError(
+                        "Shell command cannot be empty".to_string(),
+                    ));
+                }
+
+                let mut action = ShellAction::new(command);
+                let mut env_vars = HashMap::new();
+
+                if let Some(parameters) = params {
+                    for (key, value) in parameters {
+                        match key.as_str() {
+                            "timeout" => {
+                                let timeout_value = value.parse::<u64>().map_err(|_| {
+                                    ActionError::ParseError(format!(
+                                        "Invalid timeout value: {value}"
+                                    ))
+                                })?;
+
+                                if timeout_value == 0 {
+                                    return Err(ActionError::ParseError(
+                                        "Timeout must be greater than 0".to_string(),
+                                    ));
+                                }
+
+                                action = action.with_timeout(Duration::from_secs(timeout_value));
+                            }
+                            "result" => {
+                                if !self.is_valid_variable_name(&value) {
+                                    return Err(ActionError::ParseError(
+                                        format!("Invalid result variable name '{value}': must start with letter or underscore and contain only alphanumeric characters and underscores")
+                                    ));
+                                }
+                                action = action.with_result_variable(value);
+                            }
+                            "working_dir" => {
+                                if value.is_empty() {
+                                    return Err(ActionError::ParseError(
+                                        "Working directory cannot be empty".to_string(),
+                                    ));
+                                }
+                                action = action.with_working_dir(value);
+                            }
+                            "env" => {
+                                // Parse the JSON environment variables
+                                let env_map: HashMap<String, String> = serde_json::from_str(&value)
+                                    .map_err(|e| {
+                                        ActionError::ParseError(format!(
+                                            "Invalid environment variables JSON: {e}"
+                                        ))
+                                    })?;
+                                env_vars.extend(env_map);
+                            }
+                            _ => {
+                                return Err(ActionError::ParseError(format!(
+                                    "Unknown shell action parameter: {key}"
+                                )));
+                            }
+                        }
+                    }
+                }
+
+                if !env_vars.is_empty() {
+                    action = action.with_environment(env_vars);
+                }
+
+                Ok(Some(action))
+            }
+            Err(_) => Ok(None),
+        }
+    }
+
     /// Safely substitute variables in a string using regex
     pub fn substitute_variables_safe(
         &self,
@@ -671,5 +816,227 @@ mod tests {
         // Test invalid format
         let result = parser.parse_abort_action("Abort test error");
         assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn test_parse_shell_action_basic() {
+        let parser = ActionParser::new().unwrap();
+
+        // Test basic shell command
+        let action = parser
+            .parse_shell_action("Shell \"echo hello\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.command, "echo hello");
+        assert!(action.timeout.is_none());
+        assert!(action.result_variable.is_none());
+        assert!(action.working_dir.is_none());
+        assert!(action.environment.is_empty());
+
+        // Test case insensitive
+        let action = parser.parse_shell_action("shell \"pwd\"").unwrap().unwrap();
+        assert_eq!(action.command, "pwd");
+    }
+
+    #[test]
+    fn test_parse_shell_action_with_timeout() {
+        let parser = ActionParser::new().unwrap();
+
+        // Test with timeout
+        let action = parser
+            .parse_shell_action("Shell \"ls -la\" with timeout=30")
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.command, "ls -la");
+        assert_eq!(action.timeout, Some(Duration::from_secs(30)));
+
+        // Test invalid timeout (zero)
+        let result = parser.parse_shell_action("Shell \"echo test\" with timeout=0");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Timeout must be greater than 0"));
+
+        // Test invalid timeout (non-numeric)
+        let result = parser.parse_shell_action("Shell \"echo test\" with timeout=abc");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid timeout value"));
+    }
+
+    #[test]
+    fn test_parse_shell_action_with_result() {
+        let parser = ActionParser::new().unwrap();
+
+        // Test with result variable
+        let action = parser
+            .parse_shell_action("Shell \"git status\" with result=\"status_output\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.command, "git status");
+        assert_eq!(action.result_variable, Some("status_output".to_string()));
+
+        // Test invalid result variable name (starts with number)
+        let result = parser.parse_shell_action("Shell \"echo test\" with result=\"123invalid\"");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid result variable name"));
+
+        // Test invalid result variable name (contains special chars)
+        let result = parser.parse_shell_action("Shell \"echo test\" with result=\"invalid-name\"");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid result variable name"));
+    }
+
+    #[test]
+    fn test_parse_shell_action_with_working_dir() {
+        let parser = ActionParser::new().unwrap();
+
+        // Test with working directory
+        let action = parser
+            .parse_shell_action("Shell \"ls\" with working_dir=\"/tmp\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.command, "ls");
+        assert_eq!(action.working_dir, Some("/tmp".to_string()));
+
+        // Test empty working directory
+        let result = parser.parse_shell_action("Shell \"ls\" with working_dir=\"\"");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Working directory cannot be empty"));
+    }
+
+    #[test]
+    fn test_parse_shell_action_with_environment() {
+        let parser = ActionParser::new().unwrap();
+
+        // Test with environment variables
+        let action = parser
+            .parse_shell_action(
+                "Shell \"env\" with env={\"PATH\":\"/usr/bin\",\"USER\":\"testuser\"}",
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.command, "env");
+        assert_eq!(action.environment.len(), 2);
+        assert_eq!(
+            action.environment.get("PATH"),
+            Some(&"/usr/bin".to_string())
+        );
+        assert_eq!(
+            action.environment.get("USER"),
+            Some(&"testuser".to_string())
+        );
+
+        // Test invalid JSON environment
+        let result = parser.parse_shell_action("Shell \"env\" with env={invalid json}");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid environment variables JSON"));
+    }
+
+    #[test]
+    fn test_parse_shell_action_combined_parameters() {
+        let parser = ActionParser::new().unwrap();
+
+        // Test multiple parameters combined
+        let action = parser
+            .parse_shell_action("Shell \"cargo build\" with timeout=120 result=\"build_output\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.command, "cargo build");
+        assert_eq!(action.timeout, Some(Duration::from_secs(120)));
+        assert_eq!(action.result_variable, Some("build_output".to_string()));
+
+        // Test all parameters combined
+        let action = parser
+            .parse_shell_action("Shell \"make\" with timeout=300 result=\"make_output\" working_dir=\"./project\" env={\"CC\":\"gcc\"}")
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.command, "make");
+        assert_eq!(action.timeout, Some(Duration::from_secs(300)));
+        assert_eq!(action.result_variable, Some("make_output".to_string()));
+        assert_eq!(action.working_dir, Some("./project".to_string()));
+        assert_eq!(action.environment.get("CC"), Some(&"gcc".to_string()));
+    }
+
+    #[test]
+    fn test_parse_shell_action_validation() {
+        let parser = ActionParser::new().unwrap();
+
+        // Test empty command
+        let result = parser.parse_shell_action("Shell \"\"");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Shell command cannot be empty"));
+
+        // Test unknown parameter
+        let result = parser.parse_shell_action("Shell \"echo test\" with unknown_param=\"value\"");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Unknown shell action parameter"));
+    }
+
+    #[test]
+    fn test_parse_shell_action_invalid_formats() {
+        let parser = ActionParser::new().unwrap();
+
+        // Test invalid format (no quotes)
+        let result = parser.parse_shell_action("Shell echo hello");
+        assert!(result.unwrap().is_none());
+
+        // Test invalid format (not shell command)
+        let result = parser.parse_shell_action("Execute \"echo hello\"");
+        assert!(result.unwrap().is_none());
+
+        // Test invalid format (missing with keyword)
+        let result = parser.parse_shell_action("Shell \"echo hello\" timeout=30");
+        assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn test_parse_shell_action_edge_cases() {
+        let parser = ActionParser::new().unwrap();
+
+        // Test command with spaces and special characters
+        let action = parser
+            .parse_shell_action("Shell \"echo 'hello world' && ls -la\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.command, "echo 'hello world' && ls -la");
+
+        // Test valid variable names
+        let action = parser
+            .parse_shell_action("Shell \"echo test\" with result=\"_valid_var_123\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.result_variable, Some("_valid_var_123".to_string()));
+
+        // Test working directory with path
+        let action = parser
+            .parse_shell_action("Shell \"ls\" with working_dir=\"/home/user/projects/app\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            action.working_dir,
+            Some("/home/user/projects/app".to_string())
+        );
     }
 }

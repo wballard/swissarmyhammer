@@ -1017,21 +1017,18 @@ impl ShellAction {
     }
 
     /// Set the result variable name
-    #[allow(dead_code)]
     pub fn with_result_variable(mut self, variable: String) -> Self {
         self.result_variable = Some(variable);
         self
     }
 
     /// Set the working directory for command execution
-    #[allow(dead_code)]
     pub fn with_working_dir(mut self, dir: String) -> Self {
         self.working_dir = Some(dir);
         self
     }
 
     /// Set environment variables for the command
-    #[allow(dead_code)]
     pub fn with_environment(mut self, env: HashMap<String, String>) -> Self {
         self.environment = env;
         self
@@ -1149,8 +1146,8 @@ impl Action for ShellAction {
             context.insert(result_var.clone(), Value::String(stdout.clone()));
         }
 
-        // Always mark action as successful in workflow terms - command failures don't fail the workflow
-        context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(true));
+        // Set last action result based on command success
+        context.insert(LAST_ACTION_RESULT_KEY.to_string(), Value::Bool(success));
 
         // Return appropriate result - success returns stdout, failure returns false
         if success {
@@ -2224,5 +2221,226 @@ mod tests {
         // Verify it can be used through the trait
         let trait_action: &dyn Action = &action;
         assert_eq!(trait_action.action_type(), "shell");
+    }
+
+    #[tokio::test]
+    async fn test_shell_action_execution_success() {
+        let action = ShellAction::new("echo hello world".to_string());
+        let mut context = HashMap::new();
+
+        let result = action.execute(&mut context).await.unwrap();
+
+        // Verify success context variables are set
+        assert_eq!(context.get("success"), Some(&Value::Bool(true)));
+        assert_eq!(context.get("failure"), Some(&Value::Bool(false)));
+        assert_eq!(context.get("exit_code"), Some(&Value::Number(0.into())));
+
+        // Verify stdout contains expected output
+        let stdout = context.get("stdout").unwrap().as_str().unwrap();
+        assert!(stdout.contains("hello world"));
+
+        // Verify stderr is empty or minimal
+        let stderr = context.get("stderr").unwrap().as_str().unwrap();
+        assert!(stderr.is_empty() || stderr.trim().is_empty());
+
+        // Verify duration is tracked
+        assert!(context.contains_key("duration_ms"));
+        let _duration_ms = context.get("duration_ms").unwrap().as_u64().unwrap();
+        // Duration is always >= 0 for u64, so just verify it exists
+
+        // Verify last action result is success
+        assert_eq!(
+            context.get(LAST_ACTION_RESULT_KEY),
+            Some(&Value::Bool(true))
+        );
+
+        // Result should contain stdout
+        assert_eq!(result, context.get("stdout").unwrap().clone());
+    }
+
+    #[tokio::test]
+    async fn test_shell_action_execution_failure() {
+        let action = ShellAction::new("exit 42".to_string());
+        let mut context = HashMap::new();
+
+        let _result = action.execute(&mut context).await.unwrap();
+
+        // Verify failure context variables are set
+        assert_eq!(context.get("success"), Some(&Value::Bool(false)));
+        assert_eq!(context.get("failure"), Some(&Value::Bool(true)));
+        assert_eq!(context.get("exit_code"), Some(&Value::Number(42.into())));
+
+        // Verify stdout and stderr are captured
+        assert!(context.contains_key("stdout"));
+        assert!(context.contains_key("stderr"));
+
+        // Verify duration is tracked
+        assert!(context.contains_key("duration_ms"));
+
+        // Verify last action result is failure
+        assert_eq!(
+            context.get(LAST_ACTION_RESULT_KEY),
+            Some(&Value::Bool(false))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_shell_action_with_variable_substitution_execution() {
+        let action = ShellAction::new("echo ${greeting} ${name}".to_string());
+        let mut context = HashMap::new();
+        context.insert("greeting".to_string(), Value::String("Hello".to_string()));
+        context.insert("name".to_string(), Value::String("World".to_string()));
+
+        let _result = action.execute(&mut context).await.unwrap();
+
+        // Verify the command was substituted correctly
+        let stdout = context.get("stdout").unwrap().as_str().unwrap();
+        assert!(stdout.contains("Hello World"));
+
+        // Verify success
+        assert_eq!(context.get("success"), Some(&Value::Bool(true)));
+    }
+
+    #[tokio::test]
+    async fn test_shell_action_with_result_variable() {
+        let action = ShellAction::new("echo test output".to_string())
+            .with_result_variable("command_output".to_string());
+        let mut context = HashMap::new();
+
+        let result = action.execute(&mut context).await.unwrap();
+
+        // Verify result variable is set
+        assert!(context.contains_key("command_output"));
+        let command_output = context.get("command_output").unwrap();
+        assert_eq!(command_output, &result);
+
+        // Result should be the stdout
+        let stdout = context.get("stdout").unwrap().as_str().unwrap();
+        assert!(stdout.contains("test output"));
+        assert_eq!(result, context.get("stdout").unwrap().clone());
+    }
+
+    #[tokio::test]
+    async fn test_shell_action_with_working_directory() {
+        use std::fs;
+        use tempfile::TempDir;
+        
+        // Create a unique temporary directory for testing
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+        
+        let action = ShellAction::new("pwd".to_string())
+            .with_working_dir(temp_path.to_string_lossy().to_string());
+        let mut context = HashMap::new();
+
+        let _result = action.execute(&mut context).await.unwrap();
+
+        // Verify success
+        assert_eq!(context.get("success"), Some(&Value::Bool(true)));
+        
+        // Verify the working directory was used
+        let stdout = context.get("stdout").unwrap().as_str().unwrap().trim();
+        let canonical_temp_path = fs::canonicalize(temp_path).unwrap();
+        let canonical_stdout_path = fs::canonicalize(stdout).unwrap_or_else(|_| stdout.into());
+        
+        assert_eq!(canonical_stdout_path, canonical_temp_path);
+    }
+
+    #[tokio::test]
+    async fn test_shell_action_with_environment_variables() {
+        let mut env = HashMap::new();
+        env.insert("TEST_VAR".to_string(), "test_value".to_string());
+        env.insert("ANOTHER_VAR".to_string(), "another_value".to_string());
+
+        let action =
+            ShellAction::new("echo $TEST_VAR $ANOTHER_VAR".to_string()).with_environment(env);
+        let mut context = HashMap::new();
+
+        let _result = action.execute(&mut context).await.unwrap();
+
+        // Verify success
+        assert_eq!(context.get("success"), Some(&Value::Bool(true)));
+
+        // Verify environment variables were set
+        let stdout = context.get("stdout").unwrap().as_str().unwrap();
+        assert!(stdout.contains("test_value"));
+        assert!(stdout.contains("another_value"));
+    }
+
+    #[tokio::test]
+    async fn test_shell_action_with_environment_variable_substitution() {
+        let mut env = HashMap::new();
+        env.insert("TEST_VAR".to_string(), "${dynamic_value}".to_string());
+
+        let action = ShellAction::new("echo $TEST_VAR".to_string()).with_environment(env);
+        let mut context = HashMap::new();
+        context.insert(
+            "dynamic_value".to_string(),
+            Value::String("substituted".to_string()),
+        );
+
+        let _result = action.execute(&mut context).await.unwrap();
+
+        // Verify success
+        assert_eq!(context.get("success"), Some(&Value::Bool(true)));
+
+        // Verify environment variable substitution worked
+        let stdout = context.get("stdout").unwrap().as_str().unwrap();
+        assert!(stdout.contains("substituted"));
+    }
+
+    #[tokio::test]
+    async fn test_shell_action_timeout() {
+        use std::time::Duration;
+
+        // Create an action with a very short timeout
+        let action =
+            ShellAction::new("sleep 5".to_string()).with_timeout(Duration::from_millis(100));
+        let mut context = HashMap::new();
+
+        let _result = action.execute(&mut context).await.unwrap();
+
+        // Verify timeout results in failure state
+        assert_eq!(context.get("success"), Some(&Value::Bool(false)));
+        assert_eq!(context.get("failure"), Some(&Value::Bool(true)));
+
+        // Exit code should indicate timeout/kill (may vary by platform)
+        assert!(context.contains_key("exit_code"));
+
+        // Duration should be tracked
+        assert!(context.contains_key("duration_ms"));
+        let duration_ms = context.get("duration_ms").unwrap().as_u64().unwrap();
+        // Should be around 100ms or slightly more
+        assert!((100..1000).contains(&duration_ms));
+    }
+
+    #[tokio::test]
+    #[cfg(target_os = "windows")]
+    async fn test_shell_action_windows_command_format() {
+        // Test that Windows uses cmd /C for shell commands
+        let action = ShellAction::new("echo windows test".to_string());
+        let mut context = HashMap::new();
+
+        let _result = action.execute(&mut context).await.unwrap();
+
+        // Verify success - this confirms the Windows cmd /C format worked
+        assert_eq!(context.get("success"), Some(&Value::Bool(true)));
+        let stdout = context.get("stdout").unwrap().as_str().unwrap();
+        assert!(stdout.contains("windows test"));
+    }
+
+    #[tokio::test]
+    #[cfg(not(target_os = "windows"))]
+    async fn test_shell_action_unix_command_format() {
+        // Test that Unix systems use sh -c for shell commands
+        let action = ShellAction::new("echo unix test".to_string());
+        let mut context = HashMap::new();
+
+        let _result = action.execute(&mut context).await.unwrap();
+
+        // Verify success - this confirms the Unix sh -c format worked
+        assert_eq!(context.get("success"), Some(&Value::Bool(true)));
+        let stdout = context.get("stdout").unwrap().as_str().unwrap();
+        assert!(stdout.contains("unix test"));
     }
 }

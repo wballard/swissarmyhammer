@@ -241,16 +241,22 @@ impl ContentValidator for YamlTypoValidator {
     ) {
         for (line_num, line) in content.lines().enumerate() {
             for (typo, correct) in &self.typo_map {
-                if line.contains(typo) {
-                    result.add_issue(ValidationIssue {
-                        level: ValidationLevel::Warning,
-                        file_path: file_path.to_path_buf(),
-                        content_title: content_title.clone(),
-                        line: Some(line_num + 1),
-                        column: None,
-                        message: format!("Possible typo: '{typo}' should be '{correct}'"),
-                        suggestion: Some(format!("Replace '{typo}' with '{correct}'")),
-                    });
+                // Check for whole word matches to avoid false positives like "tage" in "staged"
+                let words: Vec<&str> = line.split_whitespace().collect();
+                for word in words {
+                    // Remove common punctuation to check the actual word
+                    let clean_word = word.trim_matches(&[',', '.', ':', ';', '!', '?', '"', '\'', '(', ')', '[', ']', '{', '}'][..]);
+                    if clean_word == *typo {
+                        result.add_issue(ValidationIssue {
+                            level: ValidationLevel::Warning,
+                            file_path: file_path.to_path_buf(),
+                            content_title: content_title.clone(),
+                            line: Some(line_num + 1),
+                            column: None,
+                            message: format!("Possible typo: '{typo}' should be '{correct}'"),
+                            suggestion: Some(format!("Replace '{typo}' with '{correct}'")),
+                        });
+                    }
                 }
             }
         }
@@ -419,6 +425,12 @@ mod tests {
         assert_eq!(result.warnings, 2);
         assert!(result.issues[0].message.contains("titel"));
         assert!(result.issues[1].message.contains("descripton"));
+
+        // Test that substrings don't match (like "tage" in "staged")
+        let mut result2 = ValidationResult::new();
+        let content_with_substring = "These files are staged and ready";
+        validator.validate_content(content_with_substring, Path::new("test.txt"), &mut result2, None);
+        assert_eq!(result2.warnings, 0, "Should not match 'tage' within 'staged'");
     }
 
     #[test]

@@ -93,18 +93,57 @@ fn test_shell_action_variable_substitution() {
 }
 
 #[tokio::test]
-async fn test_shell_action_execution_unimplemented() {
-    let action = ShellAction::new("echo test".to_string());
+async fn test_shell_action_basic_execution() {
+    let action = ShellAction::new("echo hello world".to_string());
     let mut context = HashMap::new();
 
-    // Test that the execute method panics with unimplemented
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(action.execute(&mut context))
-    }));
+    let result = action.execute(&mut context).await.unwrap();
 
-    assert!(result.is_err());
+    // Check that context variables are set properly
+    assert_eq!(context.get("success"), Some(&serde_json::Value::Bool(true)));
+    assert_eq!(
+        context.get("failure"),
+        Some(&serde_json::Value::Bool(false))
+    );
+    assert_eq!(
+        context.get("exit_code"),
+        Some(&serde_json::Value::Number(0.into()))
+    );
+
+    // Check that stdout contains our output
+    let stdout = context.get("stdout").unwrap().as_str().unwrap();
+    assert!(stdout.contains("hello world"));
+
+    // Check that duration_ms is set
+    assert!(context.contains_key("duration_ms"));
+
+    // Check return value
+    assert!(result.as_str().unwrap().contains("hello world"));
+}
+
+#[tokio::test]
+async fn test_shell_action_failed_execution() {
+    let action = ShellAction::new("exit 1".to_string());
+    let mut context = HashMap::new();
+
+    let result = action.execute(&mut context).await.unwrap();
+
+    // Check that context variables are set properly for failure
+    assert_eq!(
+        context.get("success"),
+        Some(&serde_json::Value::Bool(false))
+    );
+    assert_eq!(context.get("failure"), Some(&serde_json::Value::Bool(true)));
+    assert_eq!(
+        context.get("exit_code"),
+        Some(&serde_json::Value::Number(1.into()))
+    );
+
+    // Check that duration_ms is set
+    assert!(context.contains_key("duration_ms"));
+
+    // Check return value - should be false for failure
+    assert_eq!(result, serde_json::Value::Bool(false));
 }
 
 #[test]

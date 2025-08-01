@@ -33,8 +33,8 @@ mod visualization_tests;
 
 pub use actions::{
     parse_action_from_description, parse_action_from_description_with_context, Action, ActionError,
-    ActionResult, LogAction, LogLevel, PromptAction, SetVariableAction, SubWorkflowAction,
-    WaitAction,
+    ActionResult, LogAction, LogLevel, PromptAction, SetVariableAction, ShellAction,
+    SubWorkflowAction, WaitAction,
 };
 pub use cache::{
     CacheStats, CelProgramCache, TransitionCache, TransitionPath, WorkflowCache,

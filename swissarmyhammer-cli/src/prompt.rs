@@ -37,11 +37,14 @@ pub async fn run_prompt_command(subcommand: PromptSubcommand) -> CliResult<()> {
                 save,
                 debug,
             };
-            runner
-                .run(config)
-                .await
-                .map(|_| ())
-                .map_err(|e| CliError::new(e.to_string(), 1))
+            runner.run(config).await.map(|_| ()).map_err(|e| {
+                let error_msg = e.to_string();
+                if error_msg.contains("ABORT ERROR") {
+                    CliError::new(error_msg, crate::exit_codes::EXIT_ERROR)
+                } else {
+                    CliError::new(error_msg, 1)
+                }
+            })
         }
         PromptSubcommand::Search {
             query,

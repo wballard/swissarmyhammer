@@ -72,12 +72,14 @@ impl McpTool for SearchQueryTool {
         let searcher = {
             #[cfg(test)]
             {
-                SemanticSearcher::new_for_testing(storage, config).await.map_err(|e| {
-                    McpErrorHandler::handle_error(
-                        crate::SwissArmyHammerError::Semantic(e),
-                        "create semantic searcher for testing",
-                    )
-                })?
+                SemanticSearcher::new_for_testing(storage, config)
+                    .await
+                    .map_err(|e| {
+                        McpErrorHandler::handle_error(
+                            crate::SwissArmyHammerError::Semantic(e),
+                            "create semantic searcher for testing",
+                        )
+                    })?
             }
             #[cfg(not(test))]
             {

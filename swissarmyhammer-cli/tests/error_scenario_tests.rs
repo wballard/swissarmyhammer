@@ -188,11 +188,13 @@ fn test_search_error_conditions() -> Result<()> {
         .current_dir(&temp_path)
         .assert()
         .success(); // Changed to expect success since "No matches found" is a valid response
-    
+
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
     // Should indicate no results found
     assert!(
-        stdout.contains("No matches") || stdout.contains("no matches") || stdout.contains("0 results"),
+        stdout.contains("No matches")
+            || stdout.contains("no matches")
+            || stdout.contains("0 results"),
         "Should indicate no matches found: {stdout}"
     );
 
@@ -246,7 +248,7 @@ fn test_invalid_command_arguments() -> Result<()> {
         .assert()
         .failure()
         .code(2);
-    
+
     let stderr = String::from_utf8_lossy(&output.get_output().stderr);
     // Should show clap usage error for invalid enum value
     assert!(

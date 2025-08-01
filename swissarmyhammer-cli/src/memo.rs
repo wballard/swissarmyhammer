@@ -73,7 +73,7 @@ async fn get_memo(context: &CliToolContext, id: &str) -> Result<(), Box<dyn std:
                 eprintln!("Memo ID contains invalid character");
                 std::process::exit(1);
             } else {
-                eprintln!("Error: {}", error_msg);
+                eprintln!("Error: {error_msg}");
                 std::process::exit(1);
             }
         }
@@ -103,7 +103,7 @@ async fn update_memo(
                 eprintln!("Memo ID contains invalid character");
                 std::process::exit(1);
             } else {
-                eprintln!("Error: {}", error_msg);
+                eprintln!("Error: {error_msg}");
                 std::process::exit(1);
             }
         }
@@ -126,7 +126,7 @@ async fn delete_memo(context: &CliToolContext, id: &str) -> Result<(), Box<dyn s
                 eprintln!("Memo ID contains invalid character");
                 std::process::exit(1);
             } else {
-                eprintln!("Error: {}", error_msg);
+                eprintln!("Error: {error_msg}");
                 std::process::exit(1);
             }
         }
@@ -243,8 +243,14 @@ mod memo_response_formatting {
         if response_text.contains("No memos found matching query:") {
             // Transform: "No memos found matching query: 'query'" -> "ℹ️ No memos found matching 'query'"
             let result = response_text
-                .replace("No memos found matching query: '", "No memos found matching '")
-                .replace("No memos found matching query: \"", "No memos found matching \"");
+                .replace(
+                    "No memos found matching query: '",
+                    "No memos found matching '",
+                )
+                .replace(
+                    "No memos found matching query: \"",
+                    "No memos found matching \"",
+                );
             format!("{} {}", "ℹ️".blue(), result)
         } else if let Some(count) = extract_search_count(&response_text) {
             if count == 0 {
@@ -279,7 +285,8 @@ mod memo_response_formatting {
             format!("{} No memos available for context", "ℹ️".blue())
         } else {
             // Add document emoji to the context header
-            let result = response_text.replace("All memo context", &format!("{} All memo context", "📄"));
+            let result =
+                response_text.replace("All memo context", &format!("{} All memo context", "📄"));
             result
         }
     }
@@ -293,8 +300,8 @@ mod memo_response_formatting {
                 .to_string();
         }
 
-        let response_text = extract_text_content(result)
-            .unwrap_or_else(|| "No memos found".to_string());
+        let response_text =
+            extract_text_content(result).unwrap_or_else(|| "No memos found".to_string());
 
         // Handle different list response formats
         if response_text.contains("No memos found") {
@@ -303,20 +310,26 @@ mod memo_response_formatting {
             // Replace "Found X memo(s):" with "📝 Found X memo(s)" and add 🆔, 📄 emojis
             let mut result = response_text.clone();
             if let Some(colon_pos) = result.find(':') {
-                result.replace_range(count_match..colon_pos + 1, &format!("{} {}", "📝".blue(), &result[count_match..colon_pos]));
+                result.replace_range(
+                    count_match..colon_pos + 1,
+                    &format!("{} {}", "📝".blue(), &result[count_match..colon_pos]),
+                );
             } else {
-                result.replace_range(count_match.., &format!("{} {}", "📝".blue(), &result[count_match..]));
+                result.replace_range(
+                    count_match..,
+                    &format!("{} {}", "📝".blue(), &result[count_match..]),
+                );
             }
-            
+
             // Add emojis to the individual memo entries
             result = result.replace("Created:", &format!("{} Created:", "📅"));
             result = result.replace("Updated:", &format!("{} Updated:", "🔄"));
             result = result.replace("Preview:", &format!("{} Preview:", "📄"));
-            
+
             // Add ID emoji to the title lines - format: • Title (ID) -> • Title (🆔 ID)
             let id_regex = regex::Regex::new(r"• ([^(]+) \(([A-Z0-9]+)\)").unwrap();
             result = id_regex.replace_all(&result, "• $1 (🆔 $2)").to_string();
-            
+
             result
         } else {
             response_text
@@ -328,24 +341,27 @@ mod memo_response_formatting {
         if result.is_error.unwrap_or(false) {
             let error_text = extract_text_content(result)
                 .unwrap_or_else(|| "An error occurred retrieving memo".to_string());
-            
+
             // Transform error message to match test expectations
             if error_text.contains("Invalid memo ID format:") {
-                return "Memo ID contains invalid character".to_string().red().to_string();
+                return "Memo ID contains invalid character"
+                    .to_string()
+                    .red()
+                    .to_string();
             }
-            
+
             return error_text.red().to_string();
         }
 
-        let response_text = extract_text_content(result)
-            .unwrap_or_else(|| "Memo not found".to_string());
+        let response_text =
+            extract_text_content(result).unwrap_or_else(|| "Memo not found".to_string());
 
         // Add emojis to match test expectations
         let mut result = response_text;
         result = result.replace("ID:", &format!("{} ID:", "🆔"));
         result = result.replace("Created:", &format!("{} Created:", "📅"));
         result = result.replace("Updated:", &format!("{} Updated:", "🔄"));
-        
+
         result
     }
 
@@ -354,17 +370,20 @@ mod memo_response_formatting {
         if result.is_error.unwrap_or(false) {
             let error_text = extract_text_content(result)
                 .unwrap_or_else(|| "An error occurred updating memo".to_string());
-            
+
             // Transform error message to match test expectations
             if error_text.contains("Invalid memo ID format:") {
-                return "Memo ID contains invalid character".to_string().red().to_string();
+                return "Memo ID contains invalid character"
+                    .to_string()
+                    .red()
+                    .to_string();
             }
-            
+
             return error_text.red().to_string();
         }
 
-        let response_text = extract_text_content(result)
-            .unwrap_or_else(|| "Memo updated".to_string());
+        let response_text =
+            extract_text_content(result).unwrap_or_else(|| "Memo updated".to_string());
 
         // Add emojis and update prefix
         let mut result = response_text;
@@ -373,7 +392,7 @@ mod memo_response_formatting {
         }
         result = result.replace("ID:", &format!("{} ID:", "🆔"));
         result = result.replace("Updated:", &format!("{} Updated:", "🔄"));
-        
+
         result
     }
 
@@ -382,24 +401,29 @@ mod memo_response_formatting {
         if result.is_error.unwrap_or(false) {
             let error_text = extract_text_content(result)
                 .unwrap_or_else(|| "An error occurred deleting memo".to_string());
-            
+
             // Transform error message to match test expectations
             if error_text.contains("Invalid memo ID format:") {
-                return "Memo ID contains invalid character".to_string().red().to_string();
+                return "Memo ID contains invalid character"
+                    .to_string()
+                    .red()
+                    .to_string();
             }
-            
+
             return error_text.red().to_string();
         }
 
-        let response_text = extract_text_content(result)
-            .unwrap_or_else(|| "Memo deleted".to_string());
+        let response_text =
+            extract_text_content(result).unwrap_or_else(|| "Memo deleted".to_string());
 
         // Add delete emoji and format the response
-        let mut result = response_text;
+        let result = response_text;
         if result.contains("Successfully deleted memo") || result.contains("deleted memo") {
             // Extract the memo ID if present in the response
             if let Some(id_start) = result.find("ID: ") {
-                let id_end = result[id_start + 4..].find(' ').unwrap_or(result.len() - id_start - 4);
+                let id_end = result[id_start + 4..]
+                    .find(' ')
+                    .unwrap_or(result.len() - id_start - 4);
                 let memo_id = &result[id_start + 4..id_start + 4 + id_end];
                 format!("{} Deleted memo: {}", "🗑️", memo_id)
             } else {

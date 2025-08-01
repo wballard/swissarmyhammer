@@ -1,0 +1,1 @@
+make sure that all errors containing ABORT ERROR really do abort, meaning lot that one last error and hard exit with a non zero exit code. setup up a test with the abort.md prompt to test that a response from the model with ABORT ERROR really does abort, meaning hard exit with a non zero

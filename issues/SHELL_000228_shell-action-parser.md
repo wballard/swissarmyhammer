@@ -114,3 +114,70 @@ The parser method will be called from the dispatch system in the next step.
 ## Next Steps
 
 After completing this step, proceed to integrating the shell action with the dispatch system.
+
+## Proposed Solution
+
+Based on the existing parser patterns and ShellAction structure, I will implement the `parse_shell_action` method following these steps:
+
+### 1. Parser Implementation Strategy
+
+Follow the established pattern from `parse_prompt_action` and other existing parsers:
+- Use `case_insensitive("shell")` for keyword matching
+- Use `quoted_string()` for command parsing
+- Use parameter parsing patterns for optional parameters
+- Return `Ok(None)` if not a shell action, `Ok(Some(action))` if parsing succeeds
+
+### 2. Syntax Support
+
+The parser will support these formats from the specification:
+- `Shell "command"` - Basic shell command  
+- `shell "command"` - Case-insensitive version
+- `Shell "command" with timeout=30` - With timeout
+- `Shell "command" with result="output_variable"` - With result capture
+- `Shell "command" with timeout=30 result="output"` - Combined parameters
+- `Shell "command" with working_dir="/path"` - With working directory
+- `Shell "command" with env={"KEY": "value"}` - With environment variables
+
+### 3. Parameter Parsing Implementation
+
+Build a parameter parser that handles:
+- `timeout=N` - Parse integer timeout value (seconds)
+- `result="variable_name"` - Parse result variable name
+- `working_dir="/path/to/dir"` - Parse working directory path
+- `env={"KEY": "value", "KEY2": "value2"}` - Parse JSON environment variables
+
+### 4. Validation Rules
+
+Implement validation to ensure:
+- Command string is not empty
+- Timeout values are positive integers  
+- Result variable names are valid identifiers (using `is_valid_variable_name`)
+- Working directory paths are non-empty strings
+- Environment variable JSON parses correctly as HashMap<String, String>
+
+### 5. Parser Method Signature
+
+```rust
+pub fn parse_shell_action(&self, description: &str) -> ActionResult<Option<ShellAction>> {
+    // Implementation follows existing patterns
+}
+```
+
+### 6. Integration Points
+
+- Add `ShellAction` import to action_parser.rs
+- Call `parse_shell_action` from `parse_action_from_description` function
+- Follow existing error handling patterns
+
+### 7. Testing Strategy
+
+Write comprehensive unit tests covering:
+- Basic shell command parsing (`Shell "echo hello"`)
+- Case-insensitive parsing (`shell "pwd"`)
+- Parameter parsing for each type (timeout, result, working_dir, env)
+- Combined parameter parsing (`Shell "ls" with timeout=30 result="files"`)
+- Invalid syntax returning None
+- Validation error cases
+- Edge cases and error conditions
+
+This approach ensures consistency with existing parser patterns while fully supporting the shell action specification requirements.

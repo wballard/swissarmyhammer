@@ -1588,6 +1588,10 @@ pub fn parse_action_from_description(description: &str) -> ActionResult<Option<B
         return Ok(Some(Box::new(abort_action)));
     }
 
+    if let Some(shell_action) = parser.parse_shell_action(description)? {
+        return Ok(Some(Box::new(shell_action)));
+    }
+
     Ok(None)
 }
 
@@ -2041,5 +2045,28 @@ mod tests {
         assert_eq!(action.timeout, Some(Duration::from_secs(120)));
         assert_eq!(action.result_variable, Some("build_output".to_string()));
         assert_eq!(action.working_dir, Some("./project".to_string()));
+    }
+
+    #[test]
+    fn test_parse_shell_action_integration() {
+        // Test that shell actions are recognized by the main parser
+        let action = parse_action_from_description("Shell \"echo hello\"")
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.action_type(), "shell");
+        assert_eq!(action.description(), "Execute shell command: echo hello");
+
+        // Test with parameters
+        let action =
+            parse_action_from_description("Shell \"ls -la\" with timeout=30 result=\"files\"")
+                .unwrap()
+                .unwrap();
+        assert_eq!(action.action_type(), "shell");
+
+        // Downcast to ShellAction to verify parameters
+        let shell_action = action.as_any().downcast_ref::<ShellAction>().unwrap();
+        assert_eq!(shell_action.command, "ls -la");
+        assert_eq!(shell_action.timeout, Some(Duration::from_secs(30)));
+        assert_eq!(shell_action.result_variable, Some("files".to_string()));
     }
 }

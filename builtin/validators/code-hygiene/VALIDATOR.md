@@ -493,7 +493,13 @@ keeps the omit-the-clause half. `preferForLoop` turns a `forEach` into a `for`
 loop — under `--single-line-for-each convert`, which the run states, so the
 single-line `things.forEach { if $0 > 2 { print($0) } }` reports rather than
 going silent — and it never suggests a `where` clause, so `idioms.md` keeps the
-`filter`-chain half.
+`where` half.
+
+Each half stays because the tool's own FIX lands there. `void` rewrites into
+`-> Void`, and `preferForLoop` rewrites the single-line `forEach` into
+`for thing in things { if thing > 2 { print(thing) } }` rather than into a
+`where` clause. A gate that autocorrects moves the author to a NEW shape, so a
+split bullet keeps the shape the fix writes.
 
 Two properties of swiftformat shape the run, and the rule file measures each.
 A rule name SwiftFormat does not know breaks the WHOLE run at status 70, and

@@ -681,6 +681,43 @@ const SWIFT_IDIOMS_FILTER_CHAIN: &str = concat!(
 const SWIFT_IDIOMS_FILTER_CHAIN_FORM: &str =
     "things.filter { $0 > 2 }.forEach { thing in print(thing) }";
 
+/// The same walk written as a `for` loop that filters with a nested `if`.
+///
+/// This is the line `preferForLoop` itself WRITES. Measured on 0.62.1,
+/// `swiftformat --rules preferForLoop --single-line-for-each convert` rewrites
+/// [`SWIFT_IDIOMS_SINGLE_LINE_FOR_EACH`] into exactly this, and never into a
+/// `where` clause. So the author who takes the finding
+/// [`the_shipped_swift_idioms_tool_rule_reads_a_single_line_for_each`] holds
+/// the gate to, and applies the tool's own fix, lands here.
+const SWIFT_IDIOMS_NESTED_IF_FOR_LOOP: &str = concat!(
+    "public enum Nesting {\n",
+    "    public static func walk(_ things: [Int]) {\n",
+    "        for thing in things { if thing > 2 { print(thing) } }\n",
+    "    }\n",
+    "}\n",
+);
+
+/// The other DON'T of the `idioms.md` bullet that keeps the `where` half, word
+/// for word as [`SWIFT_IDIOMS_NESTED_IF_FOR_LOOP`] writes it.
+const SWIFT_IDIOMS_NESTED_IF_FOR_LOOP_FORM: &str =
+    "for thing in things { if thing > 2 { print(thing) } }";
+
+/// Every shape of the `where` half `idioms.md` keeps, beside the form the
+/// bullet writes it in.
+///
+/// The half is a requirement on the LOOP — filter with a `where` clause — and
+/// two walks break it. A `filter` chain feeding a `forEach` never becomes a
+/// loop at all, and a `for` loop that filters with a nested `if` is a loop that
+/// says no `where`. A table holding one of them would guard one shape and read
+/// as if it guarded the half.
+const SWIFT_IDIOMS_WHERE_HALF_SHAPES: &[(&str, &str)] = &[
+    (SWIFT_IDIOMS_FILTER_CHAIN, SWIFT_IDIOMS_FILTER_CHAIN_FORM),
+    (
+        SWIFT_IDIOMS_NESTED_IF_FOR_LOOP,
+        SWIFT_IDIOMS_NESTED_IF_FOR_LOOP_FORM,
+    ),
+];
+
 /// Acceptance: the shipped Swift idioms rule reads a single-line `forEach`,
 /// which is the shape `--single-line-for-each convert` decides.
 ///
@@ -711,45 +748,109 @@ fn the_shipped_swift_idioms_tool_rule_reads_a_single_line_for_each() {
     );
 }
 
-/// Acceptance: the gate decides no `filter` chain feeding a `forEach`, so
-/// `idioms.md` owns the `where` half of that bullet alone.
+/// Acceptance: the gate decides NO shape of the `where` half, so `idioms.md`
+/// owns that half of the bullet alone.
 ///
 /// `preferForLoop` converts a `forEach` into a `for` loop and never suggests a
 /// `where` clause, and SwiftFormat states the limit in its own rule
 /// information: "Doesn't affect long multiline functional chains". Measured on
 /// 0.62.1 under the shipped script, and under the same script with
-/// `--single-line-for-each convert`, the chain below reports NOTHING either
-/// way. No option reaches it.
+/// `--single-line-for-each convert`, both walks below report NOTHING either
+/// way. No option reaches either one.
 ///
-/// Both halves are load-bearing. The gate must stay silent, or the bullet has
-/// two owners and every review round produces churn. And `idioms.md` must
-/// state the chain word for word, or this probe measures a shape no prompt
-/// rule asks for.
+/// The nested-`if` `for` loop is the shape the tool's own fix WRITES, so it is
+/// the one an author reaches by obeying the finding
+/// [`the_shipped_swift_idioms_tool_rule_reads_a_single_line_for_each`] holds
+/// the gate to. A guard that measured the `filter` chain alone would leave the
+/// tool free to walk the author into a shape no rule of either set asks about.
+///
+/// Both halves of each row are load-bearing. The gate must stay silent, or the
+/// bullet has two owners and every review round produces churn. And
+/// `idioms.md` must state the walk word for word, or the probe measures a
+/// shape no prompt rule asks for.
 #[test]
-fn the_shipped_swift_idioms_tool_rule_decides_no_filtering_for_each_chain() {
+fn the_shipped_swift_idioms_tool_rule_decides_no_shape_of_the_where_half() {
+    let loader = builtin_loader();
+    let body = swift_prompt_rule_body(&loader, SWIFT_IDIOMS_PROMPT_RULE);
+
+    for (probe, form) in SWIFT_IDIOMS_WHERE_HALF_SHAPES {
+        assert!(
+            body.contains(form),
+            "`{SWIFT_IDIOMS_PROMPT_RULE}.md` must state `{form}`, because no rule of this \
+             roster decides it and the probe below would otherwise measure a shape nothing \
+             asks for"
+        );
+        assert!(
+            probe.contains(form),
+            "the probe must hold the form `{SWIFT_IDIOMS_PROMPT_RULE}.md` states, or the two \
+             measure different shapes"
+        );
+
+        let reported = swift_idioms_reporting_rules(probe, SWIFT_IDIOMS_VERSION_SUPPORT);
+        assert!(
+            reported.is_empty(),
+            "the gate must report no `{form}`, because \
+             `{SWIFT_IDIOMS_PROMPT_RULE}.md` decides that half and \
+             `{SWIFT_PREFER_FOR_LOOP_RULE}` never suggests a `where` clause; the run \
+             reported {reported:?}"
+        );
+    }
+}
+
+/// A function whose return clause names `Void` where it could name nothing.
+///
+/// This is the line `void` itself WRITES. Measured on 0.62.1,
+/// `swiftformat --rules void` rewrites [`SWIFT_IDIOMS_PAREN_RETURN`] into
+/// exactly this and stops there, so the author who takes the `void` finding
+/// and applies the tool's own fix lands here.
+const SWIFT_IDIOMS_VOID_RETURN: &str = concat!(
+    "public enum Typed {\n",
+    "    public static func f() -> Void {}\n",
+    "}\n",
+);
+
+/// The DON'T of the `idioms.md` bullet that keeps the omit-the-clause half,
+/// word for word as [`SWIFT_IDIOMS_VOID_RETURN`] writes it.
+const SWIFT_IDIOMS_VOID_RETURN_FORM: &str = "func f() -> Void {}";
+
+/// Acceptance: the gate decides no `Void` return clause, so `idioms.md` owns
+/// the omit-the-clause half of that bullet alone.
+///
+/// `void` rewrites `()` INTO `Void` and stops there. Removing the clause is
+/// SwiftFormat's separate `redundantVoidReturnType` rule, which this roster
+/// does not name, so the shape the fix lands on is the shape the surviving
+/// half forbids. Measured on 0.62.1 under the shipped script, the probe below
+/// reports NOTHING.
+///
+/// Both halves are load-bearing, and they are the same pair the `where` half
+/// stands on: the gate must stay silent, or the bullet has two owners, and
+/// `idioms.md` must state the declaration word for word, or the probe measures
+/// a shape no prompt rule asks for.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_decides_no_void_return_clause() {
     let loader = builtin_loader();
     let body = swift_prompt_rule_body(&loader, SWIFT_IDIOMS_PROMPT_RULE);
 
     assert!(
-        body.contains(SWIFT_IDIOMS_FILTER_CHAIN_FORM),
-        "`{SWIFT_IDIOMS_PROMPT_RULE}.md` must state \
-         `{SWIFT_IDIOMS_FILTER_CHAIN_FORM}`, because no rule of this roster decides it \
-         and the probe below would otherwise measure a shape nothing asks for"
+        body.contains(SWIFT_IDIOMS_VOID_RETURN_FORM),
+        "`{SWIFT_IDIOMS_PROMPT_RULE}.md` must state `{SWIFT_IDIOMS_VOID_RETURN_FORM}`, \
+         because no rule of this roster decides it and the probe below would otherwise \
+         measure a shape nothing asks for"
     );
     assert!(
-        SWIFT_IDIOMS_FILTER_CHAIN.contains(SWIFT_IDIOMS_FILTER_CHAIN_FORM),
+        SWIFT_IDIOMS_VOID_RETURN.contains(SWIFT_IDIOMS_VOID_RETURN_FORM),
         "the probe must hold the form `{SWIFT_IDIOMS_PROMPT_RULE}.md` states, or the two \
          measure different shapes"
     );
 
     let reported =
-        swift_idioms_reporting_rules(SWIFT_IDIOMS_FILTER_CHAIN, SWIFT_IDIOMS_VERSION_SUPPORT);
+        swift_idioms_reporting_rules(SWIFT_IDIOMS_VOID_RETURN, SWIFT_IDIOMS_VERSION_SUPPORT);
 
     assert!(
         reported.is_empty(),
-        "the gate must report no `filter` chain feeding a `forEach`, because \
-         `{SWIFT_IDIOMS_PROMPT_RULE}.md` decides that half and `{SWIFT_PREFER_FOR_LOOP_RULE}` \
-         never suggests a `where` clause; the run reported {reported:?}"
+        "the gate must report no `Void` return clause, because \
+         `{SWIFT_IDIOMS_PROMPT_RULE}.md` decides that half and this roster names no \
+         `redundantVoidReturnType`; the run reported {reported:?}"
     );
 }
 

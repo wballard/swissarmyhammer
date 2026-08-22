@@ -35,7 +35,8 @@ one would take its remaining bullets out of every review.
 One requirement takes one owner, and a bullet is split at the requirement: a
 bullet stating two takes the tool as owner of the one the tool decides. A
 bullet stating ONE requirement the tool reads only partly stays here whole, and
-says which part the tool misses. Where a tool's finding needs an exception, the
+says which part the tool misses. The tool AUTOCORRECTS, so the half that stays
+names the shape the FIX writes. Where a tool's finding needs an exception, the
 author writes that tool's own inline directive with the reason after it — never
 a rule here.
 

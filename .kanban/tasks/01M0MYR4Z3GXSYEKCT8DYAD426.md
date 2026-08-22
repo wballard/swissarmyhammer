@@ -19,6 +19,28 @@ comments:
 
     If markdown is genuinely never reviewed on `review sha` / `review working`, then every prompt-rule change, every VALIDATOR.md change, and every doc change we have shipped has gone through an empty gate while reporting clean. That is a much bigger defect than a tally that does not add up, and it deserves its own card and its own priority.
   timestamp: 2026-08-22T16:27:38.952428+00:00
+- actor: claude-code
+  id: 01m0n8yzznr064h5qch4vdk5v2
+  text: |
+    ### reproduction 4 — markdown dropped from a diff-scoped review
+
+    `{"op": "review sha", "sha": "HEAD~1..HEAD"}` over commit `0182f3bf` on ^qs32yvp.
+
+    The commit holds 11 files: 4 `.kanban/`, 4 markdown, 3 Rust.
+
+    The engine answered "3 file(s) reviewed, 4 not reviewed" with `counts.findings: 0` and `counts.attempted: 7`. The 4 not reviewed are named in `skipped_files`, and all 4 are `.kanban/`, excluded by `.reviewignore`.
+
+    The 4 markdown files are in NEITHER count:
+
+    - `builtin/validators/code-hygiene/VALIDATOR.md`
+    - `builtin/validators/code-hygiene/rules/idioms-swift.md`
+    - `builtin/validators/swift/VALIDATOR.md`
+    - `builtin/validators/swift/rules/idioms.md`
+
+    3 reviewed + 4 skipped = 7, and 11 - 7 = 4 files that no line of the report accounts for. `skipped_files` names none of them, so the report carries no signal that anything was dropped.
+
+    A hand review of those 4 files against real swiftformat 0.62.1 found 3 findings, so `findings: 0` was not a clean result. Same shape as reproductions 1-3: markdown is silently absent, and the tally hides the absence.
+  timestamp: 2026-08-22T17:40:42.613157+00:00
 position_column: todo
 position_ordinal: ffee80
 title: 'review engine: markdown files are silently dropped from diff-scoped review'

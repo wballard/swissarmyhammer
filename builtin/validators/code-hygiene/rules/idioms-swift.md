@@ -72,6 +72,13 @@ one the project writes.
 The gate runs swiftformat in `--lint` mode. It never rewrites a file. Review is
 read-only, so a finding names the line and the author makes the edit.
 
+The author usually makes it with `swiftformat` itself, so every rule here
+AUTOCORRECTS. That decides what a split bullet keeps: the prompt rule has to
+state the shape the tool's FIX lands on, not only the shape the finding started
+from. A gate that corrects into a shape no rule of either set discusses walks
+the author into a hole. Each of the two split sections below measures the shape
+its fix writes, and names the test that holds it.
+
 Every measurement below was made with SwiftFormat 0.62.1.
 
 ## Which rules the gate enables
@@ -104,8 +111,8 @@ states that requirement no longer. A rule that went silent, and a bullet
 written back into the prompt text, each fail it by name. The two HALF rows
 carry the half the gate decides and nothing more: the `void` probe holds
 `-> ()` and never `-> Void`, and the `preferForLoop` probe holds `forEach` + an
-`if` and never a `filter` chain. Each half the gate misses has a test of its
-own, named in the section that measures it.
+`if` and never a walk of the `where` half. Each half the gate misses has a test
+of its own, named in the section that measures it.
 
 The other twenty-two decide a question no shipped prompt rule asks:
 
@@ -418,18 +425,26 @@ file:
 and leaves `-> Void` standing. Removing the clause is SwiftFormat's separate
 `redundantVoidReturnType` rule, which this roster does not name.
 
+Row 3 is what the tool's own FIX writes, so the half that stays is the half the
+author reaches by taking the finding.
+
 So the `()` half came out of `idioms.md` and the omit-the-clause half stays
-there, written as its own bullet. A roster that later takes
-`redundantVoidReturnType` takes that bullet with it.
+there, written as its own bullet, and
+`the_shipped_swift_idioms_tool_rule_decides_no_void_return_clause` holds both
+sides of it: the gate stays silent on row 3, and `idioms.md` states the row-3
+declaration word for word. A roster that later takes `redundantVoidReturnType`
+takes that bullet with it.
 
 ## `preferForLoop` decides half of the bullet it took, under an option
 
-`idioms.md` stated two requirements in one bullet as well: write a `for` loop
-rather than `forEach` + `if` when the code needs control flow, and write a
-`where` clause rather than a `filter` chain when the loop filters.
-SwiftFormat's `preferForLoop` decides the FIRST and not the second, and the
-first only under an option the rule has to name. Measured on 0.62.1, each row
-one file, under the shipped script:
+`idioms.md` stated two requirements in one bullet as well — "Prefer a `for` loop
+(with a `where` clause when filtering) over `forEach` + `if`". Write a `for`
+loop rather than `forEach` + `if` when the code needs control flow, and write a
+`where` clause ON THAT LOOP when it filters. The second requirement is about
+the LOOP; the deleted bullet named no `filter` chain. SwiftFormat's
+`preferForLoop` decides the FIRST and not the second, and the first only under
+an option the rule has to name. Measured on 0.62.1, each row one file, under the
+shipped script:
 
 | the walk | shipped run | the same, without `--single-line-for-each convert` |
 |---|---|---|
@@ -438,6 +453,7 @@ one file, under the shipped script:
 | `things.forEach { print($0) }`, on one line | reported | NO |
 | `values.forEach { value in print(value) }`, over three lines | reported | reported |
 | `things.filter { $0 > 2 }.forEach { thing in print(thing) }` | NO | NO |
+| `for thing in things { if thing > 2 { print(thing) } }` | NO | NO |
 
 Row 1 is the shape the bullet named, word for word, and the shipped run before
 this option was silent on it. Row 4 is the body the coverage-guard row used to
@@ -456,13 +472,22 @@ The option costs nothing already measured. The failing fixture reports the same
 passing fixture reports 0 either way, so every count in this file stands as
 written.
 
-Row 5 is the `where` half, and NO option reaches it. SwiftFormat states the
-limit in its own rule information — "Doesn't affect long multiline functional
-chains" — and `preferForLoop` never suggests a `where` clause even where it does
-convert. So that half stays in `idioms.md`, written as its own bullet, and
-`the_shipped_swift_idioms_tool_rule_decides_no_filtering_for_each_chain` holds
-both sides of it: the gate stays silent on row 5, and `idioms.md` states the
-row-5 declaration word for word.
+Rows 5 and 6 are the `where` half, and NO option reaches either. SwiftFormat
+states the limit on row 5 in its own rule information — "Doesn't affect long
+multiline functional chains" — and `preferForLoop` never suggests a `where`
+clause even where it does convert.
+
+Row 6 is what the tool's own FIX writes. Measured on 0.62.1,
+`swiftformat --rules preferForLoop --single-line-for-each convert` rewrites row
+1 into row 6, character for character, and never into
+`for thing in things where thing > 2`. So the author who takes the row-1 finding
+and applies SwiftFormat's own correction lands on a walk the deleted bullet
+forbade, and row 6 is why the `where` half has to name that walk.
+
+So that half stays in `idioms.md`, written as its own bullet holding both
+DON'Ts, and `the_shipped_swift_idioms_tool_rule_decides_no_shape_of_the_where_half`
+holds both sides of each row: the gate stays silent on rows 5 and 6, and
+`idioms.md` states each declaration word for word.
 
 ## Why this rule supersedes nothing
 

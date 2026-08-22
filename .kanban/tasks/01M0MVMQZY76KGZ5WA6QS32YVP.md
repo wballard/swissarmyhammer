@@ -257,6 +257,221 @@ comments:
     - confirmation 2: both new tests exist and pass (verified individually): `the_shipped_swift_idioms_tool_rule_owns_each_bullet_it_took` at `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs`, and `the_shipped_swift_disallowed_constructs_tool_rule_owns_each_bullet_it_took` at `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/disallowed_constructs_swift.rs`.
     - next: ready for review.
   timestamp: 2026-08-22T16:55:59.658527+00:00
+- actor: claude-code
+  id: 01m0n6eyhcw46xvg0f0y7h08jh
+  text: |-
+    ### commit — changed
+    - evidence: f79727e2e docs(validators): remove Swift prompt rules now owned by tool rules
+    - next: proceed to review
+  timestamp: 2026-08-22T16:56:59.692180+00:00
+- actor: claude-code
+  id: 01m0n6xnna61cbzry7aa5td1f9
+  text: |-
+    ### review — findings
+    - evidence: 5 findings. Engine `review sha HEAD~1..HEAD` returned `findings: 0` but reviewed only the 5 `.rs` files of 24; all 9 `.md` files were silently dropped, so its clean result is not evidence. Hand review of the 9 markdown files against real swiftformat 0.62.1 / swiftlint 0.65.0 found a genuine coverage hole: `preferForLoop` is SILENT on the `forEach` + `if` shape the deleted `idioms.md` bullet named (shipped run block omits `--single-line-for-each convert`, default is `ignore`), and never reads the `where`-clause half at all. The guard test's probe stages the multi-line form — the one shape that fires — so it passes without proving the claim. Findings at `builtin/validators/swift/rules/idioms.md` (deleted forEach bullet, x2), `builtin/validators/swift/VALIDATOR.md`, `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs:675`, `builtin/validators/code-hygiene/rules/idioms-swift.md:99`.
+    - verified clean by hand: all 10 other deleted bullets FIRE with literal diagnostics; all 3 deliberately-kept bullets confirmed SILENT (correct sole owners); VALIDATOR.md rewrite accurate on all three of its claims. `verify_superseded_swift_bullet` is a real fires-check, not an enabled-check.
+    - next: restore the `forEach` bullet whole with the missed-shape note, or add `--single-line-for-each convert` and re-measure; then fix the guard probe and the two overstated ownership claims. Task stays in `review`.
+    - also: logged reproduction 3 on ^dyad426 — it settles the open question there, markdown is not miscounted, it is not reviewed at all.
+  timestamp: 2026-08-22T17:05:02.122419+00:00
+- actor: claude-code
+  id: 01m0n6z3hxb36gjbp5nhhyz350
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 14 files; 10 bullets + half of an 11th deleted, each probed before removal; 3 candidates refused on measurement
+    - test: green — cargo nextest run --workspace, 14181 passed, 0 failed, 0 skipped; fmt clean; clippy clean
+    - commit: f79727e2e
+    - review: findings — 5 open, ALL from hand review; the engine found 0 and its 0 is not evidence
+
+    **The engine could not review this commit.** 24 files changed (10 `.kanban/`, 9 `.md`, 5 `.rs`). The engine reported 5 reviewed and 10 not reviewed = 15, not 24, with `skipped_files` naming only the `.kanban/` paths. All 9 markdown files were dropped with no line in the tally — and markdown is the entire substance of this commit. Logged as reproduction 3 on ^dyad426.
+
+    **One real coverage hole, and it is the important finding.** The deleted `idioms.md` bullet —
+
+    > Prefer a `for` loop (with a `where` clause when filtering) over `forEach` + `if` when you need control flow
+
+    — names a shape no tool reports. Measured under the shipped run block on swiftformat 0.62.1:
+
+    ```swift
+    things.forEach { if $0 > 2 { print($0) } }   // exit=0, ZERO findings
+    ```
+
+    `preferForLoop` has `--single-line-for-each`, which defaults to `ignore`, and the shipped script never passes it. The `where`-clause half has no owner at all — `preferForLoop` converts `forEach` to `for` and never suggests `where`.
+
+    **The guard test passed for the wrong reason.** `SWIFT_IDIOMS_FOR_EACH` stages the multi-line `values.forEach { value in print(value) }`, which DOES fire. So the row proved ownership of a shape the bullet did not name, while the shape it did name goes unreported. The mechanism is sound — `verify_superseded_swift_bullet` really does check the tool REPORTED, not merely that it is enabled — but a probe body chosen wrong defeats a correct mechanism.
+
+    **This commit's own new VALIDATOR.md text condemns the deletion:** "A bullet stating ONE requirement the tool reads only partly stays here whole, and says which part the tool misses." The `void` bullet in the same commit was handled exactly that way. `forEach` was not.
+
+    **Everything else holds.** The other 10 deleted bullets all fire with literal diagnostics. All three deliberately-kept claims are confirmed silent, so each kept bullet is the correct sole owner. The casing verdict is stronger than claimed: `identifier_name` is not in the roster, and even enabled it would fire only on `MAX_RETRY_COUNT` as a charset check — it would not cover the bullet.
+  timestamp: 2026-08-22T17:05:49.117351+00:00
+- actor: claude-code
+  id: 01m0n7ar9xe8gm6z6bc89wzm80
+  text: |-
+    ### Picked up for iteration 2 — measurement first, then the decision
+
+    Every number below was taken with the SHIPPED `run:` block, extracted verbatim out of the front matter of `builtin/validators/code-hygiene/rules/idioms-swift.md`, on swiftformat 0.62.1, beside a `.swift-version` holding `6.3`.
+
+    #### The hole reproduces exactly as the finding states
+
+        === SingleLineIf      things.forEach { if $0 > 2 { print($0) } }        exit=0, ZERO findings
+        === MultiLineIf       things.forEach { thing in if thing > 2 { … } }    preferForLoop, line 3
+        === FilterChain       things.filter { $0 > 2 }.forEach { thing in … }   exit=0, ZERO findings
+        === SingleLinePlain   things.forEach { print($0) }                      exit=0, ZERO findings
+        === MultiLinePlain    values.forEach { value in print(value) }          preferForLoop, line 3
+
+    The last row is the body `SWIFT_IDIOMS_FOR_EACH` stages today. It is the one row that reports without the option, and it holds no `if` at all — so the guard row proved ownership of a shape the deleted bullet never named.
+
+    #### The option closes the first half, and only the first half
+
+    The same five probes under the same script plus `--single-line-for-each convert`:
+
+        === SingleLineIf      preferForLoop, line 3       <- was silent
+        === MultiLineIf       preferForLoop, line 3
+        === FilterChain       exit=0, ZERO findings       <- still silent
+        === SingleLinePlain   preferForLoop, line 3       <- was silent
+        === MultiLinePlain    preferForLoop, line 3
+
+    `swiftformat --rule-info preferForLoop` states the default: `--single-line-for-each  … "ignore" (default) or "convert"`. It also states the chain limit in its own examples — "Doesn't affect long multiline functional chains" — so no option reaches the `where` half.
+
+    #### The option conflicts with nothing already shipped
+
+    Both fixtures were run through the shipped script and through the same script plus the option:
+
+    | the run | fail fixture | pass fixture |
+    |---|---|---|
+    | shipped | 42 findings, 21 distinct rules | 0 findings |
+    | plus `--single-line-for-each convert` | 42 findings, the same 21 rules | 0 findings |
+
+    Neither count moves, so the roster's measurement tables stand and the doctor fixture pair is unaffected. No prompt rule of `builtin/validators/swift/` sanctions a single-line `forEach` — searched, the only other `forEach` bullet in the whole set is `js-ts/naming-and-style`, which reads no `.swift` file.
+
+    #### The decision
+
+    BOTH, which is the `void` treatment the card asks for.
+
+    1. **Enable `--single-line-for-each convert`.** It is what makes the tool decide the shape the bullet named, and it costs nothing measured.
+    2. **Restore the `where` half as its own bullet in `idioms.md`**, saying which shape the tool misses. No option reaches it, so the prompt rule keeps it.
+
+    The bullet is SPLIT at the requirement, exactly as `void` was: the `forEach` + `if` half is the tool's, the `filter`/`forEach` chain half stays in the prompt.
+
+    #### The audit of every other probe body, both guard files
+
+    `preferForLoop` is the only probe that stages a shape its bullet never named. Each row below was read against the deleted bullet word for word:
+
+    | probe | the bullet's own DON'T | verdict |
+    |---|---|---|
+    | `SWIFT_IDIOMS_LONG_TYPE` | `Array<Int>`, `Dictionary<Key, Value>`, `Optional<String>` | the named shape, but ONE of the three |
+    | `SWIFT_IDIOMS_PAREN_RETURN` | `func f() -> ()` | the named shape, word for word |
+    | `SWIFT_IDIOMS_REDUNDANT_INIT` | the bullet names no literal; an internal memberwise `init` | the named shape |
+    | `SWIFT_IDIOMS_FOR_EACH` | `forEach` + `if` | **WRONG — holds no `if`** |
+    | `SWIFT_IDIOMS_HOISTED_LET` | `case let .point(x, y)` | the named shape, word for word |
+    | `SWIFT_IDIOMS_OPEN_CLASS` | the bullet names no literal; a non-`final` `class` | the named shape |
+    | `SWIFT_DISALLOWED_FORCE_UNWRAP` | `let name = user.name!` | the named shape |
+    | `SWIFT_DISALLOWED_IMPLICITLY_UNWRAPPED` | `var session: URLSession!` | the named shape |
+    | `SWIFT_DISALLOWED_FORCE_TRY` | `let data = try! Data(contentsOf: url)` | the named shape |
+    | `SWIFT_DISALLOWED_FORCE_CAST` | `segue.destination as! DetailVC` | the named shape |
+    | `SWIFT_UNCHECKED_SENDABLE_PLAIN` | `final class Counter: @unchecked Sendable { var n = 0 }` with no guard | the named shape |
+
+    `SWIFT_IDIOMS_LONG_TYPE` is the second row worth an edit. The bullet enumerated THREE spellings and the probe stages one. All three were measured under the shipped script and each reports on its own line, so the probe is widened to hold all three rather than left proving a third of its bullet.
+  timestamp: 2026-08-22T17:12:10.813607+00:00
+- actor: claude-code
+  id: 01m0n7zkghgd0y7pk02hxtdjdn
+  text: |-
+    ### Iteration 2 landed — the `forEach` bullet is split, and the option is on
+
+    Written test-first. Three tests were RED before any fix, each for the right reason:
+
+        the_shipped_swift_idioms_tool_rule_owns_each_bullet_it_took
+          `preferForLoop` must report the defect `idioms.md` stated as `over `forEach` + `if``,
+          or deleting that bullet left the requirement with no owner; the run reported []
+
+        the_shipped_swift_idioms_tool_rule_reads_a_single_line_for_each        FAIL (tool silent)
+        the_shipped_swift_idioms_tool_rule_decides_no_filtering_for_each_chain FAIL (`idioms.md` states no such form)
+
+    All three GREEN after the two changes below.
+
+    #### 1. `--single-line-for-each convert` stands on the shipped command line
+
+    It makes `preferForLoop` report the exact DON'T the deleted bullet named. Measured, and the measurement table now stands in `idioms-swift.md` under its own section, beside the `void` one:
+
+    | the walk | shipped run | the same, without the option |
+    |---|---|---|
+    | `things.forEach { if $0 > 2 { print($0) } }`, on one line | reported | NO |
+    | the same `forEach` and `if` over five lines | reported | reported |
+    | `things.forEach { print($0) }`, on one line | reported | NO |
+    | `values.forEach { value in print(value) }`, over three lines | reported | reported |
+    | `things.filter { $0 > 2 }.forEach { thing in print(thing) }` | NO | NO |
+
+    `the_shipped_swift_idioms_tool_rule_reads_a_single_line_for_each` holds row 1, so a run that drops the option goes quiet there rather than losing the shape without a word.
+
+    Nothing shipped conflicts: the failing fixture reports the same **42 findings** carrying the same 21 rules with the option and without it, and the passing fixture reports 0 either way, so every count in the rule body stands as written.
+
+    #### 2. The `where` half is back in `idioms.md`, as its own bullet
+
+        - **Filter with a `where` clause, not with a `filter` chain feeding a `forEach`.**
+          DON'T: `things.filter { $0 > 2 }.forEach { thing in print(thing) }`.
+          DO: `for thing in things where thing > 2 { print(thing) }`. SwiftFormat's
+          `preferForLoop` turns a `forEach` into a `for` loop and never suggests a
+          `where` clause, so this half is this rule's alone.
+
+    Row 5 above is why. No option reaches it — SwiftFormat states the limit itself, "Doesn't affect long multiline functional chains". `the_shipped_swift_idioms_tool_rule_decides_no_filtering_for_each_chain` holds BOTH sides: the gate stays silent on that chain, and `idioms.md` states the chain word for word, so a probe that stopped measuring a shape the prompt rule asks for fails by name.
+
+    The bullet is terse on purpose, and the measurement lives in `idioms-swift.md`, which is the `void` shape exactly: the review prompt carries the prompt rule and never the tool rule body, so a first draft that carried the whole measurement in the bullet cost 63 more tokens on every validator task for words a person reads once.
+
+    #### The guard probe, corrected
+
+    `SWIFT_IDIOMS_FOR_EACH` is gone. `SWIFT_IDIOMS_SINGLE_LINE_FOR_EACH` replaces it and stages `things.forEach { if $0 > 2 { print($0) } }` — the shape the bullet named. `words` moved from `Prefer a `for` loop` to ``over `forEach` + `if` ``, which is the half the tool owns and which the restored bullet does not state.
+
+    #### The second bad probe the audit found
+
+    `SWIFT_IDIOMS_LONG_TYPE` staged `Array<Int>` alone, and its bullet enumerated THREE DON'T spellings. Widened to hold `Array<Int>`, `Dictionary<String, Int>` and `Optional<String>`; measured under the shipped script, `typeSugar` reports each on its own line. Every other probe in both guard files stages the shape its bullet named — the audit table stands in the comment above.
+
+    #### Everything the change made stale
+
+    - `builtin/validators/code-hygiene/rules/idioms-swift.md` — the run block, the roster table (`preferForLoop` now names its option and reads "HALF of that bullet"), the paragraph that claimed the guard holds each row to "the rule reports a file holding that ONE defect" (it now says WRITTEN IN THE SHAPE THE BULLET NAMED), a new `preferForLoop` measurement section, and the supersedes section's counts.
+    - `builtin/validators/swift/VALIDATOR.md` — "Ten bullets … and half of an eleventh" is now "NINE bullets … and HALF of each of two more".
+    - `builtin/validators/code-hygiene/VALIDATOR.md` — the swift-idioms section now states two halves rather than one, and names the option.
+    - Rust doc comments carrying the counts: `crates/swissarmyhammer-validators/src/builtin/mod.rs`, `src/review/tool_rules/tests.rs`, and the module doc plus the superseded-bullet table doc in `tests/shipped/idioms_swift.rs`.
+
+    #### The token saving, recomputed
+
+    `tiktoken` `o200k_base` over the markdown under each front matter, `f79727e2e^` against the working tree:
+
+    | rule | before | after | saved |
+    |---|---|---|---|
+    | `VALIDATOR.md` | 174 | 403 | -229 |
+    | `idioms.md` | 510 | 429 | 81 |
+    | `value-semantics.md` | 280 | 242 | 38 |
+    | `optionals.md` | 430 | 308 | 122 |
+    | `error-handling.md` | 352 | 197 | 155 |
+    | `concurrency.md` | 380 | 303 | 77 |
+    | `casing.md` | 741 | 741 | 0 |
+    | **TOTAL** | **2867** | **2623** | **244** |
+
+    **244 tokens for each validator task, 8.5% of the set**, down from the 350 / 12.2% the first iteration reported. The rule bodies alone give up 473; `VALIDATOR.md` takes 229 back for the standing order the card asks it to state. The 106-token difference from iteration 1 is the restored `where` bullet, and it is the price of a requirement that has no tool.
+
+    Verified: `cargo fmt --all -- --check` clean, `cargo clippy --workspace --all-targets -- -D warnings` clean, `cargo nextest run --workspace --no-fail-fast` 14183 run / 14183 passed / 0 skipped (baseline 14181 plus the two new tests).
+  timestamp: 2026-08-22T17:23:34.033345+00:00
+- actor: claude-code
+  id: 01m0n80w3a7ft8vbv7aaqtk3nn
+  text: |-
+    ### implement — changed
+    - evidence: 7 files — `builtin/validators/swift/rules/idioms.md`, `builtin/validators/swift/VALIDATOR.md`, `builtin/validators/code-hygiene/rules/idioms-swift.md`, `builtin/validators/code-hygiene/VALIDATOR.md`, `crates/swissarmyhammer-validators/src/builtin/mod.rs`, `crates/swissarmyhammer-validators/src/review/tool_rules/tests.rs`, `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs`.
+    - the coverage hole: `--single-line-for-each convert` added to the shipped run (measured: the single-line `things.forEach { if $0 > 2 { print($0) } }` goes from ZERO findings to `preferForLoop`, and both fixtures are unmoved at 42 and 0), AND the `where` half restored to `idioms.md` as its own bullet, because no option reaches the `filter`/`forEach` chain.
+    - probes corrected: `SWIFT_IDIOMS_FOR_EACH` replaced by `SWIFT_IDIOMS_SINGLE_LINE_FOR_EACH`, which stages the shape the bullet named; `SWIFT_IDIOMS_LONG_TYPE` widened from one of its bullet's three DON'T spellings to all three. Every other probe in both guard files audited against its deleted bullet and correct — the table stands two comments above.
+    - 2 new tests: `the_shipped_swift_idioms_tool_rule_reads_a_single_line_for_each` and `the_shipped_swift_idioms_tool_rule_decides_no_filtering_for_each_chain`. Both written RED first, beside the guard test failing on `the run reported []`.
+    - token saving, recomputed: **244 for each validator task, 8.5% of the `swift` set** (was 350 / 12.2%). Rule bodies give up 473; `VALIDATOR.md` takes 229 back.
+    - tests: `cargo nextest run --workspace --no-fail-fast` — 14183 run, 14183 passed, 0 skipped. `cargo fmt --all -- --check` clean. `cargo clippy --workspace --all-targets -- -D warnings` clean.
+    - next: `/review`. The five findings stay unchecked for the reviewer to verify and close.
+  timestamp: 2026-08-22T17:24:15.594717+00:00
+- actor: claude-code
+  id: 01m0n8aet74ehwt9dah2c25a5j
+  text: |-
+    ### test — green
+    - evidence: `cargo nextest run --workspace` — 14183 tests run, 14183 passed, 0 failed, 0 skipped (baseline 14181 + 2 new tests, no drop). `cargo fmt --all -- --check` clean. `cargo clippy --workspace --all-targets -- -D warnings` clean.
+    - confirmation 1: `the_shipped_swift_idioms_tool_rule_reports_a_file_beside_one_it_declined` (crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs) asserts the failing fixture reports exactly `SWIFT_IDIOMS_FAIL_FIXTURE_FINDINGS` = 42 findings. I ran the shipped script by hand with the real fixtures (`builtin/validators/code-hygiene/fixtures/idioms-swift.fail.swift.tmpl` / `.pass.swift.tmpl`) against the installed swiftformat 0.62.1: fail fixture = 42 findings across 21 distinct rule_ids, pass fixture = 0 findings, exit 0. `every_shipped_idioms_tool_rule_passes_its_fixtures` (doctor's `verify_fixture_contract`) is the automated proof that pass=0/fail>0 holds for the shipped rule. Both tests pass.
+    - confirmation 2: `SWIFT_IDIOMS_FOR_EACH` no longer exists anywhere in the repo (grep returns no matches). `SWIFT_IDIOMS_SINGLE_LINE_FOR_EACH` is the replacement constant, used by `the_shipped_swift_idioms_tool_rule_reads_a_single_line_for_each` and in `SWIFT_IDIOMS_SUPERSEDED_BULLETS`.
+    - confirmation 3: `SWIFT_IDIOMS_LONG_TYPE` now stages all three DON'T spellings the bullet enumerates — `Array<Int>`, `Dictionary<String, Int>`, and `Optional<String>` — confirmed by reading the constant body in idioms_swift.rs.
+    - next: ready for review
+    task: ^qs32yvp
+  timestamp: 2026-08-22T17:29:29.671351+00:00
 depends_on:
 - 01M0MVKKJN6S08JSCDH3FX5BNY
 - 01M0MVM2VZ71SBQ95754S2N0RX
@@ -315,3 +530,53 @@ Keep the acronym-flexibility bullet. That one is a deliberate policy choice and 
 - Each removed bullet has a passing tool-rule test that covers the same defect. Name the test in the commit message.
 - No rule file states a requirement that a tool also states. One owner per rule.
 - VALIDATOR.md describes what the bundle actually is. #tool-validators
+
+## Review Findings (2026-08-22 11:58)
+
+> Scope: `review sha HEAD~1..HEAD` (commit `f79727e2e`).
+>
+> **The engine did not review this commit.** It reported "5 file(s) reviewed, 10 not reviewed" over a 24-file commit and `findings: 0`. The 5 reviewed are the 5 `.rs` files; the 10 excluded are `.kanban/`. All **9 markdown files were silently dropped** — never opened, never accounted for in the tally. The whole substance of this commit is those 9 files, so the engine's `findings: 0` is not evidence of anything. Logged as reproduction 3 on ^dyad426.
+>
+> The findings below come from a hand review of the 9 markdown files plus the shipped tool invocations, run against real swiftformat 0.62.1 and swiftlint 0.65.0 using the `run:` blocks extracted verbatim from the shipped rule files.
+
+- [ ] `builtin/validators/swift/rules/idioms.md` (deleted bullet) `swift/idioms` — the `forEach` bullet was deleted whole, but shipped `preferForLoop` reads only part of it, so the `forEach` + `if` requirement now has no owner in either set. Measured under the shipped `idioms-swift` script on swiftformat 0.62.1: `things.forEach { if $0 > 2 { print($0) } }` — the exact DON'T shape the deleted bullet named — reports ZERO findings, as does `things.forEach { print($0) }`. Root cause: `preferForLoop` has a `--single-line-for-each` option whose default is `ignore`, and the shipped run block passes `--short-optionals always --pattern-let inline --guard-like-if-statements convert` but never `--single-line-for-each convert`. Adding that flag makes the probe report `preferForLoop: Convert functional forEach calls to for loops.` Either add the flag to the run block and re-measure, or restore the bullet and state which shape the tool misses.
+
+- [ ] `builtin/validators/swift/rules/idioms.md` (deleted bullet) `swift/idioms` — the "with a `where` clause when filtering" half of the deleted `forEach` bullet has no owner and cannot get one from this tool. `preferForLoop` only converts `forEach` into `for`; it never suggests a `where` clause, and it is silent on the filter-chain shape `things.filter { $0 > 2 }.forEach { thing in print(thing) }` by its own documented design ("Doesn't affect long multiline functional chains" in `swiftformat --rule-info preferForLoop`). No option changes this. This half must stay in `idioms.md`.
+
+- [ ] `builtin/validators/swift/VALIDATOR.md` — this commit's own new text states the rule the two findings above break: "A bullet stating ONE requirement the tool reads only partly stays here whole, and says which part the tool misses." The `void` bullet in this same commit follows that rule exactly — it is split, the surviving half is written as its own bullet, and `idioms-swift.md` carries a reported/NO measurement table for the three `Void` declaration shapes. The `forEach` bullet got neither the split nor the measurement. Apply the `void` treatment to `forEach`.
+
+- [ ] `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs:675` `tool_rules/shipped` — the `SWIFT_IDIOMS_FOR_EACH` probe stages the multi-line `values.forEach { value in print(value) }`, which is the one `forEach` shape the shipped run does report, so `the_shipped_swift_idioms_tool_rule_owns_each_bullet_it_took` passes without ever exercising the `forEach` + `if` shape the deleted bullet named. The guard's mechanism is sound — `verify_superseded_swift_bullet` asserts the tool-rule name appears in what the run actually REPORTED, not that the rule is enabled — but this probe body cannot prove the claim it is cited for. Stage the shape the deleted bullet named.
+
+- [ ] `builtin/validators/code-hygiene/rules/idioms-swift.md:99` — the added paragraph claims the guard test "holds each of the six taken rows to both halves of its own claim: the rule reports a file holding that ONE defect". That is not true of the `preferForLoop` row: its probe holds a `forEach` shape the bullet did not name, while the shape the bullet did name is unreported. Correct the claim, and mark the `preferForLoop` ownership-table row for the half it actually decides, as the `void` row is marked "HALF of that bullet".
+
+### What was verified by hand, and passed
+
+Every other claim in this commit was probed against the real tool and holds.
+
+Deleted bullets — all FIRE, with the literal diagnostic observed:
+
+| bullet | tool | rule | verdict |
+|---|---|---|---|
+| shorthand type sugar | swiftformat | `typeSugar` | FIRES on all three of `Array<Int>`, `Optional<String>`, `Dictionary<String, Int>` |
+| no redundant memberwise init | swiftformat | `redundantMemberwiseInit` | FIRES |
+| `Void` not `()` (the `()` half) | swiftformat | `void` | FIRES on `-> ()` and `(Int) -> ()` |
+| own `let` per case variable | swiftformat | `hoistPatternLet` | FIRES |
+| mark classes `final` | swiftformat | `preferFinalClasses` | FIRES |
+| `for` loop over `forEach` | swiftformat | `preferForLoop` | **PARTIAL — see findings above** |
+| no force unwrap | swiftlint | `force_unwrapping` | FIRES |
+| no IUO | swiftlint | `implicitly_unwrapped_optional` | FIRES |
+| no `try!` | swiftlint | `force_try` | FIRES |
+| no `as!` | swiftlint | `force_cast` | FIRES |
+| `@unchecked Sendable` invariant | swiftlint | `no_unchecked_sendable` | FIRES, and the documented `// swiftlint:disable:next` escape hatch genuinely suppresses it |
+
+The three deliberately-KEPT bullets were each confirmed SILENT, so each is correctly the sole owner of its requirement:
+
+- `noGuardInTests` is silent on shorthand `guard let source else { return }`. Control: the long form `guard let value = source else` fires twice on the same file, so the probe is sound and the shorthand gap is real.
+- `void` is silent on `func typed() -> Void {}`, both in isolation and under the full shipped roster. Removing the clause is SwiftFormat's separate `redundantVoidReturnType`, which this roster does not name.
+- Both shipped gates are silent on all four casing shapes — `MAX_RETRY_COUNT`, `kMaximumRetries`, `strName`, `bIsValid`. `identifier_name` is not in the shipped `only_rules` roster; run in isolation it would fire on `MAX_RETRY_COUNT` only, and as a charset check ("should only contain alphanumeric and other allowed characters"), not a casing check. It stays silent on the other three. Enabling it would not cover the bullet. Keeping `casing.md` whole is correct, and the diff confirms the file is unchanged.
+
+`builtin/validators/swift/VALIDATOR.md` rewrite is accurate as to the bundle as it now stands:
+
+- "Ten bullets that stood here are theirs now, and half of an eleventh" — counted against the diff: 10 whole bullets deleted across `idioms.md`, `value-semantics.md`, `optionals.md`, `error-handling.md`, `concurrency.md`, plus the `()` half of the `Void` bullet. Accurate.
+- "Neither declares a `supersedes` key" — confirmed; both tool rules declare none and each carries a section explaining why.
+- "there are no engine probes on this side" — confirmed; no rule in `builtin/validators/swift/rules/` carries a `run:` frontmatter key. The only textual match is prose in `access-control.md` ("runs no caller probe").

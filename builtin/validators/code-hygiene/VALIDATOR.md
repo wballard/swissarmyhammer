@@ -480,13 +480,20 @@ three prompt rules of the `swift` set — five of `idioms.md`, one of
 only those bullets, so naming any of them would take its other bullets out of
 every review the moment swiftformat is installed.
 
-Six of the seven are out of the prompt text and this gate is their one owner.
-The seventh, `optionals.md` never `guard` in a test, stays there whole, because
-`noGuardInTests` reports `guard let value = source else` and stays silent on
-the shorthand `guard let value else`. The `void` row is half of the bullet it
-took: SwiftFormat rewrites `-> ()` into `-> Void` and removes the clause only
-under `redundantVoidReturnType`, which this roster does not name, so `idioms.md`
-keeps the omit-the-clause half.
+Six of the seven are this gate's, and two of those six are HALF of the bullet
+they took. The seventh, `optionals.md` never `guard` in a test, stays in the
+prompt text whole, because `noGuardInTests` reports
+`guard let value = source else` and stays silent on the shorthand
+`guard let value else`.
+
+The two halves each leave the rest with `idioms.md`. SwiftFormat's `void`
+rewrites `-> ()` into `-> Void` and removes the clause only under
+`redundantVoidReturnType`, which this roster does not name, so `idioms.md`
+keeps the omit-the-clause half. `preferForLoop` turns a `forEach` into a `for`
+loop — under `--single-line-for-each convert`, which the run states, so the
+single-line `things.forEach { if $0 > 2 { print($0) } }` reports rather than
+going silent — and it never suggests a `where` clause, so `idioms.md` keeps the
+`filter`-chain half.
 
 Two properties of swiftformat shape the run, and the rule file measures each.
 A rule name SwiftFormat does not know breaks the WHOLE run at status 70, and

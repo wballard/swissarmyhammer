@@ -24,8 +24,8 @@ own **open-source Swift** projects.
 reader must JUDGE, and it states none a linter answers. Two tool rules of
 `builtin/validators/code-hygiene/` carry the deterministic half: `idioms-swift`
 runs swiftformat over every changed Swift file, and `disallowed-constructs-swift`
-runs swiftlint. Ten bullets that stood here are theirs now, and half of an
-eleventh; each rule body names what it took and carries the measurement
+runs swiftlint. NINE bullets that stood here are theirs whole, and HALF of each
+of two more; each rule body names what it took and carries the measurement
 behind each.
 
 Neither declares a `supersedes` key. That key names a WHOLE prompt rule, and

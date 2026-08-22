@@ -301,10 +301,11 @@ mod tests {
     /// `supersedes` names a WHOLE prompt rule, and `idioms-swift` decides seven
     /// bullets spread across three of them — five of `swift/rules/idioms.md`,
     /// one of `swift/rules/value-semantics.md` and one of
-    /// `swift/rules/optionals.md`. Six of those bullets are now out of the
-    /// prompt text, with the gate as their one owner, and each of the three
-    /// rules keeps the bullets no tool reads. Naming any of those rules would
-    /// take THOSE out of every review the moment swiftformat is installed, so
+    /// `swift/rules/optionals.md`. Six of those bullets are the gate's, four
+    /// whole and two in half, and each of the three rules keeps the bullets no
+    /// tool reads and the half of each split bullet the gate misses. Naming any
+    /// of those rules would take THOSE out of every review the moment
+    /// swiftformat is installed, so
     /// the rule states the relationship in its body and claims none of them.
     const CODE_HYGIENE_IDIOMS_TOOL_RULES: &[&str] = &["idioms-swift"];
 

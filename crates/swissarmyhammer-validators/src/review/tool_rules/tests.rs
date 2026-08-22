@@ -184,10 +184,10 @@ const IDIOMS_RULE_KIND: &str = "idioms";
 /// `supersedes` names a WHOLE prompt rule, and this gate decides seven bullets
 /// spread across three of them — five of `swift/rules/idioms.md`, one of
 /// `swift/rules/value-semantics.md` and one of `swift/rules/optionals.md`. Six
-/// of those bullets are now out of the prompt text, with the gate as their one
-/// owner, and each of the three rules keeps the bullets no tool reads. Naming
-/// any of those rules here would take THOSE out of every review the moment
-/// swiftformat is installed.
+/// of those bullets are the gate's, four whole and two in half, and each of the
+/// three rules keeps the bullets no tool reads and the half of each split
+/// bullet the gate misses. Naming any of those rules here would take THOSE out
+/// of every review the moment swiftformat is installed.
 const SHIPPED_IDIOMS_RULES: &[(&str, &str, &[&str])] =
     &[("swift", SWIFT_IDIOMS_RULE, SUPERSEDES_NOTHING)];
 

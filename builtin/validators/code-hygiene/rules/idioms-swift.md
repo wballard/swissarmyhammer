@@ -40,7 +40,7 @@ tool:
       swiftformat --lint --quiet --reporter json --cache ignore \
         --min-version 0.62.1 --rules "$enabled" \
         --short-optionals always --pattern-let inline \
-        --guard-like-if-statements convert \
+        --guard-like-if-statements convert --single-line-for-each convert \
         "$file" > "$work/report.json" 2> "$work/lint.err" || status=$?
       if [ "$status" -gt 1 ]; then
         if grep -q '^error: Project specifies SwiftFormat --min-version' "$work/lint.err"; then
@@ -82,25 +82,30 @@ and narrowed to the rules that decide an IDIOM. Twenty-nine names stand in the
 script, in five groups.
 
 Seven of them decide a bullet a prompt rule of `builtin/validators/swift/` used
-to state. Six of those bullets are out of the prompt text and this gate is
-their ONE owner. The seventh stays there whole, because this gate reads only
-part of it.
+to state. FOUR of those bullets are out of the prompt text whole and this gate
+is their ONE owner. TWO more it decides in half, and each of those two stays in
+the prompt text as the half the gate misses. The seventh stays there whole,
+because this gate reads only part of it and no option moves the rest.
 
 | the rule | the option it needs | the bullet it took |
 |---|---|---|
 | `typeSugar` | `--short-optionals always` | `idioms.md` shorthand type sugar |
 | `void` | | `idioms.md` return `Void`, not `()` — HALF of that bullet |
 | `redundantMemberwiseInit` | | `idioms.md` no memberwise init identical to the synthesized one |
-| `preferForLoop` | | `idioms.md` `for` loop over `forEach` |
+| `preferForLoop` | `--single-line-for-each convert` | `idioms.md` a `for` loop over `forEach` + `if` — HALF of that bullet |
 | `hoistPatternLet` | `--pattern-let inline` | `idioms.md` bind each case variable with its own `let` |
 | `preferFinalClasses` | | `value-semantics.md` mark classes `final` |
 | `noGuardInTests` | `--guard-like-if-statements convert` | `optionals.md` never `guard` in a test — the bullet STAYS |
 
 `the_shipped_swift_idioms_tool_rule_owns_each_bullet_it_took` holds each of the
 six taken rows to both halves of its own claim: the rule reports a file holding
-that ONE defect, and the prompt rule states the bullet no longer. A rule that
-went silent, and a bullet written back into the prompt text, each fail it by
-name.
+that ONE defect, WRITTEN IN THE SHAPE THE BULLET NAMED, and the prompt rule
+states that requirement no longer. A rule that went silent, and a bullet
+written back into the prompt text, each fail it by name. The two HALF rows
+carry the half the gate decides and nothing more: the `void` probe holds
+`-> ()` and never `-> Void`, and the `preferForLoop` probe holds `forEach` + an
+`if` and never a `filter` chain. Each half the gate misses has a test of its
+own, named in the section that measures it.
 
 The other twenty-two decide a question no shipped prompt rule asks:
 
@@ -417,6 +422,48 @@ So the `()` half came out of `idioms.md` and the omit-the-clause half stays
 there, written as its own bullet. A roster that later takes
 `redundantVoidReturnType` takes that bullet with it.
 
+## `preferForLoop` decides half of the bullet it took, under an option
+
+`idioms.md` stated two requirements in one bullet as well: write a `for` loop
+rather than `forEach` + `if` when the code needs control flow, and write a
+`where` clause rather than a `filter` chain when the loop filters.
+SwiftFormat's `preferForLoop` decides the FIRST and not the second, and the
+first only under an option the rule has to name. Measured on 0.62.1, each row
+one file, under the shipped script:
+
+| the walk | shipped run | the same, without `--single-line-for-each convert` |
+|---|---|---|
+| `things.forEach { if $0 > 2 { print($0) } }`, on one line | reported | NO |
+| the same `forEach` and `if` written over five lines | reported | reported |
+| `things.forEach { print($0) }`, on one line | reported | NO |
+| `values.forEach { value in print(value) }`, over three lines | reported | reported |
+| `things.filter { $0 > 2 }.forEach { thing in print(thing) }` | NO | NO |
+
+Row 1 is the shape the bullet named, word for word, and the shipped run before
+this option was silent on it. Row 4 is the body the coverage-guard row used to
+stage: it reports without the option and it holds no `if`, so it proved
+ownership of a shape the bullet never named while row 1 went unreported.
+`swiftformat --rule-info preferForLoop` states
+why: `--single-line-for-each` takes `"ignore" (default) or "convert"`, so a
+single-line closure is out of reach until the run says otherwise. The option
+therefore stands on the command line, and
+`the_shipped_swift_idioms_tool_rule_reads_a_single_line_for_each` holds row 1,
+so a run that dropped the option goes quiet there rather than losing the shape
+without a word.
+
+The option costs nothing already measured. The failing fixture reports the same
+**42 findings** carrying the same 21 rules with it and without it, and the
+passing fixture reports 0 either way, so every count in this file stands as
+written.
+
+Row 5 is the `where` half, and NO option reaches it. SwiftFormat states the
+limit in its own rule information — "Doesn't affect long multiline functional
+chains" — and `preferForLoop` never suggests a `where` clause even where it does
+convert. So that half stays in `idioms.md`, written as its own bullet, and
+`the_shipped_swift_idioms_tool_rule_decides_no_filtering_for_each_chain` holds
+both sides of it: the gate stays silent on row 5, and `idioms.md` states the
+row-5 declaration word for word.
+
 ## Why this rule supersedes nothing
 
 `supersedes` names a whole prompt rule, and the engine skips that rule whole
@@ -425,14 +472,14 @@ prompt rules — five of `builtin/validators/swift/rules/idioms.md`, one of
 `value-semantics.md` and one of `optionals.md` — and no one of those rules is
 only those bullets. Naming any of them here would take its OTHER bullets out of
 every review the moment swiftformat is installed. `idioms.md` still states the
-empty-collection declaration, the omit-the-clause half above and the
-type-name repetition; `value-semantics.md` still states four bullets;
+empty-collection declaration, the omit-the-clause half, the `where` half and
+the type-name repetition; `value-semantics.md` still states four bullets;
 `optionals.md` still states three.
 
-The prompt half has landed. Six of the seven bullets are this gate's — five
-whole, and the `void` row for the half the section above measures. The seventh,
-`optionals.md` never `guard` in a test, stays whole for the reason the
-shorthand row records. One requirement takes one owner, and
+The prompt half has landed. Six of the seven bullets are this gate's — four
+whole, and the `void` and `preferForLoop` rows for the halves the two sections
+above measure. The seventh, `optionals.md` never `guard` in a test, stays whole
+for the reason the shorthand row records. One requirement takes one owner, and
 `the_shipped_swift_idioms_tool_rule_owns_each_bullet_it_took` is what holds it
 that way.
 

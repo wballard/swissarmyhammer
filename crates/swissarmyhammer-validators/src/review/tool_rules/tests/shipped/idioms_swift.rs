@@ -13,10 +13,13 @@
 //! a `.swift-version` file.
 //!
 //! One more test stands apart because of what it protects rather than what it
-//! measures. This gate took six bullets out of the Swift prompt rules, and a
-//! bullet deleted without a tool that reads it is a requirement the set states
-//! nowhere. The last test in this file holds each of those six to being
-//! reported by its tool AND stated by no prompt rule.
+//! measures. This gate took six requirements out of the Swift prompt rules —
+//! four whole bullets, and half of each of two more — and a requirement
+//! deleted without a tool that reads it is one the set states nowhere. The
+//! last test in this file holds each of those six to being reported by its
+//! tool, over Swift written in the SHAPE the bullet named, AND stated by no
+//! prompt rule. The half of each split bullet the gate misses has a test of
+//! its own beside it.
 
 use super::*;
 
@@ -644,11 +647,129 @@ fn the_shipped_swift_idioms_tool_rule_decides_no_empty_collection_declaration() 
     );
 }
 
-/// A declaration written with the long spelling of a sugared type.
+/// The rule that converts a `forEach` call into a `for` loop.
+const SWIFT_PREFER_FOR_LOOP_RULE: &str = "preferForLoop";
+
+/// A `forEach` whose closure holds an `if`, written on ONE line.
+///
+/// This is the shape the deleted `idioms.md` bullet named as its DON'T:
+/// `forEach` + `if` where the author needs control flow, and `forEach` can
+/// `break`, `continue` or `return` out of nothing.
+const SWIFT_IDIOMS_SINGLE_LINE_FOR_EACH: &str = concat!(
+    "public enum Looping {\n",
+    "    public static func walk(_ things: [Int]) {\n",
+    "        things.forEach { if $0 > 2 { print($0) } }\n",
+    "    }\n",
+    "}\n",
+);
+
+/// The same walk written as a `filter` chain feeding a `forEach`, which is
+/// the shape a `for … where` clause replaces.
+///
+/// The line stands, character for character, in the `idioms.md` bullet that
+/// states the `where` half.
+const SWIFT_IDIOMS_FILTER_CHAIN: &str = concat!(
+    "public enum Filtering {\n",
+    "    public static func walk(_ things: [Int]) {\n",
+    "        things.filter { $0 > 2 }.forEach { thing in print(thing) }\n",
+    "    }\n",
+    "}\n",
+);
+
+/// The DON'T of the `idioms.md` bullet that keeps the `where` half, word for
+/// word as [`SWIFT_IDIOMS_FILTER_CHAIN`] writes it.
+const SWIFT_IDIOMS_FILTER_CHAIN_FORM: &str =
+    "things.filter { $0 > 2 }.forEach { thing in print(thing) }";
+
+/// Acceptance: the shipped Swift idioms rule reads a single-line `forEach`,
+/// which is the shape `--single-line-for-each convert` decides.
+///
+/// The option is what puts that shape in reach, and its default is the other
+/// way: `swiftformat --rule-info preferForLoop` states
+/// `--single-line-for-each … "ignore" (default) or "convert"`. Measured on
+/// SwiftFormat 0.62.1 under the shipped script, over the probe below:
+/// without the option the run reports NOTHING, and with it the run reports
+/// `preferForLoop`. So this test is the guard on the option standing on the
+/// shipped command line — a run that dropped it goes quiet here rather than
+/// losing a shape without a word.
+///
+/// The shape matters more than the option. `forEach` + `if` written on one
+/// line is exactly what the deleted `idioms.md` bullet named, so a run that
+/// stays silent here leaves that bullet with no owner in either set.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_reads_a_single_line_for_each() {
+    let reported = swift_idioms_reporting_rules(
+        SWIFT_IDIOMS_SINGLE_LINE_FOR_EACH,
+        SWIFT_IDIOMS_VERSION_SUPPORT,
+    );
+
+    assert!(
+        reported.contains(&SWIFT_PREFER_FOR_LOOP_RULE.to_string()),
+        "`{SWIFT_PREFER_FOR_LOOP_RULE}` must report a single-line `forEach` holding an \
+         `if`, which is the shape the deleted `idioms.md` bullet named; the run \
+         reported {reported:?}"
+    );
+}
+
+/// Acceptance: the gate decides no `filter` chain feeding a `forEach`, so
+/// `idioms.md` owns the `where` half of that bullet alone.
+///
+/// `preferForLoop` converts a `forEach` into a `for` loop and never suggests a
+/// `where` clause, and SwiftFormat states the limit in its own rule
+/// information: "Doesn't affect long multiline functional chains". Measured on
+/// 0.62.1 under the shipped script, and under the same script with
+/// `--single-line-for-each convert`, the chain below reports NOTHING either
+/// way. No option reaches it.
+///
+/// Both halves are load-bearing. The gate must stay silent, or the bullet has
+/// two owners and every review round produces churn. And `idioms.md` must
+/// state the chain word for word, or this probe measures a shape no prompt
+/// rule asks for.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_decides_no_filtering_for_each_chain() {
+    let loader = builtin_loader();
+    let body = swift_prompt_rule_body(&loader, SWIFT_IDIOMS_PROMPT_RULE);
+
+    assert!(
+        body.contains(SWIFT_IDIOMS_FILTER_CHAIN_FORM),
+        "`{SWIFT_IDIOMS_PROMPT_RULE}.md` must state \
+         `{SWIFT_IDIOMS_FILTER_CHAIN_FORM}`, because no rule of this roster decides it \
+         and the probe below would otherwise measure a shape nothing asks for"
+    );
+    assert!(
+        SWIFT_IDIOMS_FILTER_CHAIN.contains(SWIFT_IDIOMS_FILTER_CHAIN_FORM),
+        "the probe must hold the form `{SWIFT_IDIOMS_PROMPT_RULE}.md` states, or the two \
+         measure different shapes"
+    );
+
+    let reported =
+        swift_idioms_reporting_rules(SWIFT_IDIOMS_FILTER_CHAIN, SWIFT_IDIOMS_VERSION_SUPPORT);
+
+    assert!(
+        reported.is_empty(),
+        "the gate must report no `filter` chain feeding a `forEach`, because \
+         `{SWIFT_IDIOMS_PROMPT_RULE}.md` decides that half and `{SWIFT_PREFER_FOR_LOOP_RULE}` \
+         never suggests a `where` clause; the run reported {reported:?}"
+    );
+}
+
+/// One declaration for each long spelling the deleted `idioms.md` bullet
+/// named as its DON'T.
+///
+/// The bullet enumerated three — `Array<Int>`, `Dictionary<Key, Value>` and
+/// `Optional<String>` — so a probe holding one of them would prove a third of
+/// it. Measured on 0.62.1 under the shipped script, `typeSugar` reports each of
+/// the three on its own line.
 const SWIFT_IDIOMS_LONG_TYPE: &str = concat!(
     "public enum Sugar {\n",
     "    public static func read(_ values: Array<Int>) -> Int {\n",
     "        values.count\n",
+    "    }\n\n",
+    "    public static func table(_ pairs: Dictionary<String, Int>) -> Int {\n",
+    "        pairs.count\n",
+    "    }\n\n",
+    "    public static func name(_ value: Optional<String>) -> Int {\n",
+    "        value?.count ?? 0\n",
     "    }\n",
     "}\n",
 );
@@ -667,17 +788,6 @@ const SWIFT_IDIOMS_REDUNDANT_INIT: &str = concat!(
     "\n",
     "    init(count: Int) {\n",
     "        self.count = count\n",
-    "    }\n",
-    "}\n",
-);
-
-/// A walk over a collection written as `forEach` rather than as a `for` loop.
-const SWIFT_IDIOMS_FOR_EACH: &str = concat!(
-    "public enum Looping {\n",
-    "    public static func walk(_ values: [Int]) {\n",
-    "        values.forEach { value in\n",
-    "            print(value)\n",
-    "        }\n",
     "    }\n",
     "}\n",
 );
@@ -705,14 +815,27 @@ const SWIFT_IDIOMS_OPEN_CLASS: &str = concat!(
     "}\n",
 );
 
-/// Every bullet this gate took out of a Swift prompt rule.
+/// Every requirement this gate took out of a Swift prompt rule.
 ///
-/// The `void` row is HALF of the bullet `idioms.md` used to state. Measured on
-/// 0.62.1, `void` reports `func run() -> ()` and stays SILENT on
-/// `func run() -> Void {}`: it rewrites `()` INTO `Void` and stops there.
-/// SwiftFormat removes the clause under `redundantVoidReturnType`, which this
-/// roster does not name. So the `()` half came out of `idioms.md` and the
-/// omit-the-clause half stays there.
+/// Each `defect` is written in the SHAPE the deleted bullet named, so a row
+/// reports what the bullet was about rather than a neighbouring shape the same
+/// rule happens to read.
+///
+/// Two rows are HALF of the bullet `idioms.md` used to state, and each stands
+/// beside a test of its own that holds the other half to the prompt rule.
+///
+/// The `void` row: measured on 0.62.1, `void` reports `func run() -> ()` and
+/// stays SILENT on `func run() -> Void {}`: it rewrites `()` INTO `Void` and
+/// stops there. SwiftFormat removes the clause under `redundantVoidReturnType`,
+/// which this roster does not name. So the `()` half came out of `idioms.md`
+/// and the omit-the-clause half stays there.
+///
+/// The `preferForLoop` row: measured on 0.62.1 under the shipped script,
+/// `preferForLoop` reports `forEach` + `if` — on one line under
+/// `--single-line-for-each convert`, and over several lines with or without it
+/// — and stays SILENT on `things.filter { … }.forEach { … }`, by SwiftFormat's
+/// own documented design. So the `forEach` + `if` half came out of `idioms.md`
+/// and the `where`-clause half stays there.
 ///
 /// Two bullets this gate touches are NOT here, and each was measured before it
 /// was left alone. `optionals.md` never `guard` in a test stays whole, because
@@ -742,9 +865,9 @@ const SWIFT_IDIOMS_SUPERSEDED_BULLETS: &[SupersededSwiftBullet] = &[
     },
     SupersededSwiftBullet {
         prompt_rule: SWIFT_IDIOMS_PROMPT_RULE,
-        tool_rule: "preferForLoop",
-        defect: SWIFT_IDIOMS_FOR_EACH,
-        words: "Prefer a `for` loop",
+        tool_rule: SWIFT_PREFER_FOR_LOOP_RULE,
+        defect: SWIFT_IDIOMS_SINGLE_LINE_FOR_EACH,
+        words: "over `forEach` + `if`",
     },
     SupersededSwiftBullet {
         prompt_rule: SWIFT_IDIOMS_PROMPT_RULE,
@@ -769,9 +892,12 @@ const SWIFT_IDIOMS_SUPERSEDED_BULLETS: &[SupersededSwiftBullet] = &[
 /// which produce churn on every review round. This test is what stands between
 /// the deletion and each of those.
 ///
-/// Every probe holds ONE defect, so the rule the run names is the rule that
-/// read the shape rather than a neighbour that read the same file. The probes
-/// stage a `.swift-version`, so no answer here is one the version gate bought.
+/// Every probe holds ONE KIND of defect, so the rule the run names is the rule
+/// that read the shape rather than a neighbour that read the same file, and it
+/// holds that defect in the SHAPE the bullet named — a probe staging some other
+/// shape the same rule happens to report proves ownership of a requirement the
+/// bullet never stated. The probes stage a `.swift-version`, so no answer here
+/// is one the version gate bought.
 #[test]
 fn the_shipped_swift_idioms_tool_rule_owns_each_bullet_it_took() {
     let loader = builtin_loader();

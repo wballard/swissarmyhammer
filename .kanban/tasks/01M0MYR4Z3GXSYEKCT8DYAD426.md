@@ -21,7 +21,7 @@ comments:
   timestamp: 2026-08-22T16:27:38.952428+00:00
 position_column: todo
 position_ordinal: ffee80
-title: 'review engine: the reviewed-file tally does not reconcile'
+title: 'review engine: markdown files are silently dropped from diff-scoped review'
 ---
 Found while reviewing commit `06e7a2fce` (task ^3fx5bny). The review engine's own file accounting does not add up.
 
@@ -61,3 +61,40 @@ A tally that does not close cannot be used as evidence of coverage. Today a revi
 - A test asserts the tally closes for a mixed commit — code, markdown, `.reviewignore` paths, and fixtures.
 - The report names WHY each not-reviewed file was not reviewed. "Not reviewed" with no reason is what made this hard to diagnose.
 - If markdown was genuinely never reviewed, that is a separate defect. Say so plainly and raise its own card. #review-tool
+
+## Reproduction 3 — commit `f79727e2e`, task ^qs32yvp (2026-08-22)
+
+The cleanest reproduction so far. The split is exactly along file type, with no fixture exclusion to confuse it.
+
+`review sha HEAD~1..HEAD` over commit `f79727e2e`:
+
+- The commit touches 24 files.
+- 10 are `.kanban/` — the report names all 10 and the `.reviewignore` rule that excluded them.
+- 14 are eligible: 9 `.md` and 5 `.rs`.
+- The report says "5 file(s) reviewed, 10 not reviewed".
+
+5 reviewed + 10 excluded = 15, not 24. Nine files are unaccounted for, and they are the nine markdown files — every one of them:
+
+```
+builtin/validators/code-hygiene/VALIDATOR.md
+builtin/validators/code-hygiene/rules/disallowed-constructs-swift.md
+builtin/validators/code-hygiene/rules/idioms-swift.md
+builtin/validators/swift/VALIDATOR.md
+builtin/validators/swift/rules/concurrency.md
+builtin/validators/swift/rules/error-handling.md
+builtin/validators/swift/rules/idioms.md
+builtin/validators/swift/rules/optionals.md
+builtin/validators/swift/rules/value-semantics.md
+```
+
+The 5 reviewed are precisely the 5 `.rs` files. `counts` reported `attempted: 7, failed: 0, skipped: 0, findings: 0`, and `skipped_files` listed only the 10 `.kanban/` paths.
+
+### This reproduction settles the open question
+
+Reproduction 1 left it open whether the fault was in the tally or in the analysis. This one answers it: the reviewed set is `.rs` only. Markdown is not merely miscounted, it is **not reviewed at all**, and the report claims a clean result without saying so.
+
+Per the acceptance criterion above — "If markdown was genuinely never reviewed, that is a separate defect. Say so plainly and raise its own card" — that condition is now met and the separate card is owed.
+
+### What this cost
+
+Commit `f79727e2e` is a documentation commit: its whole substance is the 9 markdown files. The engine returned `findings: 0` over a commit whose reviewable content it never opened. A hand review of the same 9 files found four defects, including a real Swift coverage hole (`preferForLoop` silent on the `forEach` + `if` shape whose prompt bullet the commit deleted). A `findings: 0` that means "nothing was read" is worse than an error, because it reads as a pass.

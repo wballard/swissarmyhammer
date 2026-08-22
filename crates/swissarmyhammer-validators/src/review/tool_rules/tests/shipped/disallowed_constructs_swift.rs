@@ -9,9 +9,13 @@
 //! cost one rule and read as a clean run. Three of the twelve stay off inside a
 //! test target, and swiftlint carries no per-rule path filter for a stock rule,
 //! so the SCRIPT partitions its own paths — from the `Tests/` convention and
-//! from the test targets the package manifest names. And the three custom
-//! regex rules read an identifier alone, so a comment and a string literal
-//! holding the same words stay silent.
+//! from the test targets the package manifest names. And each of the three
+//! custom regex rules matches a token of the KIND its `match_kinds` names, so a
+//! comment and a string literal holding the same words stay silent.
+//!
+//! Each of those two sets of three is read off the shipped script rather than
+//! written here as a list, and every name it holds carries a probe. So a rule
+//! added to either set fails these tests until it carries a probe of its own.
 
 use super::*;
 
@@ -277,7 +281,8 @@ const SWIFT_UNCHECKED_SENDABLE_PLAIN: &str = concat!(
 /// The same type behind the directive, with the invariant after it.
 ///
 /// The two constants differ in that one line and in nothing else, so the
-/// directive is the only thing the test below can be measuring.
+/// directive is the only thing the test below can be measuring. The test says
+/// so of the constants themselves before it drives either one.
 const SWIFT_UNCHECKED_SENDABLE_ANNOTATED: &str = concat!(
     "// swiftlint:disable:next no_unchecked_sendable  the value is a `let` of a value \
      type, so no write can race a read\n",
@@ -302,6 +307,13 @@ const SWIFT_UNCHECKED_SENDABLE_ANNOTATED: &str = concat!(
 /// finding no edit can satisfy.
 #[test]
 fn the_shipped_swift_disallowed_constructs_tool_rule_reads_the_unchecked_sendable_directive() {
+    assert!(
+        SWIFT_UNCHECKED_SENDABLE_ANNOTATED.ends_with(SWIFT_UNCHECKED_SENDABLE_PLAIN),
+        "the annotated probe must be the plain one with the directive written above it \
+         and nothing else changed, or the two runs below differ in more than the \
+         directive"
+    );
+
     let plain = swift_disallowed_reporting_rules(SWIFT_UNCHECKED_SENDABLE_PLAIN);
     assert!(
         plain.contains(&SWIFT_UNCHECKED_SENDABLE_RULE.to_string()),
@@ -337,35 +349,159 @@ const SWIFT_STANDARD_OUT_PROBE: &str = concat!(
     "public func documented() {}\n",
 );
 
-/// Acceptance: the three custom regex rules read an identifier, and never a
-/// comment or a string literal.
+/// The rule that reports the `#file` literal.
+const SWIFT_FILE_LITERAL_RULE: &str = "no_file_literal";
+
+/// One real `#file` literal, beside the same word inside a string literal,
+/// inside a line comment and inside a doc comment.
 ///
-/// A regex over source text reads all three alike. `match_kinds` is
-/// swiftlint's own answer, and no reading of the regex could replace it — the
-/// same words stand in each of the four positions.
-#[test]
-fn the_shipped_swift_disallowed_constructs_tool_rule_reads_no_comment_and_no_string_literal() {
-    let reported = swift_disallowed_reporting_rules(SWIFT_STANDARD_OUT_PROBE);
-
-    assert_eq!(
-        reported,
-        vec![SWIFT_STANDARD_OUT_RULE.to_string()],
-        "`{SWIFT_STANDARD_OUT_RULE}` must report the one real call and none of the three \
-         copies of the same words in a comment or a string literal; the run reported \
-         {reported:?}"
-    );
-}
-
-/// A force unwrap, which `force_unwrapping` reports in a product target and
-/// never inside a test target.
-const SWIFT_FORCE_UNWRAP_SOURCE: &str = concat!(
-    "public func unwrap(_ value: Int?) -> Int {\n",
-    "    return value!\n",
-    "}\n",
+/// `match_kinds: [keyword]` is what tells the four apart, and it is a DIFFERENT
+/// kind from the one the standard-out rule names — which is the whole reason
+/// this rule needs a probe of its own rather than the standard-out probe's
+/// answer taken on trust. Measured with the same regex and no `match_kinds`:
+/// all four report.
+const SWIFT_FILE_LITERAL_PROBE: &str = concat!(
+    "public func origin(path: StaticString = #file) -> StaticString {\n",
+    "    let quoted = \"#file is a string, not a literal\"\n",
+    "    // #file is a comment\n",
+    "    _ = quoted\n",
+    "    return path\n",
+    "}\n\n",
+    "/// #file is a doc comment\n",
+    "public func documented() {}\n",
 );
 
-/// The line [`SWIFT_FORCE_UNWRAP_SOURCE`] holds its force unwrap on.
-const SWIFT_FORCE_UNWRAP_LINE: usize = 2;
+/// One real `@unchecked Sendable` conformance, beside the same words inside a
+/// string literal, inside a line comment and inside a doc comment.
+///
+/// `match_kinds: [attribute.builtin, typeidentifier]` is what tells the four
+/// apart, and it names TWO kinds because the construct spans two tokens.
+/// Measured with the same regex and no `match_kinds`: all four report.
+const SWIFT_UNCHECKED_SENDABLE_PROBE: &str = concat!(
+    "public final class Box: @unchecked Sendable {\n",
+    "    public let note = \"@unchecked Sendable is a string, not a conformance\"\n",
+    "    // @unchecked Sendable is a comment\n",
+    "}\n\n",
+    "/// @unchecked Sendable is a doc comment\n",
+    "public struct Plain {}\n",
+);
+
+/// Each custom regex rule, with the probe that holds its construct in the four
+/// positions.
+///
+/// Each probe holds ONE real construct and three copies of the same words —
+/// one in a string literal, one in a line comment and one in a doc comment —
+/// so a run over it reports its rule one time and nothing else.
+const SWIFT_CUSTOM_RULE_PROBES: &[(&str, &str)] = &[
+    (SWIFT_STANDARD_OUT_RULE, SWIFT_STANDARD_OUT_PROBE),
+    (SWIFT_FILE_LITERAL_RULE, SWIFT_FILE_LITERAL_PROBE),
+    (
+        SWIFT_UNCHECKED_SENDABLE_RULE,
+        SWIFT_UNCHECKED_SENDABLE_PROBE,
+    ),
+];
+
+/// What the shipped script writes before each key of its `custom_rules:`
+/// block.
+///
+/// The block stands in the same `printf` argument list the roster does, one
+/// quoted YAML line for each entry. A custom rule's NAME is the only two-space
+/// entry that ends on its own colon: every other two-space entry states a
+/// value after its key, and every entry of the rule's own body carries four
+/// spaces instead.
+const SWIFT_CUSTOM_RULE_HEAD: &str = "'  ";
+
+/// What closes the entry a custom rule's name stands in.
+const SWIFT_CUSTOM_RULE_END: char = ':';
+
+/// The names of the custom regex rules the shipped script defines, read off
+/// the script itself.
+fn swift_custom_rule_names(script: &str) -> Vec<String> {
+    script
+        .split(SWIFT_CUSTOM_RULE_HEAD)
+        .skip(1)
+        .filter_map(|entry| entry.split_once(SWIFT_DISALLOWED_ROSTER_END))
+        .filter_map(|(entry, _)| entry.strip_suffix(SWIFT_CUSTOM_RULE_END))
+        .map(str::to_string)
+        .collect()
+}
+
+/// Acceptance: each custom regex rule matches a token of the kind its
+/// `match_kinds` names, and never a comment and never a string literal.
+///
+/// A regex over source text reads all four positions alike. `match_kinds` is
+/// swiftlint's own answer, and no reading of the regex could replace it — the
+/// same words stand in each of the four positions. Measured over the three
+/// probes with the same regexes and every `match_kinds` line dropped: each
+/// rule reports four times rather than one.
+///
+/// The three rules name three DIFFERENT kinds, so one rule's answer says
+/// nothing about the other two, and each carries a probe of its own. The set
+/// the test walks is read off the shipped script rather than written here, so
+/// a fourth custom rule fails this test until it carries a probe as well.
+#[test]
+fn the_shipped_swift_disallowed_constructs_tool_rule_reads_no_comment_and_no_string_literal() {
+    let loader = builtin_loader();
+    require_tool_installed(
+        &loader,
+        SWIFT_PROJECT_TYPES,
+        SWIFT_DISALLOWED_CONSTRUCTS_RULE,
+    );
+    let shipped = required_shipped_tool_rule(&loader, SWIFT_DISALLOWED_CONSTRUCTS_RULE);
+
+    let defined = swift_custom_rule_names(&shipped.script);
+    let probed: Vec<String> = SWIFT_CUSTOM_RULE_PROBES
+        .iter()
+        .map(|(rule, _)| (*rule).to_string())
+        .collect();
+    assert_eq!(
+        sorted_names(&defined),
+        sorted_names(&probed),
+        "every custom rule the shipped script defines must carry a probe here, or the \
+         claim that all of them read a token kind rather than raw text stands on a rule \
+         nothing measured; the script defines {defined:?}"
+    );
+
+    for (rule, probe) in SWIFT_CUSTOM_RULE_PROBES {
+        let reported = swift_disallowed_reporting_rules(probe);
+        assert_eq!(
+            reported,
+            vec![(*rule).to_string()],
+            "`{rule}` must report the one real construct and none of the three copies of \
+             the same words in a string literal, a line comment and a doc comment; the \
+             run reported {reported:?}"
+        );
+    }
+}
+
+/// Each rule the gate keeps out of a test target, with the text the line its
+/// construct stands on opens with.
+///
+/// The second half of each pair is what [`declaration_line`] turns into the
+/// line the run must report, so no line number is written here as a number an
+/// edit to the source below would move.
+const SWIFT_FORCE_CONSTRUCTS: &[(&str, &str)] = &[
+    ("force_unwrapping", "return value!"),
+    ("force_try", "return try! make()"),
+    ("force_cast", "return value as! Int"),
+];
+
+/// One file holding all three force constructs, which the three force rules
+/// report in a product target and never inside a test target.
+///
+/// The three stand in ONE file so a single run answers for all three, and so
+/// the product copy and the test copy of the file hold identical bytes.
+const SWIFT_FORCE_CONSTRUCTS_SOURCE: &str = concat!(
+    "public func unwrap(_ value: Int?) -> Int {\n",
+    "    return value!\n",
+    "}\n\n",
+    "public func attempt(_ make: () throws -> Int) -> Int {\n",
+    "    return try! make()\n",
+    "}\n\n",
+    "public func convert(_ value: Any) -> Int {\n",
+    "    return value as! Int\n",
+    "}\n",
+);
 
 /// Where a probe stages the product-target copy of those bytes.
 const SWIFT_PRODUCT_TARGET_PATH: &str = "Sources/Probe/Forced.swift";
@@ -399,9 +535,81 @@ const SWIFT_PROBE_MANIFEST: &str = concat!(
 /// Where a package states its manifest.
 const SWIFT_PACKAGE_MANIFEST_PATH: &str = "Package.swift";
 
-/// Drives the shipped script over `files`, staged with the same force unwrap
-/// at each path, and answers each finding as the `path:line` row the work-list
-/// holds.
+/// What a probe of the partition writes between a finding's `path:line` row
+/// and the name of the rule that placed it.
+const SWIFT_FORCE_ROW_SEPARATOR: &str = " ";
+
+/// Each finding of `outcome` as the `path:line` row the work-list holds, with
+/// the name of the rule that placed it after it.
+///
+/// A probe of the test-target partition must say WHICH rule placed each row.
+/// The partition drops three rules by name and keeps the other nine, so a row
+/// naming a path and a line alone could not tell a rule the partition dropped
+/// from a rule that never fired.
+fn finding_rule_rows(outcome: &ScriptOutcome, repo_root: &Path) -> Vec<String> {
+    outcome
+        .findings
+        .iter()
+        .map(|finding| {
+            let rule = finding
+                .claim
+                .split_once(TOOL_CLAIM_SEPARATOR)
+                .map_or_else(|| finding.claim.clone(), |(name, _)| name.to_string());
+            format!(
+                "{}:{}{SWIFT_FORCE_ROW_SEPARATOR}{rule}",
+                normalize_tool_path(&finding.file, repo_root),
+                finding.line
+            )
+        })
+        .collect()
+}
+
+/// Every row a run must report for [`SWIFT_FORCE_CONSTRUCTS_SOURCE`] staged at
+/// `path` with no carve-out over it: one for each of the three constructs.
+fn swift_force_rows_of(path: &str) -> Vec<String> {
+    SWIFT_FORCE_CONSTRUCTS
+        .iter()
+        .map(|(rule, construct)| {
+            format!(
+                "{path}:{}{SWIFT_FORCE_ROW_SEPARATOR}{rule}",
+                declaration_line(SWIFT_FORCE_CONSTRUCTS_SOURCE, construct)
+            )
+        })
+        .collect()
+}
+
+/// What the shipped script writes before the names of the rules it keeps out
+/// of a test target.
+const SWIFT_PRODUCT_ONLY_HEAD: &str = "printf '%s\\n' ";
+
+/// What it writes after those names, which is the redirection that stores
+/// them. The roster's own `printf` opens the same way and ends otherwise, so
+/// the tail is what tells the two lists apart.
+const SWIFT_PRODUCT_ONLY_TAIL: &str = " > \"$work/product-only\"";
+
+/// The rules the shipped script keeps out of a test target, read off the
+/// script itself.
+fn swift_product_only_rules(script: &str) -> Vec<String> {
+    script
+        .lines()
+        .filter_map(|line| {
+            line.trim_start()
+                .strip_prefix(SWIFT_PRODUCT_ONLY_HEAD)?
+                .strip_suffix(SWIFT_PRODUCT_ONLY_TAIL)
+        })
+        .flat_map(|names| names.split_whitespace().map(str::to_string))
+        .collect()
+}
+
+/// Drives the shipped script over `files`, staged as `staged` states, and
+/// answers each finding as the `path:line` row the work-list holds with the
+/// name of the rule that placed it after it.
+///
+/// The rows come back in swiftlint's own order, which groups a file's findings
+/// by rule rather than by line — measured over one file holding all three
+/// force constructs, the report reads `force_cast`, `force_try`,
+/// `force_unwrapping` while their lines run 10, 6, 2. So each caller sorts
+/// both sides rather than asserting that grouping.
 fn swift_disallowed_force_rows(staged: &[(&str, &str)], files: &[&str]) -> Vec<String> {
     let loader = builtin_loader();
     require_tool_installed(
@@ -410,41 +618,75 @@ fn swift_disallowed_force_rows(staged: &[(&str, &str)], files: &[&str]) -> Vec<S
         SWIFT_DISALLOWED_CONSTRUCTS_RULE,
     );
 
-    shipped_script_findings(&loader, SWIFT_DISALLOWED_CONSTRUCTS_RULE, staged, files)
-        .expect("the shipped Swift disallowed-constructs script must judge the probe files")
+    drive_shipped_script(
+        &loader,
+        SWIFT_DISALLOWED_CONSTRUCTS_RULE,
+        &ShippedStaging::of(staged),
+        files,
+        finding_rule_rows,
+    )
+    .expect("the shipped Swift disallowed-constructs script must judge the probe files")
 }
 
-/// Acceptance: a force unwrap reports in a product target and stays silent in
-/// a test target, for the SAME bytes.
+/// Acceptance: each of the three force constructs reports in a product target
+/// and stays silent in a test target, for the SAME bytes.
 ///
-/// `optionals.md` says "in non-test code" and means it, and swiftlint carries
-/// no per-rule path filter for a stock rule — measured on 0.65.0, an
-/// `excluded:` key under `force_unwrapping:` is answered with
+/// `optionals.md` and `error-handling.md` say "in non-test code" and mean it,
+/// and swiftlint carries no per-rule path filter for a stock rule — measured on
+/// 0.65.0, an `excluded:` key under `force_unwrapping:` is answered with
 /// `warning: Configuration for 'force_unwrapping' rule contains the invalid
 /// key(s) 'excluded'.` and both files still report. So the SCRIPT partitions
 /// its own paths.
 ///
-/// The two halves are both load-bearing. The product path must report, or the
-/// partition swallowed a real finding; the test path must stay silent, or the
-/// carve-out the prompt rule states was never honoured. The two files hold
-/// identical bytes, so the PATH is the only difference between them.
+/// All three rules stand in the run rather than one of them. The partition is
+/// the script's own list, so a rule dropped from that list, and a rule the
+/// `jq` filter reads differently from its neighbours, is visible only where
+/// every named rule is measured. The list the test walks is read off the
+/// shipped script, so a fourth rule added to the carve-out fails here until it
+/// carries a construct as well.
+///
+/// The two halves are both load-bearing. The product path must report all
+/// three, or the partition swallowed a real finding; the test path must stay
+/// silent for all three, or the carve-out the prompt rules state was never
+/// honoured. The two files hold identical bytes, so the PATH is the only
+/// difference between them.
 #[test]
 fn the_shipped_swift_disallowed_constructs_tool_rule_keeps_the_force_rules_out_of_a_test_target() {
+    let loader = builtin_loader();
+    require_tool_installed(
+        &loader,
+        SWIFT_PROJECT_TYPES,
+        SWIFT_DISALLOWED_CONSTRUCTS_RULE,
+    );
+    let shipped = required_shipped_tool_rule(&loader, SWIFT_DISALLOWED_CONSTRUCTS_RULE);
+
+    let kept_out = swift_product_only_rules(&shipped.script);
+    let probed: Vec<String> = SWIFT_FORCE_CONSTRUCTS
+        .iter()
+        .map(|(rule, _)| (*rule).to_string())
+        .collect();
+    assert_eq!(
+        sorted_names(&kept_out),
+        sorted_names(&probed),
+        "every rule the shipped script keeps out of a test target must carry a construct \
+         here, or the carve-out stands on a rule nothing measured; the script keeps out \
+         {kept_out:?}"
+    );
+
     let rows = swift_disallowed_force_rows(
         &[
-            (SWIFT_PRODUCT_TARGET_PATH, SWIFT_FORCE_UNWRAP_SOURCE),
-            (SWIFT_TESTS_DIRECTORY_PATH, SWIFT_FORCE_UNWRAP_SOURCE),
+            (SWIFT_PRODUCT_TARGET_PATH, SWIFT_FORCE_CONSTRUCTS_SOURCE),
+            (SWIFT_TESTS_DIRECTORY_PATH, SWIFT_FORCE_CONSTRUCTS_SOURCE),
         ],
         &[SWIFT_PRODUCT_TARGET_PATH, SWIFT_TESTS_DIRECTORY_PATH],
     );
 
     assert_eq!(
-        rows,
-        vec![format!(
-            "{SWIFT_PRODUCT_TARGET_PATH}:{SWIFT_FORCE_UNWRAP_LINE}"
-        )],
-        "the force unwrap under `{SWIFT_PRODUCT_TARGET_PATH}` must report and the same \
-         bytes under `{SWIFT_TESTS_DIRECTORY_PATH}` must not; the run reported {rows:?}"
+        sorted_names(&rows),
+        sorted_names(&swift_force_rows_of(SWIFT_PRODUCT_TARGET_PATH)),
+        "each of the three constructs under `{SWIFT_PRODUCT_TARGET_PATH}` must report, \
+         and the same bytes under `{SWIFT_TESTS_DIRECTORY_PATH}` must not; the run \
+         reported {rows:?}"
     );
 }
 
@@ -457,7 +699,9 @@ fn the_shipped_swift_disallowed_constructs_tool_rule_keeps_the_force_rules_out_o
 /// `Tests/ProbeTests` and `Custom/OddTests`.
 ///
 /// The product path stands in the same run, so the test says the manifest
-/// widened the carve-out rather than switched the gate off.
+/// widened the carve-out rather than switched the gate off. All three
+/// constructs stand in each copy, so the manifest's answer is measured for
+/// every rule the carve-out names rather than for one of them.
 ///
 /// The probe stages a file under `Tests/ProbeTests` as well, and names it in
 /// no argument list. SPM refuses to describe a package whose declared target
@@ -470,20 +714,18 @@ fn the_shipped_swift_disallowed_constructs_tool_rule_reads_a_test_target_the_man
     let rows = swift_disallowed_force_rows(
         &[
             (SWIFT_PACKAGE_MANIFEST_PATH, SWIFT_PROBE_MANIFEST),
-            (SWIFT_PRODUCT_TARGET_PATH, SWIFT_FORCE_UNWRAP_SOURCE),
-            (SWIFT_TESTS_DIRECTORY_PATH, SWIFT_FORCE_UNWRAP_SOURCE),
-            (SWIFT_MANIFEST_TARGET_PATH, SWIFT_FORCE_UNWRAP_SOURCE),
+            (SWIFT_PRODUCT_TARGET_PATH, SWIFT_FORCE_CONSTRUCTS_SOURCE),
+            (SWIFT_TESTS_DIRECTORY_PATH, SWIFT_FORCE_CONSTRUCTS_SOURCE),
+            (SWIFT_MANIFEST_TARGET_PATH, SWIFT_FORCE_CONSTRUCTS_SOURCE),
         ],
         &[SWIFT_PRODUCT_TARGET_PATH, SWIFT_MANIFEST_TARGET_PATH],
     );
 
     assert_eq!(
-        rows,
-        vec![format!(
-            "{SWIFT_PRODUCT_TARGET_PATH}:{SWIFT_FORCE_UNWRAP_LINE}"
-        )],
+        sorted_names(&rows),
+        sorted_names(&swift_force_rows_of(SWIFT_PRODUCT_TARGET_PATH)),
         "the manifest names `{SWIFT_MANIFEST_TARGET_PATH}`'s directory as a test target, \
-         so the force unwrap there must stay silent while the one under \
-         `{SWIFT_PRODUCT_TARGET_PATH}` reports; the run reported {rows:?}"
+         so all three constructs there must stay silent while the three under \
+         `{SWIFT_PRODUCT_TARGET_PATH}` report; the run reported {rows:?}"
     );
 }

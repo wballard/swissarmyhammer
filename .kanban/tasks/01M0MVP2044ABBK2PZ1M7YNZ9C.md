@@ -208,6 +208,127 @@ comments:
     - confirmation 2 (tests fail on old partial): spot-checked all three. Reverted `builtin/_partials/project-types/swift.md` to `HEAD` content, ran `cargo nextest run -p swissarmyhammer-templating swift_partial` — all 3 tests FAILED (`swift_partial_names_each_formatter_with_its_own_config_file`, `swift_partial_documents_the_airbnb_plugin_commands`, `swift_partial_agrees_with_the_shipped_swift_tool_validators`), each panic naming the missing requirement (e.g. missing ".swift-format", missing "--pattern-let inline"). Restored the file byte-for-byte (verified via `git diff --stat` matching pre-check state) and re-ran — all 3 PASS. Full workspace suite confirmed green after restore.
     - next: none, ready for review
   timestamp: 2026-08-22T19:49:50.721552+00:00
+- actor: claude-code
+  id: 01m0ngx89mdmqe2wa4nqjpd6zt
+  text: |-
+    ### review — findings
+    - evidence: 1 finding — crates/swissarmyhammer-templating/src/resolver.rs:572. Engine `review sha HEAD~1..HEAD` returned findings 0, confirmed 0, refuted 0, attempted 7 — but it opened only 1 of the 12 changed files and never read `builtin/_partials/project-types/swift.md`. No validator of the 13 matches `*.md`. The hand review RAN every command line in the partial against Swift 6.4, SwiftFormat 0.62.1, SwiftLint 0.65.0 and airbnb/swift 1.2.0. Every documented claim measured TRUE, the pre-existing ULID and test-command claims included. Both documented contradictions reproduce exactly: a bare `swiftformat .` rewrote `if case .some(let inner)` into `if case let .some(inner)` and the shipped `idioms-swift` gate then reported `hoistPatternLet` on that line; the plugin config carries `--property-types inferred` and its fix mode rewrote `var items: [Int] = []` into `var items = [Int]()`. The one finding is on the added Rust test, not the document.
+    - next: couple `swift_partial_agrees_with_the_shipped_swift_tool_validators` to `builtin/validators/code-hygiene/rules/idioms-swift.md` — read the four swiftformat options and the `--min-version` floor out of the shipped rule instead of repeating the literals. A further engine reproduction is recorded on ^dyad426.
+  timestamp: 2026-08-22T19:59:34.196556+00:00
+- actor: claude-code
+  id: 01m0ngz19wnjmbm50hqj1rr8v3
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 2 files; the partial now names each tool with its own config file, and documents the Airbnb plugin path
+    - test: green — cargo nextest run --workspace, 14191 passed, 0 failed, 0 skipped; fmt clean; clippy clean; all 3 regression tests verified RED against the old partial
+    - commit: d4a6da772
+    - review: findings — 1 open
+    - engine coverage: 1 of 12 files. **Root cause of ^dyad426 found here** — no validator names `*.md` in its `match_globs`, so markdown cannot enter the pipeline at all.
+
+    **The document itself measured correct in every claim.** The reviewer RAN every command line against Swift 6.4, swift-format `main`, SwiftFormat 0.62.1, SwiftLint 0.65.0 and a real SPM package resolving airbnb/swift 1.2.0:
+    - Bare `swift package format --lint` with stdin closed → exit 1, "Plugin 'FormatSwift' wants permission to write to the package directory". With the flag it runs, and `shasum` of all three sources was byte-identical before and after — the check run genuinely writes nothing.
+    - `--targets Demo` → "Unknown option", exit 64. `--target Demo` scopes correctly.
+    - Exit codes exactly as documented: lint mode exit 1 on 7 SwiftFormat errors; fix mode exit 0 on the same file, then exit 1 once a SwiftLint-only defect was present.
+    - Config mappings confirmed, including that a PARENT `.swift-format` is honored (`dump-configuration --effective` showed the parent's `"spaces": 7`).
+
+    **Both documented contradictions reproduce exactly.** Bare `swiftformat .` rewrote `if case .some(let inner)` into `if case let .some(inner)`, and the shipped `idioms-swift` script then reported `hoistPatternLet`. The plugin's built config carries `--property-types inferred`, and its fix mode rewrote `var items: [Int] = []` into `var items = [Int]()`.
+
+    The pre-existing content was checked too, not assumed: the ULID dependency builds, `let id = ULID()` compiles, and the documented `swift test --filter` selected exactly one test.
+
+    **The finding is a coupling defect, and it is the right kind to catch.** `swift_partial_agrees_with_the_shipped_swift_tool_validators` asserts only that six literals appear in the partial. It never reads `idioms-swift.md`, the file its own doc comment names as the thing it agrees with. So the four swiftformat options and the version floor now live in three places with nothing holding them equal — change the gate's `run:` options and the agreement silently breaks while the test stays green.
+
+    That is the same defect class as the probe that passed for the wrong reason on ^qs32yvp: a test whose name claims more than its assertions prove.
+  timestamp: 2026-08-22T20:00:32.572163+00:00
+- actor: claude-code
+  id: 01m0nh8429x811gkq3by784vf6
+  text: |-
+    ## Research for the open finding
+
+    **The dependency constraint is real. `swissarmyhammer-templating` CANNOT read the shipped rule.**
+
+    `crates/swissarmyhammer-validators/Cargo.toml` line 40 carries `swissarmyhammer-templating = { workspace = true }` as a NORMAL dependency ("Templating / partials for the rules-as-data loader"). `crates/swissarmyhammer-templating/Cargo.toml` names `validators` zero times. So `templating -> validators` is a cycle, and `builtin_validators_dir()` is out of reach from `resolver.rs`. The card says not to force it, so it is not forced.
+
+    **Where the test goes instead: `swissarmyhammer-validators`.** Both sides are already reachable there:
+
+    - the SHIPPED rule, through the loader the engine plans with — `required_shipped_tool_rule(&loader, "idioms-swift").script` in `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped.rs`, which is a better reader than a raw disk read of the `.md`;
+    - the SERVED partial, through `swissarmyhammer_templating::resolver::get_builtin_partials()` — `pub fn` inside `pub mod resolver`, generated by `crates/swissarmyhammer-templating/build.rs`. Same table `PromptResolver::load_builtin_partials` serves from, so the "served, not on disk" pattern the two sound tests use is kept.
+
+    All three tests move together. Splitting them would duplicate `SWIFT_PARTIAL`, `builtin_partial` and `assert_swift_partial_states` across two crates for one test.
+
+    **The second half of the same defect.** The finding names the four options and the version floor. The SAME test also holds `--property-types inferred` as a bare literal, and its own doc comment names `builtin/validators/swift/rules/idioms.md` as the thing that is agreed with. That file states the option, the DO (`var items: [Int] = []`) and the DON'T (`var items = [Int]()`) word for word in one bullet, and it is reachable through the existing `swift_prompt_rule_body(&loader, "idioms")` helper. Same cause, same file — so it is read out of the shipped rule too, not hardcoded.
+
+    **The other two tests are sound.** For a document, the presence of the exact command line IS the behaviour. `swift_partial_names_each_formatter_with_its_own_config_file` also carries a negative assertion pinning the removed `(or `swiftformat .`)` regression by name, and that assertion was already proved able to fail.
+  timestamp: 2026-08-22T20:05:30.313692+00:00
+- actor: claude-code
+  id: 01m0nj20f67y0psfkpnqjtbd4m
+  text: |-
+    ## What landed for the open finding
+
+    **The test now READS the shipped rule. No literal stands in for the real thing.**
+
+    ### The dependency constraint, and where the tests went
+
+    `swissarmyhammer-templating` cannot read a validator. `crates/swissarmyhammer-validators/Cargo.toml` carries `swissarmyhammer-templating` as a NORMAL dependency, so the edge the other way is a cycle. It was not forced.
+
+    All three tests moved to `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/swift_guidelines_partial.rs`, where both sides are already reachable. They moved together because splitting them would copy `SWIFT_PARTIAL`, `builtin_partial` and `assert_swift_partial_states` into two crates for one test.
+
+    The SERVED-partial pattern is kept: the module reads `swissarmyhammer_templating::resolver::get_builtin_partials()`, the same table `PromptResolver::load_builtin_partials` serves from. The shipped rule is read the way the ENGINE reads it — `required_shipped_tool_rule(&loader, "idioms-swift").script` and `swift_prompt_rule_body(&loader, "idioms")` — which is a better reader than a raw `.md` read through `builtin_validators_dir()`, because it is the loader that plans the real run.
+
+    ### What the coupling test measures now
+
+    `swift_idioms_agreed_options` reads the `swiftformat --lint` command off the shipped script, joins its continuation lines, and takes every `--option value` pair. Three options are named as the ENGINE's own — `--reporter`, `--cache`, `--rules` — because an author running swiftformat by hand needs none of them. **Every OTHER option is one the guidelines must state.** So a fifth style option added to the gate reaches the test with no edit here; it does not need a list of four names to keep in step.
+
+    The version floor is read from `--min-version` and the partial is held to its VALUE, because the partial advises a minimum in prose rather than writing the flag.
+
+    ### The same defect in the same test, fixed too
+
+    The finding names the four options and the floor. The SAME test held `--property-types inferred` as a bare literal while its own doc comment named `builtin/validators/swift/rules/idioms.md` as the thing agreed with. Same cause. That rule states the option, the DO (`var items: [Int] = []`) and the DON'T (`var items = [Int]()`) in one bullet, so all three are now read out of it. The bullet is found by the option it names, so the DO, the DON'T and the option come off the SAME sentence rather than out of whichever bullet wrote `DO:` first.
+
+    ### RED proof — four ways to break the gate, four failures
+
+    Each mutation was applied, the test run, then the file restored; `git status --porcelain -- builtin/` was empty after each restore.
+
+    | the divergence | the test's answer |
+    |---|---|
+    | `--pattern-let inline` → `hoist` in the gate `run:` block | FAIL: `must pin every style option the idioms-swift gate's lint command carries (missing "--pattern-let hoist")` |
+    | `--min-version 0.62.1` → `0.63.0` | FAIL |
+    | a fifth style option `--self remove` added to the lint command | FAIL: `must carry 5 options ... it carries [("--min-version","0.62.1"),("--short-optionals","always"),("--pattern-let","inline"),("--self","remove"),...] left: 6 right: 5` |
+    | the DO form of the shipped `idioms` prompt rule renamed | FAIL |
+
+    Restored, all three PASS.
+
+    ## The other two tests — what I found
+
+    **`swift_partial_documents_the_airbnb_plugin_commands` is sound.** Every literal is an external tool's own command line, which this repo owns no second copy of, and the reviewer RAN each one. Nothing here can drift out of step with a repo source of truth.
+
+    **`swift_partial_names_each_formatter_with_its_own_config_file` carried the SAME fault, and it is fixed.** Its name claims the partial names each formatter WITH ITS OWN config file. Its assertions proved only that `.swift-format`, `.swiftformat` and `.swiftlint.yml` each appear SOMEWHERE. A partial whose table swapped `.swift-format` and `.swiftformat` — sending an agent to the wrong config file, which is the exact defect this card exists to stop — held all three names and passed.
+
+    Each needle now carries the command cell and the config cell of ONE table row. Proved: the two config files were swapped in the table with all three names still present; the test FAILED with `must pair Apple's swift-format with the config file it alone reads (missing "`swift format` (in the toolchain) | `.swift-format`")`. Restored, PASS. The test is not weakened and not renamed — the assertions now reach the claim the name already made.
+
+    ## One shared constant hoisted
+
+    `SWIFT_IDIOMS_LINE_JOIN` moved from `shipped/idioms_swift.rs` up to `shipped.rs`, so the roster reader and the lint-command reader share one definition instead of holding two copies.
+  timestamp: 2026-08-22T20:19:38.598103+00:00
+- actor: claude-code
+  id: 01m0nj2d0e2pawehsqggpzd5yd
+  text: |-
+    ### implement — changed
+    - evidence: 4 files — NEW `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/swift_guidelines_partial.rs`; `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped.rs` (mod line, shared `SWIFT_IDIOMS_LINE_JOIN`, module doc); `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs` (constant hoisted out); `crates/swissarmyhammer-templating/src/resolver.rs` (three tests and their helpers removed). `cargo nextest run` 14191 tests run, 14191 passed, 0 skipped — the same count as before, because the three tests moved rather than being added. `cargo fmt --all -- --check` exit 0. `cargo clippy --workspace --all-targets -- -D warnings` exit 0.
+    - RED proof: FIVE divergences each made a test FAIL, and each file was restored byte-for-byte (`git status --porcelain -- builtin/` empty after every restore). Gate `run:` block — `--pattern-let inline` to `hoist`; `--min-version 0.62.1` to `0.63.0`; a fifth style option `--self remove` added. Shipped `idioms` prompt rule — the DO form renamed. Guidelines partial — the two config files swapped in the table with all three names still present, which the OLD assertions passed and the new one fails.
+    - dependency constraint: `templating -> validators` IS a cycle. `crates/swissarmyhammer-validators/Cargo.toml` carries `swissarmyhammer-templating` as a normal dependency; `crates/swissarmyhammer-templating/Cargo.toml` names `validators` zero times. Not forced. The tests moved to the validators crate, which already reaches the served partial through `swissarmyhammer_templating::resolver::get_builtin_partials()` and the shipped rules through the engine's own loader.
+    - next: `/review`. Both sibling tests were checked for the same fault, as the card asked: the Airbnb-plugin test is sound; the config-file test carried the fault and was strengthened to pair each tool with its own config file, without weakening or renaming it.
+  timestamp: 2026-08-22T20:19:51.438882+00:00
+- actor: claude-code
+  id: 01m0njc1sjf024qssfm98smyes
+  text: |-
+    ### test — green
+    - evidence: `cargo nextest run --workspace` — 14191 tests run: 14191 passed, 0 skipped (count unchanged as expected, since tests moved not multiplied). `cargo fmt --all -- --check` clean. `cargo clippy --workspace --all-targets -- -D warnings` clean.
+    - (1) Confirmed `test_load_all_prompts_registers_builtin_partials`, `test_prompt_resolver_loads_user_prompts`, `test_prompt_resolver_loads_local_prompts` remain in `crates/swissarmyhammer-templating/src/resolver.rs` (unrelated tests) and no `swift`-named test exists there anymore. The three moved Swift tests — `swift_partial_names_each_formatter_with_its_own_config_file`, `swift_partial_documents_the_airbnb_plugin_commands`, `swift_partial_agrees_with_the_shipped_swift_tool_validators` — exist in `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/swift_guidelines_partial.rs` and all 3 PASS: `cargo nextest run --package swissarmyhammer-validators shipped::swift_guidelines_partial` — 3 passed.
+    - (2) `mod swift_guidelines_partial;` is registered in `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped.rs`, and the run above proves it actually executes (not just compiles).
+    - (3) `idioms_swift.rs` — all 12 of its own tests pass in isolation: `cargo nextest run --package swissarmyhammer-validators shipped::idioms_swift` — 12 passed, including `every_shipped_idioms_tool_rule_passes_its_fixtures` (passing fixture reports 0) and `the_shipped_swift_idioms_tool_rule_reports_a_file_beside_one_it_declined` (asserts `SWIFT_IDIOMS_FAIL_FIXTURE_FINDINGS = 42`). The "21 distinct rules" figure is documented in `builtin/validators/code-hygiene/rules/idioms-swift.md` ("42 findings ... carrying 21 of the 27 enabled rules").
+    - (4) RED proof reproduced myself: swapped `.swift-format`/`.swiftformat` in the table of `builtin/_partials/project-types/swift.md` (Apple swift-format ↔ SwiftFormat rows) — `swift_partial_names_each_formatter_with_its_own_config_file` FAILED with `the swift guidelines partial must pair Apple's swift-format with the config file it alone reads`. Restored the file; `git status --porcelain` on that file returned empty (byte-for-byte restore confirmed), and the test went back to PASS (3 passed, 845 skipped).
+    - next: caller (/finish or user) records this outcome on the card.
+  timestamp: 2026-08-22T20:25:07.634645+00:00
 position_column: doing
 position_ordinal: '8280'
 project: swift-validator
@@ -254,3 +375,44 @@ Card ^7fgdenq — "guidelines: swift format instruction — honor an existing .s
 - The partial names each tool once, with its own config file.
 - The plugin path is documented with the real command lines above.
 - No line implies `swift format` and `swiftformat` are the same tool. #tool-validators
+
+## Review Findings (2026-08-22 15:00)
+
+> Scope: `review sha HEAD~1..HEAD` — commit `d4a6da772`. Task-mode.
+>
+> ENGINE COVERAGE: the engine reported `findings: 0` over 1 of the 12 changed files. It never opened `builtin/_partials/project-types/swift.md`, which holds the substance of this commit. No validator in the roster of 13 matches `*.md`. That `findings: 0` is not a clean review, and a further reproduction is on ^dyad426.
+>
+> The finding below comes from a hand review. Every command line in the partial was RUN.
+
+- [ ] `crates/swissarmyhammer-templating/src/resolver.rs:572` `tests/coupling` — `swift_partial_agrees_with_the_shipped_swift_tool_validators` does not measure agreement. It asserts only that six literal strings are in the partial. It never reads `builtin/validators/code-hygiene/rules/idioms-swift.md`, the file its own doc comment names as the thing agreed with. Change the `run:` option set of that rule and the partial disagrees with the gate while this test stays green — the four options and the version floor are now written in THREE places with nothing holding them equal. Read the four swiftformat options and the `--min-version` floor out of the shipped rule text, then hold the partial to those values, so one source of truth decides both. The other two tests are sound: for a document, the presence of the exact command line IS the behaviour, and `swift_partial_names_each_formatter_with_its_own_config_file` also pins the removed regression by name.
+
+### What was measured, so it is not measured again
+
+Every claim the commit adds to the partial was RUN on this machine. Toolchain: Swift 6.4, swift-format `main`, SwiftFormat 0.62.1, SwiftLint 0.65.0, airbnb/swift 1.2.0. Each row PASSED.
+
+| the claim | how it was run | result |
+|---|---|---|
+| a bare `swift package format --lint` stops with a permission error | run with stdin closed | `error: Plugin 'FormatSwift' wants permission to write to the package directory.` exit 1 |
+| the flag makes the check run | `swift package --allow-writing-to-package-directory format --lint` | runs, exit 1 on findings |
+| the check run writes no file | `shasum` of all three sources before and after | identical |
+| `--targets` is not a switch and exits non-zero | `--targets Demo` | `Error: Unknown option '--targets'`, tool exit 64, command exit 1 |
+| `--target <Target>` is the switch | `--target Demo` | scoped the run to `Sources/Demo` |
+| `--paths Sources Tests Package.swift` | the exact documented form | `Linting Swift files at paths Sources, Tests, Package.swift` |
+| `--exclude Tests` | run with it | `Tests` dropped, `Sources` and `Package.swift` kept |
+| `--swift-version 6.2` | run with it | accepted, and it turned on a version-gated `trailingCommas` finding |
+| `--lint` exits non-zero on any failure | 7 SwiftFormat errors | exit 1 |
+| fix mode exits non-zero ONLY for a SwiftLint rule | SwiftFormat-only defects, then a SwiftLint-only defect | exit 0, then exit 1 |
+| the plugin config sets `--property-types inferred` | read `airbnb.swiftformat` from the built bundle | line 40: `--property-types inferred # redundantType, propertyTypes` |
+| plugin fix mode rewrites `var items: [Int] = []` into `var items = [Int]()` | ran fix mode | rewrote it, and `var ids: Set<String> = []` into `var ids = Set<String>()` |
+| bare `swiftformat .` rewrites `if case .some(let inner)` into `if case let .some(inner)` | ran it with no config | rewrote it |
+| the `idioms-swift` gate then REPORTS that line | ran the shipped `run:` script on the rewritten file | `hoistPatternLet: Reposition let or var bindings within pattern.` on that line |
+| the four defaults are `hoist`, `preserve-struct-inits`, `ignore` and `preserve` | `swiftformat --options` | all four exact |
+| a parent `.swiftformat` stating the four options makes a bare run correct | staged one two directories up | inline form preserved, 0 files changed |
+| `.swift-format` is JSON, and a parent one is obeyed | `swift format dump-configuration --effective` from a nested directory | the parent's `"spaces": 7` was effective |
+| `swift format lint -s` exits non-zero, and without `-s` it exits 0 | both runs | exit 1 with `error:`, exit 0 with `warning:` |
+| `swift format -i -r` writes in place | ran it | wrote |
+| `swiftlint` reads `.swiftlint.yml` | 1 violation by default, then `only_rules: [todo]` | 0 violations |
+
+The parts of the partial that PREDATE this work were measured too, because they were never under a gate either. All PASSED: the ULID dependency, product and target lines resolve and build, and `let id = ULID()` compiles; `swift test --filter 'MyTargetTests.ThingTests/testMakesAnId'` selects exactly that one test, so the target name IS part of the expression as documented; `.swift-version` gates `preferCountWhere` and `Package.swift` is not read for it.
+
+Both documented contradictions are REAL and stated correctly. The partial is not misleading on either one.

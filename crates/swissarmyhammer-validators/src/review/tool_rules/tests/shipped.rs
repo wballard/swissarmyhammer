@@ -19,6 +19,11 @@
 //! rule, because the contract it holds is about the set and not about one
 //! language. `scope_roster` states which of those set-wide guards reads which
 //! rule, and it holds the two scope rosters to the whole set.
+//!
+//! `swift_judgment_rules` and `swift_guidelines_partial` are Swift-wide rather
+//! than set-wide: each reads SEVERAL Swift rules at once. The first holds which
+//! prompt rule owns which bullet; the second holds the shipped Swift
+//! guidelines partial to the two rules it advises an author about.
 
 mod dead_code;
 mod dead_code_python;
@@ -42,6 +47,7 @@ mod missing_docs;
 mod missing_docs_rust;
 mod scope_roster;
 mod stuttering_name_go;
+mod swift_guidelines_partial;
 mod swift_judgment_rules;
 mod temp_directory;
 mod unused_dependencies;
@@ -125,6 +131,12 @@ fn shipped_asset(loader: &ValidatorLoader, kind: &ShippedAssetKind, name: &str) 
         .find(|path| path.exists())
         .unwrap_or_else(|| panic!("a builtin validator set must ship a {name} {}", kind.label))
 }
+
+/// What a shell line of a shipped script writes to join the line under it.
+///
+/// A script states one command over several lines, so a test that reads a
+/// command off the shipped text gathers the lines the join holds together.
+const SWIFT_IDIOMS_LINE_JOIN: char = '\\';
 
 /// The validator set the Swift prompt rules stand in.
 const SWIFT_VALIDATOR_SET: &str = "swift";

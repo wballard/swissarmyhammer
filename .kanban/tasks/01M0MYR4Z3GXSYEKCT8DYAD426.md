@@ -76,6 +76,73 @@ comments:
 
     Consequence for ^052w80d, iteration 2: the engine returned `findings: 0` over a commit whose entire delta is prompt-rule prose. Three findings were raised by hand against those five files, one of them a collision between two rules the commit's own sweep declared to share no shape. A thin `findings: 0` over a markdown commit remains worth nothing.
   timestamp: 2026-08-22T19:20:16.825868+00:00
+- actor: claude-code
+  id: 01m0ngvqjkchk06zhecnn0ws8c
+  text: |-
+    ## Further reproduction — commit `d4a6da772`, task ^m7ynz9c (2026-08-22)
+
+    Same split, same silence. This commit is a documentation commit, and the engine did not open the document.
+
+    `review sha HEAD~1..HEAD` over commit `d4a6da772`:
+
+    - The commit touches 12 files.
+    - 10 are `.kanban/` — the report names all 10 and the `.reviewignore` rule that excluded them.
+    - 2 are eligible: 1 `.md` and 1 `.rs`.
+    - The report says "1 file(s) reviewed, 10 not reviewed".
+
+    1 reviewed + 10 excluded = 11, not 12. One file is in NO set. It is the markdown file:
+
+    ```
+    builtin/_partials/project-types/swift.md
+    ```
+
+    The 1 reviewed file is the 1 `.rs` file. `counts` reported `findings: 0, confirmed: 0, refuted: 0, attempted: 7, failed: 0, skipped: 0`, and `skipped_files` listed only the 10 `.kanban/` paths.
+
+    `counts.skipped` is `0` while `counts.skipped_files` holds 10 paths. This is the second arithmetic fault the Reproduction 4 section records, seen again.
+
+    ### The validator rosters confirm the cause
+
+    `list validators` returns 13 validators. NO validator names `*.md` or `**/*.md` in its `match_globs`. The 12 that match source code name 37 code extensions, and markdown is not one of them. So the drop is not a tally fault for this class of file — no validator can match a markdown file at all.
+
+    ### What this cost
+
+    The whole substance of `d4a6da772` is `builtin/_partials/project-types/swift.md`: a new tool-to-config table, the Airbnb plugin command lines, two documented contradictions with our own shipped gates, and four swiftformat options with their defaults. The engine returned `findings: 0` over a commit whose reviewable content it never opened.
+
+    A hand review ran every command line in the partial. Each documented claim measured TRUE, so the document is correct — but the engine did not establish that, and could not have. The hand review also found one defect, and it was in the `.rs` file the engine DID open: a regression test whose name promises agreement with a shipped validator and whose body only checks that six strings are present. The engine reported `findings: 0` on that file.
+  timestamp: 2026-08-22T19:58:44.307136+00:00
+- actor: claude-code
+  id: 01m0ngypa0fnx4nctrdp5m82b2
+  text: |-
+    ### ROOT CAUSE FOUND — stop investigating, start fixing
+
+    Found while reviewing `d4a6da772` (task ^m7ynz9c). This card can stop hunting.
+
+    **`list validators` returns 13 validators. NOT ONE of them names `*.md` in its `match_globs`.**
+
+    That is the whole bug. Markdown is not miscounted, not dropped by a filter, not excluded by `.reviewignore`. **No validator can match a markdown file**, so the engine has nothing to run against one, and the file falls out of every tally because no code path ever considers it.
+
+    This also explains the arithmetic fault that opened this card. The tally is built from files that matched at least one validator, plus files explicitly skipped. A file that matched nothing is in neither set, so `reviewed + not_reviewed < total` — and the difference is always exactly the markdown.
+
+    **Second, separate fault, confirmed again here:** `counts.skipped` reads `0` while `skipped_files` holds 10 paths. Two different fields disagree about the same thing.
+
+    **Eight reproductions across this project's commits**, every one with the unaccounted files being markdown:
+    `06e7a2fce`, `c097c1548`, `f79727e2e`, `0182f3bf`, `ae24e8474`, `379079d84`, `0334b79e6`, `d4a6da772`.
+
+    ### Why this matters more than a tally
+
+    Our validator RULES are markdown. Our VALIDATOR.md files are markdown. Our partials are markdown. Our docs are markdown. Every one of those changes has passed through review reporting `findings: 0` — and that zero meant "nothing could look", not "nothing is wrong".
+
+    On `d4a6da772` the reviewed file count was **1 of 12**, and the one file the engine opened was not the substance of the change. Across this project, every real finding on a markdown commit came from a human-directed hand measurement, not from the engine.
+
+    ### The work is now clear
+
+    1. Decide what a markdown validator is. Some rules genuinely apply — dead links, stale command lines, contradictions with shipped config. Prose style is a separate question.
+    2. Give at least one validator a `match_globs` that includes `*.md`, so markdown enters the pipeline at all.
+    3. Fix the tally so `total == excluded + reviewed + not_reviewed`, with every file in exactly one set, and make the report name WHY each not-reviewed file was not reviewed. "Matched no validator" must be a stated outcome, never silence.
+    4. Fix `counts.skipped` to agree with `skipped_files`.
+
+    Item 3 is the safety net: even with no markdown validator, the report must SAY that a file matched nothing. Silence is what let this run for eight commits.
+  timestamp: 2026-08-22T20:00:21.312470+00:00
 position_column: todo
 position_ordinal: ffee80
 title: 'review engine: markdown files are silently dropped from diff-scoped review'

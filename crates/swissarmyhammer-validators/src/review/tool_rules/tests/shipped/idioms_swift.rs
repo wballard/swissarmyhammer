@@ -48,9 +48,6 @@ const SWIFT_IDIOMS_ROSTER_HEAD: &str = r"printf '%s\n' ";
 /// The word that closes the roster: the pipe the `printf` writes into.
 const SWIFT_IDIOMS_ROSTER_END: &str = "|";
 
-/// What a shell line writes to join the line under it.
-const SWIFT_IDIOMS_LINE_JOIN: char = '\\';
-
 /// How many rule names the shipped roster holds.
 ///
 /// Twenty-nine, which is Airbnb's list narrowed to the rules that decide an

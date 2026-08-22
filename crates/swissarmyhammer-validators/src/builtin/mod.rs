@@ -298,9 +298,10 @@ mod tests {
 
     /// The idiom tool rules `code-hygiene` carries. Each supersedes nothing.
     ///
-    /// `supersedes` names a WHOLE prompt rule, and `idioms-swift` decides six
-    /// bullets spread across two of them — five of `swift/rules/idioms.md` and
-    /// one of `swift/rules/value-semantics.md`. Naming either rule would take
+    /// `supersedes` names a WHOLE prompt rule, and `idioms-swift` decides seven
+    /// bullets spread across three of them — five of `swift/rules/idioms.md`,
+    /// one of `swift/rules/value-semantics.md` and one of
+    /// `swift/rules/optionals.md`. Naming any of those rules would take
     /// its other bullets out of every review the moment swiftformat is
     /// installed, so the rule states the relationship in its body and claims
     /// neither.

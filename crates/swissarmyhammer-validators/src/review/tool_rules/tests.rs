@@ -181,10 +181,11 @@ const IDIOMS_RULE_KIND: &str = "idioms";
 /// prompt rules it supersedes.
 ///
 /// It supersedes nothing, and `idioms-swift` states why in its own body.
-/// `supersedes` names a WHOLE prompt rule, and this gate decides six bullets
-/// spread across two of them — five of `swift/rules/idioms.md` and one of
-/// `swift/rules/value-semantics.md`. Naming either rule here would take its
-/// other bullets out of every review the moment swiftformat is installed.
+/// `supersedes` names a WHOLE prompt rule, and this gate decides seven bullets
+/// spread across three of them — five of `swift/rules/idioms.md`, one of
+/// `swift/rules/value-semantics.md` and one of `swift/rules/optionals.md`.
+/// Naming any of those rules here would take its other bullets out of every
+/// review the moment swiftformat is installed.
 const SHIPPED_IDIOMS_RULES: &[(&str, &str, &[&str])] =
     &[("swift", SWIFT_IDIOMS_RULE, SUPERSEDES_NOTHING)];
 

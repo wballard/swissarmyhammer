@@ -44,10 +44,10 @@ const SWIFT_IDIOMS_LINE_JOIN: char = '\\';
 
 /// How many rule names the shipped roster holds.
 ///
-/// Twenty-eight, which is Airbnb's list narrowed to the rules that decide an
+/// Twenty-nine, which is Airbnb's list narrowed to the rules that decide an
 /// idiom. The count is the assertion that a name added or dropped later
 /// reaches this guard rather than moving the gate without a word.
-const SWIFT_IDIOMS_ROSTER_SIZE: usize = 28;
+const SWIFT_IDIOMS_ROSTER_SIZE: usize = 29;
 
 /// The roster names no released SwiftFormat knows.
 ///
@@ -191,10 +191,10 @@ const SWIFT_IDIOMS_ABSENT_PATH: &str = "Absent.swift";
 /// How many findings the shipped failing fixture reports.
 ///
 /// Measured with the shipped script and SwiftFormat 0.62.1, over a probe
-/// repository that states no `.swift-version`: 37 findings, at exit 0. The
+/// repository that states no `.swift-version`: 42 findings, at exit 0. The
 /// count states that a refusing path beside the fixture costs the run nothing,
-/// because the run reports the same 37 either way.
-const SWIFT_IDIOMS_FAIL_FIXTURE_FINDINGS: usize = 37;
+/// because the run reports the same 42 either way.
+const SWIFT_IDIOMS_FAIL_FIXTURE_FINDINGS: usize = 42;
 
 /// What the marked line the script writes for a path it could not judge opens
 /// with, after the engine takes the `sah-diagnostic:` marker off.
@@ -418,4 +418,249 @@ fn the_shipped_swift_idioms_tool_rule_reads_the_project_swift_version() {
              {SWIFT_IDIOMS_PROBE_VERSION:?}; the run reported {with:?}"
         );
     }
+}
+
+/// The support files a probe stages to make every enabled rule live.
+///
+/// Five rules read the Swift language version, so a probe that stated none
+/// would buy a clean run from the version gate rather than from the source it
+/// staged.
+const SWIFT_IDIOMS_VERSION_SUPPORT: &[(&str, &str)] =
+    &[(SWIFT_VERSION_PATH, SWIFT_IDIOMS_PROBE_VERSION)];
+
+/// The validator set the Swift prompt rules stand in.
+const SWIFT_VALIDATOR_SET: &str = "swift";
+
+/// The prompt rule that decides how a test unwraps an optional.
+const SWIFT_OPTIONALS_PROMPT_RULE: &str = "optionals";
+
+/// The prompt rule that decides how an empty collection is declared.
+const SWIFT_IDIOMS_PROMPT_RULE: &str = "idioms";
+
+/// The markdown body the shipped Swift prompt rule `rule` carries.
+///
+/// The body is read where the set ships it, so a test measures the SHIPPED
+/// words rather than a copy this file wrote.
+fn swift_prompt_rule_body(loader: &ValidatorLoader, rule: &str) -> String {
+    loader
+        .get_ruleset(SWIFT_VALIDATOR_SET)
+        .unwrap_or_else(|| panic!("the `{SWIFT_VALIDATOR_SET}` validator set must ship"))
+        .rules
+        .iter()
+        .find(|shipped| shipped.name == rule)
+        .unwrap_or_else(|| {
+            panic!("the `{SWIFT_VALIDATOR_SET}` set must carry a `{rule}` prompt rule")
+        })
+        .body
+        .clone()
+}
+
+/// A Swift file written the way the two Swift prompt rules ASK for.
+///
+/// Every declaration is a DO one of them states: the empty-collection
+/// properties carry the type annotation `idioms.md` requires, and the test
+/// unwraps with `#require` rather than with the `guard` `optionals.md` now
+/// refuses in a test.
+const SWIFT_PROMPT_RULE_ANSWER: &str = concat!(
+    "import Testing\n\n",
+    "public struct Holder {\n",
+    "    public var items: [Int] = []\n",
+    "    public var ids: Set<String> = []\n",
+    "}\n\n",
+    "struct HolderTests {\n",
+    "    @Test func `the holder holds its readings`() throws {\n",
+    "        let holder = Holder()\n",
+    "        let value = try #require(holder.items.first)\n",
+    "        #expect(value == 1)\n",
+    "    }\n",
+    "}\n",
+);
+
+/// The same suite written the way `optionals.md` states NOT to: a `guard`
+/// that returns takes the test out before its assertion runs.
+const SWIFT_PROMPT_RULE_REFUSAL: &str = concat!(
+    "import Testing\n\n",
+    "struct HolderTests {\n",
+    "    @Test func `the holder holds its readings`() {\n",
+    "        let source: Int? = 1\n",
+    "        guard let value = source else { return }\n",
+    "        #expect(value == 1)\n",
+    "    }\n",
+    "}\n",
+);
+
+/// The rule that reports the `guard` of [`SWIFT_PROMPT_RULE_REFUSAL`].
+const SWIFT_NO_GUARD_IN_TESTS_RULE: &str = "noGuardInTests";
+
+/// Each form the probes above are written in, with the prompt rule that
+/// states it.
+///
+/// The pairs are what make [`SWIFT_PROMPT_RULE_ANSWER`] and
+/// [`SWIFT_PROMPT_RULE_REFUSAL`] the PROMPT RULES' own answer rather than a
+/// shape this file invented: every form must stand, word for word, in the body
+/// of the rule that names it.
+const SWIFT_PROMPT_RULE_FORMS: &[(&str, &str)] = &[
+    (SWIFT_IDIOMS_PROMPT_RULE, "var items: [Int] = []"),
+    (SWIFT_IDIOMS_PROMPT_RULE, "var ids: Set<String> = []"),
+    (SWIFT_OPTIONALS_PROMPT_RULE, "try #require("),
+    (
+        SWIFT_OPTIONALS_PROMPT_RULE,
+        "guard let value = source else { return }",
+    ),
+];
+
+/// Acceptance: the two halves agree — Swift written the way the prompt rules
+/// ask for draws no finding from this gate, and the shape they refuse does.
+///
+/// A tool and a prompt rule that disagree produce churn on every review round,
+/// so agreement is a fact to measure rather than one to assume. Both halves
+/// are load-bearing. The answer file must report NOTHING, or the gate fights
+/// the prompt rule the author is reading; the refusal file must report
+/// `noGuardInTests`, or the carve-out `optionals.md` states is a bullet no
+/// tool backs.
+///
+/// The probe stages a `.swift-version`, so every enabled rule is live and a
+/// clean run cannot be one the version gate bought.
+///
+/// Each form the two probes are written in is held to standing in the body of
+/// the prompt rule that states it. Without that, an edit to either prompt rule
+/// would leave this test measuring a house style nothing ships.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_agrees_with_the_swift_prompt_rules() {
+    let loader = builtin_loader();
+
+    for (rule, form) in SWIFT_PROMPT_RULE_FORMS {
+        let body = swift_prompt_rule_body(&loader, rule);
+        assert!(
+            body.contains(form),
+            "`{rule}.md` must state `{form}`, or the probes below measure a form no \
+             prompt rule asks for"
+        );
+        assert!(
+            SWIFT_PROMPT_RULE_ANSWER.contains(form) || SWIFT_PROMPT_RULE_REFUSAL.contains(form),
+            "`{form}` stands in `{rule}.md` and in neither probe, so nothing measures it"
+        );
+    }
+
+    let answered =
+        swift_idioms_reporting_rules(SWIFT_PROMPT_RULE_ANSWER, SWIFT_IDIOMS_VERSION_SUPPORT);
+    assert!(
+        answered.is_empty(),
+        "Swift written the way the prompt rules ask for must draw no finding from this \
+         gate; the run reported {answered:?}"
+    );
+
+    let refused =
+        swift_idioms_reporting_rules(SWIFT_PROMPT_RULE_REFUSAL, SWIFT_IDIOMS_VERSION_SUPPORT);
+    assert!(
+        refused.contains(&SWIFT_NO_GUARD_IN_TESTS_RULE.to_string()),
+        "`{SWIFT_NO_GUARD_IN_TESTS_RULE}` must report the `guard` `optionals.md` refuses \
+         in a test; the run reported {refused:?}"
+    );
+}
+
+/// A test whose assertion stands inside an `if let` that trails the body.
+const SWIFT_IDIOMS_TRAILING_IF: &str = concat!(
+    "import Testing\n\n",
+    "struct TrailingTests {\n",
+    "    @Test func `the reading stands`() {\n",
+    "        let source: Int? = 1\n",
+    "        if let value = source {\n",
+    "            #expect(value == 1)\n",
+    "        }\n",
+    "    }\n",
+    "}\n",
+);
+
+/// The same suite with one assertion written after the `if let`, so the `if`
+/// no longer trails the body.
+const SWIFT_IDIOMS_UNTRAILED_IF: &str = concat!(
+    "import Testing\n\n",
+    "struct TrailingTests {\n",
+    "    @Test func `the reading stands`() {\n",
+    "        let source: Int? = 1\n",
+    "        if let value = source {\n",
+    "            #expect(value == 1)\n",
+    "        }\n",
+    "        #expect(source != nil)\n",
+    "    }\n",
+    "}\n",
+);
+
+/// Acceptance: the shipped Swift idioms rule reads a trailing `if let` in a
+/// test, which is the shape `--guard-like-if-statements convert` decides.
+///
+/// The option is what puts that shape in reach: measured on SwiftFormat
+/// 0.62.1 over the trailing probe, `noGuardInTests` alone reports NOTHING and
+/// the same rule under `--guard-like-if-statements convert` reports three
+/// lines. So this test is the guard on the option standing on the shipped
+/// command line — a run that dropped it goes quiet here rather than losing a
+/// shape without a word.
+///
+/// The two halves are both load-bearing. The trailing `if` must report,
+/// because the assertions inside it never run when the binding fails and the
+/// test passes anyway. The untrailed `if` must NOT, because an `if` a test
+/// asserts after is a branch rather than an early exit. The two probes differ
+/// in that one line and in nothing else.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_reads_a_trailing_if_in_a_test() {
+    let trailing = swift_idioms_reporting_rules(SWIFT_IDIOMS_TRAILING_IF, NO_SUPPORT_FILES);
+    assert!(
+        trailing.contains(&SWIFT_NO_GUARD_IN_TESTS_RULE.to_string()),
+        "`{SWIFT_NO_GUARD_IN_TESTS_RULE}` must report a test whose assertion stands \
+         inside a trailing `if let`; the run reported {trailing:?}"
+    );
+
+    let untrailed = swift_idioms_reporting_rules(SWIFT_IDIOMS_UNTRAILED_IF, NO_SUPPORT_FILES);
+    assert!(
+        !untrailed.contains(&SWIFT_NO_GUARD_IN_TESTS_RULE.to_string()),
+        "an `if let` a test asserts AFTER does not trail the body, so \
+         `{SWIFT_NO_GUARD_IN_TESTS_RULE}` must stay silent; the run reported {untrailed:?}"
+    );
+}
+
+/// The empty-collection form `idioms.md` names as its DON'T.
+///
+/// It differs from the two properties of [`SWIFT_PROMPT_RULE_ANSWER`] in that
+/// each annotated literal is written as a constructor call instead.
+const SWIFT_IDIOMS_INFERRED_PROPERTY: &str = concat!(
+    "public struct Holder {\n",
+    "    public var items = [Int]()\n",
+    "    public var ids = Set<String>()\n",
+    "}\n",
+);
+
+/// Acceptance: the gate decides NEITHER form of an empty-collection
+/// declaration, so `idioms.md` owns that bullet alone.
+///
+/// SwiftFormat's `propertyTypes` rule under `--property-types inferred` is
+/// Airbnb's answer here, and it rewrites the DO of `idioms.md` into its DON'T
+/// — measured on 0.62.1, `var items: [Int] = []` becomes
+/// `var items = [Int]()` and `var ids: Set<String> = []` becomes
+/// `var ids = Set<String>()`. Enabling it would set the tool against the
+/// prompt rule on every review round, so the roster names neither the rule nor
+/// the option, and the rule body carries the measurement.
+///
+/// This test and the one above are what make that decision fail loudly, and
+/// each catches one direction of the option. Measured on 0.62.1 over the two
+/// forms:
+///
+/// | the option | the DO of `idioms.md` | the DON'T |
+/// |---|---|---|
+/// | `--property-types inferred` | 2 findings | silent |
+/// | `--property-types explicit` | silent | 2 findings |
+///
+/// So `inferred` fails the test above, on the DO, and `explicit` fails this
+/// one, on the DON'T. Neither direction can be added without a test naming it.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_decides_no_empty_collection_declaration() {
+    let reported =
+        swift_idioms_reporting_rules(SWIFT_IDIOMS_INFERRED_PROPERTY, SWIFT_IDIOMS_VERSION_SUPPORT);
+
+    assert!(
+        reported.is_empty(),
+        "the gate must report neither form of an empty-collection declaration, because \
+         `idioms.md` decides that bullet and `propertyTypes` would decide it the other \
+         way; the run reported {reported:?}"
+    );
 }

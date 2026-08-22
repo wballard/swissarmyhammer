@@ -204,4 +204,18 @@ struct ReadingsTests {
     func testWithNoAttribute() {
         #expect(Readings.hasNone([]))
     }
+
+    /// A `guard` early exit in a test, which `noGuardInTests` reports.
+    @Test func `the first reading over the limit stands`() {
+        guard let value = Readings.firstOver([11]) else { return }
+        #expect(value == 11)
+    }
+
+    /// A trailing `if let` wrapping the assertions of a test, which
+    /// `noGuardInTests` reports under `--guard-like-if-statements convert`.
+    @Test func `the flattened readings stand`() {
+        if let value = Readings.flattened([[1]]).first {
+            #expect(value == 1)
+        }
+    }
 }

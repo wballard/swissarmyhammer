@@ -189,4 +189,17 @@ struct ReadingsTests {
     private func stagedReadings() -> [Int] {
         [1, 2, 3]
     }
+
+    /// A `#require` rather than a `guard`, which `noGuardInTests` asks for.
+    @Test func `the first reading over the limit stands`() throws {
+        let value = try #require(Readings.firstOver([11]))
+        #expect(value == 11)
+    }
+
+    /// A `#require` rather than a trailing `if let`, which `noGuardInTests`
+    /// asks for under `--guard-like-if-statements convert`.
+    @Test func `the flattened readings stand`() throws {
+        let value = try #require(Readings.flattened([[1]]).first)
+        #expect(value == 1)
+    }
 }

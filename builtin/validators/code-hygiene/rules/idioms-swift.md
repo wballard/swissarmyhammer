@@ -20,7 +20,7 @@ tool:
       preferContains preferFirstWhere preferMinOverSorted preferFlatMap \
       preferLazyMap swiftTestingTestCaseNames redundantSwiftTestingSuite \
       testSuiteAccessControl validateTestCases noForceUnwrapInTests \
-      noForceTryInTests environmentEntry redundantEmptyView \
+      noForceTryInTests noGuardInTests environmentEntry redundantEmptyView \
       redundantViewBuilder redundantSwiftUIGroup redundantEquatable \
       genericExtensions opaqueGenericParameters ifExpressions \
       conditionalAssignment | sort -u > "$work/named"
@@ -40,6 +40,7 @@ tool:
       swiftformat --lint --quiet --reporter json --cache ignore \
         --min-version 0.62.1 --rules "$enabled" \
         --short-optionals always --pattern-let inline \
+        --guard-like-if-statements convert \
         "$file" > "$work/report.json" 2> "$work/lint.err" || status=$?
       if [ "$status" -gt 1 ]; then
         if grep -q '^error: Project specifies SwiftFormat --min-version' "$work/lint.err"; then
@@ -77,11 +78,11 @@ Every measurement below was made with SwiftFormat 0.62.1.
 
 The roster is Airbnb's, taken from
 `Sources/AirbnbSwiftFormatTool/airbnb.swiftformat` on their `master` branch,
-and narrowed to the rules that decide an IDIOM. Twenty-eight names stand in the
+and narrowed to the rules that decide an IDIOM. Twenty-nine names stand in the
 script, in five groups.
 
-Six of them decide a bullet a prompt rule of `builtin/validators/swift/` states
-today:
+Seven of them decide a bullet a prompt rule of `builtin/validators/swift/`
+states today:
 
 | the rule | the option it needs | the bullet it decides |
 |---|---|---|
@@ -91,6 +92,7 @@ today:
 | `preferForLoop` | | `idioms.md` `for` loop over `forEach` |
 | `hoistPatternLet` | `--pattern-let inline` | `idioms.md` bind each case variable with its own `let` |
 | `preferFinalClasses` | | `value-semantics.md` mark classes `final` |
+| `noGuardInTests` | `--guard-like-if-statements convert` | `optionals.md` never `guard` in a test |
 
 The other twenty-two decide a question no shipped prompt rule asks:
 
@@ -106,11 +108,11 @@ The other twenty-two decide a question no shipped prompt rule asks:
 
 ## Why the script intersects its roster with the installed tool
 
-Two of the twenty-eight names — `preferLazyMap` and `ifExpressions` — stand in
+Two of the twenty-nine names — `preferLazyMap` and `ifExpressions` — stand in
 Airbnb's file and in NO released SwiftFormat. Airbnb's `master` tracks
 SwiftFormat's `main` branch rather than a release. The eight newest SwiftFormat
 releases were read, 0.59.1 through 0.62.1, and neither name appears in any of
-them; `swiftformat --rules` on 0.62.1 lists 153 rules and holds 26 of the 28.
+them; `swiftformat --rules` on 0.62.1 lists 153 rules and holds 27 of the 29.
 
 A name SwiftFormat does not know breaks the WHOLE run, and no flag turns that
 off. Measured on 0.62.1, over one file:
@@ -129,8 +131,8 @@ script that named the two would report NOTHING for any Swift file, at a status
 the engine reads as a broken tool.
 
 The script therefore asks `swiftformat --rules` which rules the installed tool
-knows, and enables the INTERSECTION of that answer with the twenty-eight names.
-Measured on 0.62.1: 26 rules are enabled, and the two unreleased names are
+knows, and enables the INTERSECTION of that answer with the twenty-nine names.
+Measured on 0.62.1: 27 rules are enabled, and the two unreleased names are
 absent. The day SwiftFormat ships either one, the same script enables it with
 no edit here.
 
@@ -192,16 +194,16 @@ So the script hands swiftformat ONE path for each run. A refusing path then
 costs its own file and nothing more, and the script writes one line opening
 `sah-diagnostic:` that names the path and carries swiftformat's own words.
 Measured with the shipped script over the four refusing paths above, each
-staged beside the failing fixture, which holds 37 findings:
+staged beside the failing fixture, which holds 42 findings:
 
 | the run | findings | marked lines | exit |
 |---|---|---|---|
-| the failing fixture alone | 37 | 0 | 0 |
+| the failing fixture alone | 42 | 0 | 0 |
 | the passing fixture alone | 0 | 0 | 0 |
-| a path that holds no file, beside the failing fixture | 37 | 1 | 0 |
-| a file with no read permission, beside it | 37 | 1 | 0 |
-| a file whose bytes are not UTF-8, beside it | 37 | 1 | 0 |
-| a file the parser recovers nothing from, beside it | 37 | 1 | 0 |
+| a path that holds no file, beside the failing fixture | 42 | 1 | 0 |
+| a file with no read permission, beside it | 42 | 1 | 0 |
+| a file whose bytes are not UTF-8, beside it | 42 | 1 | 0 |
+| a file the parser recovers nothing from, beside it | 42 | 1 | 0 |
 | a path that holds no file, alone | 0 | 1 | 0 |
 
 The `[ ! -e "$file" ]` test stands before swiftformat, because a path that
@@ -256,6 +258,93 @@ Measured: `Package.swift` is not read for this. A directory holding
 `// swift-tools-version:5.9` and no `.swift-version` still gets the warning
 swiftformat writes when no version is stated.
 
+## The two Airbnb options that contradicted a prompt rule
+
+Airbnb's configuration states two answers this project already answered in
+`builtin/validators/swift/`. A tool and a prompt rule that disagree produce
+churn on every review round, so each was measured and decided before the roster
+took it.
+
+### `noGuardInTests` is ENABLED, and `optionals.md` gained the test carve-out
+
+`optionals.md` asked for `guard let … else { return }` as the early exit and
+carved out nothing for a test. Airbnb bans `guard` inside a test.
+
+Both are right, and they are right about different code. In production a
+`guard` protects the happy path. In a test a `guard` that returns takes the
+test out BEFORE its assertions run, so a broken program reads as a pass. That
+is a defect, not a style. `optionals.md` already knew tests are different — it
+sanctions an implicitly unwrapped optional for a fixture set in `setUp()` — and
+it now states the test bullet as well.
+
+So the roster takes `noGuardInTests`, and the prompt rule states the same
+requirement in words. Measured on 0.62.1 over one XCTest suite, the rule
+reports:
+
+| the declaration | reported |
+|---|---|
+| `guard let value = source else { return }` in a `throws` test | yes |
+| the same in a test that is not `throws` | yes, on the `guard` and on the `func` line, because the fix adds `throws` |
+| `guard let value = source else { XCTFail("missing"); return }` | yes |
+| `guard 1 == 1 else { return }` | yes |
+| `guard let value else { return }`, the shorthand | NO |
+| `guard let source else { return 0 }` in a `private` helper of the suite | NO |
+
+The rule reads a TEST, not a file name: a production method named
+`testConnection` holding a `guard` draws nothing, measured over a file that
+imports no test framework.
+
+`--guard-like-if-statements convert` stands on the command line with it. The
+option is the only difference between two measured runs over the same probe: a
+trailing `if let value = source { … }` that wraps the assertions of a test
+reports THREE lines under the option and NOTHING without it. It is the same
+defect the guard half decides — the assertions never run when the binding
+fails, and the test passes anyway. An `if let` a test asserts AFTER does not
+trail the body, and stays silent. Where the intent really is a conditional
+failure report, the message names `XCTAssert(...)` beside `#require`, and the
+assertion that matches the intent is the edit.
+
+### `--property-types inferred` is NOT enabled, because it loses
+
+Airbnb sets `--property-types inferred`. `idioms.md` states the opposite for an
+empty collection, and calls the reverse a validator error.
+
+Measured on 0.62.1, `swiftformat --rules propertyTypes --property-types
+inferred` over a struct holding `var items: [Int] = []`,
+`var ids: Set<String> = []` and `var table: [String: Int] = [:]` reports all
+three and rewrites them:
+
+| what the file held | what the run wrote |
+|---|---|
+| `public var items: [Int] = []` | `public var items = [Int]()` |
+| `public var ids: Set<String> = []` | `public var ids = Set<String>()` |
+| `public var table: [String: Int] = [:]` | `public var table = [String: Int]()` |
+| `public var name: String = "probe"` | unchanged |
+
+Each rewrite turns the DO of `idioms.md` into its DON'T, word for word. The
+empty literal names no type, so the rule was expected to leave it alone; it
+does not. `idioms.md` is the deliberate house style and it is already
+load-bearing — it warns in as many words against flip-flopping between the two
+forms across review rounds.
+
+So the roster names NEITHER `propertyTypes` NOR the option, and the gate
+decides neither form of an empty-collection declaration. `idioms.md` owns that
+bullet alone.
+
+Two acceptance tests hold that, one for each direction the option can take.
+Measured on 0.62.1 over the two forms:
+
+| the option | the DO of `idioms.md` | the DON'T |
+|---|---|---|
+| `--property-types inferred` | 2 findings | silent |
+| `--property-types explicit` | silent | 2 findings |
+
+`the_shipped_swift_idioms_tool_rule_agrees_with_the_swift_prompt_rules` holds
+the DO to drawing no finding, so `inferred` fails there.
+`the_shipped_swift_idioms_tool_rule_decides_no_empty_collection_declaration`
+holds the DON'T to the same, so `explicit` fails there. Neither direction can
+be added without a test naming it.
+
 ## `testSuiteAccessControl` reports the declaration `validateTestCases` reads
 
 The two rules read the SAME declaration — an internal method a test suite holds
@@ -298,11 +387,18 @@ clears all five at once.
 ## Why this rule supersedes nothing
 
 `supersedes` names a whole prompt rule, and the engine skips that rule whole
-when the tool is healthy. This gate decides SIX bullets spread across two
-prompt rules — five of `builtin/validators/swift/rules/idioms.md` and one of
-`value-semantics.md` — and neither rule is only those bullets. Naming either
-one here would take its other bullets out of every review the moment
-swiftformat is installed.
+when the tool is healthy. This gate decides SEVEN bullets spread across three
+prompt rules — five of `builtin/validators/swift/rules/idioms.md`, one of
+`value-semantics.md` and one of `optionals.md` — and no one of those rules is
+only those bullets. Naming any of them here would take its other bullets out of
+every review the moment swiftformat is installed.
+
+`optionals.md` shows why plainly. `noGuardInTests` decides its test bullet, and
+it decides only part of it: measured on 0.62.1, the rule reports
+`guard let value = source else { return }` and stays SILENT on the shorthand
+`guard let value else { return }`, which binds the same name from the same
+optional. The bullet still reads for both shapes, so the prompt half carries
+the one the tool misses.
 
 The prompt half is a change of its own: the bullets a tool now decides come out
 of the prompt text, and the rules keep the bullets no tool reads. Until that
@@ -336,9 +432,11 @@ section above states the measurement behind it.
 
 The failing fixture holds one declaration for each of the five groups, each
 written in the form its rule reports, under a `// MARK:` heading that names the
-group. Measured with the shipped script: **37 findings**, exit 0, carrying 25
-of the 26 enabled rules — every rule but `validateTestCases`, which the section
-above records as unreachable behind `testSuiteAccessControl`.
+group. Measured with the shipped script, over a directory that states no
+`.swift-version`: **42 findings**, exit 0, carrying 21 of the 27 enabled rules.
+The six that stay silent are the five the section above records as
+version-gated, and `validateTestCases`, which the section above records as
+unreachable behind `testSuiteAccessControl`.
 
 The passing fixture holds the SAME declarations, each written in the form its
 rule asks for. Measured with the shipped script: 0 findings, exit 0, and 0

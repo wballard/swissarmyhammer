@@ -381,6 +381,8 @@ mod tests {
         "function-length-dart.pass.dart.tmpl",
         "stuttering-name-go.fail.go.tmpl",
         "stuttering-name-go.pass.go.tmpl",
+        "idioms-swift.fail.swift.tmpl",
+        "idioms-swift.pass.swift.tmpl",
         "Cargo.toml.tmpl",
         "Cargo.lock.tmpl",
         "lib.rs.tmpl",

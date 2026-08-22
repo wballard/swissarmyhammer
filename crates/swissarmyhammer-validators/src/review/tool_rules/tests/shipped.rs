@@ -34,6 +34,7 @@ mod function_length_swift;
 mod function_length_typescript;
 mod go_probe;
 mod golangci_cache;
+mod idioms_swift;
 mod magic_numbers;
 mod magic_numbers_go;
 mod missing_docs;

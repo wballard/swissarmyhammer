@@ -164,6 +164,30 @@ const STUTTERING_NAME_RULE_KIND: &str = "stuttering-name";
 const SHIPPED_STUTTERING_NAME_RULES: &[(&str, &str, &[&str])] =
     &[("go", GO_STUTTERING_NAME_RULE, SUPERSEDES_NOTHING)];
 
+/// The shipped idioms tool rule for Swift. swiftformat names a rule
+/// SwiftFormat does not know as a whole-run error, so the script intersects
+/// its own roster with `swiftformat --rules` before it lints, and it hands
+/// swiftformat ONE path for each run because one refusing path otherwise
+/// costs the whole run every finding it made. Several more acceptance tests
+/// drive those answers end to end.
+const SWIFT_IDIOMS_RULE: &str = "idioms-swift";
+
+/// The name [`verify_shipped_tool_rules_pass_fixtures`] puts in its failure
+/// messages for this group. Every group that replaces a prompt rule is named
+/// for that rule; this one replaces none, so it is named for its own concern.
+const IDIOMS_RULE_KIND: &str = "idioms";
+
+/// Every shipped idioms tool rule, with the project type it serves and the
+/// prompt rules it supersedes.
+///
+/// It supersedes nothing, and `idioms-swift` states why in its own body.
+/// `supersedes` names a WHOLE prompt rule, and this gate decides six bullets
+/// spread across two of them — five of `swift/rules/idioms.md` and one of
+/// `swift/rules/value-semantics.md`. Naming either rule here would take its
+/// other bullets out of every review the moment swiftformat is installed.
+const SHIPPED_IDIOMS_RULES: &[(&str, &str, &[&str])] =
+    &[("swift", SWIFT_IDIOMS_RULE, SUPERSEDES_NOTHING)];
+
 /// The prompt rule every shipped dead-code tool rule supersedes.
 const DEAD_CODE_PROMPT_RULE: &str = "dead-code";
 

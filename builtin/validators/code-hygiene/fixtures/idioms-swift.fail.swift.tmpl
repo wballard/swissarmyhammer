@@ -1,0 +1,207 @@
+// The failing fixture of the `idioms-swift` tool rule.
+//
+// One declaration stands for each group of the enabled SwiftFormat rules, and
+// each one is written in the form the rule reports.
+
+import SwiftUI
+import Testing
+
+// MARK: - The idioms group
+
+/// Long-form generic sugar, which `typeSugar` reports.
+public struct Sugar {
+    public var maybe: Optional<Int>
+    public var list: Array<String>
+    public var table: Dictionary<String, Int>
+}
+
+/// An empty tuple return type, which `void` reports.
+public typealias Callback = () -> ()
+
+/// An explicit internal memberwise initializer, which
+/// `redundantMemberwiseInit` reports.
+public struct Point {
+    var x: Int
+    var y: Int
+
+    init(x: Int, y: Int) {
+        self.x = x
+        self.y = y
+    }
+}
+
+/// A functional `forEach`, which `preferForLoop` reports.
+public func walk(_ names: [String]) {
+    names.forEach { name in
+        print(name)
+        print(name.count)
+    }
+}
+
+/// The shape the enum of the pattern group binds.
+public enum Shape {
+    case circle(Int)
+    case square(Int, Int)
+}
+
+/// A hoisted `let` binding, which `hoistPatternLet` reports.
+public func describe(_ shape: Shape) -> String {
+    switch shape {
+    case let .circle(radius):
+        return "circle \(radius)"
+    case let .square(width, height):
+        return "square \(width)x\(height)"
+    }
+}
+
+/// A class that is neither `final` nor `open`, which `preferFinalClasses`
+/// reports.
+public class Worker {
+    public func work() {}
+}
+
+// MARK: - The performance group
+
+public enum Readings {
+    /// `filter { }.count`, which `preferCountWhere` reports.
+    public static func overLimit(_ values: [Int]) -> Int {
+        values.filter { $0 > 10 }.count
+    }
+
+    /// `count == 0`, which `isEmpty` reports.
+    public static func hasNone(_ values: [Int]) -> Bool {
+        values.count == 0
+    }
+
+    /// `first { } != nil`, which `preferContains` reports.
+    public static func holds(_ values: [Int]) -> Bool {
+        values.first { $0 == 3 } != nil
+    }
+
+    /// `filter { }.first`, which `preferFirstWhere` reports.
+    public static func firstOver(_ values: [Int]) -> Int? {
+        values.filter { $0 > 10 }.first
+    }
+
+    /// `sorted().first`, which `preferMinOverSorted` reports.
+    public static func smallest(_ values: [Int]) -> Int? {
+        values.sorted().first
+    }
+
+    /// `map { }.reduce([], +)`, which `preferFlatMap` reports.
+    public static func flattened(_ sections: [[Int]]) -> [Int] {
+        sections.map { $0 }.reduce([], +)
+    }
+}
+
+// MARK: - The other group
+
+/// A hand-written `==` the compiler would synthesize, which
+/// `redundantEquatable` reports.
+public struct Pair: Equatable {
+    let left: Int
+    let right: Int
+
+    public static func == (lhs: Pair, rhs: Pair) -> Bool {
+        lhs.left == rhs.left
+            && lhs.right == rhs.right
+    }
+}
+
+/// A `where` type constraint, which `genericExtensions` reports.
+extension Array where Element == Int {
+    /// The first reading of the array.
+    public var head: Int? { first }
+}
+
+/// A constrained generic parameter, which `opaqueGenericParameters` reports.
+public func handle<T: Collection>(_ value: T) {
+    print(value.count)
+}
+
+/// A conditional assignment written as statements, which
+/// `conditionalAssignment` reports.
+public func label(_ ready: Bool) -> String {
+    let name: String
+    if ready {
+        name = "ready"
+    } else {
+        name = "waiting"
+    }
+    return name
+}
+
+// MARK: - The SwiftUI group
+
+/// An `EnvironmentKey` conformance, which `environmentEntry` reports.
+private struct ScreenNameKey: EnvironmentKey {
+    static var defaultValue: String { "undefined" }
+}
+
+extension EnvironmentValues {
+    /// The screen name the environment carries.
+    var screenName: String {
+        get { self[ScreenNameKey.self] }
+        set { self[ScreenNameKey.self] = newValue }
+    }
+}
+
+/// An `else { EmptyView() }` branch, which `redundantEmptyView` reports.
+public struct Banner: View {
+    /// Whether the banner shows its text.
+    public var ready: Bool
+
+    public var body: some View {
+        if ready {
+            Text("ready")
+        } else {
+            EmptyView()
+        }
+    }
+}
+
+/// A redundant `@ViewBuilder`, which `redundantViewBuilder` reports, over a
+/// redundant `Group`, which `redundantSwiftUIGroup` reports.
+public struct Panel: View {
+    public var body: some View {
+        Group {
+            Text("left")
+            Text("right")
+        }
+    }
+
+    @ViewBuilder
+    var footer: some View {
+        Text("footer")
+    }
+}
+
+// MARK: - The Swift Testing group
+
+/// A redundant `@Suite`, which `redundantSwiftTestingSuite` reports, over a
+/// suite whose members every other testing rule reports.
+@Suite
+struct ReadingsTests {
+    /// A `test`-prefixed name, which `swiftTestingTestCaseNames` reports, and
+    /// a `public` test method, which `testSuiteAccessControl` reports.
+    @Test public func testReadingsHoldTheirValues() {
+        #expect(Readings.hasNone([]))
+    }
+
+    /// A `try!`, which `noForceTryInTests` reports.
+    @Test func forcedTry() {
+        try! Readings.load()
+    }
+
+    /// A force unwrap, which `noForceUnwrapInTests` reports.
+    @Test func forcedUnwrap() {
+        let value = Readings.smallest([1])!
+        #expect(value == 1)
+    }
+
+    /// A `test`-prefixed method with no `@Test`, which `validateTestCases`
+    /// reports.
+    func testWithNoAttribute() {
+        #expect(Readings.hasNone([]))
+    }
+}

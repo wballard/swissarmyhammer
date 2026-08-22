@@ -296,6 +296,16 @@ mod tests {
     /// category, an exported name that opens with the name of its own package.
     const CODE_HYGIENE_NAMING_TOOL_RULES: &[&str] = &["stuttering-name-go"];
 
+    /// The idiom tool rules `code-hygiene` carries. Each supersedes nothing.
+    ///
+    /// `supersedes` names a WHOLE prompt rule, and `idioms-swift` decides six
+    /// bullets spread across two of them — five of `swift/rules/idioms.md` and
+    /// one of `swift/rules/value-semantics.md`. Naming either rule would take
+    /// its other bullets out of every review the moment swiftformat is
+    /// installed, so the rule states the relationship in its body and claims
+    /// neither.
+    const CODE_HYGIENE_IDIOMS_TOOL_RULES: &[&str] = &["idioms-swift"];
+
     /// The function-length tool rules `code-hygiene` carries.
     ///
     /// Every one of them supersedes `function-length` and nothing else, because
@@ -342,6 +352,7 @@ mod tests {
             .chain(CODE_HYGIENE_DEAD_CODE_TOOL_RULES.iter())
             .chain(CODE_HYGIENE_MAGIC_NUMBERS_TOOL_RULES.iter())
             .chain(CODE_HYGIENE_NAMING_TOOL_RULES.iter())
+            .chain(CODE_HYGIENE_IDIOMS_TOOL_RULES.iter())
             .chain(CODE_HYGIENE_FUNCTION_LENGTH_TOOL_RULES.iter());
         assert_eq!(
             ruleset.rules.len(),
@@ -350,6 +361,7 @@ mod tests {
                 + CODE_HYGIENE_DEAD_CODE_TOOL_RULES.len()
                 + CODE_HYGIENE_MAGIC_NUMBERS_TOOL_RULES.len()
                 + CODE_HYGIENE_NAMING_TOOL_RULES.len()
+                + CODE_HYGIENE_IDIOMS_TOOL_RULES.len()
                 + CODE_HYGIENE_FUNCTION_LENGTH_TOOL_RULES.len(),
             "code-hygiene should carry exactly its prompt and tool rules, got: {rule_names:?}"
         );

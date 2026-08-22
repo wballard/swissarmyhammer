@@ -4,7 +4,9 @@ description: >-
   Flag hygiene defects in changed source code — commented-out code, overlong
   functions, missing documentation on public APIs,
   hardcoded values that should be data, dead code with no inbound callers,
-  and an exported Go name that repeats the name of its own package.
+  an exported Go name that repeats the name of its own package,
+  and a Swift declaration written in a non-preferred form when an equivalent
+  preferred form exists.
 metadata:
   version: "{{version}}"
 match:
@@ -386,11 +388,12 @@ suppression the tool reads.
 with the name of its own package, because a caller outside the package then
 writes the word two times — `staged.StagedType`.
 
-It supersedes nothing. It is the only TOOL rule of this set to do that, and one
-of two tool rules tree-wide — the other is the `manifests` set's
-`unused-dependencies-rust`. Both counts are of tool rules only. The engine reads
-`supersedes` on a rule that carries a `tool` block and nowhere else, so a prompt
-rule declares no `supersedes` key and enters neither count.
+It supersedes nothing. It is one of two TOOL rules of this set to do that — the
+other is `idioms-swift`, below — and one of three tree-wide, the third being the
+`manifests` set's `unused-dependencies-rust`. Both counts are of tool rules
+only. The engine reads `supersedes` on a rule that carries a `tool` block and
+nowhere else, so a prompt rule declares no `supersedes` key and enters neither
+count.
 
 No shipped prompt rule reads a Go NAME, and the check for that is a `match`
 block rather than a reading of what each rule is about. Seven of the thirteen
@@ -450,6 +453,46 @@ so it needs neither the `GOLANGCI_LINT_CACHE` directory nor the
 carry. Both halves are measured in the rule file: eight runs started together in
 one workspace each reported every finding, and a module of 400 packages took the
 same time cold and warm at two different paths.
+
+## Swift idioms: one tool rule, and the prompt bullets it stands beside
+
+`idioms-swift` runs `swiftformat --lint` over a roster of 28 rules, each of
+which rewrites one Swift shape into an equivalent shape. The two forms compile
+to the same program, so the tool's answer is a fact about the source rather
+than a preference. The roster is Airbnb's, taken from
+`Sources/AirbnbSwiftFormatTool/airbnb.swiftformat` and narrowed to the rules
+that decide an IDIOM: the formatting rules — `indent`, every `wrap*`,
+`sortImports`, `blankLines*`, `spaceAround*`, `trailingSpace`, `braces`,
+`semicolons` — are deliberately left out, because a whitespace finding in a
+diff review is noise and the format step already owns it.
+
+| Rule | Tool | Inline suppression |
+|---|---|---|
+| `idioms-swift` | `swiftformat --lint`, 28 named rules | `// swiftformat:disable:next <rule>` |
+
+It supersedes nothing, and that is a fact of the `supersedes` key rather than a
+reading of what the rule is about. The key names a WHOLE prompt rule and the
+engine skips that rule whole. This gate decides SIX bullets spread across two
+prompt rules of the `swift` set — five of `idioms.md` and one of
+`value-semantics.md` — and neither rule is only those bullets, so naming either
+one would take its other bullets out of every review the moment swiftformat is
+installed. Taking those six bullets out of the prompt text is a change of its
+own; until it lands, both halves state the same requirement and they agree.
+
+Two properties of swiftformat shape the run, and the rule file measures each.
+A rule name SwiftFormat does not know breaks the WHOLE run at status 70, and
+`--unknown-rules ignore` moves nothing on the command line, so the script
+intersects its roster with `swiftformat --rules` before it lints — two of
+Airbnb's 28 stand in no released SwiftFormat. And one refusing path costs a
+single swiftformat run every finding it made, which is the answer
+`builtin/validators/README.md` refuses, so the script hands swiftformat one
+path for each run and states each path it declined on the marked stderr
+channel.
+
+The version floor is SwiftFormat **0.62.1**, the version every rule of the
+roster was measured present in. `doctor.check_command` carries it through
+`--min-version`, so a machine whose swiftformat is too old reports as a missing
+tool rather than silently dropping the rules an older release lacks.
 
 ## Tools measured and rejected
 

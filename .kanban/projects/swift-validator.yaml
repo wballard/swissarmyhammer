@@ -1,0 +1,16 @@
+color: FA7343
+description: |-
+  Capture the lessons from the Airbnb Swift AI skill (https://swift.airbnb.tech/skill) and its tool config (github.com/airbnb/swift) in our Swift validator.
+
+  FINDING: Airbnb's skill states it "excludes rules that are automatically enforced with code formatting". Our builtin/validators/swift/VALIDATOR.md states the opposite about itself: "Each rule is an in-file idiom judgment read from the diff — there are no engine probes." We wrote the same principle (objectivity-over-judgment) and then built the Swift bundle on the wrong side of it. Their tool half is 100+ SwiftFormat rules plus 11 SwiftLint rules plus 4 custom regex rules. Our tool half is 4 code-hygiene rules (function-length, magic-numbers, missing-docs, dead-code) driving swiftlint and periphery. No validator runs swiftformat at all.
+
+  THREE BODIES OF WORK:
+  1. Build the missing tool half — a swiftformat runner and an expanded swiftlint rule set.
+  2. Supersede the ~12 prompt-rule bullets a tool can now decide, and resolve two conflicts the tool config exposes.
+  3. Add the ~10 genuinely-judgment rules we do not have, plus the Swift Testing and SwiftUI gaps.
+
+  SOURCES (read these first):
+  - Skill text: https://swift.airbnb.tech/skill
+  - SwiftFormat config: https://raw.githubusercontent.com/airbnb/swift/master/Sources/AirbnbSwiftFormatTool/airbnb.swiftformat
+  - SwiftLint config: https://raw.githubusercontent.com/airbnb/swift/master/Sources/AirbnbSwiftFormatTool/swiftlint.yml
+name: 'Swift Validator: tool half + missing rules'

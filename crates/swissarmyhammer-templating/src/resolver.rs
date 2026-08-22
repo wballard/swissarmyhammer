@@ -455,4 +455,146 @@ This is partial content"#;
             "Rendered content should include partial"
         );
     }
+
+    /// Name `get_builtin_partials` serves the Swift project-type guidelines
+    /// under. `load_builtin_partials` registers it as `_partials/{name}`, which
+    /// is the same path `swissarmyhammer-project-detection` builds for the
+    /// `swift` project type through its `partial!` macro.
+    const SWIFT_PARTIAL: &str = "project-types/swift";
+
+    /// Return one embedded builtin partial's content by name.
+    ///
+    /// Reads the same table `load_builtin_partials` serves from, so an
+    /// assertion here measures the text an agent actually receives rather than
+    /// a file on disk.
+    fn builtin_partial(name: &str) -> &'static str {
+        get_builtin_partials()
+            .into_iter()
+            .find(|(partial_name, _)| *partial_name == name)
+            .map(|(_, content)| content)
+            .unwrap_or_else(|| panic!("builtin partial '{name}' should be embedded"))
+    }
+
+    /// Assert the Swift guidelines partial carries each phrase it must keep.
+    ///
+    /// Each row pairs the exact text the partial has to hold with the
+    /// requirement that text satisfies, so a failure names the requirement
+    /// rather than only the missing string.
+    fn assert_swift_partial_states(requirements: &[(&str, &str)]) {
+        let swift = builtin_partial(SWIFT_PARTIAL);
+        for (needle, requirement) in requirements {
+            assert!(
+                swift.contains(needle),
+                "the swift guidelines partial must {requirement} (missing {needle:?})"
+            );
+        }
+    }
+
+    /// `swift format` and `swiftformat` are different programs. The first is
+    /// Apple's swift-format, which ships with the toolchain and reads
+    /// `.swift-format`. The second is Nick Lockwood's SwiftFormat, installed
+    /// separately, which reads `.swiftformat`. The guidelines once offered the
+    /// two as interchangeable alternatives on one line, which sends an agent to
+    /// the wrong config file.
+    #[test]
+    fn swift_partial_names_each_formatter_with_its_own_config_file() {
+        assert_swift_partial_states(&[
+            (
+                ".swift-format",
+                "name the config file Apple's swift-format reads",
+            ),
+            (".swiftformat", "name the config file SwiftFormat reads"),
+            (".swiftlint.yml", "name the config file SwiftLint reads"),
+            (
+                "DIFFERENT programs",
+                "state that the two formatters are not one tool",
+            ),
+            (
+                "Do not write a config file as a side effect",
+                "forbid creating a config file while formatting",
+            ),
+        ]);
+
+        let swift = builtin_partial(SWIFT_PARTIAL);
+        assert!(
+            !swift.contains("(or `swiftformat .`)"),
+            "the swift guidelines partial must never offer `swift format` and \
+             `swiftformat` as interchangeable alternatives — they are different \
+             tools reading different config files"
+        );
+    }
+
+    /// A package that depends on `github.com/airbnb/swift` gets one command
+    /// running SwiftFormat and SwiftLint together. Both command lines carry
+    /// `--allow-writing-to-package-directory`: the plugin always asks for write
+    /// permission, so a bare `swift package format --lint` stops with a
+    /// permission error in a non-interactive shell.
+    #[test]
+    fn swift_partial_documents_the_airbnb_plugin_commands() {
+        assert_swift_partial_states(&[
+            (
+                "https://github.com/airbnb/swift",
+                "show the dependency that supplies the Airbnb plugin",
+            ),
+            (
+                "swift package --allow-writing-to-package-directory format --lint\n",
+                "give the plugin check command, which needs the write permission too",
+            ),
+            (
+                "swift package --allow-writing-to-package-directory format\n",
+                "give the plugin non-interactive fix command",
+            ),
+            (
+                "--target <Target>",
+                "give the singular --target switch the plugin accepts",
+            ),
+            ("--paths Sources Tests", "list the plugin paths switch"),
+            ("--exclude Tests", "list the plugin exclude switch"),
+            (
+                "--swift-version 6.2",
+                "list the plugin Swift version switch",
+            ),
+            (
+                "Fix mode exits non-zero only for a SwiftLint rule",
+                "state which failures each mode reports through its exit code",
+            ),
+        ]);
+    }
+
+    /// Guidance that disagrees with a shipped gate walks an author into a
+    /// finding from this project's own review.
+    /// `builtin/validators/code-hygiene/rules/idioms-swift.md` runs swiftformat
+    /// above a version floor with four options whose defaults all point the
+    /// other way, and `builtin/validators/swift/rules/idioms.md` wants the
+    /// annotated empty-collection literal that the Airbnb plugin's own
+    /// `--property-types inferred` rewrites away.
+    #[test]
+    fn swift_partial_agrees_with_the_shipped_swift_tool_validators() {
+        assert_swift_partial_states(&[
+            (
+                "--pattern-let inline",
+                "pin the pattern-let option the idioms-swift gate measures",
+            ),
+            (
+                "--short-optionals always",
+                "pin the short-optionals option the idioms-swift gate measures",
+            ),
+            (
+                "--single-line-for-each convert",
+                "pin the single-line-for-each option the idioms-swift gate measures",
+            ),
+            (
+                "--guard-like-if-statements convert",
+                "pin the guard-like-if-statements option the idioms-swift gate measures",
+            ),
+            (
+                "0.62.1",
+                "state the swiftformat version floor idioms-swift enforces",
+            ),
+            (
+                "--property-types inferred",
+                "warn that the plugin rewrites annotated empty collections",
+            ),
+        ]);
+    }
 }

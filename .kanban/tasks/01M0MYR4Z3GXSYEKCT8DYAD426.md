@@ -41,6 +41,41 @@ comments:
 
     A hand review of those 4 files against real swiftformat 0.62.1 found 3 findings, so `findings: 0` was not a clean result. Same shape as reproductions 1-3: markdown is silently absent, and the tally hides the absence.
   timestamp: 2026-08-22T17:40:42.613157+00:00
+- actor: claude-code
+  id: 01m0nena5sse56zzxz8etj7g7x
+  text: |-
+    ## Reproduction 7 — `review sha HEAD~1..HEAD` over `0334b79e6`, from ^052w80d
+
+    The tally does not close, and it does not close in a NEW way: five files are neither reviewed nor named as excluded.
+
+    `{"op": "review sha", "sha": "HEAD~1..HEAD"}` answered:
+
+    ```
+    counts: { findings: 0, confirmed: 0, refuted: 0, attempted: 7, failed: 0, skipped: 0, skipped_files: [6 .kanban paths] }
+    markdown header: "4 file(s) reviewed, 6 not reviewed."
+                     "6 file(s) not reviewed — excluded by an ignore rule: .kanban/ (from .reviewignore)"
+    ```
+
+    `git diff --stat 379079d84 0334b79e6` reports **15 files changed**. The report accounts for 10 of them: 4 reviewed, 6 excluded. Five files are missing from both counts:
+
+    - `builtin/validators/swift/VALIDATOR.md`
+    - `builtin/validators/swift/rules/idioms.md`
+    - `builtin/validators/swift/rules/immutability.md`
+    - `builtin/validators/swift/rules/initialization.md`
+    - `builtin/validators/swift/rules/preconditions.md`
+
+    Every one is markdown. Every one is the substance of the commit — this commit's whole claim is a set of prompt-rule text edits, and 545 of its insertions are prose.
+
+    Three faults stand in the one answer:
+
+    1. **Markdown is not reviewed.** Same as reproductions 1-6.
+    2. **The header arithmetic is wrong.** `4 reviewed + 6 not reviewed = 10`, against 15 changed. The header states "6 not reviewed" when 11 were not reviewed.
+    3. **The five are not reported as skipped either.** `skipped_files` names only the six `.kanban` paths. A caller reading `skipped_files` to learn what went unread learns nothing about the markdown, so the gap is invisible to an automated consumer as well as to a reader.
+
+    Fault 2 is a tighter version of the arithmetic fault logged in reproduction 6 (`counts.skipped: 0` beside a six-entry `skipped_files`). Both say the same thing: the counts are not derived from the file set the run actually walked.
+
+    Consequence for ^052w80d, iteration 2: the engine returned `findings: 0` over a commit whose entire delta is prompt-rule prose. Three findings were raised by hand against those five files, one of them a collision between two rules the commit's own sweep declared to share no shape. A thin `findings: 0` over a markdown commit remains worth nothing.
+  timestamp: 2026-08-22T19:20:16.825868+00:00
 position_column: todo
 position_ordinal: ffee80
 title: 'review engine: markdown files are silently dropped from diff-scoped review'

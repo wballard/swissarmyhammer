@@ -1,6 +1,36 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01m0nfm8e28fg6e0n6hk55n7cj
+  text: |-
+    ## Superseded by ^m7ynz9c — do not work this card as written
+
+    ^m7ynz9c ("swift partial: prefer `swift package format --lint` when the Airbnb plugin is a dependency") rewrites the SAME Format/Lint bullet in `builtin/_partials/project-types/swift.md`. Both halves of this card landed there:
+
+    - **Checkbox 1 (the Format bullet).** The partial now names each tool beside the config file it alone reads (`swift format` → `.swift-format`, `swiftformat` → `.swiftformat`, `swiftlint` → `.swiftlint.yml`), states plainly that the first two are DIFFERENT programs, says to use the tool whose config file the repo already holds and to obey it, forbids writing a config file as a side effect of formatting, forbids style flags that disagree with a config already there, and states the tool defaults apply when no config exists.
+    - **Checkbox 2 (the content regression test).** Landed as `swift_partial_separates_the_two_formatters_and_documents_the_airbnb_plugin` in `crates/swissarmyhammer-templating/src/resolver.rs`. Verified RED against the old partial, GREEN against the new one.
+
+    Two departures from this card's text, both driven by measurement:
+
+    1. **The test reads the SERVED content, not the file on disk.** This card proposed a test in `crates/swissarmyhammer-project-detection/src/types.rs` reading the `.md` through `CARGO_MANIFEST_DIR`. That crate holds only the partial's PATH string; it never sees the content. `swissarmyhammer-templating` embeds the partial at build time via `get_builtin_partials()` and `PromptResolver::load_builtin_partials` registers it as `_partials/project-types/swift` — the same path `partial!("swift")` builds. Asserting there measures the text an agent actually receives. `spec_partial_matches_key` is untouched and still passes.
+
+    2. **"`swiftformat .` honors `.swiftformat` likewise" is not sufficient advice.** Measured on swiftformat 0.62.1, the four options our shipped `idioms-swift` validator pins all default the other way:
+
+       | option | default | what `idioms-swift` pins |
+       |---|---|---|
+       | `--pattern-let` | `hoist` | `inline` |
+       | `--short-optionals` | `preserve-struct-inits` | `always` |
+       | `--single-line-for-each` | `ignore` | `convert` |
+       | `--guard-like-if-statements` | `preserve` | `convert` |
+
+       A bare `swiftformat .` rewrote `if case .some(let inner) = value` into `if case let .some(inner) = value`, and `idioms-swift` then reported that exact line. So the partial states the four options, and states that a repo `.swiftformat` already carrying them makes a bare run correct.
+
+    Config discovery was measured, not assumed: a root `.swift-format` reached a file two directories down (7-space indentation applied, no `--configuration` flag), and a root `.swiftformat` did the same.
+
+    This card can be archived.
+  timestamp: 2026-08-22T19:37:10.850616+00:00
 position_column: todo
 position_ordinal: b280
 title: 'guidelines: swift format instruction — honor an existing .swift-format/.swiftformat config, defaults otherwise'

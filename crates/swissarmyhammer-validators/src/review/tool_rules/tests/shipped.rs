@@ -2214,6 +2214,48 @@ const RUST_PROJECT_TYPES: &[&str] = &["rust"];
 /// The project types a Swift workspace carries, as the plan holds them.
 const SWIFT_PROJECT_TYPES: &[&str] = &["swift"];
 
+/// The file a project states its Swift language version in.
+const SWIFT_VERSION_PATH: &str = ".swift-version";
+
+/// The Swift language version a probe repository states, which is the version
+/// Airbnb's own SwiftFormat configuration pins.
+const SWIFT_PROBE_VERSION: &str = "6.3\n";
+
+/// The support files a Swift probe stages to make every enabled rule live.
+///
+/// Five rules of the `idioms-swift` roster read the Swift language version, so
+/// a probe that stated none would buy its answer from the version gate rather
+/// than from the Swift it staged.
+const SWIFT_VERSION_SUPPORT: &[(&str, &str)] = &[(SWIFT_VERSION_PATH, SWIFT_PROBE_VERSION)];
+
+/// Drives the shipped script of `gate` over `source`, staged at `probe_path`
+/// beside `support`, and answers the rule name of each finding it reported.
+///
+/// Every Swift probe that reads finding NAMES reaches its gate through here, so
+/// the staging — one probe file, the support files beside it, and the one path
+/// the run carries — has one implementation rather than one for each module.
+fn swift_gate_reporting_rules(
+    gate: &str,
+    probe_path: &str,
+    source: &str,
+    support: &[(&str, &str)],
+) -> Vec<String> {
+    let loader = builtin_loader();
+    require_tool_installed(&loader, SWIFT_PROJECT_TYPES, gate);
+
+    let mut staged: Vec<(&str, &str)> = vec![(probe_path, source)];
+    staged.extend_from_slice(support);
+
+    drive_shipped_script(
+        &loader,
+        gate,
+        &ShippedStaging::of(&staged),
+        &[probe_path],
+        finding_rule_names,
+    )
+    .unwrap_or_else(|_| panic!("the shipped `{gate}` script must judge the probe file and exit 0"))
+}
+
 /// Where a project states its own swiftlint settings, as the work-list holds
 /// the path.
 const SWIFT_PROJECT_CONFIG_PATH: &str = ".swiftlint.yml";

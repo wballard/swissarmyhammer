@@ -41,13 +41,21 @@ author writes that tool's own inline directive with the reason after it — neve
 a rule here.
 
 `initialization`, `immutability` and `preconditions` are the three newest rules,
-and each was measured against every shipped Swift gate before it was written:
-the cost of `init`, a stored property a later method fills in, a property
-observer or a callback closure that branches, a `var` accumulator, a stored
-`static var`, a global function, a precondition written as a nested `if`, and a
-surprise answered with a crash or with silence. `naming-clarity` gained the
-past-tense event handler, and `access-control` the SwiftUI memberwise
-initializer. No shipped gate reports any of those shapes.
+and each was measured before it was written against the five shipped Swift gates
+that read a FILE list — `idioms-swift`, `disallowed-constructs-swift`,
+`function-length-swift`, `magic-numbers-swift` and `missing-docs-swift`: the
+cost of `init`, a stored property a later method fills in, a property observer
+or a callback closure that branches, a `var` accumulator, a stored `static var`,
+a global function, a precondition written as a nested `if`, and a surprise
+answered with silence. `naming-clarity` gained the past-tense event handler, and
+`access-control` the SwiftUI memberwise initializer. None of the five reports any
+of those shapes. Every run stood over a probe repository stating `6.3` in
+`.swift-version`: five swiftformat rules of `idioms-swift` read the Swift
+language version and stay silent without one, so a run that stated none would
+buy its clean answer from the version gate rather than from the Swift it staged.
+`dead-code-swift` is the sixth Swift gate and stands outside that measurement —
+it loads a built package rather than a file list, and decides whether a
+declaration is USED, which no rule here asks.
 
 ONE half of one bullet here IS tool-decidable and waits on a roster: swiftformat
 `privateStateVariables` and swiftlint `private_swiftui_state` each report a

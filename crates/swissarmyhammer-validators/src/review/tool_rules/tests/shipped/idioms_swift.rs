@@ -295,13 +295,6 @@ fn the_shipped_swift_idioms_tool_rule_reports_a_file_beside_one_it_declined() {
 /// Where a probe stages the Swift file it measures a rule set over.
 const SWIFT_IDIOMS_PROBE_PATH: &str = "Probe.swift";
 
-/// The file a project states its Swift language version in.
-const SWIFT_VERSION_PATH: &str = ".swift-version";
-
-/// The Swift language version the version probe states, which is the version
-/// Airbnb's own SwiftFormat configuration pins.
-const SWIFT_IDIOMS_PROBE_VERSION: &str = "6.3\n";
-
 /// A test suite holding one internal method whose NAME says test and whose
 /// attribute does not.
 ///
@@ -350,20 +343,7 @@ const SWIFT_IDIOMS_VERSION_GATED_RULES: &[&str] = &["preferCountWhere", "opaqueG
 /// [`SWIFT_IDIOMS_PROBE_PATH`], beside `support`, and answers the rule name of
 /// each finding it reported.
 fn swift_idioms_reporting_rules(source: &str, support: &[(&str, &str)]) -> Vec<String> {
-    let loader = builtin_loader();
-    require_tool_installed(&loader, SWIFT_PROJECT_TYPES, SWIFT_IDIOMS_RULE);
-
-    let mut staged: Vec<(&str, &str)> = vec![(SWIFT_IDIOMS_PROBE_PATH, source)];
-    staged.extend_from_slice(support);
-
-    drive_shipped_script(
-        &loader,
-        SWIFT_IDIOMS_RULE,
-        &ShippedStaging::of(&staged),
-        &[SWIFT_IDIOMS_PROBE_PATH],
-        finding_rule_names,
-    )
-    .expect("the shipped Swift idioms script must judge the probe file and exit 0")
+    swift_gate_reporting_rules(SWIFT_IDIOMS_RULE, SWIFT_IDIOMS_PROBE_PATH, source, support)
 }
 
 /// Acceptance: the shipped Swift idioms rule reports the rule swiftformat
@@ -412,7 +392,7 @@ fn the_shipped_swift_idioms_tool_rule_reads_the_project_swift_version() {
     let without = swift_idioms_reporting_rules(SWIFT_IDIOMS_VERSION_GATED, NO_SUPPORT_FILES);
     let with = swift_idioms_reporting_rules(
         SWIFT_IDIOMS_VERSION_GATED,
-        &[(SWIFT_VERSION_PATH, SWIFT_IDIOMS_PROBE_VERSION)],
+        &[(SWIFT_VERSION_PATH, SWIFT_PROBE_VERSION)],
     );
 
     for rule in SWIFT_IDIOMS_VERSION_GATED_RULES {
@@ -424,18 +404,10 @@ fn the_shipped_swift_idioms_tool_rule_reads_the_project_swift_version() {
         assert!(
             with.contains(&(*rule).to_string()),
             "`{rule}` must report beside a `{SWIFT_VERSION_PATH}` of \
-             {SWIFT_IDIOMS_PROBE_VERSION:?}; the run reported {with:?}"
+             {SWIFT_PROBE_VERSION:?}; the run reported {with:?}"
         );
     }
 }
-
-/// The support files a probe stages to make every enabled rule live.
-///
-/// Five rules read the Swift language version, so a probe that stated none
-/// would buy a clean run from the version gate rather than from the source it
-/// staged.
-const SWIFT_IDIOMS_VERSION_SUPPORT: &[(&str, &str)] =
-    &[(SWIFT_VERSION_PATH, SWIFT_IDIOMS_PROBE_VERSION)];
 
 /// A Swift file written the way the two Swift prompt rules ASK for.
 ///
@@ -524,16 +496,14 @@ fn the_shipped_swift_idioms_tool_rule_agrees_with_the_swift_prompt_rules() {
         );
     }
 
-    let answered =
-        swift_idioms_reporting_rules(SWIFT_PROMPT_RULE_ANSWER, SWIFT_IDIOMS_VERSION_SUPPORT);
+    let answered = swift_idioms_reporting_rules(SWIFT_PROMPT_RULE_ANSWER, SWIFT_VERSION_SUPPORT);
     assert!(
         answered.is_empty(),
         "Swift written the way the prompt rules ask for must draw no finding from this \
          gate; the run reported {answered:?}"
     );
 
-    let refused =
-        swift_idioms_reporting_rules(SWIFT_PROMPT_RULE_REFUSAL, SWIFT_IDIOMS_VERSION_SUPPORT);
+    let refused = swift_idioms_reporting_rules(SWIFT_PROMPT_RULE_REFUSAL, SWIFT_VERSION_SUPPORT);
     assert!(
         refused.contains(&SWIFT_NO_GUARD_IN_TESTS_RULE.to_string()),
         "`{SWIFT_NO_GUARD_IN_TESTS_RULE}` must report the `guard` `optionals.md` refuses \
@@ -637,7 +607,7 @@ const SWIFT_IDIOMS_INFERRED_PROPERTY: &str = concat!(
 #[test]
 fn the_shipped_swift_idioms_tool_rule_decides_no_empty_collection_declaration() {
     let reported =
-        swift_idioms_reporting_rules(SWIFT_IDIOMS_INFERRED_PROPERTY, SWIFT_IDIOMS_VERSION_SUPPORT);
+        swift_idioms_reporting_rules(SWIFT_IDIOMS_INFERRED_PROPERTY, SWIFT_VERSION_SUPPORT);
 
     assert!(
         reported.is_empty(),
@@ -735,10 +705,8 @@ const SWIFT_IDIOMS_WHERE_HALF_SHAPES: &[(&str, &str)] = &[
 /// stays silent here leaves that bullet with no owner in either set.
 #[test]
 fn the_shipped_swift_idioms_tool_rule_reads_a_single_line_for_each() {
-    let reported = swift_idioms_reporting_rules(
-        SWIFT_IDIOMS_SINGLE_LINE_FOR_EACH,
-        SWIFT_IDIOMS_VERSION_SUPPORT,
-    );
+    let reported =
+        swift_idioms_reporting_rules(SWIFT_IDIOMS_SINGLE_LINE_FOR_EACH, SWIFT_VERSION_SUPPORT);
 
     assert!(
         reported.contains(&SWIFT_PREFER_FOR_LOOP_RULE.to_string()),
@@ -786,7 +754,7 @@ fn the_shipped_swift_idioms_tool_rule_decides_no_shape_of_the_where_half() {
              measure different shapes"
         );
 
-        let reported = swift_idioms_reporting_rules(probe, SWIFT_IDIOMS_VERSION_SUPPORT);
+        let reported = swift_idioms_reporting_rules(probe, SWIFT_VERSION_SUPPORT);
         assert!(
             reported.is_empty(),
             "the gate must report no `{form}`, because \
@@ -843,8 +811,7 @@ fn the_shipped_swift_idioms_tool_rule_decides_no_void_return_clause() {
          measure different shapes"
     );
 
-    let reported =
-        swift_idioms_reporting_rules(SWIFT_IDIOMS_VOID_RETURN, SWIFT_IDIOMS_VERSION_SUPPORT);
+    let reported = swift_idioms_reporting_rules(SWIFT_IDIOMS_VOID_RETURN, SWIFT_VERSION_SUPPORT);
 
     assert!(
         reported.is_empty(),
@@ -1004,7 +971,7 @@ fn the_shipped_swift_idioms_tool_rule_owns_each_bullet_it_took() {
     let loader = builtin_loader();
 
     for bullet in SWIFT_IDIOMS_SUPERSEDED_BULLETS {
-        let reported = swift_idioms_reporting_rules(bullet.defect, SWIFT_IDIOMS_VERSION_SUPPORT);
+        let reported = swift_idioms_reporting_rules(bullet.defect, SWIFT_VERSION_SUPPORT);
         verify_superseded_swift_bullet(&loader, bullet, &reported);
     }
 }

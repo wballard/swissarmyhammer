@@ -120,3 +120,35 @@ Per the acceptance criterion above — "If markdown was genuinely never reviewed
 ### What this cost
 
 Commit `f79727e2e` is a documentation commit: its whole substance is the 9 markdown files. The engine returned `findings: 0` over a commit whose reviewable content it never opened. A hand review of the same 9 files found four defects, including a real Swift coverage hole (`preferForLoop` silent on the `forEach` + `if` shape whose prompt bullet the commit deleted). A `findings: 0` that means "nothing was read" is worse than an error, because it reads as a pass.
+
+## Reproduction 4 — commit `379079d84`, task ^052w80d (2026-08-22)
+
+Sixth commit measured, same split, same silence.
+
+`review sha HEAD~1..HEAD` over commit `379079d84`:
+
+- The commit touches 14 files.
+- 6 are `.kanban/` — the report names all 6 and the `.reviewignore` rule that excluded them.
+- 8 are eligible: 6 `.md` and 2 `.rs`.
+- The report says "2 file(s) reviewed, 6 not reviewed".
+
+2 reviewed + 6 not-reviewed = 8, not 14. The 6 "not reviewed" ARE the 6 `.kanban/` paths, so the 6 markdown files are in NO set at all — not reviewed, not excluded, not named anywhere in `markdown` or in `counts.skipped_files`:
+
+```
+builtin/validators/swift/VALIDATOR.md
+builtin/validators/swift/rules/access-control.md
+builtin/validators/swift/rules/immutability.md
+builtin/validators/swift/rules/initialization.md
+builtin/validators/swift/rules/naming-clarity.md
+builtin/validators/swift/rules/preconditions.md
+```
+
+The 2 reviewed are precisely the 2 `.rs` files. `counts` reported `findings: 1, confirmed: 1, refuted: 1, attempted: 7, failed: 0, skipped: 0`, and `skipped_files` listed only the 6 `.kanban/` paths.
+
+### A second arithmetic fault, in `counts` itself
+
+`counts.skipped` is `0` while `counts.skipped_files` holds 6 paths. The scalar and the list disagree in the same object. Whatever walk fills `skipped_files` is not the walk that increments `skipped`. Add that to the invariant in step 3.
+
+### What this cost
+
+The commit adds eleven Swift prompt-rule bullets across five markdown files, plus one Rust test file. The engine's ONE finding is on the Rust file. Every bullet — the whole substance of the change — went unread. A hand review of the six markdown files found six defects, including a prompt-versus-prompt two-owner conflict between `immutability.md` and `idioms.md` in which one rule's DO is written word for word as the other rule's DON'T. That is the exact defect class the whole `tool-validators` project exists to remove, and the engine reported `findings: 1` on a different file.

@@ -256,22 +256,16 @@ const SWIFT_DISALLOWED_PROBE_PATH: &str = "Probe.swift";
 /// Drives the shipped script over `source` staged at
 /// [`SWIFT_DISALLOWED_PROBE_PATH`], and answers the rule name of each finding
 /// it reported.
+///
+/// The probe stages no support file. swiftlint reads no `.swift-version`, so
+/// staging one beside the probe would state a condition this gate never reads.
 fn swift_disallowed_reporting_rules(source: &str) -> Vec<String> {
-    let loader = builtin_loader();
-    require_tool_installed(
-        &loader,
-        SWIFT_PROJECT_TYPES,
+    swift_gate_reporting_rules(
         SWIFT_DISALLOWED_CONSTRUCTS_RULE,
-    );
-
-    drive_shipped_script(
-        &loader,
-        SWIFT_DISALLOWED_CONSTRUCTS_RULE,
-        &ShippedStaging::of(&[(SWIFT_DISALLOWED_PROBE_PATH, source)]),
-        &[SWIFT_DISALLOWED_PROBE_PATH],
-        finding_rule_names,
+        SWIFT_DISALLOWED_PROBE_PATH,
+        source,
+        NO_SUPPORT_FILES,
     )
-    .expect("the shipped Swift disallowed-constructs script must judge the probe file and exit 0")
 }
 
 /// The rule that reports an `@unchecked Sendable` conformance.

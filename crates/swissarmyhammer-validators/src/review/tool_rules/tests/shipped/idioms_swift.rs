@@ -11,6 +11,12 @@
 //! the same declaration, and only the first of them reports it. And five
 //! enabled rules read the Swift language version, which the project states in
 //! a `.swift-version` file.
+//!
+//! One more test stands apart because of what it protects rather than what it
+//! measures. This gate took six bullets out of the Swift prompt rules, and a
+//! bullet deleted without a tool that reads it is a requirement the set states
+//! nowhere. The last test in this file holds each of those six to being
+//! reported by its tool AND stated by no prompt rule.
 
 use super::*;
 
@@ -428,33 +434,6 @@ fn the_shipped_swift_idioms_tool_rule_reads_the_project_swift_version() {
 const SWIFT_IDIOMS_VERSION_SUPPORT: &[(&str, &str)] =
     &[(SWIFT_VERSION_PATH, SWIFT_IDIOMS_PROBE_VERSION)];
 
-/// The validator set the Swift prompt rules stand in.
-const SWIFT_VALIDATOR_SET: &str = "swift";
-
-/// The prompt rule that decides how a test unwraps an optional.
-const SWIFT_OPTIONALS_PROMPT_RULE: &str = "optionals";
-
-/// The prompt rule that decides how an empty collection is declared.
-const SWIFT_IDIOMS_PROMPT_RULE: &str = "idioms";
-
-/// The markdown body the shipped Swift prompt rule `rule` carries.
-///
-/// The body is read where the set ships it, so a test measures the SHIPPED
-/// words rather than a copy this file wrote.
-fn swift_prompt_rule_body(loader: &ValidatorLoader, rule: &str) -> String {
-    loader
-        .get_ruleset(SWIFT_VALIDATOR_SET)
-        .unwrap_or_else(|| panic!("the `{SWIFT_VALIDATOR_SET}` validator set must ship"))
-        .rules
-        .iter()
-        .find(|shipped| shipped.name == rule)
-        .unwrap_or_else(|| {
-            panic!("the `{SWIFT_VALIDATOR_SET}` set must carry a `{rule}` prompt rule")
-        })
-        .body
-        .clone()
-}
-
 /// A Swift file written the way the two Swift prompt rules ASK for.
 ///
 /// Every declaration is a DO one of them states: the empty-collection
@@ -663,4 +642,142 @@ fn the_shipped_swift_idioms_tool_rule_decides_no_empty_collection_declaration() 
          `idioms.md` decides that bullet and `propertyTypes` would decide it the other \
          way; the run reported {reported:?}"
     );
+}
+
+/// A declaration written with the long spelling of a sugared type.
+const SWIFT_IDIOMS_LONG_TYPE: &str = concat!(
+    "public enum Sugar {\n",
+    "    public static func read(_ values: Array<Int>) -> Int {\n",
+    "        values.count\n",
+    "    }\n",
+    "}\n",
+);
+
+/// A function whose return clause names the empty tuple rather than `Void`.
+const SWIFT_IDIOMS_PAREN_RETURN: &str = concat!(
+    "public enum Returns {\n",
+    "    public static func run() -> () {}\n",
+    "}\n",
+);
+
+/// A struct carrying an internal initializer the compiler would synthesize.
+const SWIFT_IDIOMS_REDUNDANT_INIT: &str = concat!(
+    "public struct Reading {\n",
+    "    public var count: Int\n",
+    "\n",
+    "    init(count: Int) {\n",
+    "        self.count = count\n",
+    "    }\n",
+    "}\n",
+);
+
+/// A walk over a collection written as `forEach` rather than as a `for` loop.
+const SWIFT_IDIOMS_FOR_EACH: &str = concat!(
+    "public enum Looping {\n",
+    "    public static func walk(_ values: [Int]) {\n",
+    "        values.forEach { value in\n",
+    "            print(value)\n",
+    "        }\n",
+    "    }\n",
+    "}\n",
+);
+
+/// A case whose `let` binds the whole pattern rather than each variable.
+const SWIFT_IDIOMS_HOISTED_LET: &str = concat!(
+    "public enum Corner {\n",
+    "    case at(Int, Int)\n",
+    "}\n",
+    "\n",
+    "public func describe(_ corner: Corner) -> Int {\n",
+    "    switch corner {\n",
+    "    case let .at(x, y):\n",
+    "        return x + y\n",
+    "    }\n",
+    "}\n",
+);
+
+/// A class that is neither `final` nor a stated extension point.
+const SWIFT_IDIOMS_OPEN_CLASS: &str = concat!(
+    "public class Worker {\n",
+    "    public var count = 0\n",
+    "\n",
+    "    public init() {}\n",
+    "}\n",
+);
+
+/// Every bullet this gate took out of a Swift prompt rule.
+///
+/// The `void` row is HALF of the bullet `idioms.md` used to state. Measured on
+/// 0.62.1, `void` reports `func run() -> ()` and stays SILENT on
+/// `func run() -> Void {}`: it rewrites `()` INTO `Void` and stops there.
+/// SwiftFormat removes the clause under `redundantVoidReturnType`, which this
+/// roster does not name. So the `()` half came out of `idioms.md` and the
+/// omit-the-clause half stays there.
+///
+/// Two bullets this gate touches are NOT here, and each was measured before it
+/// was left alone. `optionals.md` never `guard` in a test stays whole, because
+/// `noGuardInTests` reports `guard let value = source else { return }` and
+/// stays silent on the shorthand `guard let value else { return }`, which binds
+/// the same name from the same optional. `idioms.md` empty-collection
+/// declarations stay whole, because the roster names neither `propertyTypes`
+/// nor its option, for the reason the test above states.
+const SWIFT_IDIOMS_SUPERSEDED_BULLETS: &[SupersededSwiftBullet] = &[
+    SupersededSwiftBullet {
+        prompt_rule: SWIFT_IDIOMS_PROMPT_RULE,
+        tool_rule: "typeSugar",
+        defect: SWIFT_IDIOMS_LONG_TYPE,
+        words: "shorthand type sugar",
+    },
+    SupersededSwiftBullet {
+        prompt_rule: SWIFT_IDIOMS_PROMPT_RULE,
+        tool_rule: "void",
+        defect: SWIFT_IDIOMS_PAREN_RETURN,
+        words: "Return `Void`, not `()`",
+    },
+    SupersededSwiftBullet {
+        prompt_rule: SWIFT_IDIOMS_PROMPT_RULE,
+        tool_rule: "redundantMemberwiseInit",
+        defect: SWIFT_IDIOMS_REDUNDANT_INIT,
+        words: "memberwise initializer identical to the synthesized one",
+    },
+    SupersededSwiftBullet {
+        prompt_rule: SWIFT_IDIOMS_PROMPT_RULE,
+        tool_rule: "preferForLoop",
+        defect: SWIFT_IDIOMS_FOR_EACH,
+        words: "Prefer a `for` loop",
+    },
+    SupersededSwiftBullet {
+        prompt_rule: SWIFT_IDIOMS_PROMPT_RULE,
+        tool_rule: "hoistPatternLet",
+        defect: SWIFT_IDIOMS_HOISTED_LET,
+        words: "Bind each case variable with its own `let`",
+    },
+    SupersededSwiftBullet {
+        prompt_rule: SWIFT_VALUE_SEMANTICS_PROMPT_RULE,
+        tool_rule: "preferFinalClasses",
+        defect: SWIFT_IDIOMS_OPEN_CLASS,
+        words: "Mark classes not designed for subclassing",
+    },
+];
+
+/// Acceptance: this gate is the ONE owner of every bullet it took out of a
+/// Swift prompt rule.
+///
+/// A bullet deleted from the prompt text without a tool that reads it is a
+/// requirement the set states nowhere, and nothing downstream reports the hole.
+/// A bullet the prompt rule states beside a tool that decides it is two owners,
+/// which produce churn on every review round. This test is what stands between
+/// the deletion and each of those.
+///
+/// Every probe holds ONE defect, so the rule the run names is the rule that
+/// read the shape rather than a neighbour that read the same file. The probes
+/// stage a `.swift-version`, so no answer here is one the version gate bought.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_owns_each_bullet_it_took() {
+    let loader = builtin_loader();
+
+    for bullet in SWIFT_IDIOMS_SUPERSEDED_BULLETS {
+        let reported = swift_idioms_reporting_rules(bullet.defect, SWIFT_IDIOMS_VERSION_SUPPORT);
+        verify_superseded_swift_bullet(&loader, bullet, &reported);
+    }
 }

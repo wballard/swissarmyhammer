@@ -16,6 +16,12 @@
 //! Each of those two sets of three is read off the shipped script rather than
 //! written here as a list, and every name it holds carries a probe. So a rule
 //! added to either set fails these tests until it carries a probe of its own.
+//!
+//! One more test stands apart because of what it protects rather than what it
+//! measures. This gate took five bullets out of the Swift prompt rules, and a
+//! bullet deleted without a tool that reads it is a requirement the set states
+//! nowhere. The last test in this file holds each of those five to being
+//! reported by its rule AND stated by no prompt rule.
 
 use super::*;
 
@@ -631,7 +637,7 @@ fn swift_disallowed_force_rows(staged: &[(&str, &str)], files: &[&str]) -> Vec<S
 /// Acceptance: each of the three force constructs reports in a product target
 /// and stays silent in a test target, for the SAME bytes.
 ///
-/// `optionals.md` and `error-handling.md` say "in non-test code" and mean it,
+/// The two bullets the gate took each say "in non-test code" and mean it,
 /// and swiftlint carries no per-rule path filter for a stock rule — measured on
 /// 0.65.0, an `excluded:` key under `force_unwrapping:` is answered with
 /// `warning: Configuration for 'force_unwrapping' rule contains the invalid
@@ -728,4 +734,104 @@ fn the_shipped_swift_disallowed_constructs_tool_rule_reads_a_test_target_the_man
          so all three constructs there must stay silent while the three under \
          `{SWIFT_PRODUCT_TARGET_PATH}` report; the run reported {rows:?}"
     );
+}
+
+/// A force unwrap of an optional, in code no test target holds.
+const SWIFT_DISALLOWED_FORCE_UNWRAP: &str = concat!(
+    "public enum Unwrapping {\n",
+    "    public static func read(_ name: String?) -> String {\n",
+    "        name!\n",
+    "    }\n",
+    "}\n",
+);
+
+/// A stored property declared as an implicitly unwrapped optional.
+const SWIFT_DISALLOWED_IMPLICITLY_UNWRAPPED: &str = concat!(
+    "public final class Holder {\n",
+    "    public var name: String!\n",
+    "\n",
+    "    public init() {}\n",
+    "}\n",
+);
+
+/// A `try!` on a call that can fail, in code no test target holds.
+const SWIFT_DISALLOWED_FORCE_TRY: &str = concat!(
+    "public enum Trying {\n",
+    "    public static func read(_ body: () throws -> Int) -> Int {\n",
+    "        try! body()\n",
+    "    }\n",
+    "}\n",
+);
+
+/// An `as!` force cast, in code no test target holds.
+const SWIFT_DISALLOWED_FORCE_CAST: &str = concat!(
+    "public enum Casting {\n",
+    "    public static func read(_ value: Any) -> Int {\n",
+    "        value as! Int\n",
+    "    }\n",
+    "}\n",
+);
+
+/// Every bullet this gate took out of a Swift prompt rule.
+///
+/// The `@unchecked Sendable` row takes [`SWIFT_UNCHECKED_SENDABLE_PLAIN`],
+/// which the directive test above already drives, so one probe carries both
+/// answers: the conformance reports, and the same bytes behind the directive
+/// do not.
+///
+/// The gate reads a test target for the three force rules, and each probe here
+/// stands at the repository root, which no test target holds. The carve-out
+/// itself is measured by the two test-target tests below.
+const SWIFT_DISALLOWED_SUPERSEDED_BULLETS: &[SupersededSwiftBullet] = &[
+    SupersededSwiftBullet {
+        prompt_rule: SWIFT_OPTIONALS_PROMPT_RULE,
+        tool_rule: "force_unwrapping",
+        defect: SWIFT_DISALLOWED_FORCE_UNWRAP,
+        words: "No force unwrap (`!`) in non-test code.",
+    },
+    SupersededSwiftBullet {
+        prompt_rule: SWIFT_OPTIONALS_PROMPT_RULE,
+        tool_rule: "implicitly_unwrapped_optional",
+        defect: SWIFT_DISALLOWED_IMPLICITLY_UNWRAPPED,
+        words: "No implicitly unwrapped optionals (`Type!`).",
+    },
+    SupersededSwiftBullet {
+        prompt_rule: SWIFT_ERROR_HANDLING_PROMPT_RULE,
+        tool_rule: "force_try",
+        defect: SWIFT_DISALLOWED_FORCE_TRY,
+        words: "No `try!` in non-test code.",
+    },
+    SupersededSwiftBullet {
+        prompt_rule: SWIFT_ERROR_HANDLING_PROMPT_RULE,
+        tool_rule: "force_cast",
+        defect: SWIFT_DISALLOWED_FORCE_CAST,
+        words: "No `as!` force-cast in non-test code.",
+    },
+    SupersededSwiftBullet {
+        prompt_rule: SWIFT_CONCURRENCY_PROMPT_RULE,
+        tool_rule: SWIFT_UNCHECKED_SENDABLE_RULE,
+        defect: SWIFT_UNCHECKED_SENDABLE_PLAIN,
+        words: "`@unchecked Sendable` requires a documented synchronization invariant.",
+    },
+];
+
+/// Acceptance: this gate is the ONE owner of every bullet it took out of a
+/// Swift prompt rule.
+///
+/// A bullet deleted from the prompt text without a tool that reads it is a
+/// requirement the set states nowhere, and nothing downstream reports the hole.
+/// A bullet the prompt rule states beside a tool that decides it is two owners,
+/// which produce churn on every review round. This test is what stands between
+/// the deletion and each of those.
+///
+/// Every probe holds ONE defect, so the rule the run names is the rule that
+/// read the shape rather than a neighbour that read the same file.
+#[test]
+fn the_shipped_swift_disallowed_constructs_tool_rule_owns_each_bullet_it_took() {
+    let loader = builtin_loader();
+
+    for bullet in SWIFT_DISALLOWED_SUPERSEDED_BULLETS {
+        let reported = swift_disallowed_reporting_rules(bullet.defect);
+        verify_superseded_swift_bullet(&loader, bullet, &reported);
+    }
 }

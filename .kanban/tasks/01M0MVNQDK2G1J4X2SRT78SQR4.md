@@ -334,10 +334,103 @@ comments:
     - RED watched for all three new tests before GREEN; the exact failure messages are in the comment above.
     - next: `/review`.
   timestamp: 2026-08-22T16:15:06.331479+00:00
+- actor: claude-code
+  id: 01m0n4a7ac8859k92h9s2z18gr
+  text: |-
+    ### commit — changed
+    - evidence: c097c1548 fix(validators): enable noGuardInTests, keep house style for property types
+    - next: local checkpoint only. No push.
+  timestamp: 2026-08-22T16:19:27.692827+00:00
+- actor: claude-code
+  id: 01m0n4q5zd388fkt6sae0aqe9x
+  text: |-
+    ### review — clean
+
+    - scope: `review sha HEAD~1..HEAD`, which is c097c1548.
+    - engine counts: 0 findings, 0 confirmed, 0 refuted, 7 attempted, 0 failed.
+    - The engine read the three Rust files. It did not count the four prompt-rule
+      markdown files. I read those four files and I measured each number in them
+      again with swiftformat 0.62.1.
+
+    **Every measurement in the commit is correct. I made each one again:**
+
+    - The roster holds 29 names. swiftformat 0.62.1 knows 27 of them.
+    - The failing fixture gives 42 findings, which carry 21 of the 27 enabled
+      rules. The six silent rules are `preferCountWhere`, `opaqueGenericParameters`,
+      `environmentEntry`, `genericExtensions`, `conditionalAssignment` and
+      `validateTestCases`. This agrees with the rule body word for word. The old
+      "25 of the 26" line was wrong. The new "21 of 27" line is correct.
+    - The table of the bullets holds seven rows: five for `idioms.md`, one for
+      `value-semantics.md`, one for `optionals.md`. The "seven across three" count
+      is correct in the rule body, in `tests.rs` and in `builtin/mod.rs`.
+
+    **Decision 1. The carve-out agrees with the tool.** I measured
+    `noGuardInTests` again over one XCTest suite. It reports the binding `guard`
+    and the boolean `guard`. It stays silent on the shorthand
+    `guard let value else`, on a `private` helper of the suite, and on a
+    production method with the name `testConnection`. The bullet in `optionals.md`
+    speaks about a test, not about a file name, so it agrees at each of these
+    points. The bullet is wider than the tool at one point only: the shorthand.
+    This is not a contradiction, because the tool asks for nothing there. The
+    rule body gives this gap as the reason that `supersedes` stays empty. The two
+    halves cannot fight.
+
+    **Decision 2. The probe supports the decision.** swiftformat 0.62.1 with
+    `--property-types inferred` writes `var items = [Int]()`,
+    `var ids = Set<String>()` and `var table = [String: Int]()`. It does not change
+    `var name: String = "probe"`. These are the DON'T forms of `idioms.md`, word
+    for word. The conflict is real, and the option loses.
+
+    **The two new guards are real guards. I measured each one:**
+
+    - Trailing `if let` in a test: 0 findings without
+      `--guard-like-if-statements convert`, 3 findings with it. An `if let` that a
+      test asserts after gives 0 findings with the option. So the test fails if the
+      option comes off the command line, and the negative half separates the two
+      shapes.
+    - Empty collection: the DON'T form gives 2 findings under `explicit` and 0
+      under `inferred`. The DO form gives 2 findings under `inferred` and 0 under
+      `explicit`. So the two tests catch the two directions, as the rule body
+      states. Neither direction can enter without a test failure.
+
+    **The coupling of the acceptance test is sound.** The test reads the shipped
+    bodies off the loader, so an edit to a prompt rule cannot leave the probe
+    measuring a form that nothing ships. The coupled strings are the DO and DON'T
+    code forms, not prose, so a change to them is a change to the rule itself. The
+    test reads presence, not polarity, but the tool half of the same test closes
+    that gap: the answer file must report nothing and the refusal file must report
+    `noGuardInTests`, and both come from real swiftformat.
+
+    - next: none. Task moves to `done`.
+  timestamp: 2026-08-22T16:26:32.301852+00:00
+- actor: claude-code
+  id: 01m0n4rxn9dp22ygxm6xey4j9z
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 9 files; both conflicts decided by measurement
+    - test: green — cargo nextest run --workspace, 14179 passed, 0 failed, 0 skipped (14176 baseline + 3 new tests); fmt clean; clippy clean
+    - commit: c097c1548
+    - review: clean — 0 findings, 7 attempted, 0 failed; every documented measurement independently reproduced against swiftformat 0.62.1
+    - result: done in one iteration
+
+    **Decision 1 — `noGuardInTests` + `--guard-like-if-statements convert` ENABLED**, with a test carve-out added to `optionals.md`. A `guard` that returns in a test takes the test out before its assertions run, so a broken program reads as a pass.
+
+    Re-measured by the reviewer over an XCTest suite: the rule reports the binding `guard` and the boolean `guard`, and stays silent on the shorthand `guard let value else`, on a `private` helper inside the suite, and on a production method named `testConnection`. The carve-out keys on a test, not a filename, so it agrees at every one of those points. It is wider than the tool at exactly one place — the shorthand — and the tool asks for nothing there, so the two halves cannot fight. That gap is the documented reason `supersedes` stays empty.
+
+    **Decision 2 — `--property-types inferred` NOT enabled.** The probe disproved the card's guess. swiftformat rewrites `items`, `ids` and `table` into `[Int]()`, `Set<String>()`, `[String: Int]()` — the DON'T forms of `idioms.md` verbatim — and leaves `name: String` alone. House style stands.
+
+    **Two wrong measurements in already-committed work were corrected and re-verified:**
+    - The `idioms-swift` rule said "25 of the 26 enabled rules". True figure is **21 of 27**. Roster is 29 names, 27 known to swiftformat 0.62.1; the failing fixture yields 42 findings carrying 21 distinct rules. The six silent ones are exactly `preferCountWhere`, `opaqueGenericParameters`, `environmentEntry`, `genericExtensions`, `conditionalAssignment`, `validateTestCases`.
+    - "Six bullets across two prompt rules" was wrong and had propagated into three files. True figure is **seven bullets across three rules** — 5 in `idioms.md`, 1 in `value-semantics.md`, 1 in `optionals.md`.
+
+    **Both new guards discriminate.** The trailing-`if` probe gives 0 findings without `--guard-like-if-statements convert` and 3 with it. The property guards catch opposite directions: the DON'T form reports 2 under `explicit` and 0 under `inferred`; the DO form reports 2 under `inferred` and 0 under `explicit`.
+
+    One known limit, recorded not hidden: the acceptance test's `body.contains(form)` check proves presence, not polarity. A bullet inverted while keeping the same code string would pass that half. The real-swiftformat assertions in the same test cover it.
+  timestamp: 2026-08-22T16:27:29.321358+00:00
 depends_on:
 - 01M0MVKKJN6S08JSCDH3FX5BNY
-position_column: doing
-position_ordinal: '8280'
+position_column: done
+position_ordinal: ffffffffffffffffffffffffffffffffffffffffffad80
 project: swift-validator
 title: 'swift: resolve the two conflicts Airbnb''s tool config exposes in our prompt rules'
 ---

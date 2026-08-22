@@ -81,18 +81,26 @@ The roster is Airbnb's, taken from
 and narrowed to the rules that decide an IDIOM. Twenty-nine names stand in the
 script, in five groups.
 
-Seven of them decide a bullet a prompt rule of `builtin/validators/swift/`
-states today:
+Seven of them decide a bullet a prompt rule of `builtin/validators/swift/` used
+to state. Six of those bullets are out of the prompt text and this gate is
+their ONE owner. The seventh stays there whole, because this gate reads only
+part of it.
 
-| the rule | the option it needs | the bullet it decides |
+| the rule | the option it needs | the bullet it took |
 |---|---|---|
 | `typeSugar` | `--short-optionals always` | `idioms.md` shorthand type sugar |
-| `void` | | `idioms.md` return `Void`, not `()` |
+| `void` | | `idioms.md` return `Void`, not `()` — HALF of that bullet |
 | `redundantMemberwiseInit` | | `idioms.md` no memberwise init identical to the synthesized one |
 | `preferForLoop` | | `idioms.md` `for` loop over `forEach` |
 | `hoistPatternLet` | `--pattern-let inline` | `idioms.md` bind each case variable with its own `let` |
 | `preferFinalClasses` | | `value-semantics.md` mark classes `final` |
-| `noGuardInTests` | `--guard-like-if-statements convert` | `optionals.md` never `guard` in a test |
+| `noGuardInTests` | `--guard-like-if-statements convert` | `optionals.md` never `guard` in a test — the bullet STAYS |
+
+`the_shipped_swift_idioms_tool_rule_owns_each_bullet_it_took` holds each of the
+six taken rows to both halves of its own claim: the rule reports a file holding
+that ONE defect, and the prompt rule states the bullet no longer. A rule that
+went silent, and a bullet written back into the prompt text, each fail it by
+name.
 
 The other twenty-two decide a question no shipped prompt rule asks:
 
@@ -273,8 +281,7 @@ carved out nothing for a test. Airbnb bans `guard` inside a test.
 Both are right, and they are right about different code. In production a
 `guard` protects the happy path. In a test a `guard` that returns takes the
 test out BEFORE its assertions run, so a broken program reads as a pass. That
-is a defect, not a style. `optionals.md` already knew tests are different — it
-sanctions an implicitly unwrapped optional for a fixture set in `setUp()` — and
+is a defect, not a style. `optionals.md` already knew tests are different, and
 it now states the test bullet as well.
 
 So the roster takes `noGuardInTests`, and the prompt rule states the same
@@ -289,6 +296,11 @@ reports:
 | `guard 1 == 1 else { return }` | yes |
 | `guard let value else { return }`, the shorthand | NO |
 | `guard let source else { return 0 }` in a `private` helper of the suite | NO |
+
+The shorthand row is why that bullet STAYS in `optionals.md` whole. It binds
+the same name from the same optional and the bullet reads for both shapes, so
+the prompt half carries the one this gate misses. Every other bullet of the
+roster table came out of the prompt text; this one did not.
 
 The rule reads a TEST, not a file name: a production method named
 `testConnection` holding a `guard` draws nothing, measured over a file that
@@ -384,26 +396,45 @@ and a collapse would report one of them. No field of the report tells the two
 shapes apart, so every line stands, and the author who fixes the initializer
 clears all five at once.
 
+## `void` decides half of the bullet it took, and which half
+
+`idioms.md` stated two requirements in one bullet: write `Void` rather than
+`()`, and omit the return clause entirely when it is `Void`. SwiftFormat's
+`void` rule decides the FIRST and not the second. Measured on 0.62.1 over one
+file:
+
+| the declaration | reported |
+|---|---|
+| `public static func run() -> ()` | yes |
+| `public static func handler(_ body: (Int) -> ())` | yes |
+| `public static func typed() -> Void {}` | NO |
+
+`swiftformat --rules void` over the same file rewrites `-> ()` into `-> Void`
+and leaves `-> Void` standing. Removing the clause is SwiftFormat's separate
+`redundantVoidReturnType` rule, which this roster does not name.
+
+So the `()` half came out of `idioms.md` and the omit-the-clause half stays
+there, written as its own bullet. A roster that later takes
+`redundantVoidReturnType` takes that bullet with it.
+
 ## Why this rule supersedes nothing
 
 `supersedes` names a whole prompt rule, and the engine skips that rule whole
 when the tool is healthy. This gate decides SEVEN bullets spread across three
 prompt rules — five of `builtin/validators/swift/rules/idioms.md`, one of
 `value-semantics.md` and one of `optionals.md` — and no one of those rules is
-only those bullets. Naming any of them here would take its other bullets out of
-every review the moment swiftformat is installed.
+only those bullets. Naming any of them here would take its OTHER bullets out of
+every review the moment swiftformat is installed. `idioms.md` still states the
+empty-collection declaration, the omit-the-clause half above and the
+type-name repetition; `value-semantics.md` still states four bullets;
+`optionals.md` still states three.
 
-`optionals.md` shows why plainly. `noGuardInTests` decides its test bullet, and
-it decides only part of it: measured on 0.62.1, the rule reports
-`guard let value = source else { return }` and stays SILENT on the shorthand
-`guard let value else { return }`, which binds the same name from the same
-optional. The bullet still reads for both shapes, so the prompt half carries
-the one the tool misses.
-
-The prompt half is a change of its own: the bullets a tool now decides come out
-of the prompt text, and the rules keep the bullets no tool reads. Until that
-lands, both halves state the same requirement, and they agree — this gate
-reports exactly the shape each bullet names.
+The prompt half has landed. Six of the seven bullets are this gate's — five
+whole, and the `void` row for the half the section above measures. The seventh,
+`optionals.md` never `guard` in a test, stays whole for the reason the
+shorthand row records. One requirement takes one owner, and
+`the_shipped_swift_idioms_tool_rule_owns_each_bullet_it_took` is what holds it
+that way.
 
 `stuttering-name-go` and `unused-dependencies-rust` are the two shipped tool
 rules that already declare no `supersedes`, so an empty key is the stated shape

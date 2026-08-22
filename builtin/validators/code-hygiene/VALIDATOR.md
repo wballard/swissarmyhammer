@@ -456,9 +456,9 @@ carry. Both halves are measured in the rule file: eight runs started together in
 one workspace each reported every finding, and a module of 400 packages took the
 same time cold and warm at two different paths.
 
-## Swift idioms: one tool rule, and the prompt bullets it stands beside
+## Swift idioms: one tool rule, and the prompt bullets it took
 
-`idioms-swift` runs `swiftformat --lint` over a roster of 28 rules, each of
+`idioms-swift` runs `swiftformat --lint` over a roster of 29 rules, each of
 which rewrites one Swift shape into an equivalent shape. The two forms compile
 to the same program, so the tool's answer is a fact about the source rather
 than a preference. The roster is Airbnb's, taken from
@@ -470,22 +470,29 @@ diff review is noise and the format step already owns it.
 
 | Rule | Tool | Inline suppression |
 |---|---|---|
-| `idioms-swift` | `swiftformat --lint`, 28 named rules | `// swiftformat:disable:next <rule>` |
+| `idioms-swift` | `swiftformat --lint`, 29 named rules | `// swiftformat:disable:next <rule>` |
 
 It supersedes nothing, and that is a fact of the `supersedes` key rather than a
 reading of what the rule is about. The key names a WHOLE prompt rule and the
-engine skips that rule whole. This gate decides SIX bullets spread across two
-prompt rules of the `swift` set — five of `idioms.md` and one of
-`value-semantics.md` — and neither rule is only those bullets, so naming either
-one would take its other bullets out of every review the moment swiftformat is
-installed. Taking those six bullets out of the prompt text is a change of its
-own; until it lands, both halves state the same requirement and they agree.
+engine skips that rule whole. This gate decides SEVEN bullets spread across
+three prompt rules of the `swift` set — five of `idioms.md`, one of
+`value-semantics.md` and one of `optionals.md` — and no one of those rules is
+only those bullets, so naming any of them would take its other bullets out of
+every review the moment swiftformat is installed.
+
+Six of the seven are out of the prompt text and this gate is their one owner.
+The seventh, `optionals.md` never `guard` in a test, stays there whole, because
+`noGuardInTests` reports `guard let value = source else` and stays silent on
+the shorthand `guard let value else`. The `void` row is half of the bullet it
+took: SwiftFormat rewrites `-> ()` into `-> Void` and removes the clause only
+under `redundantVoidReturnType`, which this roster does not name, so `idioms.md`
+keeps the omit-the-clause half.
 
 Two properties of swiftformat shape the run, and the rule file measures each.
 A rule name SwiftFormat does not know breaks the WHOLE run at status 70, and
 `--unknown-rules ignore` moves nothing on the command line, so the script
 intersects its roster with `swiftformat --rules` before it lints — two of
-Airbnb's 28 stand in no released SwiftFormat. And one refusing path costs a
+Airbnb's 29 stand in no released SwiftFormat. And one refusing path costs a
 single swiftformat run every finding it made, which is the answer
 `builtin/validators/README.md` refuses, so the script hands swiftformat one
 path for each run and states each path it declined on the marked stderr
@@ -518,11 +525,12 @@ Nine are swiftlint's own — `implicitly_unwrapped_optional`, `force_unwrapping`
 It supersedes nothing, for the same reason `idioms-swift` does. This gate
 decides FIVE bullets spread across three prompt rules of the `swift` set — two
 of `optionals.md`, two of `error-handling.md` and one of `concurrency.md` — and
-none of the three is only those bullets.
+none of the three was only those bullets. All five are out of the prompt text
+and this gate is their one owner.
 
 **The three custom rules are the reason to copy Airbnb's file rather than write
 one.** Each turns an LLM judgment into a regex plus an escape hatch, and
-`no_unchecked_sendable` is the shape that matters. `concurrency.md` states its
+`no_unchecked_sendable` is the shape that matters. `concurrency.md` stated its
 requirement as pure judgment — "`@unchecked Sendable` requires a documented
 synchronization invariant. The smell is the *absence* of a lock/isolation
 mechanism and a comment." No tool can answer "is there a documented invariant".
@@ -537,8 +545,8 @@ holding a `print(` call, the same word inside a string literal, inside a `//`
 comment and inside a `///` doc comment: the shipped `match_kinds: [identifier]`
 reports the call alone, and the same regex without the key reports all four.
 
-**The three force rules stay off inside a test target**, because
-`optionals.md` and `error-handling.md` each say "in non-test code" and mean it.
+**The three force rules stay off inside a test target**, because the two
+bullets they took each say "in non-test code" and mean it.
 Airbnb reaches the same split from the other side, with the swiftformat rules
 `noForceUnwrapInTests` and `noForceTryInTests` that `idioms-swift` enables. The
 split cannot live in the configuration: measured on swiftlint 0.65.0, an

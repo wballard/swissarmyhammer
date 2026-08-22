@@ -125,6 +125,95 @@ fn shipped_asset(loader: &ValidatorLoader, kind: &ShippedAssetKind, name: &str) 
         .unwrap_or_else(|| panic!("a builtin validator set must ship a {name} {}", kind.label))
 }
 
+/// The validator set the Swift prompt rules stand in.
+const SWIFT_VALIDATOR_SET: &str = "swift";
+
+/// The markdown body the shipped Swift prompt rule `rule` carries.
+///
+/// The body is read where the set ships it, so a test measures the SHIPPED
+/// words rather than a copy this file wrote.
+fn swift_prompt_rule_body(loader: &ValidatorLoader, rule: &str) -> String {
+    loader
+        .get_ruleset(SWIFT_VALIDATOR_SET)
+        .unwrap_or_else(|| panic!("the `{SWIFT_VALIDATOR_SET}` validator set must ship"))
+        .rules
+        .iter()
+        .find(|shipped| shipped.name == rule)
+        .unwrap_or_else(|| {
+            panic!("the `{SWIFT_VALIDATOR_SET}` set must carry a `{rule}` prompt rule")
+        })
+        .body
+        .clone()
+}
+
+/// The prompt rule that decides how a test unwraps an optional.
+const SWIFT_OPTIONALS_PROMPT_RULE: &str = "optionals";
+
+/// The prompt rule that decides how an empty collection is declared.
+const SWIFT_IDIOMS_PROMPT_RULE: &str = "idioms";
+
+/// The prompt rule that decides when a class is a value type.
+const SWIFT_VALUE_SEMANTICS_PROMPT_RULE: &str = "value-semantics";
+
+/// The prompt rule that decides how a failure is raised and caught.
+const SWIFT_ERROR_HANDLING_PROMPT_RULE: &str = "error-handling";
+
+/// The prompt rule that decides how state crosses an isolation boundary.
+const SWIFT_CONCURRENCY_PROMPT_RULE: &str = "concurrency";
+
+/// One requirement a Swift tool rule took over from a Swift prompt rule.
+///
+/// A bullet deleted from a prompt rule without a tool that decides it is a
+/// coverage hole nothing downstream reports, so each deletion is recorded here
+/// beside the source that proves the tool reads it.
+struct SupersededSwiftBullet {
+    /// The prompt rule the bullet stood in, by its name in the `swift` set.
+    prompt_rule: &'static str,
+
+    /// The tool rule that decides the bullet now.
+    tool_rule: &'static str,
+
+    /// Swift holding that one defect, which the tool rule must report.
+    defect: &'static str,
+
+    /// Words the deleted bullet stated, which no prompt rule may state again.
+    words: &'static str,
+}
+
+/// Holds one superseded bullet to having exactly ONE owner.
+///
+/// `reported` is what the gate answered over [`SupersededSwiftBullet::defect`],
+/// which the caller drives, because each gate runs its own script.
+///
+/// Both halves are load-bearing, and they answer the two ways a supersession
+/// can go wrong. A bullet whose tool stays silent is a requirement the set no
+/// longer states anywhere. A bullet the prompt rule still states beside a tool
+/// that decides it is two owners, which produce churn on every review round.
+fn verify_superseded_swift_bullet(
+    loader: &ValidatorLoader,
+    bullet: &SupersededSwiftBullet,
+    reported: &[String],
+) {
+    assert!(
+        reported.contains(&bullet.tool_rule.to_string()),
+        "`{}` must report the defect `{}.md` stated as `{}`, or deleting that bullet \
+         left the requirement with no owner; the run reported {reported:?}",
+        bullet.tool_rule,
+        bullet.prompt_rule,
+        bullet.words
+    );
+
+    let body = swift_prompt_rule_body(loader, bullet.prompt_rule);
+    assert!(
+        !body.contains(bullet.words),
+        "`{}` decides `{}`, so `{}.md` must not state it as well; one requirement \
+         takes one owner",
+        bullet.tool_rule,
+        bullet.words,
+        bullet.prompt_rule
+    );
+}
+
 /// The run one probe asks the planner for, and exactly what that run must
 /// report.
 ///

@@ -301,10 +301,11 @@ mod tests {
     /// `supersedes` names a WHOLE prompt rule, and `idioms-swift` decides seven
     /// bullets spread across three of them — five of `swift/rules/idioms.md`,
     /// one of `swift/rules/value-semantics.md` and one of
-    /// `swift/rules/optionals.md`. Naming any of those rules would take
-    /// its other bullets out of every review the moment swiftformat is
-    /// installed, so the rule states the relationship in its body and claims
-    /// neither.
+    /// `swift/rules/optionals.md`. Six of those bullets are now out of the
+    /// prompt text, with the gate as their one owner, and each of the three
+    /// rules keeps the bullets no tool reads. Naming any of those rules would
+    /// take THOSE out of every review the moment swiftformat is installed, so
+    /// the rule states the relationship in its body and claims none of them.
     const CODE_HYGIENE_IDIOMS_TOOL_RULES: &[&str] = &["idioms-swift"];
 
     /// The disallowed-construct tool rules `code-hygiene` carries. Each
@@ -314,9 +315,11 @@ mod tests {
     /// `disallowed-constructs-swift` decides five bullets spread across three
     /// of them — two of `swift/rules/optionals.md`, two of
     /// `swift/rules/error-handling.md` and one of
-    /// `swift/rules/concurrency.md`. Naming any one rule would take its other
-    /// bullets out of every review the moment swiftlint is installed, so the
-    /// rule states the relationship in its body and claims none of the three.
+    /// `swift/rules/concurrency.md`. All five are now out of the prompt text,
+    /// with the gate as their one owner, and each of the three rules keeps the
+    /// bullets no tool reads. Naming any one rule would take THOSE out of every
+    /// review the moment swiftlint is installed, so the rule states the
+    /// relationship in its body and claims none of the three.
     const CODE_HYGIENE_DISALLOWED_CONSTRUCTS_TOOL_RULES: &[&str] = &["disallowed-constructs-swift"];
 
     /// The function-length tool rules `code-hygiene` carries.

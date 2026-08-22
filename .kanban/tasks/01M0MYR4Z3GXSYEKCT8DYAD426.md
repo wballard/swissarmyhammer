@@ -1,6 +1,24 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01m0n4s728v9y20tackbcrxjac
+  text: |-
+    ### Second independent occurrence — this is reproducible, not a one-off
+
+    Commit `c097c1548`, reviewed in task ^t78sqr4. Same fault, same shape as the `06e7a2fce` case that opened this card.
+
+    Measured: 15 files changed. The engine counted **3 reviewed** and **8 excluded** (6 `.kanban/`, 2 validator fixtures) = 11. Four files unaccounted for.
+
+    The four missing files are **all markdown**, and in this commit they were the files that carried the entire deliverable — the two decisions this card existed to make lived in `builtin/validators/swift/rules/optionals.md`, `builtin/validators/swift/rules/idioms.md`, `builtin/validators/swift/rules/error-handling.md`, and `builtin/validators/code-hygiene/rules/idioms-swift.md`.
+
+    This raises the severity. In the first occurrence the unaccounted files were incidental docs. Here the unreviewed markdown WAS the change. The reviewer only caught the claims because they re-measured all four files by hand against real swiftformat, outside the engine. That is not a gate; that is one reviewer being thorough.
+
+    Two occurrences, both with every unaccounted file being markdown, makes "markdown is silently dropped from diff-scoped review" the leading hypothesis — not the "counting quirk" this card originally guessed. Test that hypothesis FIRST.
+
+    If markdown is genuinely never reviewed on `review sha` / `review working`, then every prompt-rule change, every VALIDATOR.md change, and every doc change we have shipped has gone through an empty gate while reporting clean. That is a much bigger defect than a tally that does not add up, and it deserves its own card and its own priority.
+  timestamp: 2026-08-22T16:27:38.952428+00:00
 position_column: todo
 position_ordinal: ffee80
 title: 'review engine: the reviewed-file tally does not reconcile'

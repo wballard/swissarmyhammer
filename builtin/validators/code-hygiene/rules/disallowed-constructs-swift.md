@@ -160,16 +160,22 @@ Every measurement below was made with swiftlint 0.65.0.
 ## Which rules the gate enables
 
 Five of the twelve decide a bullet a prompt rule of `builtin/validators/swift/`
-states today. Each bullet was read out of the rule file rather than taken from a
-list:
+used to state. Each bullet was read out of the rule file rather than taken from
+a list, and each is now out of the prompt text with this gate as its ONE owner:
 
-| the rule | the bullet it decides |
+| the rule | the bullet it took |
 |---|---|
 | `force_unwrapping` | `optionals.md` **No force unwrap (`!`) in non-test code.** |
 | `implicitly_unwrapped_optional` | `optionals.md` **No implicitly unwrapped optionals (`Type!`).** |
 | `force_try` | `error-handling.md` **No `try!` in non-test code.** |
 | `force_cast` | `error-handling.md` **No `as!` force-cast in non-test code.** |
 | `no_unchecked_sendable` | `concurrency.md` **`@unchecked Sendable` requires a documented synchronization invariant.** |
+
+`the_shipped_swift_disallowed_constructs_tool_rule_owns_each_bullet_it_took`
+holds every row to both halves of its own claim: the rule reports a file
+holding that ONE construct, and the prompt rule states the bullet no longer. A
+rule that went silent, and a bullet written back into the prompt text, each
+fail it by name.
 
 The other seven decide a question no shipped prompt rule asks:
 
@@ -237,10 +243,11 @@ same directive is the recourse Airbnb's own message names.
 
 ## The annotation IS the documentation
 
-`concurrency.md` states the `@unchecked Sendable` requirement as pure judgment:
+`concurrency.md` stated the `@unchecked Sendable` requirement as pure judgment:
 the smell is the *absence* of a lock or an isolation mechanism and a comment.
 No tool can answer "is there a documented invariant". A tool can require an
-explicit annotation, and the text of that annotation IS the invariant.
+explicit annotation, and the text of that annotation IS the invariant. That
+answer is the whole bullet now, and this gate is where it is written.
 
 That is what `no_unchecked_sendable` does, and the message says so in as many
 words: write `// swiftlint:disable:next no_unchecked_sendable` above the
@@ -254,7 +261,7 @@ that stopped honouring the directive makes the fixture pair fail.
 
 ## Test targets keep the three force rules off
 
-The prompt rules say "in non-test code" and they mean it. A test asserts on a
+The two bullets above say "in non-test code" and they mean it. A test asserts on a
 value it has already proved is there, and a force unwrap is how a test says so;
 Airbnb reaches the same split from the other side, with the swiftformat rules
 `noForceUnwrapInTests` and `noForceTryInTests` that `idioms-swift` enables. So
@@ -313,15 +320,17 @@ halves.
 
 ## Two prompt carve-outs no option expresses
 
-Three of the five bullets above carry a sanctioned exception of their own, and
-swiftlint expresses ONE of them. `swiftlint rules <name>` names the whole option
-set each rule accepts, and the other two exceptions are absent from it.
+Three of the five bullets above carried a sanctioned exception of their own,
+and swiftlint expresses ONE of them. `swiftlint rules <name>` names the whole
+option set each rule accepts, and the other two exceptions are absent from it.
+This gate owns the three bullets now, so this table is where each exception is
+stated.
 
 | the bullet's exception | the option that expresses it |
 |---|---|
-| `optionals.md` no IUO, except `@IBOutlet` | `mode: all_except_iboutlets`, which the child states |
-| `optionals.md` no IUO, except a test fixture set in `setUp()` | none — `mode` and `severity` are the whole option set |
-| `error-handling.md` no `try!`, except a literal that can fail solely through programmer error | none — `severity` is the whole option set |
+| no IUO, except `@IBOutlet` | `mode: all_except_iboutlets`, which the child states |
+| no IUO, except a test fixture set in `setUp()` | none — `mode` and `severity` are the whole option set |
+| no `try!`, except a literal that can fail solely through programmer error | none — `severity` is the whole option set |
 
 Measured over one file: `@IBOutlet var titleLabel: UILabel!` reports nothing,
 and `var plain: UILabel!` beside it reports. A `var subject: Screen!` a `setUp()`
@@ -417,15 +426,15 @@ as test code. Selection there is attribution, not exemption.
 `supersedes` names a WHOLE prompt rule, and the engine skips that rule whole when
 the tool is healthy. This gate decides FIVE bullets spread across three prompt
 rules of the `swift` set — two of `optionals.md`, two of `error-handling.md` and
-one of `concurrency.md` — and none of the three is only those bullets.
-`optionals.md` holds four bullets, `error-handling.md` five and
-`concurrency.md` seven, so naming any one here would take its other bullets out
-of every review the moment swiftlint is installed.
+one of `concurrency.md` — and none of the three was only those bullets.
+`optionals.md` still holds three bullets, `error-handling.md` three and
+`concurrency.md` six, so naming any one here would take those out of every
+review the moment swiftlint is installed.
 
-The prompt half is a change of its own: the bullets a tool now decides come out
-of the prompt text, and the rules keep the bullets no tool reads. Until that
-lands, both halves state the same requirement, and they agree — this gate reports
-exactly the shape each bullet names.
+The prompt half has landed. All five bullets are out of the prompt text and
+this gate is their one owner. One requirement takes one owner, and
+`the_shipped_swift_disallowed_constructs_tool_rule_owns_each_bullet_it_took`
+is what holds it that way.
 
 `stuttering-name-go`, `unused-dependencies-rust` and `idioms-swift` are the
 shipped tool rules that already declare no `supersedes`, so an empty key is the

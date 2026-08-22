@@ -20,13 +20,28 @@ Language-scoped review guidance for changed Swift (`.swift`) files, grounded in
 two sources: Apple's **Swift API Design Guidelines** and the idioms of Apple's
 own **open-source Swift** projects.
 
-Each rule is an **in-file idiom judgment** read from the diff — there are no
-engine probes. Every rule that fires must be fixed — review is binary
-pass/fail, with no advisory or severity tier among findings. Only add a rule to
-this validator if you want it enforced; there are no advisory rules.
+**If a tool can decide it, the tool owns it.** This set holds the questions a
+reader must JUDGE, and it states none a linter answers. Two tool rules of
+`builtin/validators/code-hygiene/` carry the deterministic half: `idioms-swift`
+runs swiftformat over every changed Swift file, and `disallowed-constructs-swift`
+runs swiftlint. Ten bullets that stood here are theirs now, and half of an
+eleventh; each rule body names what it took and carries the measurement
+behind each.
 
-Formatting-only concerns (whitespace, indentation, import ordering, semicolons)
-belong to `swift-format`, not this validator; the rules here are semantic.
+Neither declares a `supersedes` key. That key names a WHOLE prompt rule, and
+each gate decides BULLETS spread across several rules of this set, so naming
+one would take its remaining bullets out of every review.
 
-Every rule here reads plain Swift. No rule is scoped to a third-party library,
-so none opens with a detection clause.
+One requirement takes one owner, and a bullet is split at the requirement: a
+bullet stating two takes the tool as owner of the one the tool decides. A
+bullet stating ONE requirement the tool reads only partly stays here whole, and
+says which part the tool misses. Where a tool's finding needs an exception, the
+author writes that tool's own inline directive with the reason after it — never
+a rule here.
+
+Each rule here is an **in-file idiom judgment** read from the diff; there are no
+engine probes on this side. Every rule that fires must be fixed — review is
+binary pass/fail, with no advisory or severity tier among findings. Only add a
+rule if you want it enforced. Formatting-only concerns (whitespace, indentation,
+import ordering, semicolons) belong to `swift-format`. Every rule reads plain
+Swift, so none opens with a detection clause.

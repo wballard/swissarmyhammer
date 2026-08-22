@@ -183,9 +183,11 @@ const IDIOMS_RULE_KIND: &str = "idioms";
 /// It supersedes nothing, and `idioms-swift` states why in its own body.
 /// `supersedes` names a WHOLE prompt rule, and this gate decides seven bullets
 /// spread across three of them — five of `swift/rules/idioms.md`, one of
-/// `swift/rules/value-semantics.md` and one of `swift/rules/optionals.md`.
-/// Naming any of those rules here would take its other bullets out of every
-/// review the moment swiftformat is installed.
+/// `swift/rules/value-semantics.md` and one of `swift/rules/optionals.md`. Six
+/// of those bullets are now out of the prompt text, with the gate as their one
+/// owner, and each of the three rules keeps the bullets no tool reads. Naming
+/// any of those rules here would take THOSE out of every review the moment
+/// swiftformat is installed.
 const SHIPPED_IDIOMS_RULES: &[(&str, &str, &[&str])] =
     &[("swift", SWIFT_IDIOMS_RULE, SUPERSEDES_NOTHING)];
 
@@ -209,8 +211,10 @@ const DISALLOWED_CONSTRUCTS_RULE_KIND: &str = "disallowed constructs";
 /// own body. `supersedes` names a WHOLE prompt rule, and this gate decides five
 /// bullets spread across three of them — two of `swift/rules/optionals.md`, two
 /// of `swift/rules/error-handling.md` and one of `swift/rules/concurrency.md`.
-/// Naming any one rule here would take its other bullets out of every review
-/// the moment swiftlint is installed.
+/// All five are now out of the prompt text, with the gate as their one owner,
+/// and each of the three rules keeps the bullets no tool reads. Naming any one
+/// rule here would take THOSE out of every review the moment swiftlint is
+/// installed.
 const SHIPPED_DISALLOWED_CONSTRUCTS_RULES: &[(&str, &str, &[&str])] = &[(
     "swift",
     SWIFT_DISALLOWED_CONSTRUCTS_RULE,

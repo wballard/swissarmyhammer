@@ -383,6 +383,8 @@ mod tests {
         "stuttering-name-go.pass.go.tmpl",
         "idioms-swift.fail.swift.tmpl",
         "idioms-swift.pass.swift.tmpl",
+        "disallowed-constructs-swift.fail.swift.tmpl",
+        "disallowed-constructs-swift.pass.swift.tmpl",
         "Cargo.toml.tmpl",
         "Cargo.lock.tmpl",
         "lib.rs.tmpl",

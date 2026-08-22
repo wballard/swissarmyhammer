@@ -337,29 +337,6 @@ const SWIFT_IDIOMS_VERSION_GATED: &str = concat!(
 /// states its Swift language version.
 const SWIFT_IDIOMS_VERSION_GATED_RULES: &[&str] = &["preferCountWhere", "opaqueGenericParameters"];
 
-/// What the script writes between a finding's rule name and swiftformat's own
-/// sentence.
-const SWIFT_IDIOMS_CLAIM_SEPARATOR: &str = ": ";
-
-/// The rule name of each finding of `outcome`, in the order the run stated
-/// them.
-///
-/// The script writes each finding's claim as `<rule_id>: <reason>`, so the
-/// name stands before the first separator. A probe of WHICH rule fired reads
-/// this rather than the `path:line` row [`finding_rows`] answers.
-fn finding_rule_names(outcome: &ScriptOutcome, _repo_root: &Path) -> Vec<String> {
-    outcome
-        .findings
-        .iter()
-        .map(|finding| {
-            finding
-                .claim
-                .split_once(SWIFT_IDIOMS_CLAIM_SEPARATOR)
-                .map_or_else(|| finding.claim.clone(), |(name, _)| name.to_string())
-        })
-        .collect()
-}
-
 /// Drives the shipped script over `source` staged at
 /// [`SWIFT_IDIOMS_PROBE_PATH`], beside `support`, and answers the rule name of
 /// each finding it reported.

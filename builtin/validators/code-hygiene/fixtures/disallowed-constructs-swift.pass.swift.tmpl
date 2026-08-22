@@ -1,0 +1,105 @@
+// The passing fixture of the `disallowed-constructs-swift` tool rule.
+//
+// It holds the same declarations the failing fixture holds, each written in the
+// form its rule asks for, so the tool must report none of them.
+//
+// The last two declarations carry the inline directive instead, because the
+// directive is the escape hatch this gate hands an author and a swiftlint
+// upgrade that stopped honouring it must make the fixture pair fail.
+
+import CoreGraphics
+import Foundation
+
+// MARK: - The optional group
+
+/// A plain optional, which `implicitly_unwrapped_optional` asks for.
+public struct Label {
+    /// The text the label shows, when it has one.
+    public var text: String?
+}
+
+/// Unwrap an optional with a default, which `force_unwrapping` asks for.
+public func unwrap(_ value: Int?) -> Int {
+    return value ?? 0
+}
+
+/// Test an optional against `nil`, which `unused_optional_binding` asks for.
+public func present(_ value: Int?) -> Bool {
+    return value != nil
+}
+
+// MARK: - The error group
+
+/// A call that throws, so the two declarations below have a callee.
+public func make() throws -> Int {
+    return 1
+}
+
+/// Handle the throwing call, which `force_try` asks for.
+public func forced() -> Int {
+    return (try? make()) ?? 0
+}
+
+/// Cast conditionally, which `force_cast` asks for.
+public func text(_ value: Any) -> String {
+    return value as? String ?? ""
+}
+
+// MARK: - The capture group
+
+/// A type whose method captures itself, so the capture below has a subject.
+public final class Worker {
+    /// Capture the reference as `weak`, which `unowned_variable_capture` asks
+    /// for.
+    public func capture(_ run: (() -> Void) -> Void) {
+        run { [weak self] in _ = self }
+    }
+}
+
+// MARK: - The legacy group
+
+/// The Swift constructor, which `legacy_constructor` asks for.
+public func origin() -> CGPoint {
+    return CGPoint(x: 0, y: 0)
+}
+
+/// The struct property, which `legacy_nsgeometry_functions` asks for.
+public func nsWidth(of rect: NSRect) -> CGFloat {
+    return rect.width
+}
+
+/// The same property, which `legacy_cggeometry_functions` asks for.
+public func cgWidth(of rect: CGRect) -> CGFloat {
+    return rect.width
+}
+
+// MARK: - The custom group
+
+/// Write the log message through a logging system, which
+/// `no_direct_standard_out_logs` asks for.
+public func announce(_ message: String) {
+    Logger().info("\(message)")
+}
+
+/// Read `#fileID`, which `no_file_literal` asks for.
+public func sourceFile() -> String {
+    return #fileID
+}
+
+// MARK: - The directives an author writes
+
+/// Read the `#file` literal behind the directive, which is what an author
+/// writes for the one call that needs the exact path.
+public func sourcePath() -> String {
+    // swiftlint:disable:next no_file_literal  the crash reporter needs the exact path
+    return #file
+}
+
+/// A box whose conformance stands behind the directive, which is what an
+/// author writes when the type really must be `@unchecked Sendable`. The text
+/// after the directive is the synchronization invariant.
+// swiftlint:disable:next no_unchecked_sendable  the value is a `let` of a value type, so no write can race a read
+public final class Box: @unchecked Sendable {
+    /// The value the box holds.
+    public let value: Int = 0
+}

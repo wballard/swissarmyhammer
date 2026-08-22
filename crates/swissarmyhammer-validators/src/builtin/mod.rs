@@ -306,6 +306,18 @@ mod tests {
     /// neither.
     const CODE_HYGIENE_IDIOMS_TOOL_RULES: &[&str] = &["idioms-swift"];
 
+    /// The disallowed-construct tool rules `code-hygiene` carries. Each
+    /// supersedes nothing.
+    ///
+    /// `supersedes` names a WHOLE prompt rule, and
+    /// `disallowed-constructs-swift` decides five bullets spread across three
+    /// of them — two of `swift/rules/optionals.md`, two of
+    /// `swift/rules/error-handling.md` and one of
+    /// `swift/rules/concurrency.md`. Naming any one rule would take its other
+    /// bullets out of every review the moment swiftlint is installed, so the
+    /// rule states the relationship in its body and claims none of the three.
+    const CODE_HYGIENE_DISALLOWED_CONSTRUCTS_TOOL_RULES: &[&str] = &["disallowed-constructs-swift"];
+
     /// The function-length tool rules `code-hygiene` carries.
     ///
     /// Every one of them supersedes `function-length` and nothing else, because
@@ -353,6 +365,7 @@ mod tests {
             .chain(CODE_HYGIENE_MAGIC_NUMBERS_TOOL_RULES.iter())
             .chain(CODE_HYGIENE_NAMING_TOOL_RULES.iter())
             .chain(CODE_HYGIENE_IDIOMS_TOOL_RULES.iter())
+            .chain(CODE_HYGIENE_DISALLOWED_CONSTRUCTS_TOOL_RULES.iter())
             .chain(CODE_HYGIENE_FUNCTION_LENGTH_TOOL_RULES.iter());
         assert_eq!(
             ruleset.rules.len(),
@@ -362,6 +375,7 @@ mod tests {
                 + CODE_HYGIENE_MAGIC_NUMBERS_TOOL_RULES.len()
                 + CODE_HYGIENE_NAMING_TOOL_RULES.len()
                 + CODE_HYGIENE_IDIOMS_TOOL_RULES.len()
+                + CODE_HYGIENE_DISALLOWED_CONSTRUCTS_TOOL_RULES.len()
                 + CODE_HYGIENE_FUNCTION_LENGTH_TOOL_RULES.len(),
             "code-hygiene should carry exactly its prompt and tool rules, got: {rule_names:?}"
         );
@@ -393,6 +407,16 @@ mod tests {
             )
             .chain(
                 CODE_HYGIENE_NAMING_TOOL_RULES
+                    .iter()
+                    .map(|name| (name, [].as_slice())),
+            )
+            .chain(
+                CODE_HYGIENE_IDIOMS_TOOL_RULES
+                    .iter()
+                    .map(|name| (name, [].as_slice())),
+            )
+            .chain(
+                CODE_HYGIENE_DISALLOWED_CONSTRUCTS_TOOL_RULES
                     .iter()
                     .map(|name| (name, [].as_slice())),
             )

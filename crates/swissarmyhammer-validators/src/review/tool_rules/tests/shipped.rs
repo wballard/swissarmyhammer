@@ -25,6 +25,7 @@ mod dead_code_python;
 mod dead_code_rust;
 mod dead_code_swift;
 mod dead_code_typescript;
+mod disallowed_constructs_swift;
 mod function_length;
 mod function_length_dart;
 mod function_length_go;
@@ -813,6 +814,30 @@ fn finding_rows(outcome: &ScriptOutcome, repo_root: &Path) -> Vec<String> {
                 normalize_tool_path(&finding.file, repo_root),
                 finding.line
             )
+        })
+        .collect()
+}
+
+/// What a script writes between a finding's rule name and the tool's own
+/// sentence.
+const TOOL_CLAIM_SEPARATOR: &str = ": ";
+
+/// The rule name of each finding of `outcome`, in the order the run stated
+/// them.
+///
+/// A script that drives a tool holding several rules at once writes each
+/// finding's claim as `<rule_id>: <reason>`, so the name stands before the
+/// first separator. A probe of WHICH rule fired reads this rather than the
+/// `path:line` row [`finding_rows`] answers.
+fn finding_rule_names(outcome: &ScriptOutcome, _repo_root: &Path) -> Vec<String> {
+    outcome
+        .findings
+        .iter()
+        .map(|finding| {
+            finding
+                .claim
+                .split_once(TOOL_CLAIM_SEPARATOR)
+                .map_or_else(|| finding.claim.clone(), |(name, _)| name.to_string())
         })
         .collect()
 }

@@ -279,7 +279,7 @@ read a dirty file as clean.
 ## How the run is shaped
 
 The script names TWO configuration files. swiftlint reads a list of `--config`
-paths as a parent-child hierarchy. The three shipped swiftlint rules share this
+paths as a parent-child hierarchy. The four shipped swiftlint rules share this
 shape, and `missing-docs-swift` states each measurement behind it.
 
 - The PARENT is the project's own `.swiftlint.yml` at the repository root. The

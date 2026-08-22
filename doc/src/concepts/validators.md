@@ -31,10 +31,12 @@ Four of these — `dead-code`, `function-length`, `magic-numbers` and
 rule. A tool rule runs a language tool instead of an LLM, and it replaces the
 prompt rule for the files it matches: `function-length-rust`,
 `magic-numbers-python` and `missing-docs-typescript` are three of them. The
-set holds two tool rules that replace no prompt rule — `stuttering-name-go`,
-which flags an exported Go name that repeats its package name, and
-`idioms-swift`, which runs SwiftFormat in lint mode over a roster of Swift
-idioms. `builtin/validators/README.md` states the whole tool rule contract.
+set holds three tool rules that replace no prompt rule — `stuttering-name-go`,
+which flags an exported Go name that repeats its package name, `idioms-swift`,
+which runs SwiftFormat in lint mode over a roster of Swift idioms, and
+`disallowed-constructs-swift`, which runs SwiftLint over the Swift constructs
+the project does not write. `builtin/validators/README.md` states the whole tool
+rule contract.
 
 ### `code-security`
 

@@ -128,14 +128,23 @@ Write one name, or a list of names:
 
 One tool run can replace more than one prompt rule, and the list is how a rule
 says so. No shipped rule names two today. A shipped tool rule replaces one
-prompt rule or none: every shipped tool rule but `stuttering-name-go` and
-`unused-dependencies-rust` names exactly one, and those two declare no
-`supersedes` key at all. Neither has a prompt rule to name, and both times that
-follows from a `match` block rather than from a survey of what each rule is
+prompt rule or none: every shipped tool rule but `stuttering-name-go`,
+`unused-dependencies-rust`, `idioms-swift` and `disallowed-constructs-swift`
+names exactly one, and those four declare no `supersedes` key at all.
+
+The first two have no prompt rule to name, and both times that follows from a
+`match` block rather than from a survey of what each rule is
 about: a `Cargo.toml` reaches the `manifests` set alone, whose `rules/`
 directory holds `unused-dependencies-rust` and nothing else, and
 `code-hygiene/VALIDATOR.md` derives the Go half the same way from the six sets a
-`.go` file reaches. A TOOL rule that supersedes nothing replaces no prompt rule
+`.go` file reaches.
+
+The two Swift rules leave the key empty for the other reason the key admits:
+each decides some BULLETS of a prompt rule rather than the whole of it.
+`supersedes` names a whole rule and the engine skips that rule whole, so naming
+one would take its other bullets out of every review the moment the tool is
+installed. Each rule file states which bullets it decides and which prompt rules
+hold them. A TOOL rule that supersedes nothing replaces no prompt rule
 and degrades to no rule: a machine without the tool gets no answer to the
 question rather than a worse one. A prompt rule never carries the key — the
 engine reads `supersedes` on a rule that carries a `tool` block and nowhere
@@ -299,7 +308,7 @@ breaches `warning_threshold:` exits 2 and writes a JSON array that holds one
 entry for each finding and one entry more for the threshold — 2 entries over
 the magic-numbers fixture and 3 over the missing-docs fixture; a run beside a
 project `swiftlint_version:` that names a version that is not installed exits
-2, writes 0 bytes and lints no file. The three shipped
+2, writes 0 bytes and lints no file. The four shipped
 swiftlint rules accept status 2 only when the report holds a JSON array of one
 entry or more. A script that accepted every status 2 reported 0 findings and
 exited 0 for the second shape, and the engine read a dirty file as clean.
@@ -309,9 +318,9 @@ must then test STDERR, and answer clean for the shape stderr names. Measured
 with swiftlint 0.65.0: a project `.swiftlint.yml` that holds `excluded: [src]`
 makes swiftlint write `Error: No lintable files found at paths:
 'src/Magic.swift'` to stderr, write 0 bytes to stdout, and exit 1. Each of the
-three shipped swiftlint rules tests stderr for `No lintable files found` after
+four shipped swiftlint rules tests stderr for `No lintable files found` after
 the status gate, and each exits 0 with no finding for that shape. Measured over
-three dirty fixtures beside that project file: each of the three reported 0
+four dirty fixtures beside that project file: each of the four reported 0
 findings at exit 0. A script without the stderr test answers a tool error for
 each project `excluded:` list.
 
@@ -366,7 +375,7 @@ Rules for tool rules:
   and only where the tool merges two configurations and lets the script's own
   one win. Which files a linter passes over — a generated tree, a vendored
   tree — is the project's decision and belongs in the project's file. What the
-  rule MEASURES is the rule's decision. The three shipped swiftlint rules do
+  rule MEASURES is the rule's decision. The four shipped swiftlint rules do
   this: each names the project's `.swiftlint.yml` as the PARENT config and its
   own temporary file as the CHILD, and passes `--force-exclude` so the
   project's `excluded:` list reaches a file named on the command line.

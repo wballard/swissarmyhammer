@@ -1,0 +1,100 @@
+// The failing fixture of the `disallowed-constructs-swift` tool rule.
+//
+// One declaration stands for each of the twelve enabled swiftlint rules, and
+// each one is written in the form its rule reports. The tool must report every
+// one of them. A swiftlint upgrade that stops reporting a construct makes the
+// doctor mark the rule unusable.
+//
+// The doctor materializes the fixture directory flat, so no path of this file
+// stands under a test target. The three force rules therefore apply here, which
+// is the polarity the passing fixture's own comment states.
+
+import CoreGraphics
+import Foundation
+
+// MARK: - The optional group
+
+/// An implicitly unwrapped optional, which `implicitly_unwrapped_optional`
+/// reports.
+public struct Label {
+    /// The text the label shows.
+    public var text: String!
+}
+
+/// Force unwrap an optional, which `force_unwrapping` reports.
+public func unwrap(_ value: Int?) -> Int {
+    return value!
+}
+
+/// Bind an optional to a wildcard, which `unused_optional_binding` reports.
+public func present(_ value: Int?) -> Bool {
+    if let _ = value {
+        return true
+    }
+    return false
+}
+
+// MARK: - The error group
+
+/// A call that throws, so the two declarations below have a callee.
+public func make() throws -> Int {
+    return 1
+}
+
+/// Force a throwing call, which `force_try` reports.
+public func forced() -> Int {
+    return try! make()
+}
+
+/// Force a cast, which `force_cast` reports.
+public func text(_ value: Any) -> String {
+    return value as! String
+}
+
+// MARK: - The capture group
+
+/// A type whose method captures itself, so the capture below has a subject.
+public final class Worker {
+    /// Capture the reference as `unowned`, which `unowned_variable_capture`
+    /// reports.
+    public func capture(_ run: (() -> Void) -> Void) {
+        run { [unowned self] in _ = self }
+    }
+}
+
+// MARK: - The legacy group
+
+/// A legacy constructor function, which `legacy_constructor` reports.
+public func origin() -> CGPoint {
+    return CGPointMake(0, 0)
+}
+
+/// A legacy NSGeometry function, which `legacy_nsgeometry_functions` reports.
+public func nsWidth(of rect: NSRect) -> CGFloat {
+    return NSWidth(rect)
+}
+
+/// A legacy CGGeometry function, which `legacy_cggeometry_functions` reports.
+public func cgWidth(of rect: CGRect) -> CGFloat {
+    return CGRectGetWidth(rect)
+}
+
+// MARK: - The custom group
+
+/// Write a log message to standard out, which `no_direct_standard_out_logs`
+/// reports.
+public func announce(_ message: String) {
+    print(message)
+}
+
+/// Read the `#file` literal, which `no_file_literal` reports.
+public func sourceFile() -> String {
+    return #file
+}
+
+/// Declare a type `@unchecked Sendable` with no stated invariant, which
+/// `no_unchecked_sendable` reports.
+public final class Box: @unchecked Sendable {
+    /// The value the box holds.
+    public let value: Int = 0
+}

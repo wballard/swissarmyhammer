@@ -5,8 +5,10 @@ description: >-
   functions, missing documentation on public APIs,
   hardcoded values that should be data, dead code with no inbound callers,
   an exported Go name that repeats the name of its own package,
-  and a Swift declaration written in a non-preferred form when an equivalent
-  preferred form exists.
+  a Swift declaration written in a non-preferred form when an equivalent
+  preferred form exists,
+  and a Swift construct the project does not write when a named replacement
+  stands beside it.
 metadata:
   version: "{{version}}"
 match:
@@ -388,12 +390,12 @@ suppression the tool reads.
 with the name of its own package, because a caller outside the package then
 writes the word two times — `staged.StagedType`.
 
-It supersedes nothing. It is one of two TOOL rules of this set to do that — the
-other is `idioms-swift`, below — and one of three tree-wide, the third being the
-`manifests` set's `unused-dependencies-rust`. Both counts are of tool rules
-only. The engine reads `supersedes` on a rule that carries a `tool` block and
-nowhere else, so a prompt rule declares no `supersedes` key and enters neither
-count.
+It supersedes nothing. It is one of three TOOL rules of this set to do that —
+the others are `idioms-swift` and `disallowed-constructs-swift`, both below —
+and one of four tree-wide, the fourth being the `manifests` set's
+`unused-dependencies-rust`. Both counts are of tool rules only. The engine reads
+`supersedes` on a rule that carries a `tool` block and nowhere else, so a prompt
+rule declares no `supersedes` key and enters neither count.
 
 No shipped prompt rule reads a Go NAME, and the check for that is a `match`
 block rather than a reading of what each rule is about. Seven of the thirteen
@@ -493,6 +495,58 @@ The version floor is SwiftFormat **0.62.1**, the version every rule of the
 roster was measured present in. `doctor.check_command` carries it through
 `--min-version`, so a machine whose swiftformat is too old reports as a missing
 tool rather than silently dropping the rules an older release lacks.
+
+## Swift disallowed constructs: one tool rule, and the annotation as the exemption
+
+`disallowed-constructs-swift` runs `swiftlint` over TWELVE rules, and every
+construct they name has a replacement the language already holds: a force
+unwrap has `??`, a `try!` has `try?`, an `as!` has `as?`, a `CGPointMake` has
+`CGPoint(x:y:)`, a `print` has a logger. So the tool's answer is a fact about
+the source rather than a preference.
+
+Nine are swiftlint's own — `implicitly_unwrapped_optional`, `force_unwrapping`,
+`force_try`, `force_cast`, `unused_optional_binding`, `unowned_variable_capture`,
+`legacy_constructor`, `legacy_nsgeometry_functions` and
+`legacy_cggeometry_functions`. Three are custom regex rules copied from Airbnb's
+`Sources/AirbnbSwiftFormatTool/swiftlint.yml`: `no_direct_standard_out_logs`,
+`no_file_literal` and `no_unchecked_sendable`.
+
+| Rule | Tool | Inline suppression |
+|---|---|---|
+| `disallowed-constructs-swift` | `swiftlint`, 9 stock rules and 3 custom regex rules | `// swiftlint:disable:next <rule>` |
+
+It supersedes nothing, for the same reason `idioms-swift` does. This gate
+decides FIVE bullets spread across three prompt rules of the `swift` set — two
+of `optionals.md`, two of `error-handling.md` and one of `concurrency.md` — and
+none of the three is only those bullets.
+
+**The three custom rules are the reason to copy Airbnb's file rather than write
+one.** Each turns an LLM judgment into a regex plus an escape hatch, and
+`no_unchecked_sendable` is the shape that matters. `concurrency.md` states its
+requirement as pure judgment — "`@unchecked Sendable` requires a documented
+synchronization invariant. The smell is the *absence* of a lock/isolation
+mechanism and a comment." No tool can answer "is there a documented invariant".
+A tool CAN require an explicit annotation, and the TEXT of that annotation is
+the invariant. Airbnb's message says so in as many words, and this rule keeps
+that message: write `// swiftlint:disable:next no_unchecked_sendable` above the
+declaration with the reason after it. The exemption became an annotation, which
+is the standing answer this whole set gives to a judgment.
+
+`match_kinds` is what makes a regex rule safe here. Measured over one probe
+holding a `print(` call, the same word inside a string literal, inside a `//`
+comment and inside a `///` doc comment: the shipped `match_kinds: [identifier]`
+reports the call alone, and the same regex without the key reports all four.
+
+**The three force rules stay off inside a test target**, because
+`optionals.md` and `error-handling.md` each say "in non-test code" and mean it.
+Airbnb reaches the same split from the other side, with the swiftformat rules
+`noForceUnwrapInTests` and `noForceTryInTests` that `idioms-swift` enables. The
+split cannot live in the configuration: measured on swiftlint 0.65.0, an
+`excluded:` key under `force_unwrapping:` is answered with
+`warning: Configuration for 'force_unwrapping' rule contains the invalid key(s)
+'excluded'.` and both files still report. So the SCRIPT partitions its own
+paths, from the `Tests/` convention and from the test targets
+`swift package describe` names, and the rule file states every measurement.
 
 ## Tools measured and rejected
 

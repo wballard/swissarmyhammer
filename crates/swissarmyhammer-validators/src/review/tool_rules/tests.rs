@@ -188,6 +188,34 @@ const IDIOMS_RULE_KIND: &str = "idioms";
 const SHIPPED_IDIOMS_RULES: &[(&str, &str, &[&str])] =
     &[("swift", SWIFT_IDIOMS_RULE, SUPERSEDES_NOTHING)];
 
+/// The shipped disallowed-construct tool rule for Swift. It runs twelve
+/// swiftlint rules — nine of swiftlint's own and three custom regex rules
+/// copied from Airbnb — and it partitions its own paths, because three of the
+/// twelve stay off inside a test target and swiftlint carries no per-rule path
+/// filter for a stock rule. Several more acceptance tests drive those answers
+/// end to end.
+const SWIFT_DISALLOWED_CONSTRUCTS_RULE: &str = "disallowed-constructs-swift";
+
+/// The name [`verify_shipped_tool_rules_pass_fixtures`] puts in its failure
+/// messages for this group. Every group that replaces a prompt rule is named
+/// for that rule; this one replaces none, so it is named for its own concern.
+const DISALLOWED_CONSTRUCTS_RULE_KIND: &str = "disallowed constructs";
+
+/// Every shipped disallowed-construct tool rule, with the project type it
+/// serves and the prompt rules it supersedes.
+///
+/// It supersedes nothing, and `disallowed-constructs-swift` states why in its
+/// own body. `supersedes` names a WHOLE prompt rule, and this gate decides five
+/// bullets spread across three of them — two of `swift/rules/optionals.md`, two
+/// of `swift/rules/error-handling.md` and one of `swift/rules/concurrency.md`.
+/// Naming any one rule here would take its other bullets out of every review
+/// the moment swiftlint is installed.
+const SHIPPED_DISALLOWED_CONSTRUCTS_RULES: &[(&str, &str, &[&str])] = &[(
+    "swift",
+    SWIFT_DISALLOWED_CONSTRUCTS_RULE,
+    SUPERSEDES_NOTHING,
+)];
+
 /// The prompt rule every shipped dead-code tool rule supersedes.
 const DEAD_CODE_PROMPT_RULE: &str = "dead-code";
 

@@ -80,8 +80,37 @@ comments:
     - note: fixed a `cargo fmt` violation in the untracked file `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs` (whitespace-only, unrelated idioms-swift work in progress). Re-verified `cargo nextest run --package swissarmyhammer-validators` (826/826 passed) and the full workspace suite again after the fix.
     - next: none
   timestamp: 2026-08-22T14:35:15.196589+00:00
-position_column: doing
-position_ordinal: '8280'
+- actor: claude-code
+  id: 01m0myd3w5s6krf4beekahshcd
+  text: |-
+    ### commit — changed
+    - evidence: 06e7a2fce feat(validators): add idioms-swift tool rule to code-hygiene
+    - next: none
+  timestamp: 2026-08-22T14:36:11.013215+00:00
+- actor: claude-code
+  id: 01m0mypv1gac5n9hqjwdmzxd4j
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 06e7a2fce) — 0 findings, 0 confirmed, 0 refuted; 7 validators attempted, 0 failed, 0 skipped. 8 files reviewed. Not reviewed: 14 `.kanban/` files (.reviewignore) and the 2 `idioms-swift` fixture templates (validator fixtures). No prior Review Findings section on this task, so no open items.
+    - next: task moved to `done`. The prompt half of the gate stays with card ^qs32yvp.
+  timestamp: 2026-08-22T14:41:29.648028+00:00
+- actor: claude-code
+  id: 01m0myqsfqjc5z0ftzqvse0tha
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 13 files; installed swiftformat 0.62.1; new `idioms-swift` tool rule in code-hygiene, fixture pair, 5 shipped acceptance tests driving real swiftformat
+    - test: green — cargo nextest run --workspace, 14169 passed, 0 failed, 0 skipped; cargo fmt --check clean; cargo clippy --workspace --all-targets -- -D warnings clean
+    - commit: 06e7a2fce
+    - review: clean — review sha HEAD~1..HEAD, 0 findings, 7 validators attempted, 0 failed, 0 skipped
+    - result: done in one iteration
+
+    Three decisions were forced by measurement, not assumption, and all three survived review:
+    1. `supersedes` left empty — the gate covers 6 bullets across 2 prompt rule files, and `supersedes` names a whole rule. Handed to ^qs32yvp with a written blocker note.
+    2. The script names all 28 rules but enables the intersection with what the installed swiftformat knows. `preferLazyMap` and `ifExpressions` exist only on SwiftFormat `main` (Airbnb tracks `main`, we track releases), and an unknown rule name aborts the entire run.
+    3. swiftformat gets one path per run — a single bad path was measured to zero out every finding in a batched run, across four failure modes.
+  timestamp: 2026-08-22T14:42:00.823850+00:00
+position_column: done
+position_ordinal: ffffffffffffffffffffffffffffffffffffffffffab80
 project: swift-validator
 title: 'swift: add a swiftformat tool rule to code-hygiene (the missing tool half)'
 ---

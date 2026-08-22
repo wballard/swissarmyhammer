@@ -4,9 +4,9 @@ description: >-
   Swift review guidelines from Apple's API Design Guidelines and Apple's
   open-source libraries (stdlib, swift-nio, swift-argument-parser,
   swift-collections, swift-format) — casing, naming clarity, doc parameter
-  naming, fluent usage, idioms, value semantics, access control, error
-  handling, optionals, concurrency, and state modeling applied to changed
-  Swift files.
+  naming, fluent usage, idioms, initialization, immutability, preconditions,
+  value semantics, access control, error handling, optionals, concurrency, and
+  state modeling applied to changed Swift files.
 metadata:
   version: "{{version}}"
 match:
@@ -39,6 +39,20 @@ says which part the tool misses. The tool AUTOCORRECTS, so the half that stays
 names the shape the FIX writes. Where a tool's finding needs an exception, the
 author writes that tool's own inline directive with the reason after it — never
 a rule here.
+
+`initialization`, `immutability` and `preconditions` are the three newest rules,
+and each was measured against every shipped Swift gate before it was written:
+the cost of `init`, a stored property a later method fills in, a property
+observer or a callback closure that branches, a `var` accumulator, a stored
+`static var`, a global function, a precondition written as a nested `if`, and a
+surprise answered with a crash or with silence. `naming-clarity` gained the
+past-tense event handler, and `access-control` the SwiftUI memberwise
+initializer. No shipped gate reports any of those shapes.
+
+ONE half of one bullet here IS tool-decidable and waits on a roster: swiftformat
+`privateStateVariables` and swiftlint `private_swiftui_state` each report a
+`@State` property that is not `private`, and neither rule stands in a shipped
+gate. `access-control` states that half until one of them does.
 
 Each rule here is an **in-file idiom judgment** read from the diff; there are no
 engine probes on this side. Every rule that fires must be fixed — review is

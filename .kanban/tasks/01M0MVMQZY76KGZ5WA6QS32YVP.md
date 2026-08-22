@@ -647,12 +647,116 @@ comments:
     - Confirmation 4: `builtin/validators/swift/rules/idioms.md` literally contains `for thing in things { if thing > 2 { print(thing) } }` in the `where` bullet.
     - next: hand off for review.
   timestamp: 2026-08-22T18:02:09.779577+00:00
+- actor: claude-code
+  id: 01m0na8h7atsbpztgwwh2h7smj
+  text: |-
+    ### commit — changed
+    - evidence: ae24e8474 fix(validators): cover the shape a tool's fix writes, not just its start shape
+    - next: proceed to review
+  timestamp: 2026-08-22T18:03:23.754244+00:00
+- actor: claude-code
+  id: 01m0narka4khdc8cdy07zyarc7
+  text: |
+    ### review — clean
+
+    Scope: `review sha HEAD~1..HEAD` (commit `ae24e8474`). Iteration 3.
+
+    **Engine coverage, reported apart from the hand measurement.** The engine reported "1 file(s) reviewed, 4 not reviewed" with `findings: 0`. The 1 reviewed file is the `.rs` file. The 4 not reviewed are `.kanban/`, excluded by `.reviewignore`. The **4 markdown files of this commit appear in neither count** — no line in the tally. Those 4 files hold most of the commit, so `findings: 0` is evidence about the Rust file only. This is reproduction 5 on ^dyad426.
+
+    Every measurement below is a hand measurement, made with real swiftformat 0.62.1 and swiftlint 0.65.0, running the `run:` block extracted verbatim from the shipped `builtin/validators/code-hygiene/rules/idioms-swift.md`.
+
+    #### The three findings of 2026-08-22 12:31 — measured verdicts
+
+    1. **name the nested-`if` `for` loop as a DON'T — ADDRESSED.** `idioms.md:14` now reads "**A loop that filters says `where`.**" and holds both DON'Ts.
+    2. **add row 6, correct line 427 — ADDRESSED.** Row 6 stands in the table as NO / NO, the text reads "Rows 5 and 6", and the restatement quotes the deleted bullet and says the `where` clause is a requirement ON THAT LOOP.
+    3. **guard the nested-`if` `for` loop — ADDRESSED.** The test is table-driven over `SWIFT_IDIOMS_WHERE_HALF_SHAPES` and holds both halves of the pair for each of the two walks.
+
+    All 8 prior checklist items measure as genuinely done.
+
+    #### What this review measured by hand
+
+    The bullet's claim is true:
+
+    | walk | shipped gate |
+    |---|---|
+    | `for thing in things { if thing > 2 { print(thing) } }` (row 6) | SILENT |
+    | `things.filter { $0 > 2 }.forEach { thing in print(thing) }` (row 5) | SILENT |
+    | `things.forEach { if $0 > 2 { print($0) } }` (row 1) | reports `preferForLoop` |
+    | `public static func f() -> Void {}` | SILENT |
+    | `public static func run() -> () {}` | reports `void` |
+    | `for thing in things where thing > 2 { print(thing) }` (the DO) | SILENT |
+    | `public static func f() {}` (the DO) | SILENT |
+
+    The autocorrect claims hold. `swiftformat --rules preferForLoop --single-line-for-each convert` rewrites row 1 into `for thing in things { if thing > 2 { print(thing) } }` — compared line to line, a character-for-character match with row 6. `swiftformat --rules void` rewrites `-> ()` into `-> Void`, which is the surviving bullet's own DON'T.
+
+    **Claim 4 was performed, not asserted.** All five named rules were run independently, not the two asked for. Each fix output was measured under the shipped gate and read against the surviving prompt rules:
+
+    | rule | what the fix wrote | gate on the fixed file | lands on |
+    |---|---|---|---|
+    | `typeSugar` | `[Int]`, `[String: Int]`, `String?` | SILENT | the DO of the bullet the rule took |
+    | `hoistPatternLet` | `case .at(let x, let y)` | SILENT | the DO — one `let` per case variable |
+    | `preferFinalClasses` | `public final class Worker` | SILENT | the DO of the `value-semantics.md` bullet |
+    | `redundantMemberwiseInit` | the init removed | SILENT | the DO |
+    | `noGuardInTests` | `let value = try #require(source)`, `throws` added | SILENT | the DO `optionals.md` states |
+
+    No fix among the five lands on a shape a surviving rule forbids, and none lands on a shape no rule discusses. `preferForLoop` and `void` were the only gaps, as the commit states.
+
+    Convergence, as a check on the whole defect class: applying the gate's own fix to the failing fixture drops the fixture from 42 findings to **0**. The gate is idempotent on its own output, so no enabled rule walks an author into a shape another enabled rule reports.
+
+    Fixtures unmoved, staged as the guard stages them (as `Judged.swift`, with no `.swift-version`):
+
+    | fixture | findings | distinct rules |
+    |---|---|---|
+    | `idioms-swift.fail.swift.tmpl` | 42 | 21 |
+    | `idioms-swift.pass.swift.tmpl` | 0 | — |
+
+    Both guards were verified RED by mutation, because a guard that cannot bite is the defect class this card kept hitting:
+
+    - Removing `` `func f() -> Void {}` `` from `idioms.md` fails `the_shipped_swift_idioms_tool_rule_decides_no_void_return_clause` at `idioms_swift.rs:834`.
+    - Removing the nested-`if` DON'T fails `the_shipped_swift_idioms_tool_rule_decides_no_shape_of_the_where_half` at `idioms_swift.rs:777`.
+
+    The working tree was restored after each mutation. All 13 Swift idioms guard tests pass. `the_shipped_swift_idioms_tool_rule_decides_no_filtering_for_each_chain` and `SWIFT_IDIOMS_FOR_EACH` are retired with no reference left in `crates/` or `builtin/`.
+
+    #### The same region, examined once more, and found covered
+
+    The multi-line `forEach` + `if` (row 2 of the table) reports `preferForLoop`, and its fix writes a MULTI-LINE `for` loop holding a bare `if`, on which the gate is SILENT. `idioms.md:14` names only the one-line form of that walk.
+
+    This is NOT a finding. The bullet's requirement is its headline — "A loop that filters says `where`" — which is stated at the level of the construct, and the multi-line form is the same construct with different line breaks. The iteration-2 hole was different in kind: there the headline itself read "Filter with a `where` clause, not with a `filter` chain feeding a `forEach`", so it named one construct and missed another. Asking the bullet to enumerate every line-breaking of one construct is not what the earlier findings asked for.
+
+    **On whether the rule is faulty rather than the implementation:** it is not. The three iterations found three distinct gaps — a missing option, a bullet narrower than the half it restored, and the shape the fix writes — each real and each in the same area because that area was under-specified, not because the rule measures the wrong thing. This commit ends the recurrence structurally: both VALIDATOR.md files now state the general lesson at the place that decides a split ("The tool AUTOCORRECTS, so the half that stays names the shape the FIX writes"), and that generalization is what turned up the `void` defect by audit rather than by a fourth review round.
+
+    - evidence: engine 0 findings over 1 of 5 files (4 markdown files uncounted); hand review of the 4 markdown files and the guard file found 0 findings; all 8 prior items verified done
+    - next: none — task moves to done
+  timestamp: 2026-08-22T18:12:10.180433+00:00
+- actor: claude-code
+  id: 01m0nasy6ezmz9avww4e4v72sb
+  text: |-
+    ### finish iteration 3 — clean
+    - implement: changed — 5 files; `where` bullet widened to both walks; autocorrect audit found and closed a second defect (`void`)
+    - test: green — cargo nextest run --workspace, 14184 passed, 0 failed, 0 skipped; fmt clean; clippy clean
+    - commit: ae24e8474
+    - review: clean — 0 findings; all 8 prior items verified done by measurement
+    - engine coverage: 1 of 5 files; the 4 markdown files in neither count. Reproduction 5 on ^dyad426.
+    - result: done in 3 iterations
+
+    **The audit claim was performed, not asserted.** The reviewer ran all five named rewriting rules rather than the two spot-checks requested. Each fix output measured SILENT under the gate and lands on the DO of a surviving rule: `typeSugar` → `[Int]`/`[String: Int]`/`String?`; `hoistPatternLet` → `case .at(let x, let y)`; `preferFinalClasses` → `public final class`; `redundantMemberwiseInit` → init removed; `noGuardInTests` → `let value = try #require(source)`.
+
+    **A structural convergence guarantee was added.** Applying the gate's own fix to the failing fixture drops it from 42 findings to **0**. So no enabled rule walks an author into a shape another enabled rule reports. That is a property of the whole gate, not a per-rule check, and it closes the defect class rather than its instances.
+
+    **Both guards verified RED by mutation.** Removing the DON'T from `idioms.md` fails `..._decides_no_void_return_clause` and `..._decides_no_shape_of_the_where_half`. Working tree restored after each.
+
+    **One measurement subtlety worth keeping.** The fixture constant 42/21 is measured with NO `.swift-version` staged. With `.swift-version` of 6.3, more rules go live and the same fixture yields 62/26. Anyone changing that constant needs to know which staging it assumes.
+
+    **The rule is not faulty — the three iterations found three DISTINCT gaps:** a missing option, a bullet narrower than the half it restored, and the shape the fix writes. The recurrence is ended structurally: the general lesson is now stated in both VALIDATOR.md files, and that generalisation is what found the `void` defect by audit instead of by a fourth round.
+
+    One shape in the same region was found and judged covered rather than a finding: the multi-line `forEach` + `if` whose fix writes a multi-line `for` loop holding a bare `if`. The bullet's headline states the requirement at construct level, so it is named. That judgment is recorded here so a later round does not relitigate it.
+  timestamp: 2026-08-22T18:12:54.094013+00:00
 depends_on:
 - 01M0MVKKJN6S08JSCDH3FX5BNY
 - 01M0MVM2VZ71SBQ95754S2N0RX
 - 01M0MVNQDK2G1J4X2SRT78SQR4
-position_column: doing
-position_ordinal: '8280'
+position_column: done
+position_ordinal: ffffffffffffffffffffffffffffffffffffffffffae80
 project: swift-validator
 title: 'swift: supersede the prompt-rule bullets the new tool rules now decide'
 ---

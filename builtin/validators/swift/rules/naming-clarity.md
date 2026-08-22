@@ -1,6 +1,6 @@
 ---
 name: naming-clarity
-description: Clarity over brevity, no needless words, name by role, boolean assertions, protocol naming
+description: Clarity over brevity, no needless words, name by role, boolean assertions, event handler naming, protocol naming
 ---
 
 # Swift Naming Clarity
@@ -11,4 +11,5 @@ description: Clarity over brevity, no needless words, name by role, boolean asse
 - **Compensate for weak type information.** Precede a weakly typed parameter (`Any`, `AnyObject`, `NSObject`, `Int`, `String`) with a noun describing its role. DON'T: `func add(_ mid: NSObject, to path: String)`. DO: `func addObserver(_ observer: NSObject, forKeyPath path: String)`.
 - **Non-mutating Boolean members read as assertions about the receiver.** DO: `isEmpty`, `isEnabled`, `hasPrefix(_:)`, `line1.intersects(line2)`. DON'T: bare adjectives (`empty`, `enabled`) or `getIsEmpty()`.
 - **Protocol naming: capabilities end in `-able`/`-ible`/`-ing`; a protocol describing what something *is* is a noun.** DO: `Equatable`, `ProgressReporting`, `Collection`. DON'T: `Equality` for a capability.
+- **An event-handling method reads as a past-tense sentence.** The name says what happened, not that a handler exists. DON'T: `func handleSaveTap()`, `func onCancelPressed()`. DO: `func didTapSave()`, `func didTapCancel()`. Omit the subject where one screen owns the event; keep it where two sources send the same event: `func settingsButtonDidTap()`.
 - **No `Protocol`/`Type` suffix as a crutch.** Use it only to break an otherwise unavoidable name clash (as the stdlib does with `IteratorProtocol`). DON'T: `FooProtocol` merely to signal "this is a protocol".

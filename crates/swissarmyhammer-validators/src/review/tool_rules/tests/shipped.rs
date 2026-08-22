@@ -42,6 +42,7 @@ mod missing_docs;
 mod missing_docs_rust;
 mod scope_roster;
 mod stuttering_name_go;
+mod swift_judgment_rules;
 mod temp_directory;
 mod unused_dependencies;
 mod zero_argument;

@@ -22,6 +22,12 @@ pub struct RalphState {
     pub max_iterations: u32,
     /// Optional notes/context (stored as markdown body after frontmatter)
     pub body: String,
+    /// Pid of the process that wrote the instruction (stored in frontmatter)
+    ///
+    /// `None` for files written before ownership tracking existed, and for
+    /// files written by hand. Ownership decisions treat such an instruction
+    /// as one whose session has ended.
+    pub owner_pid: Option<u32>,
 }
 
 /// Validate a session ID for use as a filename
@@ -138,15 +144,20 @@ pub fn read_ralph(base_dir: &Path, session_id: &str) -> anyhow::Result<Option<Ra
 /// Write a session's ralph state to disk
 ///
 /// Creates `.ralph/<session_id>.md` with YAML frontmatter containing
-/// instruction, iteration, and max_iterations. The `state.body` field is
-/// written as the markdown body after the frontmatter.
+/// instruction, iteration, max_iterations, and owner_pid (when present).
+/// The `state.body` field is written as the markdown body after the
+/// frontmatter.
 pub fn write_ralph(base_dir: &Path, session_id: &str, state: &RalphState) -> anyhow::Result<()> {
     validate_session_id(session_id)?;
 
     // Quote the instruction to prevent YAML injection via newlines or special chars
     let escaped_instruction = escape_yaml_value(&state.instruction);
+    let owner_line = state
+        .owner_pid
+        .map(|pid| format!("owner_pid: {pid}\n"))
+        .unwrap_or_default();
     let content = format!(
-        "---\ninstruction: {escaped_instruction}\niteration: {}\nmax_iterations: {}\n---\n\n{}\n",
+        "---\ninstruction: {escaped_instruction}\niteration: {}\nmax_iterations: {}\n{owner_line}---\n\n{}\n",
         state.iteration, state.max_iterations, state.body
     );
 
@@ -156,18 +167,25 @@ pub fn write_ralph(base_dir: &Path, session_id: &str, state: &RalphState) -> any
 
 /// Find the most recently modified active ralph state in `.ralph/`
 ///
-/// `set ralph` keys state by the MCP server process's session id, but the
-/// Stop hook's `check ralph` runs in a fresh CLI process under the harness's
-/// session id — the two never match, so a session-keyed lookup from the hook
-/// always misses. Callers fall back to this scan to find the instruction
-/// that is actually active.
+/// A read-only convenience over [`find_newest_ralph_matching`] with no
+/// filter. `get ralph` uses it to show whatever instruction is active when
+/// the caller names no session — the file may be keyed by a different
+/// process's session id.
+pub fn find_active_ralph(base_dir: &Path) -> anyhow::Result<Option<(String, RalphState)>> {
+    find_newest_ralph_matching(base_dir, |_, _| true)
+}
+
+/// Find the newest ralph state in `.ralph/` that satisfies `filter`
 ///
 /// Skips files without an `.md` extension, files whose stem is not a valid
-/// session id, and files that do not parse as ralph state. Among the rest,
-/// returns the session id (file stem) and state of the newest file by
-/// modification time, ties broken by session id so the result is
-/// deterministic. Returns `Ok(None)` when nothing is active.
-pub fn find_active_ralph(base_dir: &Path) -> anyhow::Result<Option<(String, RalphState)>> {
+/// session id, files that do not parse as ralph state, and files the filter
+/// rejects. Among the rest, returns the session id (file stem) and state of
+/// the newest file by modification time, ties broken by session id so the
+/// result is deterministic. Returns `Ok(None)` when nothing matches.
+pub fn find_newest_ralph_matching(
+    base_dir: &Path,
+    filter: impl Fn(&str, &RalphState) -> bool,
+) -> anyhow::Result<Option<(String, RalphState)>> {
     let dir = ralph_dir(base_dir)?;
     let mut newest: Option<(std::time::SystemTime, String, RalphState)> = None;
 
@@ -189,6 +207,9 @@ pub fn find_active_ralph(base_dir: &Path) -> anyhow::Result<Option<(String, Ralp
         let Some(state) = parse_ralph_file(&content) else {
             continue;
         };
+        if !filter(stem, &state) {
+            continue;
+        }
         let modified = entry.metadata()?.modified()?;
 
         let is_newer = match &newest {
@@ -203,14 +224,19 @@ pub fn find_active_ralph(base_dir: &Path) -> anyhow::Result<Option<(String, Ralp
     Ok(newest.map(|(_, sid, state)| (sid, state)))
 }
 
-/// Delete every ralph state file in `.ralph/`
+/// Delete the ralph state files of sessions that have ended
 ///
-/// Used by `clear ralph` when the caller's own session has no file: the
-/// intent of a clear is "nothing should block stops anymore", and the file
-/// holding the active instruction may have been written by an MCP server
-/// process that no longer exists. Returns the session ids of the removed
-/// files, sorted for determinism.
-pub fn clear_all_ralph(base_dir: &Path) -> anyhow::Result<Vec<String>> {
+/// A file belongs to an ended session when its recorded `owner_pid` names a
+/// process that `is_alive` reports dead, when it records no owner at all
+/// (written before ownership tracking, or by hand), or when it does not
+/// parse as ralph state. `.ralph/` is fully managed by this module, so such
+/// a file is a leftover no live session can still need. Files whose owner is
+/// alive stay untouched — they belong to a running session. Returns the
+/// session ids (file stems) of the removed files, sorted for determinism.
+pub fn clear_dead_ralph(
+    base_dir: &Path,
+    is_alive: impl Fn(u32) -> bool,
+) -> anyhow::Result<Vec<String>> {
     let dir = ralph_dir(base_dir)?;
     let mut cleared = Vec::new();
 
@@ -223,6 +249,14 @@ pub fn clear_all_ralph(base_dir: &Path) -> anyhow::Result<Vec<String>> {
         let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
             continue;
         };
+        let owner_is_alive = fs::read_to_string(&path)
+            .ok()
+            .and_then(|content| parse_ralph_file(&content))
+            .and_then(|state| state.owner_pid)
+            .is_some_and(&is_alive);
+        if owner_is_alive {
+            continue;
+        }
         fs::remove_file(&path)?;
         cleared.push(stem.to_string());
     }
@@ -252,6 +286,7 @@ pub fn delete_ralph(base_dir: &Path, session_id: &str) -> anyhow::Result<()> {
 /// instruction: ...
 /// iteration: N
 /// max_iterations: N
+/// owner_pid: N
 /// ---
 ///
 /// Body text here
@@ -270,6 +305,7 @@ fn parse_ralph_file(content: &str) -> Option<RalphState> {
     let mut instruction = String::new();
     let mut iteration: u32 = 0;
     let mut max_iterations: u32 = 50;
+    let mut owner_pid: Option<u32> = None;
 
     for line in frontmatter.lines() {
         if let Some(val) = line.strip_prefix("instruction:") {
@@ -281,6 +317,10 @@ fn parse_ralph_file(content: &str) -> Option<RalphState> {
         } else if let Some(val) = line.strip_prefix("max_iterations:") {
             if let Ok(n) = val.trim().parse::<u32>() {
                 max_iterations = n;
+            }
+        } else if let Some(val) = line.strip_prefix("owner_pid:") {
+            if let Ok(n) = val.trim().parse::<u32>() {
+                owner_pid = Some(n);
             }
         }
     }
@@ -298,6 +338,7 @@ fn parse_ralph_file(content: &str) -> Option<RalphState> {
         iteration,
         max_iterations,
         body,
+        owner_pid,
     })
 }
 
@@ -340,6 +381,7 @@ mod tests {
             iteration: 3,
             max_iterations: 50,
             body: "Agent notes go here.".to_string(),
+            owner_pid: None,
         };
 
         write_ralph(tmp.path(), "session-123", &state).unwrap();
@@ -359,6 +401,7 @@ mod tests {
             iteration: 0,
             max_iterations: 10,
             body: String::new(),
+            owner_pid: None,
         };
 
         write_ralph(tmp.path(), "test-session", &state).unwrap();
@@ -375,6 +418,7 @@ mod tests {
             iteration: 0,
             max_iterations: 10,
             body: String::new(),
+            owner_pid: None,
         };
 
         write_ralph(tmp.path(), "session-123", &state).unwrap();
@@ -398,12 +442,14 @@ mod tests {
             iteration: 1,
             max_iterations: 10,
             body: "body A".to_string(),
+            owner_pid: None,
         };
         let state_b = RalphState {
             instruction: "instruction B".to_string(),
             iteration: 2,
             max_iterations: 20,
             body: "body B".to_string(),
+            owner_pid: None,
         };
 
         write_ralph(tmp.path(), "session-a", &state_a).unwrap();
@@ -425,12 +471,14 @@ mod tests {
             iteration: 1,
             max_iterations: 10,
             body: String::new(),
+            owner_pid: None,
         };
         let state_second = RalphState {
             instruction: "second".to_string(),
             iteration: 2,
             max_iterations: 20,
             body: String::new(),
+            owner_pid: None,
         };
 
         write_ralph(tmp.path(), "session-123", &state_first).unwrap();
@@ -448,6 +496,39 @@ mod tests {
         assert_eq!(state.instruction, "Implement all kanban cards");
         assert_eq!(state.iteration, 3);
         assert_eq!(state.max_iterations, 50);
+    }
+
+    // --- Owner pid persistence tests ---
+
+    #[test]
+    fn test_owner_pid_round_trips() {
+        let tmp = setup();
+        let state = RalphState {
+            instruction: "owned".to_string(),
+            iteration: 0,
+            max_iterations: 50,
+            body: String::new(),
+            owner_pid: Some(4242),
+        };
+
+        write_ralph(tmp.path(), "owned-session", &state).unwrap();
+        let read = read_ralph(tmp.path(), "owned-session").unwrap().unwrap();
+        assert_eq!(read.owner_pid, Some(4242));
+    }
+
+    #[test]
+    fn test_owner_pid_absent_in_file_reads_none() {
+        let content = "---\ninstruction: legacy\niteration: 1\nmax_iterations: 50\n---\n\nBody.\n";
+        let state = parse_ralph_file(content).unwrap();
+        assert_eq!(state.owner_pid, None);
+    }
+
+    #[test]
+    fn test_owner_pid_parses_from_frontmatter() {
+        let content =
+            "---\ninstruction: owned\niteration: 1\nmax_iterations: 50\nowner_pid: 77\n---\n\n\n";
+        let state = parse_ralph_file(content).unwrap();
+        assert_eq!(state.owner_pid, Some(77));
     }
 
     // --- Session ID validation tests ---
@@ -486,6 +567,7 @@ mod tests {
             iteration: 0,
             max_iterations: 10,
             body: String::new(),
+            owner_pid: None,
         };
         assert!(write_ralph(tmp.path(), "../escape", &state).is_err());
     }
@@ -506,6 +588,7 @@ mod tests {
             iteration: 5,
             max_iterations: 10,
             body: String::new(),
+            owner_pid: None,
         };
         write_ralph(tmp.path(), "inject-test", &state).unwrap();
         let read = read_ralph(tmp.path(), "inject-test").unwrap().unwrap();
@@ -524,6 +607,7 @@ mod tests {
             iteration: 0,
             max_iterations: 50,
             body: String::new(),
+            owner_pid: None,
         };
         write_ralph(tmp.path(), "colon-test", &state).unwrap();
         let read = read_ralph(tmp.path(), "colon-test").unwrap().unwrap();
@@ -560,6 +644,7 @@ mod tests {
             iteration: 7,
             max_iterations: 42,
             body: "Notes.".to_string(),
+            owner_pid: None,
         };
 
         write_ralph(tmp.path(), "hyphen-test", &state).unwrap();
@@ -583,7 +668,7 @@ mod tests {
         assert!(parse_ralph_file(content).is_none());
     }
 
-    // --- find_active_ralph / clear_all_ralph tests ---
+    // --- Scan / clear tests ---
 
     fn state_with(instruction: &str) -> RalphState {
         RalphState {
@@ -591,6 +676,14 @@ mod tests {
             iteration: 0,
             max_iterations: 50,
             body: String::new(),
+            owner_pid: None,
+        }
+    }
+
+    fn state_owned(instruction: &str, owner_pid: u32) -> RalphState {
+        RalphState {
+            owner_pid: Some(owner_pid),
+            ..state_with(instruction)
         }
     }
 
@@ -661,22 +754,65 @@ mod tests {
     }
 
     #[test]
-    fn test_clear_all_ralph_removes_everything_and_reports_ids() {
+    fn test_find_newest_matching_applies_filter() {
         let tmp = setup();
-        write_ralph(tmp.path(), "session-a", &state_with("a")).unwrap();
-        write_ralph(tmp.path(), "session-b", &state_with("b")).unwrap();
+        write_ralph(tmp.path(), "session-a", &state_owned("a", 1111)).unwrap();
+        write_ralph(tmp.path(), "session-b", &state_owned("b", 2222)).unwrap();
+        age_file(tmp.path(), "session-a", 3600);
 
-        let cleared = clear_all_ralph(tmp.path()).unwrap();
-        assert_eq!(
-            cleared,
-            vec!["session-a".to_string(), "session-b".to_string()]
-        );
-        assert!(find_active_ralph(tmp.path()).unwrap().is_none());
+        // The newest file is session-b, but the filter only accepts owner 1111.
+        let (sid, state) =
+            find_newest_ralph_matching(tmp.path(), |_, state| state.owner_pid == Some(1111))
+                .unwrap()
+                .unwrap();
+        assert_eq!(sid, "session-a");
+        assert_eq!(state.instruction, "a");
     }
 
     #[test]
-    fn test_clear_all_ralph_empty_dir_is_ok() {
+    fn test_find_newest_matching_rejecting_all_returns_none() {
         let tmp = setup();
-        assert!(clear_all_ralph(tmp.path()).unwrap().is_empty());
+        write_ralph(tmp.path(), "session-a", &state_with("a")).unwrap();
+
+        let found = find_newest_ralph_matching(tmp.path(), |_, _| false).unwrap();
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn test_clear_dead_ralph_removes_only_ended_sessions() {
+        let tmp = setup();
+        write_ralph(tmp.path(), "live-owner", &state_owned("live", 111)).unwrap();
+        write_ralph(tmp.path(), "dead-owner", &state_owned("dead", 222)).unwrap();
+        write_ralph(tmp.path(), "no-owner", &state_with("legacy")).unwrap();
+
+        let cleared = clear_dead_ralph(tmp.path(), |pid| pid == 111).unwrap();
+
+        assert_eq!(
+            cleared,
+            vec!["dead-owner".to_string(), "no-owner".to_string()]
+        );
+        assert!(read_ralph(tmp.path(), "live-owner").unwrap().is_some());
+        assert!(read_ralph(tmp.path(), "dead-owner").unwrap().is_none());
+        assert!(read_ralph(tmp.path(), "no-owner").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_clear_dead_ralph_removes_unparseable_files() {
+        let tmp = setup();
+        ensure_ralph_dir(tmp.path()).unwrap();
+        fs::write(
+            tmp.path().join(".ralph").join("garbage.md"),
+            "no frontmatter",
+        )
+        .unwrap();
+
+        let cleared = clear_dead_ralph(tmp.path(), |_| true).unwrap();
+        assert_eq!(cleared, vec!["garbage".to_string()]);
+    }
+
+    #[test]
+    fn test_clear_dead_ralph_empty_dir_is_ok() {
+        let tmp = setup();
+        assert!(clear_dead_ralph(tmp.path(), |_| true).unwrap().is_empty());
     }
 }

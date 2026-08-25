@@ -8,6 +8,7 @@
 //! The ralph tool has three submodules:
 //! - `execute/` — MCP tool implementation (`RalphTool`, `McpTool` trait impl)
 //! - `state.rs` — File-based state management (read/write `.ralph/<session_id>.md`)
+//! - `ownership.rs` — Decides which process tree an instruction belongs to
 //!
 //! ## File Format
 //!
@@ -23,6 +24,7 @@
 //! ```
 
 pub mod execute;
+pub mod ownership;
 pub mod state;
 
 use crate::mcp::tool_registry::ToolRegistry;

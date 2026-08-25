@@ -80,6 +80,9 @@ async-watcher = { workspace = true }
 encoding_rs = { workspace = true }
 filetime = { workspace = true }
 
+# Process liveness and ancestry for ralph instruction ownership
+sysinfo = { workspace = true }
+
 # Web dependencies
 libc = { workspace = true }
 rand = { workspace = true }

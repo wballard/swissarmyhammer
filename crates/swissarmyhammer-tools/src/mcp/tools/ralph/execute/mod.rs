@@ -13,8 +13,10 @@ use swissarmyhammer_operations::{
     SchemaConfig,
 };
 
+use super::ownership::{is_pid_alive, owner_owns_current_session};
 use super::state::{
-    clear_all_ralph, delete_ralph, find_active_ralph, read_ralph, write_ralph, RalphState,
+    clear_dead_ralph, delete_ralph, find_active_ralph, find_newest_ralph_matching, read_ralph,
+    write_ralph, RalphState,
 };
 
 // --- Operation metadata ---
@@ -60,7 +62,7 @@ pub struct CheckRalph;
 
 static CHECK_RALPH_PARAMS: &[ParamMeta] = &[ParamMeta::new("session_id")
     .description(
-        "Session ID to check first; when that session has no instruction, the check falls back to the most recent active instruction in .ralph/",
+        "Session ID to check first; when that session has no instruction, the check falls back to the newest instruction whose owner process belongs to this session's process tree",
     )
     .param_type(ParamType::String)];
 
@@ -72,7 +74,7 @@ impl Operation for CheckRalph {
         "ralph"
     }
     fn description(&self) -> &'static str {
-        "Check for an active instruction, falling back to any session's active instruction when the named session has none. Returns block/allow JSON for Stop hook integration."
+        "Check for an active instruction owned by this session, matching by session id or by the owner process's process tree. Returns block/allow JSON for Stop hook integration."
     }
     fn parameters(&self) -> &'static [ParamMeta] {
         CHECK_RALPH_PARAMS
@@ -95,7 +97,7 @@ impl Operation for ClearRalph {
         "ralph"
     }
     fn description(&self) -> &'static str {
-        "Remove a session's persistent instruction. Deletes .ralph/<session_id>.md"
+        "Remove a session's persistent instruction. Deletes .ralph/<session_id>.md; without an explicit session_id and no own file, removes only the instructions of sessions that have ended"
     }
     fn parameters(&self) -> &'static [ParamMeta] {
         CLEAR_RALPH_PARAMS
@@ -305,6 +307,10 @@ impl McpTool for RalphTool {
                     iteration: existing_iteration,
                     max_iterations,
                     body,
+                    // Record the writing process as the owner, so a later
+                    // check can tell this session's instruction apart from a
+                    // peer session's and from a session that has ended.
+                    owner_pid: Some(std::process::id()),
                 };
 
                 write_ralph(base_dir, session_id, &state).map_err(|e| {
@@ -323,9 +329,11 @@ impl McpTool for RalphTool {
                 // The Stop hook pipes in the harness's session id, but `set
                 // ralph` keys the file by the MCP server process's session —
                 // ids minted by different processes that never match. A miss
-                // on the named session therefore falls back to the newest
-                // active instruction in `.ralph/`, which is the state the
-                // hook is really asking about.
+                // on the named session therefore falls back to the instruction
+                // whose OWNER PROCESS belongs to this session's process tree
+                // (the harness spawned the setter and this checker as
+                // siblings). An instruction owned by a live peer session, or
+                // by a process that has ended, never blocks this session.
                 let named = args
                     .get("session_id")
                     .and_then(|v| v.as_str())
@@ -343,7 +351,10 @@ impl McpTool for RalphTool {
                     None => None,
                 };
                 if resolved.is_none() {
-                    resolved = find_active_ralph(base_dir).map_err(|e| {
+                    resolved = find_newest_ralph_matching(base_dir, |_, state| {
+                        state.owner_pid.is_some_and(owner_owns_current_session)
+                    })
+                    .map_err(|e| {
                         McpError::internal_error(
                             format!("failed to scan for active ralph state: {e}"),
                             None,
@@ -438,11 +449,13 @@ impl McpTool for RalphTool {
                     }),
                     // A clear means "stop blocking stops". Without an explicit
                     // target and with nothing under this process's session,
-                    // the active instruction belongs to some other process
-                    // (or a previous server incarnation) — remove every state
-                    // file so the net is actually released.
+                    // the blocking instruction was written by a previous
+                    // server incarnation that no longer runs — remove the
+                    // state files of ended sessions so the net is released.
+                    // Instructions whose owner process is still alive belong
+                    // to live peer sessions and stay untouched.
                     None if explicit.is_none() => {
-                        let cleared = clear_all_ralph(base_dir).map_err(|e| {
+                        let cleared = clear_dead_ralph(base_dir, is_pid_alive).map_err(|e| {
                             McpError::internal_error(
                                 format!("failed to clear ralph: {e}"),
                                 None,
@@ -524,6 +537,7 @@ impl McpTool for RalphTool {
 mod tests {
     use super::*;
     use crate::mcp::tool_registry::ToolRegistry;
+    use crate::mcp::tools::ralph::ownership::test_support::DEAD_PID;
     use tempfile::TempDir;
 
     async fn make_context(tmp: &TempDir) -> ToolContext {
@@ -1230,12 +1244,13 @@ mod tests {
         assert!(json.get("decision").is_none(), "nothing active must allow");
     }
 
-    // --- Cross-session fallback tests ---
+    // --- Ownership fallback tests ---
     //
     // The Stop hook's `check ralph` runs in a fresh CLI process whose session
     // id (the harness's) never matches the MCP-server session that `set
-    // ralph` keyed the file by. These tests pin the fallback that makes the
-    // safety net actually fire.
+    // ralph` keyed the file by. A miss falls back to the instruction whose
+    // owner process belongs to this process tree. These tests pin that the
+    // safety net fires only for the session that owns the instruction.
 
     fn response_json(result: &CallToolResult) -> serde_json::Value {
         let content = result
@@ -1247,23 +1262,182 @@ mod tests {
         serde_json::from_str(content).unwrap()
     }
 
+    /// Owner pid standing in for a sibling MCP server spawned by the same
+    /// harness process: the parent of the test process is alive and is a
+    /// proper ancestor of it.
+    fn harness_sibling_owner_pid() -> u32 {
+        crate::mcp::tools::ralph::ownership::current_parent_pid()
+            .expect("the test process has a parent")
+    }
+
+    /// Write an instruction file directly, keyed by `session_id` and owned
+    /// by `owner_pid`, the way an MCP server process would have left it.
+    fn write_instruction(
+        base: &std::path::Path,
+        session_id: &str,
+        instruction: &str,
+        owner_pid: Option<u32>,
+    ) {
+        write_ralph(
+            base,
+            session_id,
+            &RalphState {
+                instruction: instruction.to_string(),
+                iteration: 0,
+                max_iterations: 50,
+                body: String::new(),
+                owner_pid,
+            },
+        )
+        .unwrap();
+    }
+
     #[tokio::test]
-    async fn test_check_ralph_falls_back_when_named_session_misses() {
+    async fn test_check_ralph_does_not_block_for_another_sessions_instruction() {
         let tmp = tempfile::tempdir().unwrap();
         let ctx = make_context(&tmp).await;
         let tool = RalphTool::new();
 
+        // Session X holds an instruction, owned by this live process.
         let mut set_args = serde_json::Map::new();
         set_args.insert("op".to_string(), serde_json::json!("set ralph"));
-        set_args.insert(
-            "session_id".to_string(),
-            serde_json::json!("server-session"),
-        );
-        set_args.insert(
-            "instruction".to_string(),
-            serde_json::json!("Finish all ready kanban tasks"),
-        );
+        set_args.insert("session_id".to_string(), serde_json::json!("session-x"));
+        set_args.insert("instruction".to_string(), serde_json::json!("Belongs to X"));
         tool.execute(set_args, &ctx).await.unwrap();
+
+        // The Stop hook check for session Y must not be blocked by it.
+        let mut check_args = serde_json::Map::new();
+        check_args.insert("op".to_string(), serde_json::json!("check ralph"));
+        check_args.insert("session_id".to_string(), serde_json::json!("session-y"));
+        let result = tool.execute(check_args, &ctx).await.unwrap();
+
+        let json = response_json(&result);
+        assert!(
+            json.get("decision").is_none(),
+            "another session's instruction must not block, got: {json}"
+        );
+        // X's state stays untouched.
+        let state = read_ralph(tmp.path(), "session-x").unwrap().unwrap();
+        assert_eq!(state.iteration, 0);
+    }
+
+    #[tokio::test]
+    async fn test_check_ralph_after_own_clear_allows_despite_peer_instruction() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = make_context(&tmp).await;
+        let tool = RalphTool::new();
+
+        // A live peer session holds an instruction throughout.
+        let mut peer_args = serde_json::Map::new();
+        peer_args.insert("op".to_string(), serde_json::json!("set ralph"));
+        peer_args.insert("session_id".to_string(), serde_json::json!("peer-session"));
+        peer_args.insert("instruction".to_string(), serde_json::json!("Peer work"));
+        tool.execute(peer_args, &ctx).await.unwrap();
+
+        // Session X sets and then clears its own instruction.
+        let mut set_args = serde_json::Map::new();
+        set_args.insert("op".to_string(), serde_json::json!("set ralph"));
+        set_args.insert("session_id".to_string(), serde_json::json!("session-x"));
+        set_args.insert("instruction".to_string(), serde_json::json!("X work"));
+        tool.execute(set_args, &ctx).await.unwrap();
+
+        let mut clear_args = serde_json::Map::new();
+        clear_args.insert("op".to_string(), serde_json::json!("clear ralph"));
+        clear_args.insert("session_id".to_string(), serde_json::json!("session-x"));
+        tool.execute(clear_args, &ctx).await.unwrap();
+
+        // Session X can now stop, although the peer's instruction is active.
+        let mut check_args = serde_json::Map::new();
+        check_args.insert("op".to_string(), serde_json::json!("check ralph"));
+        check_args.insert("session_id".to_string(), serde_json::json!("session-x"));
+        let result = tool.execute(check_args, &ctx).await.unwrap();
+
+        let json = response_json(&result);
+        assert!(
+            json.get("decision").is_none(),
+            "a cleared session must stop, got: {json}"
+        );
+        assert!(read_ralph(tmp.path(), "peer-session").unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_check_ralph_ignores_instruction_of_ended_session() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = make_context(&tmp).await;
+        let tool = RalphTool::new();
+
+        write_instruction(tmp.path(), "gone-session", "Left behind", Some(DEAD_PID));
+
+        let mut check_args = serde_json::Map::new();
+        check_args.insert("op".to_string(), serde_json::json!("check ralph"));
+        check_args.insert("session_id".to_string(), serde_json::json!("live-session"));
+        let result = tool.execute(check_args, &ctx).await.unwrap();
+
+        let json = response_json(&result);
+        assert!(
+            json.get("decision").is_none(),
+            "an ended session's instruction must not block, got: {json}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_check_ralph_ignores_instruction_without_an_owner() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = make_context(&tmp).await;
+        let tool = RalphTool::new();
+
+        write_instruction(tmp.path(), "legacy-session", "No owner recorded", None);
+
+        let mut check_args = serde_json::Map::new();
+        check_args.insert("op".to_string(), serde_json::json!("check ralph"));
+        check_args.insert("session_id".to_string(), serde_json::json!("live-session"));
+        let result = tool.execute(check_args, &ctx).await.unwrap();
+
+        let json = response_json(&result);
+        assert!(
+            json.get("decision").is_none(),
+            "an ownerless instruction must not block, got: {json}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_clear_ralph_explicit_keeps_other_sessions_instruction() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = make_context(&tmp).await;
+        let tool = RalphTool::new();
+
+        for session in ["session-x", "session-y"] {
+            let mut set_args = serde_json::Map::new();
+            set_args.insert("op".to_string(), serde_json::json!("set ralph"));
+            set_args.insert("session_id".to_string(), serde_json::json!(session));
+            set_args.insert("instruction".to_string(), serde_json::json!("Work"));
+            tool.execute(set_args, &ctx).await.unwrap();
+        }
+
+        let mut clear_args = serde_json::Map::new();
+        clear_args.insert("op".to_string(), serde_json::json!("clear ralph"));
+        clear_args.insert("session_id".to_string(), serde_json::json!("session-x"));
+        let result = tool.execute(clear_args, &ctx).await.unwrap();
+
+        assert_eq!(response_json(&result)["cleared"], true);
+        assert!(read_ralph(tmp.path(), "session-x").unwrap().is_none());
+        assert!(read_ralph(tmp.path(), "session-y").unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_check_ralph_falls_back_to_this_sessions_owned_instruction() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = make_context(&tmp).await;
+        let tool = RalphTool::new();
+
+        // The MCP server process — a sibling under the same harness — left
+        // this instruction, keyed by its own session id.
+        write_instruction(
+            tmp.path(),
+            "server-session",
+            "Finish all ready kanban tasks",
+            Some(harness_sibling_owner_pid()),
+        );
 
         // The hook checks under the harness's session id, which has no file
         let mut check_args = serde_json::Map::new();
@@ -1288,16 +1462,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_check_ralph_without_session_id_uses_active_state() {
+    async fn test_check_ralph_without_session_id_uses_owned_state() {
         let tmp = tempfile::tempdir().unwrap();
         let ctx = make_context(&tmp).await;
         let tool = RalphTool::new();
 
-        let mut set_args = serde_json::Map::new();
-        set_args.insert("op".to_string(), serde_json::json!("set ralph"));
-        set_args.insert("session_id".to_string(), serde_json::json!("some-server"));
-        set_args.insert("instruction".to_string(), serde_json::json!("Keep going"));
-        tool.execute(set_args, &ctx).await.unwrap();
+        write_instruction(
+            tmp.path(),
+            "some-server",
+            "Keep going",
+            Some(harness_sibling_owner_pid()),
+        );
 
         let mut check_args = serde_json::Map::new();
         check_args.insert("op".to_string(), serde_json::json!("check ralph"));
@@ -1308,17 +1483,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_check_ralph_fallback_auto_clears_at_max_iterations() {
+    async fn test_check_ralph_owned_fallback_auto_clears_at_max_iterations() {
         let tmp = tempfile::tempdir().unwrap();
         let ctx = make_context(&tmp).await;
         let tool = RalphTool::new();
 
-        let mut set_args = serde_json::Map::new();
-        set_args.insert("op".to_string(), serde_json::json!("set ralph"));
-        set_args.insert("session_id".to_string(), serde_json::json!("server-a"));
-        set_args.insert("instruction".to_string(), serde_json::json!("Loop"));
-        set_args.insert("max_iterations".to_string(), serde_json::json!(1));
-        tool.execute(set_args, &ctx).await.unwrap();
+        write_ralph(
+            tmp.path(),
+            "server-a",
+            &RalphState {
+                instruction: "Loop".to_string(),
+                iteration: 0,
+                max_iterations: 1,
+                body: String::new(),
+                owner_pid: Some(harness_sibling_owner_pid()),
+            },
+        )
+        .unwrap();
 
         let check_args = |op: &str| {
             let mut m = serde_json::Map::new();
@@ -1337,11 +1518,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_clear_ralph_without_session_id_clears_other_sessions_state() {
+    async fn test_clear_ralph_without_session_id_keeps_live_sessions_state() {
         let tmp = tempfile::tempdir().unwrap();
         let ctx = make_context(&tmp).await;
         let tool = RalphTool::new();
 
+        // A live session's instruction — the owner (this process) still runs.
         let mut set_args = serde_json::Map::new();
         set_args.insert("op".to_string(), serde_json::json!("set ralph"));
         set_args.insert("session_id".to_string(), serde_json::json!("other-server"));
@@ -1354,9 +1536,36 @@ mod tests {
         let result = tool.execute(clear_args, &ctx).await.unwrap();
 
         let json = response_json(&result);
+        assert_eq!(json["cleared"], false);
+        assert!(json["cleared_sessions"].as_array().unwrap().is_empty());
+        assert!(read_ralph(tmp.path(), "other-server").unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_clear_ralph_without_session_id_removes_ended_sessions_state() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = make_context(&tmp).await;
+        let tool = RalphTool::new();
+
+        // A leftover from a session whose owner process has ended, beside a
+        // live session's instruction.
+        write_instruction(tmp.path(), "gone-session", "Left behind", Some(DEAD_PID));
+        let mut set_args = serde_json::Map::new();
+        set_args.insert("op".to_string(), serde_json::json!("set ralph"));
+        set_args.insert("session_id".to_string(), serde_json::json!("live-server"));
+        set_args.insert("instruction".to_string(), serde_json::json!("Work"));
+        tool.execute(set_args, &ctx).await.unwrap();
+
+        // Clear from a context whose own session has no file
+        let mut clear_args = serde_json::Map::new();
+        clear_args.insert("op".to_string(), serde_json::json!("clear ralph"));
+        let result = tool.execute(clear_args, &ctx).await.unwrap();
+
+        let json = response_json(&result);
         assert_eq!(json["cleared"], true);
-        assert_eq!(json["cleared_sessions"][0], "other-server");
-        assert!(read_ralph(tmp.path(), "other-server").unwrap().is_none());
+        assert_eq!(json["cleared_sessions"][0], "gone-session");
+        assert!(read_ralph(tmp.path(), "gone-session").unwrap().is_none());
+        assert!(read_ralph(tmp.path(), "live-server").unwrap().is_some());
     }
 
     #[tokio::test]

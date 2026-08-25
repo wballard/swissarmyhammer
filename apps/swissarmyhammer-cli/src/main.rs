@@ -1438,9 +1438,9 @@ mod tests_relax_required_tool_args {
     ///
     /// This exercises `ralph set`, not the Stop hook's own `ralph check`:
     /// `check`'s `--session_id` is optional on the real CLI now — it falls
-    /// back to the most recent active `.ralph/*.md` instruction when the
-    /// named session has none (see `ARCHITECTURE.md`) — so `check` no longer
-    /// has a required argument to prove relaxation against. `set`'s
+    /// back to the `.ralph/*.md` instruction owned by this session's process
+    /// tree when the named session has none (see `ARCHITECTURE.md`) — so
+    /// `check` no longer has a required argument to prove relaxation against. `set`'s
     /// `--instruction` stays required, so it still demonstrates that
     /// relaxation reaches a required argument nested inside the real `tool`
     /// tree.

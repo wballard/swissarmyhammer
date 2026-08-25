@@ -8507,6 +8507,7 @@ dependencies = [
  "swissarmyhammer-treesitter",
  "swissarmyhammer-validators",
  "swissarmyhammer-web",
+ "sysinfo",
  "tempfile",
  "test-log",
  "thiserror 2.0.18",

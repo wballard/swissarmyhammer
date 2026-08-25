@@ -7,9 +7,13 @@ use markdowndown::{types::Markdown, types::MarkdownError, Config, MarkdownDown};
 use std::time::{Duration, Instant};
 use tokio::time::timeout;
 
-// Type aliases for complex result types
-type ConversionResult = Result<(String, Markdown, Duration), (String, MarkdownError, Duration)>;
+// Type aliases for complex result types. The error side boxes `MarkdownError`
+// to keep the `Err` variant small (clippy::result_large_err).
+type ConversionResult =
+    Result<(String, Markdown, Duration), (String, Box<MarkdownError>, Duration)>;
 type ConversionResults = Vec<ConversionResult>;
+type AttemptResult =
+    Result<(String, Markdown, Duration, usize), (String, Box<MarkdownError>, Duration, usize)>;
 
 // Configuration constants
 const DEFAULT_TIMEOUT_SECONDS: u64 = 30;
@@ -93,14 +97,14 @@ fn error_category(error: &MarkdownError) -> &'static str {
 }
 
 /// Generic timing wrapper for async operations
-async fn time_operation<F, T>(operation: F) -> Result<(T, Duration), (MarkdownError, Duration)>
+async fn time_operation<F, T>(operation: F) -> Result<(T, Duration), (Box<MarkdownError>, Duration)>
 where
     F: std::future::Future<Output = Result<T, MarkdownError>>,
 {
     let start = Instant::now();
     match operation.await {
         Ok(result) => Ok((result, start.elapsed())),
-        Err(e) => Err((e, start.elapsed())),
+        Err(e) => Err((Box::new(e), start.elapsed())),
     }
 }
 
@@ -117,7 +121,7 @@ async fn convert_url_with_timing_and_attempts(
     md: &MarkdownDown,
     url: &str,
     attempt: usize,
-) -> Result<(String, Markdown, Duration, usize), (String, MarkdownError, Duration, usize)> {
+) -> AttemptResult {
     match time_operation(md.convert_url(url)).await {
         Ok((markdown, duration)) => Ok((url.to_string(), markdown, duration, attempt)),
         Err((e, duration)) => Err((url.to_string(), e, duration, attempt)),
@@ -165,15 +169,11 @@ where
 }
 
 /// Fetch a URL with retry logic
-async fn fetch_with_retry(
-    md: &MarkdownDown,
-    url: &str,
-    max_attempts: usize,
-) -> Result<(String, Markdown, Duration, usize), (String, MarkdownError, Duration, usize)> {
+async fn fetch_with_retry(md: &MarkdownDown, url: &str, max_attempts: usize) -> AttemptResult {
     retry_with_backoff(
         |attempt| convert_url_with_timing_and_attempts(md, url, attempt),
         max_attempts,
-        |e: &(String, MarkdownError, Duration, usize)| e.1.is_retryable(),
+        |e: &(String, Box<MarkdownError>, Duration, usize)| e.1.is_retryable(),
         |result| match result {
             Ok((_, _, duration, _)) => *duration,
             Err((_, _, duration, _)) => *duration,
@@ -255,10 +255,7 @@ async fn process_urls_parallel(config: &Config, urls: &[&str]) -> (ConversionRes
 }
 
 /// Process URLs with timeout and retry logic
-async fn process_urls_with_retry(
-    md: &MarkdownDown,
-    urls: &[&str],
-) -> Vec<Result<(String, Markdown, Duration, usize), (String, MarkdownError, Duration, usize)>> {
+async fn process_urls_with_retry(md: &MarkdownDown, urls: &[&str]) -> Vec<AttemptResult> {
     println!("3. Batch Processing with Advanced Error Handling");
     println!("   Processing with per-URL timeouts and smart retry logic...");
 
@@ -291,7 +288,7 @@ async fn process_urls_with_retry(
                 };
                 advanced_results.push(Err((
                     url.to_string(),
-                    timeout_error,
+                    Box::new(timeout_error),
                     Duration::from_secs(PER_URL_TIMEOUT_SECONDS),
                     1,
                 )));

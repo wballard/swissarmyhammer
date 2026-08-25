@@ -84,8 +84,10 @@ async fn test_indexer_embedding_blob_roundtrips_through_deserialize() {
     // Round-trip through the same little-endian f32 layout used by
     // search_code::deserialize_embedding.
     let parsed: Vec<f32> = blob
-        .chunks_exact(4)
-        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| f32::from_le_bytes(*c))
         .collect();
     assert_eq!(parsed.len(), dim);
     // MockEmbedder returns vec![0.1; dim]

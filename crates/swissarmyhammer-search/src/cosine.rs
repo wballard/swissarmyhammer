@@ -53,7 +53,7 @@ pub fn serialize_embedding(embedding: &[f32]) -> Vec<u8> {
 /// Deserialize a little-endian f32 byte blob back into a vector.
 ///
 /// Mirrors the helper in `code-context/src/ops/search_code.rs`. Trailing bytes
-/// that do not form a full 4-byte group are ignored (via `chunks_exact`).
+/// that do not form a full 4-byte group are ignored (via `as_chunks`).
 ///
 /// # Parameters
 /// - `blob`: the little-endian byte blob produced by [`serialize_embedding`].
@@ -61,8 +61,10 @@ pub fn serialize_embedding(embedding: &[f32]) -> Vec<u8> {
 /// # Returns
 /// The reconstructed `Vec<f32>`.
 pub fn deserialize_embedding(blob: &[u8]) -> Vec<f32> {
-    blob.chunks_exact(4)
-        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+    blob.as_chunks::<4>()
+        .0
+        .iter()
+        .map(|chunk| f32::from_le_bytes(*chunk))
         .collect()
 }
 

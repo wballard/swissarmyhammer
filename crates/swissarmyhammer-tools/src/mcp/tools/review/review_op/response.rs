@@ -57,10 +57,15 @@ pub struct ReviewCountsView {
     /// gap.
     skipped: usize,
     /// Every file path the run did not review — distinct, sorted: the
-    /// `skipped` over-cap paths plus the paths the scope stage excluded
-    /// deliberately (an ignore rule matched it, or it is a validator set's own
-    /// fixture data). Orchestrators gate on this list without parsing markdown;
-    /// the markdown names each path's reason.
+    /// `skipped` over-cap paths plus the paths the scope stage excluded (an
+    /// ignore rule matched it, it is a validator set's own fixture data, or no
+    /// validator matched it at all). Orchestrators gate on this list without
+    /// parsing markdown; the markdown names each path's reason.
+    ///
+    /// This is the ONE signal that separates zero findings over a file that was
+    /// read from zero findings over a file nothing read. A clean pass leaves it
+    /// empty, so a caller that closes on `findings == 0` must check this list
+    /// too.
     skipped_files: Vec<String>,
 }
 
@@ -102,9 +107,15 @@ impl ReviewCountsView {
 
     /// Every file path the run did not review — distinct, sorted: the
     /// [`ReviewCountsView::skipped`] over-cap paths plus the paths the scope
-    /// stage excluded deliberately (an ignore rule matched it, or it is a
-    /// validator set's own fixture data). Orchestrators gate on this list
-    /// without parsing markdown; the markdown names each path's reason.
+    /// stage excluded (an ignore rule matched it, it is a validator set's own
+    /// fixture data, or no validator matched it at all). Orchestrators gate on
+    /// this list without parsing markdown; the markdown names each path's
+    /// reason.
+    ///
+    /// This is the ONE signal that separates zero findings over a file that was
+    /// read from zero findings over a file nothing read. A clean pass leaves it
+    /// empty, so a caller that closes on `findings == 0` must check this list
+    /// too.
     pub fn skipped_files(&self) -> &[String] {
         &self.skipped_files
     }

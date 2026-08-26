@@ -1,37 +1,68 @@
 //! The files the scope stage drops before any validator pairs with them, and
-//! the two deliberate reasons it drops one.
+//! the reasons it drops one.
 //!
 //! An exclusion is never silent. A run that reviewed fewer files than it
 //! resolved says which files and why, so a reader can tell a deliberate
-//! exclusion from a file the run missed. The report renders both kinds, and a
-//! scope every one of whose files was excluded is a clean review that states
-//! the exclusion — never an empty scope.
+//! exclusion from a file the run missed. The report renders each kind, and a
+//! scope every one of whose files was excluded DELIBERATELY is a clean review
+//! that states the exclusion — never an empty scope.
 //!
-//! The two kinds arrive from different stages and must never be conflated:
+//! The kinds arrive from different stages and must never be conflated:
 //! [`ExclusionKind::ReviewIgnore`] comes from the `.reviewignore` /
-//! `.gitignore` filter in [`super::resolve`], and
+//! `.gitignore` filter in [`super::resolve`],
 //! [`ExclusionKind::ValidatorFixture`] from the fixture split in
-//! [`super::fixtures`].
+//! [`super::fixtures`], and [`ExclusionKind::NoMatchingValidator`] from the
+//! validator pairing in [`super::scope_review`].
+//!
+//! Only the first two are deliberate. A file no validator matched is a
+//! coverage GAP: nothing asked for it to go unread, so it is reported the same
+//! way but never counted toward the clean full-exclusion claim
+//! ([`ExclusionKind::is_deliberate`]).
 
 use serde::Serialize;
 
 /// Why the scope stage dropped a file.
 ///
-/// The report renders the two kinds differently — an ignore exclusion is
-/// grouped under the pattern that excluded it, a fixture exclusion is named
-/// per file — so a reader sees at a glance whether a configuration or the
-/// validator store took the file out of scope.
+/// The report renders each kind differently — an ignore exclusion is grouped
+/// under the pattern that excluded it, a fixture exclusion and an unmatched
+/// file are named per file under their own heading — so a reader sees at a
+/// glance whether a configuration, the validator store, or a plain lack of
+/// coverage took the file out of scope.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum ExclusionKind {
     /// A pattern in `.reviewignore` or `.gitignore` matched the file.
     ReviewIgnore,
     /// The file is a validator set's own fixture data.
     ValidatorFixture,
+    /// No loaded validator's `match` accepted the file, so the pairing stage
+    /// had nothing to review it with.
+    NoMatchingValidator,
+}
+
+impl ExclusionKind {
+    /// Whether this kind is an exclusion someone ASKED for, as opposed to a
+    /// coverage gap.
+    ///
+    /// An ignore pattern is the repository's own configuration and a fixture
+    /// is data the validator store declares: both mean "do not read this", so
+    /// a scope covered entirely by them is a clean, passing review. No
+    /// validator matching a file means nothing read it and nothing intended
+    /// that, so it can never carry that claim — it is the exact reading
+    /// `^g7d3tzq` exists to prevent.
+    pub fn is_deliberate(self) -> bool {
+        match self {
+            ExclusionKind::ReviewIgnore | ExclusionKind::ValidatorFixture => true,
+            ExclusionKind::NoMatchingValidator => false,
+        }
+    }
 }
 
 /// The reason recorded for a file dropped because it is a validator set's own
 /// fixture data.
 const VALIDATOR_FIXTURE_REASON: &str = "validator fixture";
+
+/// The reason recorded for a file no loaded validator matched.
+const NO_MATCHING_VALIDATOR_REASON: &str = "no validator matches this file";
 
 /// A changed file the scope stage dropped before any validator paired with it,
 /// carrying the reason it was dropped.
@@ -72,6 +103,19 @@ impl ExcludedFile {
             path: path.to_string(),
             reason: pattern,
             kind: ExclusionKind::ReviewIgnore,
+        }
+    }
+
+    /// The file dropped because no loaded validator's `match` accepted it.
+    ///
+    /// Unlike the other two, this is not an exclusion anyone asked for: the
+    /// file simply has no coverage. Recording it is what keeps it out of the
+    /// silence that makes an unread file's counts identical to a clean pass's.
+    pub(crate) fn no_matching_validator(path: &str) -> Self {
+        Self {
+            path: path.to_string(),
+            reason: NO_MATCHING_VALIDATOR_REASON.to_string(),
+            kind: ExclusionKind::NoMatchingValidator,
         }
     }
 

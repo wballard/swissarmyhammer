@@ -2417,4 +2417,125 @@ for f in "$@"; do awk -v f="$f" '/TODO/ {{ print f ":" NR ": TODO left in code" 
             report.markdown()
         );
     }
+
+    // ---- a file no validator matches --------------------------------------
+
+    /// A Markdown file. No shipped validator declares a `*.md` match, and the
+    /// `docs` set these tests load matches `*.rs`, so this is a file the
+    /// pairing stage leaves with no validator at all.
+    const UNMATCHED_MARKDOWN_FILE: &str = "README.md";
+
+    /// The content of [`UNMATCHED_MARKDOWN_FILE`]: prose, so nothing in it
+    /// could produce a finding even if a validator did read it.
+    const MARKDOWN_CONTENT: &str = "# Title\n\nProse no validator reads.\n";
+
+    /// Acceptance: `review file` on a file no validator matches must never be
+    /// mistakable for a clean pass by the counts alone.
+    ///
+    /// A clean pass leaves `skipped_files` empty. The named file is therefore
+    /// on that list with its reason, which is the whole signal an orchestrator
+    /// needs: it closes a task on zero findings, and zero findings over zero
+    /// coverage must not read the same as zero findings over a file that was
+    /// read.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn review_file_over_a_file_no_validator_matches_is_a_named_gap() {
+        let (repo, conn) = todo_repo();
+        repo.write(UNMATCHED_MARKDOWN_FILE, MARKDOWN_CONTENT);
+        repo.commit("add the readme");
+        let base = tempfile::tempdir().expect("tool rule base dir");
+        crate::review::test_support::write_tool_rule_fixtures(base.path(), "docs-tool");
+        let loader = tool_rule_loader(base.path(), "true");
+
+        let (notify_tx, notification_rx) = broadcast::channel(BACKEND_BROADCAST_CAPACITY);
+        let agent = broadcast_agent(vec![], notify_tx, true);
+
+        let report = drive_review(
+            agent,
+            notification_rx,
+            &repo,
+            &conn,
+            &loader,
+            None,
+            Scope::File(UNMATCHED_MARKDOWN_FILE.to_string()),
+        )
+        .await;
+
+        assert_eq!(
+            report.counts().skipped_files(),
+            [UNMATCHED_MARKDOWN_FILE.to_string()],
+            "the named file is the one file the run did not review, and a clean \
+             pass leaves this list empty: {}",
+            report.markdown()
+        );
+        assert!(
+            report.markdown().contains("no validator matches this file"),
+            "the reason must be reported: {}",
+            report.markdown()
+        );
+        assert!(
+            report
+                .markdown()
+                .contains("0 file(s) reviewed, 1 not reviewed."),
+            "naming one file must never report \"0 reviewed, 0 not reviewed\": {}",
+            report.markdown()
+        );
+        assert!(
+            !report.markdown().contains("Nothing in scope to review."),
+            "a file that reached the pairing stage is not an empty scope: {}",
+            report.markdown()
+        );
+        assert!(
+            !report
+                .markdown()
+                .contains("Every file in scope was excluded"),
+            "no validator matching a file is a coverage gap, never the \
+             deliberate exclusion that passes clean: {}",
+            report.markdown()
+        );
+    }
+
+    /// Acceptance: the scope line reconciles. Reviewed plus not reviewed
+    /// equals the number of files the scope named.
+    ///
+    /// The glob names two tracked files, one the `docs` set matches and one it
+    /// does not. Reporting "1 file(s) reviewed, 1 not reviewed" is what makes
+    /// the line arithmetic a reader can check; the bug this pins reported
+    /// "0 reviewed, 0 not reviewed" over one named file.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn review_glob_reconciles_reviewed_plus_not_reviewed_with_the_files_named() {
+        let (repo, conn) = todo_repo();
+        repo.write(UNMATCHED_MARKDOWN_FILE, MARKDOWN_CONTENT);
+        repo.commit("add the readme");
+        let base = tempfile::tempdir().expect("tool rule base dir");
+        crate::review::test_support::write_tool_rule_fixtures(base.path(), "docs-tool");
+        let loader = tool_rule_loader(base.path(), "true");
+
+        let (notify_tx, notification_rx) = broadcast::channel(BACKEND_BROADCAST_CAPACITY);
+        let agent = broadcast_agent(vec![], notify_tx, true);
+
+        let report = drive_review(
+            agent,
+            notification_rx,
+            &repo,
+            &conn,
+            &loader,
+            None,
+            Scope::Glob("*".to_string()),
+        )
+        .await;
+
+        assert!(
+            report
+                .markdown()
+                .contains("1 file(s) reviewed, 1 not reviewed."),
+            "the two files the glob named must both be accounted for: {}",
+            report.markdown()
+        );
+        assert_eq!(
+            report.counts().skipped_files(),
+            [UNMATCHED_MARKDOWN_FILE.to_string()],
+            "the unmatched file is the half that was not reviewed: {}",
+            report.markdown()
+        );
+    }
 }

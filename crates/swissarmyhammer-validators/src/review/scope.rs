@@ -297,7 +297,9 @@ impl WorkList {
     /// The denominator the report reads: a run whose exclusions cover this
     /// whole count excluded EVERY file in scope, which is a clean review that
     /// names its exclusions rather than an empty scope. Reviewed plus excluded
-    /// need not reach it — a resolved file no validator matched is neither.
+    /// always reaches it exactly: a resolved file no validator matched is
+    /// excluded too ([`ExclusionKind::NoMatchingValidator`]), so no file
+    /// leaves this stage uncounted.
     pub fn resolved_files(&self) -> usize {
         self.resolved_files
     }
@@ -734,8 +736,8 @@ pub async fn scope_review(
     let (resolved, fixtures) = split_validator_fixtures(resolved, repo_path, loader);
 
     // The two deliberate exclusions share one list, ignore-excluded first, in
-    // the order each stage dropped them. The report tells them apart by their
-    // kind, never by their order.
+    // the order each stage dropped them; the pairing stage appends its own
+    // below. The report tells them apart by their kind, never by their order.
     let excluded: Vec<ExcludedFile> = excluded.into_iter().chain(fixtures).collect();
 
     // The base-revision content per file, keyed for the line-mark diff below.
@@ -774,6 +776,20 @@ pub async fn scope_review(
     // with the workspace's detected project types resolved once for the run.
     let project_types = detected_project_type_keys(repo_path);
     let matched = match_validators_and_files(&resolved.files, loader, &project_types);
+
+    // A resolved file that paired with NO validator leaves the work-list too,
+    // and is reported for the same reason the other two exclusions are: it is
+    // reviewed by nothing, so a run that stayed silent about it would report
+    // the counts of a clean pass over a file nothing read. Recorded here, at
+    // the stage that dropped it, so reviewed plus excluded accounts for every
+    // file the scope resolved.
+    let excluded: Vec<ExcludedFile> = excluded
+        .into_iter()
+        .chain(unmatched_exclusions(
+            &resolved.files,
+            &matched.matched_files,
+        ))
+        .collect();
 
     // Run probes ONCE over the whole change set with the union of every declared
     // probe name. This is the N+M guarantee: each distinct `(file, probe)` is
@@ -934,6 +950,32 @@ fn match_validators_and_files(
         matched_files,
         validators,
     }
+}
+
+/// One [`ExcludedFile`] for every resolved file no validator matched, in
+/// resolved order.
+///
+/// [`match_validators_and_files`] pairs a file with nothing when the loader
+/// answers with no ruleset — a Markdown file against a store of source-code
+/// validators is the everyday case. Nothing downstream can see such a file:
+/// it becomes no [`FileWork`], so no fan-out prompt renders it and no tool
+/// rule receives it as an argument. Naming it here is what turns that into a
+/// reported gap instead of a silent one.
+///
+/// Each path is logged at DEBUG as well, mirroring the ignore filter, so a run
+/// says which files it could not cover without the report being read.
+fn unmatched_exclusions(resolved: &[String], matched: &BTreeSet<String>) -> Vec<ExcludedFile> {
+    resolved
+        .iter()
+        .filter(|path| !matched.contains(path.as_str()))
+        .map(|path| {
+            tracing::debug!(
+                path = %path,
+                "review scope: no validator matched this file; it will not be reviewed"
+            );
+            ExcludedFile::no_matching_validator(path)
+        })
+        .collect()
 }
 
 /// The validator names the engine pairs with `file`, in name order.

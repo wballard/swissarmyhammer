@@ -187,6 +187,60 @@ async fn scope_review_drops_a_validator_sets_fixture_from_the_work_list() {
     assert_eq!(work.excluded()[0].reason(), "validator fixture");
 }
 
+/// A resolved file that pairs with NO validator leaves the work-list the same
+/// way a fixture does, and is reported the same way too.
+///
+/// The set matches `*.rs`, so the Markdown file resolves into the scope and
+/// then pairs with nothing. Left in silence it would be absent from the
+/// reviewed files AND from the excluded files, which is what let a report over
+/// one named file say "0 file(s) reviewed, 0 not reviewed".
+///
+/// The Markdown file is COMMITTED first and then changed, so it arrives as a
+/// tracked change. An untracked non-code file never reaches this stage at all:
+/// `resolve_working` filters the untracked half through `is_code_file`, which
+/// is a narrower gate than validator matching and a different question.
+#[tokio::test]
+async fn scope_review_reports_a_file_no_validator_matched() {
+    let repo = TestRepo::new();
+    repo.write("src/lib.rs", "pub fn base() {}\n");
+    repo.write("README.md", "# Title\n");
+    repo.commit("initial");
+    // The change: one file the set matches, and one tracked file it does not.
+    repo.write("src/alpha.rs", &format!("{}\n", body("alpha")));
+    repo.write("README.md", "# Title\n\nProse no validator reads.\n");
+
+    let conn = index_conn();
+    let loader = loader_with("scoped", "*.rs", &[]);
+    let embedder = MockEmbedder::new(DIM);
+
+    let work = scope_review(Scope::Working, repo.path(), &loader, &conn, &embedder, None)
+        .await
+        .unwrap();
+
+    let reviewed: Vec<&str> = work.distinct_files().map(FileWork::path).collect();
+    assert_eq!(
+        reviewed,
+        ["src/alpha.rs"],
+        "the Markdown file pairs with no validator; the source file still does"
+    );
+    assert_eq!(
+        work.excluded().len(),
+        1,
+        "the unmatched file is reported, not dropped in silence: {:?}",
+        work.excluded()
+    );
+    assert_eq!(work.excluded()[0].path(), "README.md");
+    assert_eq!(
+        work.excluded()[0].reason(),
+        "no validator matches this file"
+    );
+    assert_eq!(
+        reviewed.len() + work.excluded().len(),
+        work.resolved_files(),
+        "every resolved file is either reviewed or excluded, never neither"
+    );
+}
+
 // ---- scope_review: working scope, duplicate function ------------------
 
 #[tokio::test]

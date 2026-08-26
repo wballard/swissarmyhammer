@@ -137,10 +137,14 @@ pub struct ReviewCounts {
     /// CONFIRMED finding, and the markdown names each skipped file.
     skipped: usize,
     /// Every file path the run did not review — distinct, sorted: the
-    /// `skipped` over-cap paths plus the paths the scope stage excluded
-    /// deliberately (an ignore rule matched it, or it is a validator set's own
-    /// fixture data). Orchestrators gate on this list without parsing markdown;
-    /// the markdown names each path's reason.
+    /// `skipped` over-cap paths plus the paths the scope stage excluded (an
+    /// ignore rule matched it, it is a validator set's own fixture data, or no
+    /// validator matched it at all). Orchestrators gate on this list without
+    /// parsing markdown; the markdown names each path's reason.
+    ///
+    /// This is the ONE signal that separates zero findings over a file that was
+    /// read from zero findings over a file nothing read. A clean pass leaves it
+    /// empty.
     skipped_files: Vec<String>,
     /// How many tool-rule runs broke (nonzero exit or a stdout-contract
     /// violation). A non-zero value means those rules judged nothing: the
@@ -187,9 +191,13 @@ impl ReviewCounts {
 
     /// Every file path the run did not review — distinct, sorted: the
     /// [`ReviewCounts::skipped`] over-cap paths plus the paths the scope stage
-    /// excluded deliberately (an ignore rule matched it, or it is a validator
-    /// set's own fixture data). Orchestrators gate on this list without parsing
-    /// markdown; the markdown names each path's reason.
+    /// excluded (an ignore rule matched it, it is a validator set's own fixture
+    /// data, or no validator matched it at all). Orchestrators gate on this
+    /// list without parsing markdown; the markdown names each path's reason.
+    ///
+    /// This is the ONE signal that separates zero findings over a file that was
+    /// read from zero findings over a file nothing read. A clean pass leaves it
+    /// empty.
     pub fn skipped_files(&self) -> &[String] {
         &self.skipped_files
     }
@@ -258,19 +266,21 @@ impl ReviewReport {
 /// review that contains an over-cap file can never end clean.
 ///
 /// `excluded` names every [`ExcludedFile`] the scope stage dropped before any
-/// validator paired with it — a file an ignore pattern matched, or a validator
-/// set's own fixture data. Each is rendered as a named note with its reason and
-/// each path joins [`ReviewCounts::skipped_files`], so the exclusion is reported
-/// rather than silent. It is deliberately NOT a finding and NOT counted by
-/// [`ReviewCounts::skipped`]: a fixture is data the store declares, `sah doctor`
-/// is its gate, and reviewing it would fire every rule the fail fixture exists
-/// to make fire; an ignore exclusion is what the repository's own configuration
-/// asked for.
+/// validator paired with it — a file an ignore pattern matched, a validator
+/// set's own fixture data, or a file no validator matched at all. Each is
+/// rendered as a named note with its reason and each path joins
+/// [`ReviewCounts::skipped_files`], so the exclusion is reported rather than
+/// silent. None is a finding, and none is counted by [`ReviewCounts::skipped`]:
+/// a fixture is data the store declares, `sah doctor` is its gate, and
+/// reviewing it would fire every rule the fail fixture exists to make fire; an
+/// ignore exclusion is what the repository's own configuration asked for; and
+/// an unmatched file has no rule to have broken.
 ///
-/// When the exclusions cover every file the scope resolved, the report says so
-/// explicitly. That review is CLEAN — it named what it excluded and why — and
-/// it must read as neither an ordinary clean pass nor one of the empty results
-/// that stay gaps: an empty scope, a stalled run, or a size-cap skip.
+/// When the DELIBERATE exclusions cover every file the scope resolved, the
+/// report says so explicitly. That review is CLEAN — it named what it excluded
+/// and why — and it must read as neither an ordinary clean pass nor one of the
+/// empty results that stay gaps: an empty scope, a stalled run, a size-cap
+/// skip, or a file no validator matched.
 ///
 /// `tools` carries the run's tool-rule facts: each broken tool run is
 /// rendered as a tool error (its raw stderr, never findings and never a clean
@@ -522,6 +532,10 @@ fn retain_findings_on_the_change(
 /// question — which files did this run not read? The reason each path is on the
 /// list is in the markdown, and [`ReviewCounts::skipped`] still counts the
 /// over-cap half alone.
+///
+/// `excluded` carries every kind, the coverage gap of a file no validator
+/// matched included, so a named file the pairing stage could not review reaches
+/// the list a caller reads instead of leaving the run in silence.
 fn not_reviewed_paths(
     by_path: &BTreeMap<&str, SkipGroup<'_>>,
     excluded: &[ExcludedFile],
@@ -537,14 +551,25 @@ fn not_reviewed_paths(
 /// Render every file the scope stage excluded, naming the reason it was
 /// dropped.
 ///
-/// A note rather than a warning, and never a finding: the exclusion is
-/// deliberate, so the reader needs to know it happened and why, not to fix it.
-/// The two kinds render differently because they read differently — an ignore
-/// pattern is a repository's own configuration and covers whole directories at
-/// a time, a fixture is one file the validator store declares.
+/// A note rather than a warning, and never a finding: the reader needs to know
+/// the file went unread and why, not to fix it. The kinds render differently
+/// because they read differently — an ignore pattern is a repository's own
+/// configuration and covers whole directories at a time, while a fixture and an
+/// unmatched file are each one named file.
 fn render_excluded_files(markdown: &mut String, excluded: &[ExcludedFile]) {
     render_ignored_files(markdown, excluded);
-    render_fixture_files(markdown, excluded);
+    render_named_exclusions(
+        markdown,
+        excluded,
+        ExclusionKind::ValidatorFixture,
+        "excluded from the review scope",
+    );
+    render_named_exclusions(
+        markdown,
+        excluded,
+        ExclusionKind::NoMatchingValidator,
+        "no validator matched",
+    );
 }
 
 /// Render the files an ignore pattern excluded, grouped under the pattern and
@@ -570,22 +595,29 @@ fn render_ignored_files(markdown: &mut String, excluded: &[ExcludedFile]) {
     }
 }
 
-/// Render one note per file excluded as a validator set's own fixture data,
-/// naming the file and the reason it was dropped.
-fn render_fixture_files(markdown: &mut String, excluded: &[ExcludedFile]) {
-    let fixtures: Vec<&ExcludedFile> = excluded
-        .iter()
-        .filter(|file| file.kind() == ExclusionKind::ValidatorFixture)
-        .collect();
-    if fixtures.is_empty() {
+/// Render one note per file excluded with `kind`, under a heading that says
+/// `cause`, naming each file and the reason it was dropped.
+///
+/// Per file rather than grouped under a shared reason, which is what
+/// [`render_ignored_files`] does instead: these kinds carry one fixed reason
+/// each, so there is nothing to collapse them under, and the path is the only
+/// thing the reader needs from the line.
+fn render_named_exclusions(
+    markdown: &mut String,
+    excluded: &[ExcludedFile],
+    kind: ExclusionKind,
+    cause: &str,
+) {
+    let files: Vec<&ExcludedFile> = excluded.iter().filter(|file| file.kind() == kind).collect();
+    if files.is_empty() {
         return;
     }
     let _ = writeln!(
         markdown,
-        "\n> {} file(s) not reviewed — excluded from the review scope:",
-        fixtures.len()
+        "\n> {} file(s) not reviewed — {cause}:",
+        files.len()
     );
-    for file in fixtures {
+    for file in files {
         let _ = writeln!(markdown, "> - `{}` — {}", file.path(), file.reason());
     }
 }
@@ -601,8 +633,8 @@ fn count_by_reason(excluded: &[ExcludedFile], kind: ExclusionKind) -> BTreeMap<&
     counts
 }
 
-/// State a FULL exclusion: every file the scope resolved was excluded, so
-/// nothing was left to review.
+/// State a FULL exclusion: every file the scope resolved was excluded
+/// DELIBERATELY, so nothing was left to review.
 ///
 /// The notes above name each pattern and each reason; this line says they
 /// covered the WHOLE scope. Without it a fully excluded run renders as a header
@@ -610,15 +642,25 @@ fn count_by_reason(excluded: &[ExcludedFile], kind: ExclusionKind) -> BTreeMap<&
 /// and that is the one thing this report must never be mistaken for. It is a
 /// clean, passing review: the run read nothing because the repository asked it
 /// to read nothing. The empty results that stay gaps — an empty scope, a
-/// stalled run, a size-cap skip — each carry their own line instead.
+/// stalled run, a size-cap skip, a file no validator matched — each carry their
+/// own line instead.
+///
+/// Only [`ExclusionKind::is_deliberate`] exclusions count toward the claim, and
+/// the count is measured against every file the scope resolved. A run that
+/// reached the end of its scope with a file nothing could review therefore
+/// falls through to that file's own note rather than claiming a clean pass over
+/// it.
 fn render_full_exclusion(markdown: &mut String, scope: &ReviewedScope, excluded: &[ExcludedFile]) {
-    if scope.resolved == 0 || excluded.len() < scope.resolved {
+    let deliberate = excluded
+        .iter()
+        .filter(|file| file.kind().is_deliberate())
+        .count();
+    if scope.resolved == 0 || deliberate < scope.resolved {
         return;
     }
     let _ = writeln!(
         markdown,
-        "\n> Every file in scope was excluded — {} of {} file(s) — so nothing was left to review. The exclusions above are deliberate: this is a clean review, not an empty scope, a failed run, or a size-cap skip.",
-        excluded.len(),
+        "\n> Every file in scope was excluded — {deliberate} of {} file(s) — so nothing was left to review. The exclusions above are deliberate: this is a clean review, not an empty scope, a failed run, or a size-cap skip.",
         scope.resolved
     );
 }

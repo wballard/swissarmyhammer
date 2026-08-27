@@ -20,8 +20,25 @@ comments:
 
     The card's three work items are met: the writers honor the flag, `append_tag` and `rename_tag` are checked against it, and the heading-only test exists.
   timestamp: 2026-08-27T18:51:57.887551+00:00
-position_column: doing
-position_ordinal: '8380'
+- actor: claude-code
+  id: 01m1298nh0b3fk9z4hqg61eg2a
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (c157c8a72) — findings 0, confirmed 0, refuted 0, attempted 7, failed 0, skipped 0. 1 file reviewed: `crates/swissarmyhammer-kanban/src/tag_parser.rs`. 4 `.kanban/` files excluded by `.reviewignore`.
+    - next: task moved to `done`.
+  timestamp: 2026-08-27T18:56:07.200769+00:00
+- actor: claude-code
+  id: 01m1299cs8pxf0rwgjkcxk68dt
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — crates/swissarmyhammer-kanban/src/tag_parser.rs, tests only; the production behavior already held (f1ad4bc61 / 4a7bbf7e0, 2026-07-31). The first implement agent died on a session rate limit; its work survived in the tree and was verified, not restarted.
+    - test: green — cargo nextest run --workspace, 14236 passed, 0 failed, 0 skipped; clippy and fmt clean
+    - commit: c157c8a72
+    - review: clean — 0 findings, 7 validators attempted
+    - next: none — the card is in done. ^4nzhg4s is now unblocked on both of its dependencies.
+  timestamp: 2026-08-27T18:56:31.016339+00:00
+position_column: done
+position_ordinal: ffffffffffffffffffffffffffffffffffffffffffb180
 title: kanban delete tag strips a `#word` out of a markdown heading
 ---
 `tag_parser::parse_tags` does not count a `#word` inside a markdown heading

@@ -59,7 +59,7 @@ Do NOT try to engineer files so the embedding model ranks them a certain way —
 - [x] `cargo test -p swissarmyhammer-tools --test tools_tests semantic_search` still passes after the response-shape migration.
 
 ## Implementation
-New file `crates/swissarmyhammer-tools/tests/integration/search_fusion_e2e.rs`. Corpus: target `src/render.rs` (`fn reticulate_splines`, terse body = weak embedding) + semantic decoy `src/geometry.rs` (`fn tessellate_curve_patches`, rich spline/mesh-rendering doc comment) + ordinary decoys. Query mixes decoy PROSE words (pull cosine toward geometry.rs, absent from any symbol_path) with the typo `reticulate_splne` (near-maximal char-trigram on the target's high-weight symbol_path). Measured: cosine-only ranks geometry.rs above the target; default fusion ranks the target #1.
+New file `crates/swissarmyhammer-tools/tests/integration/search_fusion_e2e.rs`. Corpus: target `src/render.rs` (`fn reticulate_splines`, terse body = weak embedding) + semantic decoy `src/geometry.rs` (`fn tessellate_curve_patches`, rich spline/mesh-rendering doc comment) + ordinary decoys. Query mixes decoy PROSE words (pull cosine toward geometry.rs, absent from any symbol_path) with the typo `reticulate_splne` (near-maximal char-trigram on the target's high-weight symbol_path). Measured: cosine-only ranks geometry.rs above the target; default fusion ranks the target `#1`.
 
 ## Workflow
 - Used `/tdd` — wrote the failing e2e first, iterated the corpus/query so cosine genuinely misses, then default fusion passes.

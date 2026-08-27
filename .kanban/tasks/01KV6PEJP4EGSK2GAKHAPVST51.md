@@ -22,7 +22,7 @@ The incremental-tracking recorder now writes `.validators/.hashes/*.yaml` correc
 1. `ensure_gitignore` is not actually invoked on the recorder path that writes `.hashes/` entries (the dir+entries get created by a path that skips it), or
 2. `ensure_gitignore`'s logic treats the pre-existing store gitignore as "already set up" and returns without appending the `.hashes/` line.
 
-Determine which (likely #1 or a content-detection edge case in #2) and fix it.
+Determine which (likely `#1` or a content-detection edge case in `#2`) and fix it.
 
 ## Fix
 - Make the recorder path that writes `.validators/.hashes/` entries reliably ensure the `.hashes/` ignore line is present in `.validators/.gitignore`, **appending** it while preserving the swissarmyhammer-directory-authored content (do not clobber the store gitignore).

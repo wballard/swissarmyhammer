@@ -35,7 +35,7 @@ The verdict-shape requirement itself appears to be the trigger. The model treats
 
 ## Resolution
 
-Per acceptance criteria #2: skipped behind a feature flag (`#[ignore]`) with documented reasoning. The test is preserved in source as a real-model sanity check that can be opted into by larger-model CI runs:
+Per acceptance criteria `#2`: skipped behind a feature flag (`#[ignore]`) with documented reasoning. The test is preserved in source as a real-model sanity check that can be opted into by larger-model CI runs:
 
 ```text
 cargo nextest run -p llama-agent --test agent_tests \
@@ -59,7 +59,7 @@ When a stronger test model is wired into `test_models.rs` (or the avp validator 
 ## Workflow
 
 - Compare the prompt in `tool_use_multi_turn.rs` against `tool_call_round_trip.rs` to see why one model-driven test calls the tool and the other does not. **(Done.)**
-- If the difference is just prompt strength, tighten the prompt; if there's a real parsing regression, fix it. **(Tightened prompt insufficient against Qwen3-0.6B; gated behind `#[ignore]` per acceptance criterion #2.)**
+- If the difference is just prompt strength, tighten the prompt; if there's a real parsing regression, fix it. **(Tightened prompt insufficient against Qwen3-0.6B; gated behind `#[ignore]` per acceptance criterion `#2`.)**
 
 ## Depends on
 

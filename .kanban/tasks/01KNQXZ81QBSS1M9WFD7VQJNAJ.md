@@ -61,14 +61,14 @@ Two changes:
    - Inline comment added on `showFocusBar={false}` explaining the viewport-size suppression rationale: drawing a focus rectangle around the entire board body would be visually noisy. The zone still registers, still flips `data-focused`, still owns drill-in/out + click-to-focus — only the visible bar is muted. Sized container zones (column, card, field row) keep `showFocusBar={true}`; viewport-sized chrome (board, perspective, view, navbar) suppresses it for the same reason. Cross-references `perspective-view.spatial.test.tsx` for the matching contract.
 
 2. **`kanban-app/ui/src/components/board-view.spatial.test.tsx`** — new browser-mode test file (9 test cases, 8 passing + 1 deferred):
-   - Test #1 — `spatial_register_zone` registration with `moniker: "ui:board"`, captures the board's `SpatialKey`.
-   - Test #2 — Click on the board chrome dispatches exactly one `spatial_focus({ key: boardKey })`. Verifies `e.stopPropagation()` keeps the click from bubbling.
+   - Test `#1` — `spatial_register_zone` registration with `moniker: "ui:board"`, captures the board's `SpatialKey`.
+   - Test `#2` — Click on the board chrome dispatches exactly one `spatial_focus({ key: boardKey })`. Verifies `e.stopPropagation()` keeps the click from bubbling.
    - Test — Focus claim on the board zone flips `data-focused` but does NOT mount `<FocusIndicator>` as a direct descendant (because `showFocusBar={false}`).
-   - Test #4 — Arrow keys (ArrowUp/Down/Left/Right) dispatch `spatial_navigate({ key: boardKey, direction })` for the correct directions when the board is focused. Routes through the AppShell's global keybinding pipeline.
+   - Test `#4` — Arrow keys (ArrowUp/Down/Left/Right) dispatch `spatial_navigate({ key: boardKey, direction })` for the correct directions when the board is focused. Routes through the AppShell's global keybinding pipeline.
    - Test — Tab/Shift+Tab — `it.skip` placeholder. Deferred to follow-up task `01KQ7CQNFJ...` (Distinguish Shift+Tab from Tab in keybinding normalizer): the normalizer in `kanban-app/ui/src/lib/keybindings.ts` currently produces the same canonical key `"Tab"` for both Tab and Shift+Tab, so distinct bindings cannot be registered. The follow-up adds the Shift-prefix branch for symbolic keys.
-   - Test #6 — Enter dispatches `spatial_drill_in({ key: boardKey })`. After the kernel resolves a child column moniker and the test fires the resulting `focus-changed` event, the column's `data-focused` flips to `"true"`.
+   - Test `#6` — Enter dispatches `spatial_drill_in({ key: boardKey })`. After the kernel resolves a child column moniker and the test fires the resulting `focus-changed` event, the column's `data-focused` flips to `"true"`.
    - Test — Unmount dispatches `spatial_unregister_scope({ key: boardKey })`.
-   - Test #8 — Legacy nav stripped: zero IPCs match `entity_focus_*`/`claim_when_*`/`broadcast_nav_*` across mount/click/focus.
+   - Test `#8` — Legacy nav stripped: zero IPCs match `entity_focus_*`/`claim_when_*`/`broadcast_nav_*` across mount/click/focus.
    - Drill-out chain integration — focuses `task:t1`, then walks Escape up through `column:col-todo`, `ui:board`, and onto the window-root layer. Asserts each step's `data-focused` attribute follows the kernel's `focus-changed` payload.
 
 The test mounts `<BoardView>` inside the production-shaped spatial-nav stack PLUS `<AppShell>` so the global keybinding pipeline (`<KeybindingHandler>` → `nav.up`/`nav.down`/`nav.left`/`nav.right` → `spatial_navigate`) is live. The mock `spatial-focus-context` listens via `mockListen("focus-changed", cb)`; tests call `fireFocusChanged({ next_key, next_moniker })` to drive React state updates. `next_moniker` is required for keystroke tests because the entity-focus bridge in `<EntityFocusProvider>` uses it to seed the focused scope, which `<KeybindingHandler>` walks via `extractScopeBindings` to resolve scope-level command keys.

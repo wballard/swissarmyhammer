@@ -5,7 +5,7 @@ position_column: done
 position_ordinal: ffffffffffffffffffffffffffffffffffffca80
 title: 'KV-cache reuse: validate prefix by content fingerprint, not just length'
 ---
-Follow-up from review of d4a69cbe8 (card 01KSSS5H82YC0TX0CM6SQV8CRP, finding #3).
+Follow-up from review of d4a69cbe8 (card 01KSSS5H82YC0TX0CM6SQV8CRP, finding `#3`).
 
 `queue.rs::streaming_offset_decision` (and the batch path's `compute_template_token_count`) gate KV-cache reuse on a LENGTH check (`offset >= total` → discard). This is a length check standing in for a prefix check. It is correct only under the current invariant (conversation grows append-only; compaction strictly shrinks the prompt and never rewrites a retained prefix while keeping a similar token count). Documented in `prepare_streaming_kv_cache` doc comment.
 

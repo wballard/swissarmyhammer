@@ -79,7 +79,7 @@ Lock in the read-only enforcement at the boundary, not just at registration time
 
 ### 5. Trait-level audit — every registered tool returns `is_validator_tool() = true`
 
-Defense in depth. After registration, iterate the registry and assert that for every tool, `tool.is_validator_tool() == true`. If any tool registers itself as validator-mode but returns `false` from the trait method, that's a registration bug. If any non-validator tool sneaks into the registry, this test catches it even if grep #2 missed.
+Defense in depth. After registration, iterate the registry and assert that for every tool, `tool.is_validator_tool() == true`. If any tool registers itself as validator-mode but returns `false` from the trait method, that's a registration bug. If any non-validator tool sneaks into the registry, this test catches it even if grep `#2` missed.
 
 ### 6. Doc/test fixture audit — rule prompts don't advertise tools we don't supply
 

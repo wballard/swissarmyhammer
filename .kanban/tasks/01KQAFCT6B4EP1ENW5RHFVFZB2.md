@@ -33,7 +33,7 @@ Concrete gaps observed in `.avp/log` for the 16:06 Stop-hook run:
 
 - **Same `.avp/log`** — do not introduce a separate sink. The whole point is one file to grep. The in-process server already shares the global tracing subscriber set up in `avp-common`; verify this still holds for any new `tracing` calls.
 - **Truncation** — tool args/responses must be truncated at info level. Default 512 bytes for args, 256 bytes for preview. Allow opting into full-payload logging at trace level via `RUST_LOG=swissarmyhammer_tools::mcp=trace`.
-- **Secret hygiene** — the truncation function must not split mid-UTF-8 boundary (use `floor_char_boundary`). Same risk as task `01KQ8CXYMBGN1VTV4S89FGQYCA` Warning #2: do not log the *content* of `read_file` responses or `Write` inputs at info — preview is fine for diagnostics, full content is only at trace.
+- **Secret hygiene** — the truncation function must not split mid-UTF-8 boundary (use `floor_char_boundary`). Same risk as task `01KQ8CXYMBGN1VTV4S89FGQYCA` Warning `#2`: do not log the *content* of `read_file` responses or `Write` inputs at info — preview is fine for diagnostics, full content is only at trace.
 - **Performance** — argument JSON serialization should not happen at all when the log level is below info (use `tracing::enabled!`). Same for response previews. The validator server is on the hot path of every per-rule run; allocating a 256-byte string per call is fine, but allocating a multi-KB args dump and then discarding it is not.
 
 ## Acceptance
@@ -59,11 +59,11 @@ Mode: task. Scope: `swissarmyhammer-tools/Cargo.toml`, `swissarmyhammer-tools/sr
 
 Acceptance criteria checklist:
 
-- [x] **#1 \"Which tools were exposed to the validator agent?\"** — `event=tools_listed` info-level line in `list_tools` carries `tools=name1,name2,...` and `tool_count`. Note: fires on every `tools/list` call (typically once per session, but could repeat); not strictly per-session-create.
-- [x] **#2 \"What did rule X actually call?\"** — `tool_call args` info-level line carries `tool=`, `args_preview=` (UTF-8-safe truncation to 512 bytes), and the parent span carries `session_id=`. JSON serialization is correctly gated by `tracing::enabled!(Level::INFO)` and `Level::TRACE`.
-- [x] **#3 \"What did the tool return?\"** — `tool_call complete` info-level line carries `duration_ms`, `error`, `result_bytes`, and `preview=` (UTF-8-safe 256-byte truncation). Trace-level emits the full payload in a separate `tool_call result (full payload)` line.
-- [x] **#4 \"Why did session abc-123 die?\"** — Now COMPLETE. The middleware tracks `session_open` (first sight), `session_close` (DELETE observed — clean vs. forced via `cause` field), and `session_terminate` (non-success status on a session-bearing request). Each line carries `session_id` so the lifetime of one session can be grepped end-to-end. The `initialize` handler now emits `event=session_initialized` (distinct from `session_open`) so the schema is unambiguous.
-- [x] **#5 \"Did the in-process MCP server shut down cleanly when avp exited?\"** — `event=server_shutdown` info-level line in `McpServerHandle::shutdown` carries `bound_for_seconds`, `bound_for_ms`, `total_requests`, `total_errors`, `total_sessions`, `signal_sent`, `connection_url`. Idempotent (early `take()` on `shutdown_tx`). Now backed by a `Drop` impl that fires the same line on implicit drop with `dropped=true`.
+- [x] **`#1` \"Which tools were exposed to the validator agent?\"** — `event=tools_listed` info-level line in `list_tools` carries `tools=name1,name2,...` and `tool_count`. Note: fires on every `tools/list` call (typically once per session, but could repeat); not strictly per-session-create.
+- [x] **`#2` \"What did rule X actually call?\"** — `tool_call args` info-level line carries `tool=`, `args_preview=` (UTF-8-safe truncation to 512 bytes), and the parent span carries `session_id=`. JSON serialization is correctly gated by `tracing::enabled!(Level::INFO)` and `Level::TRACE`.
+- [x] **`#3` \"What did the tool return?\"** — `tool_call complete` info-level line carries `duration_ms`, `error`, `result_bytes`, and `preview=` (UTF-8-safe 256-byte truncation). Trace-level emits the full payload in a separate `tool_call result (full payload)` line.
+- [x] **`#4` \"Why did session abc-123 die?\"** — Now COMPLETE. The middleware tracks `session_open` (first sight), `session_close` (DELETE observed — clean vs. forced via `cause` field), and `session_terminate` (non-success status on a session-bearing request). Each line carries `session_id` so the lifetime of one session can be grepped end-to-end. The `initialize` handler now emits `event=session_initialized` (distinct from `session_open`) so the schema is unambiguous.
+- [x] **`#5` \"Did the in-process MCP server shut down cleanly when avp exited?\"** — `event=server_shutdown` info-level line in `McpServerHandle::shutdown` carries `bound_for_seconds`, `bound_for_ms`, `total_requests`, `total_errors`, `total_sessions`, `signal_sent`, `connection_url`. Idempotent (early `take()` on `shutdown_tx`). Now backed by a `Drop` impl that fires the same line on implicit drop with `dropped=true`.
 
 Constraints:
 
@@ -75,9 +75,9 @@ Constraints:
 
 Findings:
 
-- [x] **MEDIUM — Session close/terminate lifecycle missing (criterion #4 not fully met).** RESOLVED. The `request_observer` middleware now emits `event=session_close` on observed DELETE requests (with a `cause` field distinguishing `client_delete` from `delete_failed`) and `event=session_terminate` on any non-success response on a session-bearing non-DELETE request, with the HTTP `status` and `cause` (canonical reason) fields. Every line carries `session_id=...` so the per-session lifetime is greppable end-to-end. New regression test `test_request_observer_session_lifecycle_events` asserts open→terminate→close fire exactly once for the right session ids.
+- [x] **MEDIUM — Session close/terminate lifecycle missing (criterion `#4` not fully met).** RESOLVED. The `request_observer` middleware now emits `event=session_close` on observed DELETE requests (with a `cause` field distinguishing `client_delete` from `delete_failed`) and `event=session_terminate` on any non-success response on a session-bearing non-DELETE request, with the HTTP `status` and `cause` (canonical reason) fields. Every line carries `session_id=...` so the per-session lifetime is greppable end-to-end. New regression test `test_request_observer_session_lifecycle_events` asserts open→terminate→close fire exactly once for the right session ids.
 
-- [x] **MEDIUM — Per-request timing breakdown missing (\"What's missing\" #6 not addressed).** RESOLVED. `tool_call complete` now carries `duration_ms` (total) plus `parse_ms`, `dispatch_ms`, `handler_ms`, `response_ms` so a slow call's bottleneck is visible at info level without re-running.
+- [x] **MEDIUM — Per-request timing breakdown missing (\"What's missing\" `#6` not addressed).** RESOLVED. `tool_call complete` now carries `duration_ms` (total) plus `parse_ms`, `dispatch_ms`, `handler_ms`, `response_ms` so a slow call's bottleneck is visible at info level without re-running.
 
 - [x] **LOW — Duplicate `event=session_open` log lines.** RESOLVED. The `McpServer::initialize` handler now emits `event=session_initialized` instead of duplicating `session_open`. The middleware retains the unique `session_open` event on first-sight of a `mcp-session-id`. `grep 'event=session_open' | wc -l` now matches the actual count of distinct sessions.
 
@@ -89,7 +89,7 @@ Findings:
 
 - [x] **LOW — Args JSON serialization at info level still allocates the full string before truncation.** RESOLVED. Added `serialize_json_bounded` to `tracing_util.rs` — a streaming serializer with a `BoundedWriter` that stops accepting bytes once a soft cap is reached while still counting the would-be size. The `call_tool` info path now uses it for args, capping allocation at `MAX_ARGS_BYTES_INFO` (512 B) regardless of the underlying value's size. Four new unit tests cover the bounded writer (short/long/multi-byte/zero-cap cases).
 
-Overall: the truncation primitive and its tests are excellent; criteria #1, #2, #3, #5 are met cleanly; criterion #4 is the load-bearing gap. Recommending fixes for the medium findings and at least one log-output assertion test.
+Overall: the truncation primitive and its tests are excellent; criteria `#1`, `#2`, `#3`, `#5` are met cleanly; criterion `#4` is the load-bearing gap. Recommending fixes for the medium findings and at least one log-output assertion test.
 
 ## Fix Round (2026-04-28 — second pass)
 

@@ -17,7 +17,7 @@ This is the first migration that exercises the picker pipeline end-to-end: enum 
 ### Implementation notes
 
 - **`<GroupSelector>` decision: DELETED.** The legacy selector did three things `<CommandPopover>`'s generic enum renderer can't do natively: filter to `groupable === true` fields, include a "None" option dispatching `perspective.clearGroup`, and render each field as a dedicated button. The right replacements:
-  - Field filtering is owned by the backend: `denormalize_perspective_fields` in `swissarmyhammer-kanban/src/dynamic_sources.rs` filters perspective fields against `FieldDef.groupable == Some(true)` so the Group By popover only surfaces fields the user can actually group on. (This filter was missing on the first pass — see review-finding #1 below — and is now in place with full unit-test coverage.)
+  - Field filtering is owned by the backend: `denormalize_perspective_fields` in `swissarmyhammer-kanban/src/dynamic_sources.rs` filters perspective fields against `FieldDef.groupable == Some(true)` so the Group By popover only surfaces fields the user can actually group on. (This filter was missing on the first pass — see review-finding `#1` below — and is now in place with full unit-test coverage.)
   - The "None" affordance is restored via a `clear_command: "perspective.clearGroup"` annotation on the YAML param. `<CommandPopover>` renders "(none)" as the first option whenever a param carries `clear_command`, and `<CommandButton>`'s commit handler intercepts the empty-string sentinel to dispatch the clear command instead of the parent command.
   - The plain `<select>` from `<CommandPopover>` covers the field-list UX without any virtualization, search, or icon needs.
 

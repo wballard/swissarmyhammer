@@ -8,20 +8,20 @@ position_ordinal: ffffffffffffffffffffffffffffffffffffd980
 project: agent-builtins
 title: sah deinit must NOT clean up the Bash deny (remove AllowBashCleanup)
 ---
-Reverses the cleanup half of card #7 (`01KT57DTV0A34V64FJ53KW826G`). The serve-time Bash deny is sticky; `sah deinit` must NOT re-allow Bash.
+Reverses the cleanup half of card `#7` (`01KT57DTV0A34V64FJ53KW826G`). The serve-time Bash deny is sticky; `sah deinit` must NOT re-allow Bash.
 
 ## Why
-The Bash deny is applied at serve-time (card #6) so the SAH `shell` tool replaces Claude's native Bash. That replacement should persist; `sah deinit` (which unregisters the MCP server) must not silently re-enable Bash. The deny's lifecycle is owned by the serve path, not by init/deinit.
+The Bash deny is applied at serve-time (card `#6`) so the SAH `shell` tool replaces Claude's native Bash. That replacement should persist; `sah deinit` (which unregisters the MCP server) must not silently re-enable Bash. The deny's lifecycle is owned by the serve path, not by init/deinit.
 
 ## Change
-- In `apps/swissarmyhammer-cli/src/commands/install/components/mod.rs`: card #7 turned `DenyBash` into the deinit-only `AllowBashCleanup` (init no-op, `deinit()` → `mirdan::install::allow_tool(scope, "Bash")`). With deinit no longer cleaning up, this component now does NOTHING on either init or deinit — **remove it entirely** rather than leave a vestigial no-op component.
+- In `apps/swissarmyhammer-cli/src/commands/install/components/mod.rs`: card `#7` turned `DenyBash` into the deinit-only `AllowBashCleanup` (init no-op, `deinit()` → `mirdan::install::allow_tool(scope, "Bash")`). With deinit no longer cleaning up, this component now does NOTHING on either init or deinit — **remove it entirely** rather than leave a vestigial no-op component.
   - Delete the `AllowBashCleanup` struct + its `Initializable` impl.
   - Remove it from `register_all` (component count drops from 9 to 8).
   - `apps/swissarmyhammer-cli/src/commands/registry.rs`: drop its priority-table doc row; verify nothing else references it.
-- Remove/replace the card-#7 tests that assert deinit removes a serve-applied deny (`test_allow_bash_cleanup_deinit_removes_serve_applied_deny`, etc.). After this, neither `sah init` nor `sah deinit` touches the Bash deny at all — add/keep a test asserting deinit does NOT re-allow Bash (i.e. a pre-existing `permissions.deny: ["Bash"]` survives `sah deinit`).
+- Remove/replace the card-`#7` tests that assert deinit removes a serve-applied deny (`test_allow_bash_cleanup_deinit_removes_serve_applied_deny`, etc.). After this, neither `sah init` nor `sah deinit` touches the Bash deny at all — add/keep a test asserting deinit does NOT re-allow Bash (i.e. a pre-existing `permissions.deny: ["Bash"]` survives `sah deinit`).
 
 ## Out of scope
-- The serve-time deny itself (#6) stays.
+- The serve-time deny itself (`#6`) stays.
 - shelltool-cli's standalone install/deinit Bash handling — leave it; this card is only about sah's init/deinit component set.
 
 ## Done when

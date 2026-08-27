@@ -101,11 +101,76 @@ comments:
     - blocker: the sweep item cannot finish. `delete tag` rewrites cards, and that write path holds two defects that damaged 16 cards. The whole sweep was reverted. Blocked on ^7rh0bvj and ^kt3gfhq.
     - next: land ^7rh0bvj and ^kt3gfhq, then finish the sweep and take this card through review
   timestamp: 2026-08-27T16:02:05.667496+00:00
+- actor: claude-code
+  id: 01m12av0z6mhj44w1yrm489g08
+  text: |-
+    Sweep done. The board holds 134 tags, down from 181. Every remaining name is a
+    valid slug, so no fragment name is left.
+
+    How the sweep was made safe. `delete tag` normalizes the stored name to a slug
+    and then runs `remove_tag` over EVERY card. So a fragment is only safe to
+    delete once no body carries its slug — then the `new_body != body` guard skips
+    every write and the delete touches the entity alone. The order was therefore:
+    correct the prose first, delete the entities second.
+
+    1. Prose corrections — 48 cards, 129 markers. Every prose reference to a
+       numbered item (`#1` … `#8`, `#10`, `#29`, `#64`, `#1b`) was put in inline
+       code, so the parser stops reading it as a tag and the sentence still says
+       what it said. Measured, not assumed: no marker stood on a line that holds
+       only tag markers, so not one of the 129 was a label anyone applied on
+       purpose. The rewrite was proved byte-faithful before it ran — reassembling
+       all 3063 card bodies from the same line walk returned every one unchanged —
+       and each corrected body differs from its original by exactly two backticks
+       for each wrapped marker and by nothing else.
+
+    2. Entity deletions — 47 fragment entities. 44 were bare-number debris, and
+       the slug collisions were severe: 10 separate entities all normalized to `2`,
+       7 to `1`, 7 to `3`, 7 to `4`.
+
+    3. The two hyphen-joined tags this card is about were repaired, not just
+       deleted. `bug-code-context-indexer-lsp-live-leader` was the ONLY tag on its
+       card, and the card's create record carries no such marker — the joined name
+       was written later by the defect. The five tags the caller asked for
+       (`bug`, `code-context`, `indexer`, `lsp-live`, `leader`) are now applied
+       separately. `tool-validators-objectivity` already had its two real tags
+       beside it, so only the joined marker went.
+
+    4. `init-doctor):` needed special handling and is worth writing down. Its slug
+       is `init-doctor`, which is also a REAL tag carried by 20 cards. Deleting it
+       the ordinary way would have stripped all 20 real markers, and `update tag`
+       is no escape — it renames bodies using the OLD slug, and its duplicate-name
+       check rejects the rename anyway. The way through: rename the REAL tag aside
+       to `init-doctor-sweep-tmp` (in-place marker rewrite), delete the fragment
+       (now carried by nobody, so zero card writes), rename back. The 20 cards
+       hash byte-identical before and after.
+
+    Kept on purpose, because they are labels someone applied, not prose or code
+    debris: `te`, `power`, `new-tag`, `sample`, `junk-and-things`. Each sits in a
+    deliberate tag-marker position. `te` is meaningless as a label, but it stands
+    next to `#field-special-case` in the trailing marker run of its card, so it
+    fails the "prose or code debris" test this card sets.
+
+    Verification. All 3310 tracked cards were compared against HEAD: 0 titles
+    changed, 0 newly `Untitled`, 0 files missing. The `Untitled` count is 1 both
+    before and after — `01M11YRV7M56YWPCJNG7RH0BVJ` (^7rh0bvj) is already
+    `Untitled` in HEAD, damaged by the very defect it documents, and this sweep
+    neither caused nor cured it. Across the 48 correction cards the diff is 102
+    lines rewritten and identical once backticks are stripped.
+  timestamp: 2026-08-27T19:23:37.318359+00:00
+- actor: claude-code
+  id: 01m12b3k3jaf8e1n3hdggb9jw6
+  text: |-
+    ### implement — changed
+    - evidence: board sweep only; no Rust source changed. Tags 181 → 134; 47 fragment entities deleted; 48 cards corrected (129 prose markers put in inline code); 2 hyphen-joined tags replaced by the tags the caller asked for. `cargo nextest run --workspace` — 14236 passed, 0 failed, 0 skipped. `cargo fmt --check` clean, `cargo clippy --workspace --all-targets -- -D warnings` clean. All 3310 tracked cards compared against HEAD: 0 titles changed, 0 newly `Untitled`, 0 files missing.
+    - discovered: the SAME defect class is still live on the CLI surface. `kanban task add|update|tag --tags '["a","b"]'` writes one tag `a-b` and reports `ok: true`. `dispatch::ref_list` is correct, so the CLI does not reach it for this param. Reproduced on a fresh board with a binary built at `c157c8a72`. Filed as ^18kd3j9. One such call fired against the live board during this sweep and created the tag `code-context-indexer`; the card body and the stray entity were both reverted, and the card is byte-identical to HEAD again.
+    - note: two `kanban serve` processes (PIDs 65082, 14821) ran on this board for the whole sweep. No damage is attributable to them — every batch was diffed, and the only changed files are the intended ones.
+    - next: `/review`.
+  timestamp: 2026-08-27T19:28:18.034526+00:00
 depends_on:
 - 01M11YRV7M56YWPCJNG7RH0BVJ
 - 01M11YS6AG9C75AP9RDKT3GFHQ
-position_column: todo
-position_ordinal: fff880
+position_column: doing
+position_ordinal: '8380'
 title: 'kanban tag task: an array of tags becomes one hyphen-joined tag'
 ---
 `tag task` does not split an array. It joins the array into one tag name.

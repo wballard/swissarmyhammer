@@ -12,7 +12,7 @@ The readiness gate added in 1j79z6d (short_id 1j79z6d) covers the `diagnostics` 
 
 A SEPARATE surface was NOT covered: the code-context `get diagnostics` op, `crates/swissarmyhammer-code-context/src/layered_context.rs::lsp_diagnostics`. It still collapses a not-ready rust-analyzer's error/empty answer into a clean `Some(vec![])` reported as `SourceLayer::LiveLsp`, so a caller of `code_context get diagnostics` reads "no diagnostics" as "clean" while the server is merely still loading.
 
-This is PRE-EXISTING (not a regression introduced by 1j79z6d — that path already collapsed error envelopes to empty before the change). Flagged by the adversarial double-check of 1j79z6d as observation #3.
+This is PRE-EXISTING (not a regression introduced by 1j79z6d — that path already collapsed error envelopes to empty before the change). Flagged by the adversarial double-check of 1j79z6d as observation `#3`.
 
 ## What exists to reuse
 

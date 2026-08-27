@@ -35,13 +35,13 @@ Per the silent-None enumeration we walked through, six paths in `BeamNavStrategy
 
 2. **Iter 0 finds nothing AND escalation succeeds, iter 1 finds nothing, drill-out returns the parent moniker (NOT None).** This case actually doesn't return None — it returns the panel zone's moniker. So if the user gets None, this isn't it.
 
-3. **Stale rects on every field zone → all rejected by beam.** If the inspector body has scrolled OR if `getBoundingClientRect()` returned zeros at registration time, every candidate's rect fails the in-beam test for "below the focused rect." iter 0 returns None, escalation succeeds (panel exists), iter 1 has no sibling panels, so cardinal_cascade returns the panel moniker — NOT None. Same as #2.
+3. **Stale rects on every field zone → all rejected by beam.** If the inspector body has scrolled OR if `getBoundingClientRect()` returned zeros at registration time, every candidate's rect fails the in-beam test for "below the focused rect." iter 0 returns None, escalation succeeds (panel exists), iter 1 has no sibling panels, so cardinal_cascade returns the panel moniker — NOT None. Same as `#2`.
 
 4. **All field zones share the same y-coordinate due to stale rects.** Beam search rejects every candidate that isn't "below" — if every rect has the same `top`, no candidate passes. iter 0 misses, iter 1 has no sibling panels, cascade returns panel moniker.
 
-So if the user is genuinely seeing `None` (not the panel moniker), the cause is most likely **#1 — field zones have the wrong `parent_zone`**, OR there's something more subtle (e.g., field zones registered in a different layer than the panel).
+So if the user is genuinely seeing `None` (not the panel moniker), the cause is most likely **`#1` — field zones have the wrong `parent_zone`**, OR there's something more subtle (e.g., field zones registered in a different layer than the panel).
 
-If the user is actually seeing "focus moves to the panel zone but the indicator paints somewhere unexpected," that's #2/#3/#4 — the kernel returned the panel moniker, not None, but the visual feedback looks like None.
+If the user is actually seeing "focus moves to the panel zone but the indicator paints somewhere unexpected," that's `#2`/`#3`/`#4` — the kernel returned the panel moniker, not None, but the visual feedback looks like None.
 
 ## Approach
 

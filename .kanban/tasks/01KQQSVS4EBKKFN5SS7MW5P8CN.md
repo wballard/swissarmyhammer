@@ -43,7 +43,7 @@ Cascading test updates needed (similar in scope to entity-card's iteration 2):
 
 ### 3. `kanban-app/ui/src/components/perspective-tab-bar.tsx::GroupButton` (`GroupPopoverButton`)
 
-Same reshape as #2 — covered by the same PerspectiveTabFocusable promotion.
+Same reshape as `#2` — covered by the same PerspectiveTabFocusable promotion.
 
 ## Acceptance Criteria
 

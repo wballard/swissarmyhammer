@@ -29,7 +29,7 @@ That command has **no `keys:` block** and no `scope:` constraint. Nothing keyboa
 
 Implementer chose **Option 1** — added `keys` + `scope: "entity:perspective"` to the existing `ui.entity.startRename` command in `swissarmyhammer-commands/builtin/commands/ui.yaml`. Reuses the canonical "begin inline rename" command rather than adding a perspective-domain alias.
 
-The React side mirrors the YAML by registering a perspective-scoped `CommandDef` with id `ui.entity.startRename` and `keys: { cua: Enter, vim: Enter, emacs: Enter }` on the **active** perspective tab's `<CommandScopeProvider>` in `ScopedPerspectiveTab` (`kanban-app/ui/src/components/perspective-tab-bar.tsx`). Inactive tabs receive an empty commands array, so Enter on a focused inactive tab falls through to the global `nav.drillIn` (a leaf-scope no-op). This satisfies both AC #1 (Enter on focused active tab triggers rename) and the test-case requirement that Enter on a focused inactive tab mounts no rename editor.
+The React side mirrors the YAML by registering a perspective-scoped `CommandDef` with id `ui.entity.startRename` and `keys: { cua: Enter, vim: Enter, emacs: Enter }` on the **active** perspective tab's `<CommandScopeProvider>` in `ScopedPerspectiveTab` (`kanban-app/ui/src/components/perspective-tab-bar.tsx`). Inactive tabs receive an empty commands array, so Enter on a focused inactive tab falls through to the global `nav.drillIn` (a leaf-scope no-op). This satisfies both AC `#1` (Enter on focused active tab triggers rename) and the test-case requirement that Enter on a focused inactive tab mounts no rename editor.
 
 ### Files changed
 

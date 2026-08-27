@@ -32,7 +32,7 @@ fn test_…() {
 
 That's the same pattern used by `commands::registry::tests::{test_init_runs_without_panic, test_deinit_runs_without_panic, test_register_all_includes_skill_deployment}`. Reuse the same imports.
 
-For test #1 (MCP), keep the existing `IsolatedTestEnvironment` (and the env-var guard) and add the `CurrentDirGuard` + `serial(cwd)` on top — don't double-isolate HOME.
+For test `#1` (MCP), keep the existing `IsolatedTestEnvironment` (and the env-var guard) and add the `CurrentDirGuard` + `serial(cwd)` on top — don't double-isolate HOME.
 
 After the fix: `cargo test -p swissarmyhammer-cli --lib` should leave the crate dir clean. Verify by `rm -rf apps/swissarmyhammer-cli/{.claude,.github,.skills,.zed,.sah,.prompts,.agents,mirdan-lock.json,.mcp.json}` (clean), running the suite, and checking `git status` — no untracked dirs should reappear.
 

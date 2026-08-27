@@ -238,6 +238,55 @@ fn aliased_list_param(
     list_param(op, singular)
 }
 
+/// Read a filter-sugar param that must resolve to exactly one value.
+///
+/// `project`, `tag` and `assignee` each become ONE filter atom on
+/// `list tasks`, so a value carrying several refs cannot be honoured. Shape
+/// tolerance still comes from [`ref_list`], so a bare string, a one-element
+/// array, and a stringified one-element array all resolve; a value holding
+/// any other number of refs is rejected with a pointer at `filter`, which
+/// does express the combination the caller asked for. A wrong-typed value
+/// errors rather than being dropped: a listing that quietly ignored its own
+/// scope answers a narrow question with the whole board.
+fn scalar_filter_param(op: &KanbanOperation, key: &str) -> Result<Option<String>, KanbanError> {
+    let Some(mut refs) = list_param(op, key)? else {
+        return Ok(None);
+    };
+    if refs.len() == 1 {
+        return Ok(refs.pop());
+    }
+    Err(KanbanError::parse(format!(
+        "{key} takes a single value, got {}: use `filter` to combine several",
+        refs.len()
+    )))
+}
+
+/// Read a boolean param, tolerating the string forms a transport produces.
+///
+/// MCP clients sometimes JSON-encode every argument as a string, so `"true"`
+/// and `"false"` resolve alongside real booleans — the same tolerance
+/// [`KanbanOperation::get_u64`] carries for pagination. The spelling is
+/// matched case-insensitively because a stringified boolean carries whatever
+/// case its source language writes. Any other value is an error, never a
+/// silent fall back to the default.
+fn bool_param(op: &KanbanOperation, key: &str) -> Result<Option<bool>, KanbanError> {
+    let Some(value) = op.get_param(key) else {
+        return Ok(None);
+    };
+    if let Some(flag) = value.as_bool() {
+        return Ok(Some(flag));
+    }
+    let text = value.as_str().map(str::trim).unwrap_or_default();
+    for (spelling, flag) in [("true", true), ("false", false)] {
+        if text.eq_ignore_ascii_case(spelling) {
+            return Ok(Some(flag));
+        }
+    }
+    Err(KanbanError::parse(format!(
+        "{key} must be true or false, got: {value}"
+    )))
+}
+
 /// Normalize a forgiving `depends_on` param to canonical full ULIDs.
 ///
 /// Shape tolerance comes from [`ref_list`]. Every element then routes through
@@ -763,22 +812,23 @@ async fn execute_task_query_operation(
             if let Some(column) = op.get_string("column") {
                 cmd = cmd.with_column(column);
             }
-            // `project` is forgiving sugar for the `$<project>` filter atom:
-            // resolution by id or name-slug (case-insensitive) happens inside
-            // `ListTasks::execute` via the slug registry, so we only need to
-            // fold it into the DSL here. Alone it becomes `$<project>`; with an
-            // explicit `filter` the two are AND-ed (`<filter> && $<project>`).
-            let filter = op.get_string("filter");
-            let project = op.get_string("project");
-            let effective_filter = match (filter, project) {
-                (Some(filter), Some(project)) => Some(format!("{filter} && ${project}")),
-                (Some(filter), None) => Some(filter.to_string()),
-                (None, Some(project)) => Some(format!("${project}")),
-                (None, None) => None,
-            };
-            if let Some(effective_filter) = effective_filter {
-                cmd = cmd.with_filter(effective_filter);
+            if let Some(filter) = op.get_string("filter") {
+                cmd = cmd.with_filter(filter);
             }
+            // `project`, `tag` and `assignee` are forgiving sugar for the
+            // `$<project>`, `#<tag>` and `@<assignee>` filter atoms. Both the
+            // resolution by id or name-slug (case-insensitive) and the AND
+            // against an explicit `filter` happen inside
+            // `ListTasks::execute`, so reading the param is all that is left
+            // here — and one code path then answers the sugar and the DSL.
+            for (key, slot) in [
+                ("project", &mut cmd.project),
+                ("tag", &mut cmd.tag),
+                ("assignee", &mut cmd.assignee),
+            ] {
+                *slot = scalar_filter_param(op, key)?;
+            }
+            cmd.exclude_done = bool_param(op, "exclude_done")?;
             // Pagination — MCP callers pass `page` / `page_size` directly.
             // Anything that doesn't fit in `usize` is treated as unset (the
             // default of 10/1 kicks in inside ListTasks::execute), which

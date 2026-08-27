@@ -64,3 +64,32 @@ create — it is left off the new task instead.
 
 `attachments` entries are source file paths to attach; the metadata objects
 `get task` returns are also accepted, so a task read can be sent straight back.
+
+## Scoping a listing
+
+`list tasks` takes a `filter` expression and four scoping params. Each scoping
+param is sugar for one filter atom, and each is AND-ed onto `filter` when both
+are given:
+
+| Param | Filter atom | Matches |
+|---|---|---|
+| `tag` | `#<tag>` | one tag name |
+| `assignee` | `@<assignee>` | one actor id, or the slug of the actor's name |
+| `project` | `$<project>` | one project id, or the slug of the project's name |
+| `column` | — | one column, structurally |
+
+So `{"op": "list tasks", "tag": "bug"}` returns exactly what
+`{"op": "list tasks", "filter": "#bug"}` returns. Matching is
+case-insensitive, and a value naming nothing gives an empty listing.
+
+Each of the three atom params takes ONE value. To combine several, write the
+`filter` expression: `#bug && @alice`, `#bug || #regression`, `!#done`.
+
+`exclude_done` decides whether the terminal (done) column is dropped. It
+defaults to `true` when no `column` is named and to `false` when one is, so an
+unscoped listing hides finished work while `column: "done"` returns it. Set
+`exclude_done: false` to list the whole board.
+
+Results are paged: `page_size` defaults to 10 and `count` reports the page
+while `total` reports the whole match. Read `total`, not `count`, to learn how
+many tasks matched.

@@ -728,6 +728,46 @@ mod tests {
         );
     }
 
+    /// Every filter-sugar param `list tasks` honours must also be documented.
+    /// The schema example advertises `assignee` and `exclude_done`, and the
+    /// op honours `tag` too — a param the schema hides is a capability no
+    /// caller can find, and a param the schema shows but the op drops
+    /// answers a narrow question with the whole board.
+    #[test]
+    fn test_list_tasks_sugar_params_are_documented() {
+        let ops = kanban_operations();
+        let full = generate_kanban_mcp_schema_full(ops);
+        let op_schemas = full["x-operation-schemas"].as_array().unwrap();
+        let entry = op_schemas
+            .iter()
+            .find(|s| s["properties"]["op"]["const"] == "list tasks")
+            .expect("full schema entry for `list tasks`");
+
+        for param in ["tag", "assignee", "exclude_done"] {
+            assert!(
+                entry["properties"][param].is_object(),
+                "`list tasks` full schema must document `{param}`, got: {:?}",
+                entry["properties"]
+                    .as_object()
+                    .map(|p| p.keys().map(String::as_str).collect::<Vec<_>>())
+            );
+        }
+
+        // Optional params stay out of the required-name map.
+        let required: Vec<&str> = full["x-op-signatures"]["list tasks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        for param in ["tag", "assignee", "exclude_done"] {
+            assert!(
+                !required.contains(&param),
+                "`list tasks` signature must not require `{param}`, got: {required:?}"
+            );
+        }
+    }
+
     #[test]
     fn test_kanban_operations_is_static() {
         let ops1 = kanban_operations();

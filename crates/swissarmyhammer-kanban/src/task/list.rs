@@ -10,6 +10,7 @@ use crate::types::ColumnId;
 use crate::virtual_tags::default_virtual_tag_registry;
 use serde::Deserialize;
 use serde_json::Value;
+use swissarmyhammer_filter_expr::Expr;
 use swissarmyhammer_operations::{async_trait, operation, Execute, ExecutionResult};
 
 /// Default number of tasks returned per page when the caller does not
@@ -39,10 +40,26 @@ pub struct ListTasks {
     pub filter: Option<String>,
     /// Scope the listing to a single project, by project id or by the slug of
     /// its display name (case-insensitive). Sugar for the `$<project>` filter
-    /// atom: it is folded into `filter` at dispatch (`<filter> && $<project>`
-    /// when both are given), so resolution is the same as any `$` predicate. A
-    /// value naming no project yields an empty listing.
+    /// atom, AND-ed with `filter` when both are given, so resolution is the
+    /// same as any `$` predicate. A value naming no project yields an empty
+    /// listing.
     pub project: Option<String>,
+    /// Scope the listing to one tag name. Sugar for the `#<tag>` filter atom
+    /// and AND-ed with `filter` when both are given, so `tag: "bug"` and
+    /// `filter: "#bug"` answer identically. Matching is case-insensitive, and
+    /// a value naming no tag yields an empty listing.
+    pub tag: Option<String>,
+    /// Scope the listing to one assignee, by actor id or by the slug of the
+    /// actor's display name (case-insensitive). Sugar for the `@<assignee>`
+    /// filter atom, AND-ed with `filter` when both are given. A value naming
+    /// no actor yields an empty listing.
+    pub assignee: Option<String>,
+    /// Whether to drop the tasks in the terminal (done) column. Defaults to
+    /// `true` when no `column` is named and to `false` when one is, which is
+    /// the long-standing behaviour: an unscoped listing hides finished work,
+    /// while an explicit `column: "done"` asks for it. Set it to widen an
+    /// unscoped listing to the whole board.
+    pub exclude_done: Option<bool>,
     /// 1-indexed page number. Defaults to 1 when unset; values < 1 are
     /// treated as 1.
     pub page: Option<usize>,
@@ -73,6 +90,31 @@ impl ListTasks {
         self
     }
 
+    /// Scope the listing to one project (sugar for the `$<project>` atom).
+    pub fn with_project(mut self, project: impl Into<String>) -> Self {
+        self.project = Some(project.into());
+        self
+    }
+
+    /// Scope the listing to one tag (sugar for the `#<tag>` atom).
+    pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
+        self.tag = Some(tag.into());
+        self
+    }
+
+    /// Scope the listing to one assignee (sugar for the `@<assignee>` atom).
+    pub fn with_assignee(mut self, assignee: impl Into<String>) -> Self {
+        self.assignee = Some(assignee.into());
+        self
+    }
+
+    /// Choose whether the terminal (done) column is dropped, overriding the
+    /// default that follows [`ListTasks::column`].
+    pub fn with_exclude_done(mut self, exclude_done: bool) -> Self {
+        self.exclude_done = Some(exclude_done);
+        self
+    }
+
     /// Request a specific page (1-indexed).
     pub fn with_page(mut self, page: usize) -> Self {
         self.page = Some(page);
@@ -89,6 +131,70 @@ impl ListTasks {
     pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
         self.detail = Some(detail.into());
         self
+    }
+
+    /// Compile `filter` together with the sugar params into one expression.
+    ///
+    /// `project`, `tag` and `assignee` are each exactly one filter atom —
+    /// `$`, `#` and `@` — AND-ed onto the parsed `filter`. So `tag: "bug"`
+    /// answers exactly as `filter: "#bug"` does, and the two intersect when
+    /// both are given. Returns `None` when the listing carries no filter at
+    /// all, which is the one case that scopes nothing.
+    fn effective_filter(&self) -> Result<Option<Expr>, KanbanError> {
+        let mut expr = parse_filter_expr(self.filter.as_deref())?;
+        let sugar = [
+            (
+                "project",
+                self.project.as_deref(),
+                Expr::Project as fn(String) -> Expr,
+            ),
+            ("tag", self.tag.as_deref(), Expr::Tag),
+            ("assignee", self.assignee.as_deref(), Expr::Assignee),
+        ];
+        for (field, value, atom) in sugar {
+            if let Some(value) = sugar_value(value, field)? {
+                expr = and_atom(expr, atom(value));
+            }
+        }
+        Ok(expr)
+    }
+
+    /// Whether this listing drops the tasks in the terminal (done) column.
+    ///
+    /// An explicit `exclude_done` decides. Otherwise the default follows
+    /// `column`: an unscoped listing hides finished work, while a listing
+    /// that names a column returns that column whichever one it is.
+    fn excludes_done(&self) -> bool {
+        self.exclude_done.unwrap_or(self.column.is_none())
+    }
+}
+
+/// AND one sugar atom onto an optional filter expression.
+///
+/// The composition happens on the AST, never on the DSL text. `&&` binds
+/// tighter than `||`, so appending `&& #tag` to a caller filter would rebind
+/// that filter's own `||`; and a value carrying a sigil, a space, or an
+/// operator character would inject a second atom into the caller's
+/// expression. Building the node sidesteps both.
+fn and_atom(expr: Option<Expr>, atom: Expr) -> Option<Expr> {
+    Some(match expr {
+        Some(prev) => Expr::And(Box::new(prev), Box::new(atom)),
+        None => atom,
+    })
+}
+
+/// Trim a filter-sugar value, rejecting one that names nothing.
+///
+/// An empty `project`/`tag`/`assignee` cannot match any entity, so honouring
+/// it would hand back an empty listing that reads like a real answer.
+/// `field` names the parameter in the error.
+fn sugar_value(value: Option<&str>, field: &str) -> Result<Option<String>, KanbanError> {
+    match value.map(str::trim) {
+        None => Ok(None),
+        Some("") => Err(KanbanError::parse(format!(
+            "invalid {field}: empty string (omit the parameter to leave the listing unscoped)"
+        ))),
+        Some(value) => Ok(Some(value.to_string())),
     }
 }
 
@@ -115,18 +221,21 @@ impl Execute<KanbanContext, KanbanError> for ListTasks {
             let all_actors = ectx.list("actor").await?;
             let slug_registry = EntitySlugRegistry::build(&all_projects, &all_actors, &all_tasks);
 
-            let expr = parse_filter_expr(self.filter.as_deref())?;
+            let expr = self.effective_filter()?;
             let detail = parse_detail(self.detail.as_deref())?;
             let column = &self.column;
+            let excludes_done = self.excludes_done();
 
             let filtered: Vec<Value> = all_tasks
                 .iter()
                 .filter(|t| {
-                    if let Some(ref col) = column {
-                        if t.get_str("position_column") != Some(col.as_str()) {
+                    let task_column = t.get_str("position_column");
+                    if let Some(col) = column {
+                        if task_column != Some(col.as_str()) {
                             return false;
                         }
-                    } else if t.get_str("position_column") == Some(terminal_column) {
+                    }
+                    if excludes_done && task_column == Some(terminal_column) {
                         return false;
                     }
                     if let Some(ref e) = expr {
@@ -977,5 +1086,237 @@ mod tests {
         let result = ListTasks::new().execute(&ctx).await.into_result().unwrap();
         assert_eq!(result["count"], 1);
         assert_eq!(result["tasks"][0]["title"], "Task A");
+    }
+
+    // --- Filter sugar params -------------------------------------------------
+
+    /// Read the titles of a listing result.
+    fn titles(result: &Value) -> Vec<String> {
+        result["tasks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["title"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    /// `tag` is honoured by the command itself, not only by dispatch, so
+    /// every caller of `ListTasks` gets the same scoping.
+    #[tokio::test]
+    async fn test_list_tasks_tag_param_filters() {
+        let (_temp, ctx) = setup().await;
+        AddTask::new("Tagged task")
+            .with_description("This task has a #bug tag")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+        AddTask::new("Untagged task")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+
+        let result = ListTasks::new()
+            .with_tag("bug")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+        assert_eq!(result["total"], 1);
+        assert_eq!(titles(&result), vec!["Tagged task"]);
+    }
+
+    /// `assignee` is honoured by the command itself.
+    #[tokio::test]
+    async fn test_list_tasks_assignee_param_filters() {
+        use crate::actor::AddActor;
+        use crate::task::AssignTask;
+
+        let (_temp, ctx) = setup().await;
+        AddActor::new("alice", "Alice")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+        let r1 = AddTask::new("Alice's task")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+        AssignTask::new(r1["id"].as_str().unwrap(), "alice")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+        AddTask::new("Unassigned task")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+
+        let result = ListTasks::new()
+            .with_assignee("alice")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+        assert_eq!(result["total"], 1);
+        assert_eq!(titles(&result), vec!["Alice's task"]);
+    }
+
+    /// `project` is honoured by the command itself. It used to be folded
+    /// into the filter at dispatch only, so a `ListTasks` built in Rust
+    /// dropped it and returned the whole board.
+    #[tokio::test]
+    async fn test_list_tasks_project_param_filters() {
+        use crate::project::AddProject;
+
+        let (_temp, ctx) = setup().await;
+        AddProject::new("myproj", "My Project")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+        AddTask::new("Project task")
+            .with_project("myproj")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+        AddTask::new("Unrelated task")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+
+        let result = ListTasks::new()
+            .with_project("myproj")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+        assert_eq!(result["total"], 1);
+        assert_eq!(titles(&result), vec!["Project task"]);
+    }
+
+    /// A sugar atom AND-ed onto a caller filter must not rebind that
+    /// filter's own `||`. `&&` binds tighter than `||` in the DSL, so
+    /// composing the two as text would turn `#a || #b` plus `tag: c` into
+    /// `#a || (#b && #c)` and wrongly return every `#a` task.
+    #[tokio::test]
+    async fn test_list_tasks_tag_param_does_not_rebind_filter_or() {
+        let (_temp, ctx) = setup().await;
+        // `#a` but NOT `#c` — must be excluded by the `tag` param.
+        AddTask::new("A only")
+            .with_description("#a")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+        // `#b` and `#c` — matches (`#a || #b`) and `#c`.
+        AddTask::new("B and C")
+            .with_description("#b #c")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+
+        let result = ListTasks::new()
+            .with_filter("#a || #b")
+            .with_tag("c")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+        assert_eq!(
+            result["total"], 1,
+            "the tag must AND against the whole filter, not just its last branch"
+        );
+        assert_eq!(titles(&result), vec!["B and C"]);
+    }
+
+    /// `exclude_done: false` widens an unscoped listing to the done column.
+    #[tokio::test]
+    async fn test_list_tasks_exclude_done_false_includes_done() {
+        let (_temp, ctx) = setup().await;
+        AddTask::new("Open")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+        let r2 = AddTask::new("Finished")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+        MoveTask::to_column(r2["id"].as_str().unwrap(), "done")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+
+        let result = ListTasks::new()
+            .with_exclude_done(false)
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+        assert_eq!(result["total"], 2);
+        let listed = titles(&result);
+        assert!(listed.contains(&"Open".to_string()));
+        assert!(listed.contains(&"Finished".to_string()));
+    }
+
+    /// `exclude_done: true` overrides the "an explicit column keeps done"
+    /// default, so `column: "done"` plus `exclude_done: true` is empty
+    /// rather than quietly ignoring one of the two params.
+    #[tokio::test]
+    async fn test_list_tasks_exclude_done_true_overrides_explicit_column() {
+        let (_temp, ctx) = setup().await;
+        let r1 = AddTask::new("Finished")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+        MoveTask::to_column(r1["id"].as_str().unwrap(), "done")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+
+        let result = ListTasks::new()
+            .with_column("done")
+            .with_exclude_done(true)
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+        assert_eq!(result["total"], 0);
+    }
+
+    /// An empty sugar value is a clear error, never a listing that quietly
+    /// dropped the scope the caller asked for.
+    #[tokio::test]
+    async fn test_list_tasks_empty_sugar_param_errors() {
+        let (_temp, ctx) = setup().await;
+        AddTask::new("Some task")
+            .execute(&ctx)
+            .await
+            .into_result()
+            .unwrap();
+
+        for (field, cmd) in [
+            ("tag", ListTasks::new().with_tag("  ")),
+            ("assignee", ListTasks::new().with_assignee("")),
+            ("project", ListTasks::new().with_project("")),
+        ] {
+            let err = cmd.execute(&ctx).await.into_result().unwrap_err();
+            let msg = err.to_string();
+            assert!(
+                msg.contains(field),
+                "the error must name the empty param {field}: {msg}"
+            );
+        }
     }
 }

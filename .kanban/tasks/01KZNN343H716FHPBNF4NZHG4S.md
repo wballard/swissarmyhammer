@@ -166,11 +166,57 @@ comments:
     - note: two `kanban serve` processes (PIDs 65082, 14821) ran on this board for the whole sweep. No damage is attributable to them — every batch was diffed, and the only changed files are the intended ones.
     - next: `/review`.
   timestamp: 2026-08-27T19:28:18.034526+00:00
+- actor: claude-code
+  id: 01m12bpc5g7xdr6r9n1cgheejv
+  text: |-
+    ### review — clean
+    - evidence: two engine passes, 0 findings in both.
+
+    1. `review sha HEAD~1..HEAD` (754bf2608) — **0 files reviewed, 317 excluded**. Every
+       file in that commit is board data under `.kanban/`, which `.reviewignore`
+       excludes. This pass looked at NO code. Read alone it is not evidence about
+       any source file.
+
+    2. `review sha 7af361e16` — **8 files reviewed**, 14 validator/file pairs
+       attempted, 0 failed, 0 skipped, 0 findings. This is the code half of the
+       card, and it is the pass that carries the verdict.
+
+    Why the second pass was run. The finish comment of iteration 1 records
+    `review: not run — the step before it reported stuck`. The Rust change for this
+    card had therefore never reached the review engine. Moving the card on pass 1
+    alone would have read an empty scan as a clean bill of health for code no
+    validator ever opened.
+
+    Board state checked directly, not taken from the sweep note: 134 tag entities;
+    zero names that are not a clean slug; zero names holding a comma, a quotation
+    mark, a bracket, or a colon. This matches the card's "Done when".
+
+    Work items, each met: `tag task`/`untag task` read `tags` and `tag` through
+    `dispatch::ref_list`; an unresolvable ref rejects the whole call; a test applies
+    two tags in one call; a test asserts the tag-name character invariant; the sweep
+    leaves no fragment tag.
+
+    Out of scope, correctly filed elsewhere: the same defect class is still live on
+    the CLI surface (`kanban task add|update|tag --tags '["a","b"]'` writes one tag
+    `a-b`), tracked as ^18kd3j9. It is not a finding against this card.
+
+    - next: none. Card moves to done.
+  timestamp: 2026-08-27T19:38:33.520643+00:00
+- actor: claude-code
+  id: 01m12bqgxtnat9bk8q048kbnrr
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — board data only; 48 cards corrected (129 prose markers wrapped in inline code), 47 fragment tag entities deleted (181 → 134 tags), both hyphen-joined tags repaired
+    - test: green — cargo nextest run --workspace, 14236 passed, 0 failed, 0 skipped; clippy and fmt clean
+    - commit: 754bf2608
+    - review: clean — 0 findings. The HEAD~1..HEAD pass scanned 0 files (all 317 excluded by .reviewignore), so a second pass ran over 7af361e16, the code half, which had never reached the engine: 8 files, 14 validator pairs, 0 findings.
+    - next: none — the card is in done. Two follow-ons stand open: ^18kd3j9 (the same defect class is still live on the CLI) and the recovery of ^7rh0bvj's own card file.
+  timestamp: 2026-08-27T19:39:11.162852+00:00
 depends_on:
 - 01M11YRV7M56YWPCJNG7RH0BVJ
 - 01M11YS6AG9C75AP9RDKT3GFHQ
-position_column: doing
-position_ordinal: '8380'
+position_column: done
+position_ordinal: ffffffffffffffffffffffffffffffffffffffffffb280
 title: 'kanban tag task: an array of tags becomes one hyphen-joined tag'
 ---
 `tag task` does not split an array. It joins the array into one tag name.

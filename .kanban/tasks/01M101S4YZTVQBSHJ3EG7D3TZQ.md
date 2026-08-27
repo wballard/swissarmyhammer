@@ -75,8 +75,24 @@ comments:
     - evidence: `cargo nextest run --workspace --no-fail-fast`. With the change: 14217 run, 14166 passed, 51 failed. Baseline (`git stash -u`, same command, `git stash pop`, verified with `git status` and `git stash list`): 14214 run, 14163 passed, 51 failed. The 51 failing test names are IDENTICAL in both runs — zero failures come from this task. Pre-existing causes: 13 need `swiftformat`, 35 need the Go toolchain (golangci-lint/staticcheck/revive), 2 need the npm package `eslint-plugin-sonarjs`, 1 is the precondition mismatch in `review::drive::tests::review_file_excludes_a_shipped_builtin_fixture_under_a_shadowing_user_set` (left: Some(Project), right: Some(User)). One extra first-pass failure was proved a flake: `swissarmyhammer-diagnostics::leader_follower_request_ipc follower_multi_step_rename_gets_real_leader_edits_under_one_lock` passed 5/5 alone and on the full-suite rerun; that crate is not in the diff. `cargo fmt --all --check` clean; `cargo clippy --workspace --all-targets -- -D warnings` clean.
     - next: commit the checkpoint, then review. The 51 are missing local toolchains and one older defect. They are outside this card's scope, so implement is not re-run on them.
   timestamp: 2026-08-26T22:49:55.363326+00:00
-position_column: doing
-position_ordinal: '8380'
+- actor: claude-code
+  id: 01m104jzk24xjb8jhm2sdpvb3s
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit aa0d8663e) — findings 0, confirmed 0, refuted 0, attempted 7, failed 0. 6 file(s) reviewed, 2 not reviewed (the two `.kanban/` files, excluded by `.reviewignore`).
+    - next: task moved to `done`. No prior review findings were open.
+  timestamp: 2026-08-26T22:55:53.442819+00:00
+- actor: claude-code
+  id: 01m104kvxm5myndy35sq7akcbj
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 6 files (review scope/exclusion pipeline + the tool-boundary response type)
+    - test: red at baseline — 14166 passed, 51 failed; the same 51 names fail without the change, so zero failures come from this task. fmt and clippy clean.
+    - commit: aa0d8663e fix(review): stop silently dropping files no validator matches
+    - review: clean — `review sha HEAD~1..HEAD`, findings 0, attempted 7, failed 0; 6 files reviewed, 2 excluded by .reviewignore. Task moved to done.
+  timestamp: 2026-08-26T22:56:22.452435+00:00
+position_column: done
+position_ordinal: ffffffffffffffffffffffffffffffffffffffffffaf80
 title: 'review: a Markdown file reports attempted 0, which is indistinguishable from a clean pass'
 ---
 ## What

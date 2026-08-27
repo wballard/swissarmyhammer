@@ -148,6 +148,87 @@ comments:
     - evidence: 6 files — crates/swissarmyhammer-common/src/frontmatter.rs (new `join_frontmatter_body` + `DelimiterInFrontmatter`, 6 tests), crates/swissarmyhammer-store/src/error.rs (`StoreError::Serialize` with a boxed source), crates/swissarmyhammer-entity/src/store.rs (live writer calls the shared join; 2 new tests), crates/swissarmyhammer-entity/src/io.rs (fallback writer calls it), crates/swissarmyhammer-entity/src/error.rs (`EntityError::FrontmatterDelimiter`), apps/kanban-cli/src/commands/serve.rs (exhaustive match arm), plus NEW crates/swissarmyhammer-kanban/tests/frontmatter_delimiter_roundtrip.rs (2 production-path tests). RED first: with the guard replaced by the old unguarded `format!`, `adds_the_terminator_the_closing_delimiter_needs` and `refuses_frontmatter_holding_a_delimiter_line` both FAILED; GREEN after restoring it. `cargo nextest run --workspace` gives 14234 passed, 0 failed, 0 skipped. `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --check` are clean. Board sweep: 0 cards read `title: Untitled`, so nothing needed restoring.
     - next: /review
   timestamp: 2026-08-27T16:25:52.192751+00:00
+- actor: claude-code
+  id: 01m12144fbejtnh65vs9mm4jw9
+  text: |-
+    ### review — findings
+    - evidence: 2 findings (2 confirmed, 0 refuted) from `review sha HEAD~1..HEAD` — crates/swissarmyhammer-entity/src/error.rs:24, crates/swissarmyhammer-entity/src/error.rs:25
+    - next: document every field of the struct in crates/swissarmyhammer-entity/src/error.rs, then re-run review. Task stays in review.
+  timestamp: 2026-08-27T16:33:50.059011+00:00
+- actor: claude-code
+  id: 01m1214rqjt6h5644cw4geg1a8
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 7 files; new `join_frontmatter_body` write-side guard; RED verified before GREEN
+    - test: green — cargo nextest run --workspace, 14234 passed, 0 failed, 0 skipped; clippy and fmt clean
+    - commit: c743d620b
+    - review: findings — crates/swissarmyhammer-entity/src/error.rs:24, crates/swissarmyhammer-entity/src/error.rs:25 (code-hygiene/missing-docs-rust)
+    - next: document every field of that struct in error.rs, not only the two named lines
+  timestamp: 2026-08-27T16:34:10.802196+00:00
+- actor: claude-code
+  id: 01m121hwggazws5gpscv7tszwf
+  text: |
+    Pulled the card back to `doing` and worked the two open findings.
+
+    ## The cause, and the whole file
+
+    The finding names `error.rs:24` and `error.rs:25` -- the two fields of the new
+    `FrontmatterDelimiter` variant. The cause is broader: `EntityError` is a public
+    enum, so EVERY field of EVERY struct variant is a public item, and
+    `missing_docs` asks each one for a doc comment.
+
+    I measured the file with the rule's own tool instead of reading it by eye:
+
+    ```
+    RUSTFLAGS="-W missing_docs" cargo clippy -p swissarmyhammer-entity \
+      --message-format=json | jq -r 'select(.reason=="compiler-message")
+      | select(.message.code.code=="missing_docs")
+      | "\(.message.spans[0].file_name):\(.message.spans[0].line_start) \(.message.message)"' \
+      | sort -u | grep 'swissarmyhammer-entity/src/error.rs'
+    ```
+
+    That answered 21 lines, not 2. `sort -u` on `spans[0]` collapses two fields
+    that share one line, so the real count of undocumented fields is higher still.
+    Only `TransactionPartialFailure` already documented its fields.
+
+    ## What changed
+
+    Every field of every struct variant in `crates/swissarmyhammer-entity/src/error.rs`
+    now carries a doc comment: `NotFound`, `InvalidFrontmatter`,
+    `FrontmatterDelimiter`, `Yaml`, `UnknownEntityType`, `ValidationFailed`,
+    `ComputeError`, `StaleChange`, `UnsupportedUndoOp`, `ChangelogEntryNotFound`,
+    `RestoreFromTrashFailed`, `InvalidPath`, `AttachmentSourceNotFound`,
+    `AttachmentNotFound` and `AttachmentTooLarge`. The single-line variants became
+    multi-line to hold the comments. No behavior changed, and no signature changed,
+    so the blast radius is empty: the variants keep their names, their fields and
+    their field types.
+
+    ## After
+
+    The same command answers 0 lines for that file.
+
+    ## For the next agent
+
+    The workspace holds many more files with the same cause -- the run over
+    `-p swissarmyhammer-entity` alone reported 189 lines across
+    `swissarmyhammer-fields/src/types.rs`, `swissarmyhammer-js/src/error.rs`,
+    `swissarmyhammer-operations/src/parameter.rs` and more. Review only reports
+    findings in CHANGED files, so those stay silent until someone touches them.
+    They are outside this card.
+
+    ## Verification
+
+    - `cargo nextest run --workspace`: 14234 passed, 0 failed, 0 skipped.
+    - `cargo clippy --workspace --all-targets -- -D warnings`: clean.
+    - `cargo fmt --check`: clean.
+  timestamp: 2026-08-27T16:41:20.656538+00:00
+- actor: claude-code
+  id: 01m121j2tbp7n2dprbbxm2s9w2
+  text: |
+    ### implement — changed
+    - evidence: 1 file — crates/swissarmyhammer-entity/src/error.rs. Documented every field of every struct variant of `EntityError`, not only the two lines the findings named. Measured with the rule's own tool: `RUSTFLAGS="-W missing_docs" cargo clippy -p swissarmyhammer-entity --message-format=json | jq ... | grep error.rs` answered 21 lines before and 0 lines after. `cargo nextest run --workspace` gives 14234 passed, 0 failed, 0 skipped. `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --check` are clean. Both `## Review Findings` items are now `- [x]`.
+    - next: /review
+  timestamp: 2026-08-27T16:41:27.115055+00:00
 position_column: doing
 position_ordinal: '8380'
 title: kanban task write corrupts a card whose front matter holds a `---` run
@@ -204,3 +285,13 @@ Every op that writes a task carries it: `update task`, `tag task`,
 
 A card whose front matter holds a `---` run survives a write unchanged, and
 no card on the board reads `title: Untitled`. #bug #kanban
+
+## Review Findings (2026-08-27 11:27)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 7 file(s) reviewed, 4 not reviewed.
+
+> 4 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 4 file(s)
+
+- [x] `crates/swissarmyhammer-entity/src/error.rs:24` `code-hygiene/missing-docs-rust` — missing documentation for a struct field.
+- [x] `crates/swissarmyhammer-entity/src/error.rs:25` `code-hygiene/missing-docs-rust` — missing documentation for a struct field.

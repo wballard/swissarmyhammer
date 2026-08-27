@@ -33,4 +33,4 @@ This is a product/security policy decision, not a code fix that can be inferred:
 
 ## Origin
 
-Spun out of ^t6a2952 (triage of 13 pre-existing findings against swissarmyhammer-entity io.rs/store.rs) per that task's own acceptance criterion: "Anything confirmed as a genuine security issue... is lifted into its own new kanban card with a concrete exploit path — not left buried in this triage list." #security #bug
+Spun out of ^t6a2952 (triage of 13 pre-existing findings against swissarmyhammer-entity io.rs/store.rs) per that task's own acceptance criterion: "Anything confirmed as a genuine security issue... is lifted into its own new kanban card with a concrete exploit path — not left buried in this triage list." #security #bug #kanban

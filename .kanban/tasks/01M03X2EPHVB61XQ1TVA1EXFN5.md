@@ -19,4 +19,4 @@ A stray board directory is a hazard: the live application opens a board director
 
 The implementer of ^s1qh4tv, twice, while it checked its own working tree for probe files. It is out of scope for that card.
 
-#bug
+#bug #kanban

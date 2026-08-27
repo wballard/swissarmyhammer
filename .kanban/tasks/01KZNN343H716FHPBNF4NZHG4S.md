@@ -81,8 +81,31 @@ comments:
       ^kt3gfhq. The task tree is byte-identical to HEAD.
     - next: land ^7rh0bvj and ^kt3gfhq, then finish the sweep.
   timestamp: 2026-08-27T15:58:27.951175+00:00
-position_column: doing
-position_ordinal: '8380'
+- actor: claude-code
+  id: 01m11z98mqtnqf1s8abcpcf6y9
+  text: |-
+    ### commit — changed
+    - evidence: 7af361e16 fix(kanban): route tag task/untag task through ref_list dispatch
+    - included: the 7 code/doc files for the fix, this card's own move and comments, the 38 fragment tag-entity deletions (moved to .kanban/tags/.trash), and the two follow-on defect cards filed during the sweep (^7rh0bvj, ^kt3gfhq)
+    - excluded: an unrelated new task (01M11WWMDXV903CEQV2C78RS70, a "project operation removal" card) left untracked — not part of this card's work
+    - next: land ^7rh0bvj and ^kt3gfhq, then resume the fragment-tag sweep
+  timestamp: 2026-08-27T16:01:41.015141+00:00
+- actor: claude-code
+  id: 01m11za0q3apjs53emq666y920
+  text: |-
+    ### finish iteration 1 — stuck
+    - implement: changed — 7 files; `tag task`/`untag task` now read `tags`/`tag` through `dispatch::ref_list`; 7 new tests, 5 RED first
+    - test: green — cargo nextest run --workspace, 14224 passed, 0 failed, 0 skipped; fmt and clippy clean (run inside the implement step)
+    - commit: 7af361e16
+    - review: not run — the step before it reported stuck
+    - blocker: the sweep item cannot finish. `delete tag` rewrites cards, and that write path holds two defects that damaged 16 cards. The whole sweep was reverted. Blocked on ^7rh0bvj and ^kt3gfhq.
+    - next: land ^7rh0bvj and ^kt3gfhq, then finish the sweep and take this card through review
+  timestamp: 2026-08-27T16:02:05.667496+00:00
+depends_on:
+- 01M11YRV7M56YWPCJNG7RH0BVJ
+- 01M11YS6AG9C75AP9RDKT3GFHQ
+position_column: todo
+position_ordinal: fff880
 title: 'kanban tag task: an array of tags becomes one hyphen-joined tag'
 ---
 `tag task` does not split an array. It joins the array into one tag name.

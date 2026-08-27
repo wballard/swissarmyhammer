@@ -28,4 +28,4 @@ copy must stay a copy, and say why in the code if it must.
 ## Found by
 
 Card ^hxd1r4r, while naming the djb2 constants in `agent_identity.rs`. Out of
-that card's scope because the fix crosses three crates.
+that card's scope because the fix crosses three crates. #kanban

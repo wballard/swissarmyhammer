@@ -14,7 +14,8 @@
 //! - [`dates`] — the `due` and `scheduled` fields.
 //! - [`perspectives`] — the perspective operations.
 //! - [`short_ids`] — the short-id input forms and the `short_id` output.
-//! - [`tags`] — the `tags` parameter on add task and on update task.
+//! - [`tags`] — the `tags` parameter on add task, on update task, on tag
+//!   task and on untag task.
 //! - [`tasks`] — the task operations and their optional parameters.
 //!
 //! This module holds what those ten share: the imports, the `setup` fixture,
@@ -70,6 +71,17 @@ async fn stored_tags(ctx: &KanbanContext, id: &str) -> Vec<String> {
         .expect("tags should be an array")
         .iter()
         .filter_map(|v| v.as_str().map(str::to_string))
+        .collect()
+}
+
+/// Every tag name the board holds, as `list tags` reports it.
+async fn board_tag_names(ctx: &KanbanContext) -> Vec<String> {
+    let ops = parse_input(json!({"op": "list tags"})).unwrap();
+    execute_operation(ctx, &ops[0]).await.unwrap()["tags"]
+        .as_array()
+        .expect("tags should be an array")
+        .iter()
+        .filter_map(|tag| tag["name"].as_str().map(str::to_string))
         .collect()
 }
 

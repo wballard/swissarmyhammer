@@ -264,11 +264,22 @@ async fn resolve_depends_on(
 /// Resolution (name, full ULID, `^<short>`, short id) happens inside the
 /// commands, in the one shared path `tag task` also uses — the dispatch layer
 /// only normalizes the wire shape. The singular `tag` is accepted as a
-/// one-element alias, because that is the key `tag task` teaches; this arm is
-/// only reached for `add`/`update`, so `tag task`'s own `tag` param is
-/// untouched. Returns `Ok(None)` when neither key is present.
+/// one-element alias, because that is the key `tag task` teaches. Returns
+/// `Ok(None)` when neither key is present.
 fn tag_refs(op: &KanbanOperation) -> Result<Option<Vec<String>>, KanbanError> {
     aliased_list_param(op, "tags", "tag")
+}
+
+/// Read the `tags`/`tag` param for `tag task` and `untag task`, where it is
+/// required.
+///
+/// Both ops go through [`tag_refs`], so an array, a scalar, and a stringified
+/// array mean the same thing on them as they do on `add task` / `update task`.
+/// Reading them as a scalar was the defect: an array reached the slug
+/// normalizer as one string, and its punctuation collapsed into a single
+/// hyphen-joined tag the caller never asked for.
+fn req_tag_refs(op: &KanbanOperation) -> Result<Vec<String>, KanbanError> {
+    tag_refs(op)?.ok_or_else(|| KanbanError::parse("missing required field: tags (or tag)"))
 }
 
 /// Read the forgiving `attachments` param.
@@ -716,13 +727,15 @@ async fn execute_task_assignment_operation(
         }
         Verb::Tag => {
             let id = req_task_id(ctx, op, "id").await?;
-            let tag = req(op, "tag")?;
-            processor.process(&TagTask::new(id, tag), ctx).await
+            let refs = req_tag_refs(op)?;
+            processor.process(&TagTask::with_tags(id, refs), ctx).await
         }
         Verb::Untag => {
             let id = req_task_id(ctx, op, "id").await?;
-            let tag = req(op, "tag")?;
-            processor.process(&UntagTask::new(id, tag), ctx).await
+            let refs = req_tag_refs(op)?;
+            processor
+                .process(&UntagTask::with_tags(id, refs), ctx)
+                .await
         }
         _ => Err(KanbanError::parse(format!(
             "unsupported operation: {} {}",

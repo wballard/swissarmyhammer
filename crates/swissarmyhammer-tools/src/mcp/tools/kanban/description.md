@@ -19,8 +19,8 @@ change what a task is blocked by, set `depends_on`.
 
 ## Task tags
 
-On `add task` and `update task`, `tags` applies tags. It is as forgiving as
-`depends_on`:
+On `add task`, `update task`, `tag task` and `untag task`, `tags` applies tags.
+It is as forgiving as `depends_on`:
 
 - Shape: a single tag, a JSON array, or a stringified JSON array all work. The
   singular `tag` is accepted as a one-element alias.
@@ -28,10 +28,17 @@ On `add task` and `update task`, `tags` applies tags. It is as forgiving as
   7-char short id. A name that names no tag yet creates it; an **id** reference
   that names no tag is an error, not a silent no-op.
 
+Each entry is one tag. A list of two refs applies two tags; it never becomes
+one joined name.
+
 `tags` on `add task` adds to whatever `#tag` markers the description carries.
 `tags` on `update task` **replaces** the whole set — an empty array clears every
 tag. One `add task { tags: [a, b, c] }` gives the same result as one `add task`
 plus three `tag task` calls; both run the same code.
+
+`tag task` and `untag task` require `tags` (or `tag`). An empty list is an
+error on both: there is nothing to apply, and an `ok` would report a write that
+never happened.
 
 Tags are stored as `#tag` markers in the description, so editing the description
 is the other way to change them. Because of that, replacing the tag set rewrites

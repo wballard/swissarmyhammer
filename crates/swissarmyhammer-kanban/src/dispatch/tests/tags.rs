@@ -1,4 +1,5 @@
-//! The `tags` parameter on add task and on update task.
+//! The `tags` parameter on add task, on update task, on tag task and on
+//! untag task.
 //!
 //! These tests hold each shape that `tags` accepts, the tag entities that
 //! dispatch creates, the errors for a reference that it cannot resolve, and
@@ -263,16 +264,172 @@ async fn dispatch_add_task_tags_auto_creates_tag_entities() {
     .unwrap();
     execute_operation(&ctx, &ops[0]).await.unwrap();
 
-    let ops = parse_input(json!({"op": "list tags"})).unwrap();
-    let listed = execute_operation(&ctx, &ops[0]).await.unwrap();
-    let names: Vec<&str> = listed["tags"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|t| t["name"].as_str())
-        .collect();
+    let names = board_tag_names(&ctx).await;
     assert!(
-        names.contains(&"brand-new"),
+        names.iter().any(|name| name == "brand-new"),
         "plural tags must auto-create the Tag entity, got: {names:?}"
     );
+}
+
+// -----------------------------------------------------------------------
+// `tag` / `tags` on tag task / untag task
+// -----------------------------------------------------------------------
+
+/// Punctuation that a tag name must never hold. A name carrying one of
+/// these is a fragment of prose or of code that a joined write left behind,
+/// never a tag a caller asked for.
+const FRAGMENT_PUNCTUATION: [char; 8] = [',', '"', '\'', '[', ']', '(', ')', ':'];
+
+/// The two refs of the bug report, applied in one call.
+const TWO_REFS: [&str; 2] = ["tool-validators", "objectivity"];
+
+/// The stored tag set the two refs must produce — sorted, because
+/// `parse_tags` reports a sorted set.
+const TWO_TAGS: [&str; 2] = ["objectivity", "tool-validators"];
+
+/// The defect: one `tag task` carrying two refs wrote a single tag named
+/// `tool-validators-objectivity`. The param was read as a scalar, so the
+/// slug normalizer collapsed the array's punctuation into hyphens. Two refs
+/// are two tags.
+#[tokio::test]
+async fn dispatch_tag_task_array_applies_one_tag_per_element() {
+    let (_temp, ctx) = setup().await;
+    let id = add_one_task(&ctx, "Two tags in one call").await;
+
+    let ops = parse_input(json!({"op": "tag task", "id": id, "tag": TWO_REFS})).unwrap();
+    execute_operation(&ctx, &ops[0]).await.unwrap();
+
+    assert_eq!(
+        stored_tags(&ctx, &id).await,
+        TWO_TAGS,
+        "an array of refs is one tag per element, never one joined name"
+    );
+}
+
+/// `tags` is documented as the canonical key and `tag` as its one-element
+/// alias, so `tag task` must answer to both.
+#[tokio::test]
+async fn dispatch_tag_task_accepts_the_plural_tags_key() {
+    let (_temp, ctx) = setup().await;
+    let id = add_one_task(&ctx, "Plural key").await;
+
+    let ops = parse_input(json!({"op": "tag task", "id": id, "tags": TWO_REFS})).unwrap();
+    execute_operation(&ctx, &ops[0]).await.unwrap();
+
+    assert_eq!(stored_tags(&ctx, &id).await, TWO_TAGS);
+}
+
+/// The exact wire shape from the bug report: a client with no array
+/// type-hint sends the array as one string. It still splits.
+#[tokio::test]
+async fn dispatch_tag_task_stringified_array_applies_one_tag_per_element() {
+    let (_temp, ctx) = setup().await;
+    let id = add_one_task(&ctx, "Stringified refs").await;
+
+    let ops = parse_input(json!({
+        "op": "tag task",
+        "id": id,
+        "tag": serde_json::to_string(&TWO_REFS).unwrap(),
+    }))
+    .unwrap();
+    execute_operation(&ctx, &ops[0]).await.unwrap();
+
+    assert_eq!(stored_tags(&ctx, &id).await, TWO_TAGS);
+}
+
+/// `untag task` is the inverse of `tag task` and takes the same shapes, so
+/// one call removes both tags a single `tag task` applied.
+#[tokio::test]
+async fn dispatch_untag_task_array_removes_one_tag_per_element() {
+    let (_temp, ctx) = setup().await;
+    let id = add_one_task(&ctx, "Untag both").await;
+
+    let ops = parse_input(json!({"op": "tag task", "id": id, "tag": TWO_REFS})).unwrap();
+    execute_operation(&ctx, &ops[0]).await.unwrap();
+    assert_eq!(stored_tags(&ctx, &id).await, TWO_TAGS);
+
+    let ops = parse_input(json!({"op": "untag task", "id": id, "tags": TWO_REFS})).unwrap();
+    execute_operation(&ctx, &ops[0]).await.unwrap();
+
+    assert!(
+        stored_tags(&ctx, &id).await.is_empty(),
+        "an array of refs removes one tag per element"
+    );
+}
+
+/// One unresolvable ref rejects the whole call. A partial apply, or a tag
+/// named after the failed ULID, are both silent writes the caller never
+/// asked for.
+#[tokio::test]
+async fn dispatch_tag_task_unresolvable_ulid_errors_and_applies_nothing() {
+    let (_temp, ctx) = setup().await;
+    let id = add_one_task(&ctx, "One bad ref").await;
+
+    let ops = parse_input(json!({
+        "op": "tag task",
+        "id": id,
+        "tag": ["bug", "01KJZEPKJ35S76KF7E9HS5742J"],
+    }))
+    .unwrap();
+    let result = execute_operation(&ctx, &ops[0]).await;
+
+    assert!(result.is_err(), "an unresolvable tag ref must error");
+    assert!(
+        stored_tags(&ctx, &id).await.is_empty(),
+        "a rejected call must apply none of its refs"
+    );
+}
+
+/// An empty list has no tag to apply, so an `ok` would report a write that
+/// never happened. `tag task` and `untag task` both refuse it.
+#[tokio::test]
+async fn dispatch_tag_and_untag_task_empty_list_errors() {
+    let (_temp, ctx) = setup().await;
+    let id = add_one_task(&ctx, "Nothing to apply").await;
+
+    for op in ["tag task", "untag task"] {
+        let ops = parse_input(json!({"op": op, "id": id, "tags": []})).unwrap();
+        assert!(
+            execute_operation(&ctx, &ops[0]).await.is_err(),
+            "{op} with an empty list must error instead of acking a write it never made"
+        );
+    }
+}
+
+/// The board invariant behind the wreckage the bug report lists: a tag name
+/// holds no comma, quotation mark, bracket, or colon. Every ref shape the
+/// tagging ops accept is driven through, including the shapes that used to
+/// be joined into one name.
+#[tokio::test]
+async fn dispatch_tagging_writes_no_tag_name_holding_punctuation() {
+    let (_temp, ctx) = setup().await;
+    let id = add_one_task(&ctx, "Hostile refs").await;
+
+    let ops = parse_input(json!({"op": "tag task", "id": id, "tag": TWO_REFS})).unwrap();
+    execute_operation(&ctx, &ops[0]).await.unwrap();
+
+    let ops = parse_input(json!({
+        "op": "tag task",
+        "id": id,
+        "tags": serde_json::to_string(&TWO_REFS).unwrap(),
+    }))
+    .unwrap();
+    execute_operation(&ctx, &ops[0]).await.unwrap();
+
+    let ops = parse_input(json!({
+        "op": "update task",
+        "id": id,
+        "tags": ["Coverage: gap", "[serial(cwd)]);", "he said \"go\""],
+    }))
+    .unwrap();
+    execute_operation(&ctx, &ops[0]).await.unwrap();
+
+    let names = board_tag_names(&ctx).await;
+    assert!(!names.is_empty(), "the drive must have created tags");
+    for name in &names {
+        assert!(
+            !name.contains(FRAGMENT_PUNCTUATION),
+            "tag name {name:?} holds fragment punctuation, board holds: {names:?}"
+        );
+    }
 }

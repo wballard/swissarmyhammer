@@ -53,6 +53,54 @@ comments:
     - evidence: 5 files — crates/swissarmyhammer-kanban/src/task/list.rs, crates/swissarmyhammer-kanban/src/dispatch.rs, crates/swissarmyhammer-kanban/src/dispatch/tests/tasks.rs, crates/swissarmyhammer-kanban/src/schema.rs, crates/swissarmyhammer-tools/src/mcp/tools/kanban/description.md. `cargo nextest run --workspace` 14252 passed / 0 failed; `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt` applied. 17 new tests, every one seen RED first (10 at dispatch level, 7 at command level).
     - next: /review. ^qd9z2xt is fixed by this same diff and should be reviewed with it — it still sits in `todo` because moving another agent's card was not mine to decide. ^pbfrpj3 filed for the `search tasks` parity gap this change opens up.
   timestamp: 2026-08-27T19:58:24.101047+00:00
+- actor: claude-code
+  id: 01m12kvwtxhdc77s7j6xvm3xp6
+  text: |-
+    ## Review Findings (2026-08-27)
+
+    Scope: `review sha HEAD~1..HEAD` (f8fc8394c) — diffs only. 4 files reviewed, 12 excluded by `.reviewignore` (`.kanban/`), 1 unmatched by any validator (`description.md`). 7 validators attempted, 0 failed. 1 finding, confirmed.
+
+    - [ ] `crates/swissarmyhammer-kanban/src/dispatch/tests/tasks.rs:684` — `completeness/case-sensitivity-coverage`. `bool_param` (dispatch.rs:272-288) accepts a boolean string in any case, for both spellings, through `eq_ignore_ascii_case`. `dispatch_list_tasks_exclude_done_accepts_string_boolean` proves only the `false` variants (`false`, `False`, `FALSE`), so half the case contract is unproven. Cover the `true` variants too.
+
+    A finding names one example of a cause. Check the other `bool_param` call sites in the same file for the same one-sided coverage rather than correcting only line 684.
+
+    Note on the review run: the reviewer sub-agent was killed by its stream watchdog after the card reached `review` but before the engine reported. The engine was then run directly, so this report is the engine's own output, not a reconstruction.
+  timestamp: 2026-08-27T22:01:23.037650+00:00
+- actor: claude-code
+  id: 01m12mfw7332ke9k84vfg719qc
+  text: |-
+    Review finding fixed: `completeness/case-sensitivity-coverage` on `dispatch_list_tasks_exclude_done_accepts_string_boolean`.
+
+    The cause, not only the line:
+
+    - `bool_param` has exactly ONE call site in the crate — `exclude_done` in the `Verb::List` arm of `execute_task_query_operation` (crates/swissarmyhammer-kanban/src/dispatch.rs). The sweep the finding asks for is therefore complete: no other call site can carry the same one-sided coverage.
+    - `dispatch_list_tasks_exclude_done_accepts_string_boolean` now proves BOTH spellings in every case: `false`/`False`/`FALSE` and `true`/`True`/`TRUE`.
+    - The `true` half is read on a board state where the value changes the answer, as the card requires. An unscoped listing defaults to `exclude_done: true`, so a `true` assertion there proves nothing. The listing instead names `column: "done"`, where the default is `false`. `exclude_done: "TRUE"` must then return 0, while a dropped param returns 1.
+    - The test records both defaults as explicit baselines first, so a reader sees that neither half can pass on the default.
+
+    Every assertion was seen RED before GREEN, through three separate mutations of `bool_param`:
+
+    1. `eq_ignore_ascii_case` -> `==`: FAIL at the `"False"` spelling. Proves the case contract.
+    2. Spelling table cut to `[("false", false)]`: FAIL at the `"true"` spelling. Proves the `true` half reaches the parser.
+    3. `Ok(None)` returned for a parsed `true` (a dropped param): FAIL with `left: 1, right: 0` on `exclude_done: "true"`. This is the exact weakness ^qd9z2xt named — the `true` assertion cannot pass on the default.
+
+    Production code was restored after each mutation. `git diff` on dispatch.rs is empty.
+
+    Also in this pass:
+
+    - `seed_open_and_done_board` replaces the same seven-line seed block copied into three `exclude_done` tests.
+    - `dispatch_list_tasks_non_boolean_exclude_done_errors` now reads three rejected values, `"yes please"`, `"TRU"` and `"falsey"`, so the negative direction of the case contract holds: a case-insensitive match stays a match of the whole word, not a prefix or a stem.
+    - `dispatch_list_tasks_sugar_params_match_case_insensitively` is new. The same diff documented `tag`, `project` and `assignee` as case-insensitive, and nothing proved it through the dispatch path. It reads `BUG`, `MyProj` and `ALICE` against a board that holds one matching and one non-matching task. Seen RED by making `scalar_filter_param` drop a single value: FAIL with `left: 2, right: 1`.
+
+    Verification: `cargo nextest run --workspace` — 14253 passed, 0 failed. `cargo clippy --workspace --all-targets -- -D warnings` clean. `cargo fmt` applied, no change.
+  timestamp: 2026-08-27T22:12:17.763811+00:00
+- actor: claude-code
+  id: 01m12mg2v71bh651c2dn3ayr7x
+  text: |-
+    ### implement — changed
+    - evidence: 1 file — crates/swissarmyhammer-kanban/src/dispatch/tests/tasks.rs (+102 / -24). `cargo nextest run --workspace` 14253 passed / 0 failed; `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt` no change. Production code unchanged: `git diff` on dispatch.rs is empty.
+    - next: /review. The card stays in `doing`.
+  timestamp: 2026-08-27T22:12:24.551596+00:00
 position_column: doing
 position_ordinal: '8380'
 title: 'kanban list tasks: the tag parameter is ignored and returns the whole board'

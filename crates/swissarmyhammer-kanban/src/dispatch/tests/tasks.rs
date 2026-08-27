@@ -651,19 +651,70 @@ async fn dispatch_list_tasks_with_assignee_filter() {
     assert_eq!(result["tasks"][0]["title"], "Worker task");
 }
 
+/// The sugar params resolve their value case-insensitively, the way the
+/// `#`, `$` and `@` atoms they stand for do. A caller that types the value
+/// the way it reads on a card, rather than the way it is stored, still gets
+/// the scoped answer. The board holds a second task no value matches, so a
+/// param that stopped filtering fails every assertion.
+#[tokio::test]
+async fn dispatch_list_tasks_sugar_params_match_case_insensitively() {
+    let (_temp, ctx) = setup().await;
+
+    let ops =
+        parse_input(json!({"op": "add project", "id": "myproj", "name": "My Project"})).unwrap();
+    execute_operation(&ctx, &ops[0]).await.unwrap();
+    let ops =
+        parse_input(json!({"op": "add actor", "id": "alice", "name": "Alice", "type": "human"}))
+            .unwrap();
+    execute_operation(&ctx, &ops[0]).await.unwrap();
+
+    let ops =
+        parse_input(json!({"op": "add task", "title": "Scoped", "project": "myproj"})).unwrap();
+    let r = execute_operation(&ctx, &ops[0]).await.unwrap();
+    let task_id = r["id"].as_str().unwrap().to_string();
+    let ops = parse_input(json!({"op": "tag task", "id": task_id, "tag": "bug"})).unwrap();
+    execute_operation(&ctx, &ops[0]).await.unwrap();
+    let ops =
+        parse_input(json!({"op": "assign task", "id": task_id, "assignee": "alice"})).unwrap();
+    execute_operation(&ctx, &ops[0]).await.unwrap();
+
+    let ops = parse_input(json!({"op": "add task", "title": "Unscoped"})).unwrap();
+    execute_operation(&ctx, &ops[0]).await.unwrap();
+
+    for (param, value) in [("tag", "BUG"), ("project", "MyProj"), ("assignee", "ALICE")] {
+        let mut input = json!({"op": "list tasks"});
+        input[param] = json!(value);
+        let ops = parse_input(input).unwrap();
+        let result = execute_operation(&ctx, &ops[0]).await.unwrap();
+        assert_eq!(
+            result["total"], 1,
+            "{param}: {value:?} must scope the listing the way its lowercase spelling does"
+        );
+        assert_eq!(result["tasks"][0]["title"], "Scoped", "{param}: {value:?}");
+    }
+}
+
+/// Put one task in the first column and one in the terminal column.
+///
+/// This is the board every `exclude_done` assertion needs: the answer to a
+/// listing changes with the value of the param, so a param the dispatch
+/// layer drops fails the assertion instead of matching the default.
+async fn seed_open_and_done_board(ctx: &KanbanContext) {
+    let ops = parse_input(json!({"op": "add task", "title": "Open"})).unwrap();
+    execute_operation(ctx, &ops[0]).await.unwrap();
+    let ops = parse_input(json!({"op": "add task", "title": "Finished"})).unwrap();
+    let r = execute_operation(ctx, &ops[0]).await.unwrap();
+    let done_id = r["id"].as_str().unwrap().to_string();
+    let ops = parse_input(json!({"op": "move task", "id": done_id, "column": "done"})).unwrap();
+    execute_operation(ctx, &ops[0]).await.unwrap();
+}
+
 /// `exclude_done: false` widens the listing to the done column, which is
 /// otherwise dropped when no `column` is named.
 #[tokio::test]
 async fn dispatch_list_tasks_exclude_done_false_includes_done() {
     let (_temp, ctx) = setup().await;
-
-    let ops = parse_input(json!({"op": "add task", "title": "Open"})).unwrap();
-    execute_operation(&ctx, &ops[0]).await.unwrap();
-    let ops = parse_input(json!({"op": "add task", "title": "Finished"})).unwrap();
-    let r = execute_operation(&ctx, &ops[0]).await.unwrap();
-    let done_id = r["id"].as_str().unwrap().to_string();
-    let ops = parse_input(json!({"op": "move task", "id": done_id, "column": "done"})).unwrap();
-    execute_operation(&ctx, &ops[0]).await.unwrap();
+    seed_open_and_done_board(&ctx).await;
 
     let ops = parse_input(json!({"op": "list tasks", "exclude_done": false})).unwrap();
     let result = execute_operation(&ctx, &ops[0]).await.unwrap();
@@ -680,42 +731,69 @@ async fn dispatch_list_tasks_exclude_done_false_includes_done() {
 
 /// MCP transports that carry every argument as a string must not lose
 /// `exclude_done` to a silent type mismatch.
+///
+/// Both spellings are proved in every case, and each is read on a board
+/// state where the value it carries changes the answer: `false` widens an
+/// unscoped listing past the done column, and `true` empties a listing that
+/// named that column. Neither half can pass on the default the two
+/// baselines below record, so a dropped param fails both.
 #[tokio::test]
 async fn dispatch_list_tasks_exclude_done_accepts_string_boolean() {
     let (_temp, ctx) = setup().await;
+    seed_open_and_done_board(&ctx).await;
 
-    let ops = parse_input(json!({"op": "add task", "title": "Open"})).unwrap();
-    execute_operation(&ctx, &ops[0]).await.unwrap();
-    let ops = parse_input(json!({"op": "add task", "title": "Finished"})).unwrap();
-    let r = execute_operation(&ctx, &ops[0]).await.unwrap();
-    let done_id = r["id"].as_str().unwrap().to_string();
-    let ops = parse_input(json!({"op": "move task", "id": done_id, "column": "done"})).unwrap();
-    execute_operation(&ctx, &ops[0]).await.unwrap();
+    let ops = parse_input(json!({"op": "list tasks"})).unwrap();
+    let result = execute_operation(&ctx, &ops[0]).await.unwrap();
+    assert_eq!(
+        result["total"], 1,
+        "baseline: an unscoped listing drops the done task by default"
+    );
+    let ops = parse_input(json!({"op": "list tasks", "column": "done"})).unwrap();
+    let result = execute_operation(&ctx, &ops[0]).await.unwrap();
+    assert_eq!(
+        result["total"], 1,
+        "baseline: naming a column keeps the done task by default"
+    );
 
     // A stringified boolean carries whatever case its source language
     // writes, so the spelling is matched case-insensitively.
     for spelling in ["false", "False", "FALSE"] {
         let ops = parse_input(json!({"op": "list tasks", "exclude_done": spelling})).unwrap();
         let result = execute_operation(&ctx, &ops[0]).await.unwrap();
-        assert_eq!(result["total"], 2, "exclude_done: {spelling:?}");
+        assert_eq!(
+            result["total"], 2,
+            "exclude_done: {spelling:?} must widen the listing to the done task"
+        );
+    }
+    for spelling in ["true", "True", "TRUE"] {
+        let ops =
+            parse_input(json!({"op": "list tasks", "column": "done", "exclude_done": spelling}))
+                .unwrap();
+        let result = execute_operation(&ctx, &ops[0]).await.unwrap();
+        assert_eq!(
+            result["total"], 0,
+            "exclude_done: {spelling:?} must drop the done task the column named"
+        );
     }
 }
 
 /// A non-boolean `exclude_done` is an explicit error, never a listing that
-/// quietly kept the default.
+/// quietly kept the default. A spelling that is close to a boolean but is
+/// not one carries the same verdict as prose, so the case-insensitive match
+/// stays a match of the whole word.
 #[tokio::test]
 async fn dispatch_list_tasks_non_boolean_exclude_done_errors() {
     let (_temp, ctx) = setup().await;
+    seed_open_and_done_board(&ctx).await;
 
-    let ops = parse_input(json!({"op": "add task", "title": "Open"})).unwrap();
-    execute_operation(&ctx, &ops[0]).await.unwrap();
-
-    let ops = parse_input(json!({"op": "list tasks", "exclude_done": "yes please"})).unwrap();
-    let err = execute_operation(&ctx, &ops[0]).await.unwrap_err();
-    assert!(
-        err.to_string().contains("exclude_done"),
-        "the error must name the param: {err}"
-    );
+    for value in ["yes please", "TRU", "falsey"] {
+        let ops = parse_input(json!({"op": "list tasks", "exclude_done": value})).unwrap();
+        let err = execute_operation(&ctx, &ops[0]).await.unwrap_err();
+        assert!(
+            err.to_string().contains("exclude_done"),
+            "the error must name the param for {value:?}: {err}"
+        );
+    }
 }
 
 #[tokio::test]

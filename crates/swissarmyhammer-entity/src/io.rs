@@ -20,7 +20,7 @@ use ulid::Ulid;
 
 use crate::entity::Entity;
 use crate::error::{EntityError, Result};
-use swissarmyhammer_common::frontmatter::split_frontmatter_body;
+use swissarmyhammer_common::frontmatter::{join_frontmatter_body, split_frontmatter_body};
 
 /// Maximum number of concurrent file reads issued by [`read_entity_dir`].
 ///
@@ -504,6 +504,11 @@ fn parse_plain_yaml(
 /// [`split_frontmatter_body`] reads it back as frontmatter content rather than
 /// as the closing delimiter. `format_writes_exactly_two_delimiter_lines` pins
 /// that over the value shapes that push the emitter between those two styles.
+///
+/// [`join_frontmatter_body`] measures it on every write as well, so a value
+/// that ever does emit a bare `---` line returns
+/// [`EntityError::FrontmatterDelimiter`] instead of writing a file that loses
+/// its fields on the next read.
 fn format_frontmatter_body(
     entity: &Entity,
     body_field: impl AsRef<str>,
@@ -524,7 +529,12 @@ fn format_frontmatter_body(
     let frontmatter_yaml =
         serde_yaml_ng::to_string(&frontmatter_value).map_err(|e| yaml_error(path, e))?;
 
-    Ok(format!("---\n{}---\n{}", frontmatter_yaml, body))
+    join_frontmatter_body(&frontmatter_yaml, &body).map_err(|source| {
+        EntityError::FrontmatterDelimiter {
+            path: path.to_path_buf(),
+            source,
+        }
+    })
 }
 
 /// Format an entity as plain YAML.

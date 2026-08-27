@@ -17,6 +17,14 @@ pub enum EntityError {
     #[error("invalid frontmatter in {path}: expected --- delimiters")]
     InvalidFrontmatter { path: PathBuf },
 
+    /// A field value emitted a bare `---` line into the frontmatter, so the
+    /// entity could not be written without destroying it on the next read.
+    #[error("cannot write {path}: {source}")]
+    FrontmatterDelimiter {
+        path: PathBuf,
+        source: swissarmyhammer_common::frontmatter::DelimiterInFrontmatter,
+    },
+
     /// YAML parse error.
     #[error("YAML error in {path}: {source}")]
     Yaml {

@@ -291,6 +291,7 @@ fn classify_entity_error_kind(err: &swissarmyhammer_entity::EntityError) -> Erro
         | EntityError::UnsupportedUndoOp { .. } => ErrorClass::InvalidParams,
 
         EntityError::InvalidFrontmatter { .. }
+        | EntityError::FrontmatterDelimiter { .. }
         | EntityError::Yaml { .. }
         | EntityError::YamlSerde(_)
         | EntityError::ComputeError { .. }

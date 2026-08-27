@@ -796,6 +796,140 @@ mod tests {
         }
     }
 
+    /// A `#word` that stands ONLY in a heading is not a tag, so a body carrying
+    /// nothing else comes back byte for byte from both writers.
+    ///
+    /// Each heading below is a real one off the board. `delete tag` ate the
+    /// number out of it and the card silently lost the text the heading names,
+    /// which is the whole defect: the reader never counted the number, so the
+    /// writer must never reach it.
+    #[test]
+    fn test_writers_leave_a_heading_only_marker_untouched() {
+        for (body, slug) in [
+            (
+                "### Notes on offender #2 (perspective-tab-bar)\n\nNot a violation today.\n",
+                "2",
+            ),
+            (
+                "### \u{26a0}\u{fe0f} #1 TRAP \u{2014} must set the flag\n\nSet it on the mount.\n",
+                "1",
+            ),
+            (
+                "## RESOLVED \u{2014} absorbed by card #4 (commit fb522e8a2)\n\nNothing left to do.\n",
+                "4",
+            ),
+        ] {
+            assert!(
+                !parse_tags(body).contains(&slug.to_string()),
+                "the reader must not count {slug:?} in {body:?}"
+            );
+            assert_eq!(remove_tag(body, slug), body, "remove_tag rewrote {body:?}");
+            assert_eq!(
+                rename_tag(body, slug, "renamed"),
+                body,
+                "rename_tag rewrote {body:?}"
+            );
+        }
+    }
+
+    /// One fragment for each markdown line shape the walker classifies.
+    ///
+    /// [`test_writers_copy_every_line_the_reader_skips`] builds a body out of
+    /// every ordered triple of these, so each shape meets each other one both
+    /// above it and below it — a marker inside a fence, a marker under a
+    /// heading, a marker on the line that opens a fence, and so on.
+    const LINE_SHAPES: &[&str] = &[
+        "#bug",
+        "a #bug b",
+        "#bug,",
+        "#bug #bug",
+        "  #bug",
+        "    #bug",
+        "# bug",
+        "# Fix #bug",
+        "## #bug",
+        "### Notes on offender #bug (x)",
+        "###bug",
+        "```",
+        "~~~",
+        "`#bug`",
+        "x`#bug",
+        "#bug`x`",
+        "a#bug",
+        "#!bug",
+        "#-bug",
+        "text",
+        "",
+    ];
+
+    /// The `content` of every line [`markdown_lines`] marks not tag-bearing,
+    /// paired with the line's position in the walk.
+    ///
+    /// These are exactly the lines [`parse_tags`] skips, so they are exactly the
+    /// lines both writers owe a verbatim copy.
+    fn lines_the_reader_skips(text: &str) -> Vec<(usize, &str)> {
+        markdown_lines(text)
+            .enumerate()
+            .filter(|(_, line)| !line.tag_bearing)
+            .map(|(position, line)| (position, line.content))
+            .collect()
+    }
+
+    /// A line the reader skips is a line neither writer may edit.
+    ///
+    /// This is the heading defect stated as a contract instead of as one
+    /// example: `delete tag` ran `remove_tag` over a heading `parse_tags` had
+    /// skipped and cut the `#2` out of `### Notes on offender #2 (...)`, so the
+    /// card lost the number the heading names. A fixed list of headings does not
+    /// hold that — every line shape has to meet every other one, under both line
+    /// endings.
+    ///
+    /// A writer emits one line for each line it read, and drops at most the last
+    /// one (see [`tidy_removed_line`]), so a skipped line keeps its position in
+    /// the walk and can be compared by that position.
+    ///
+    /// The converse direction — a marker the reader DOES count must be reachable
+    /// — is held by `test_remove_tag_next_to_punctuation` and
+    /// `test_rename_tag_next_to_punctuation`.
+    #[test]
+    fn test_writers_copy_every_line_the_reader_skips() {
+        for above in LINE_SHAPES {
+            for middle in LINE_SHAPES {
+                for below in LINE_SHAPES {
+                    for terminator in ["\n", "\r\n"] {
+                        let body = format!("{above}{terminator}{middle}{terminator}{below}");
+                        assert_skipped_lines_survive(
+                            &body,
+                            &remove_tag(&body, "bug"),
+                            "remove_tag",
+                        );
+                        assert_skipped_lines_survive(
+                            &body,
+                            &rename_tag(&body, "bug", "defect"),
+                            "rename_tag",
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Assert that `written` still carries, unchanged and in place, every line
+    /// of `body` that [`parse_tags`] skipped.
+    ///
+    /// `writer` names the writer under test, so a failure says which one edited
+    /// prose it never read.
+    fn assert_skipped_lines_survive(body: &str, written: &str, writer: &str) {
+        let after: Vec<&str> = markdown_lines(written).map(|line| line.content).collect();
+        for (position, content) in lines_the_reader_skips(body) {
+            assert_eq!(
+                after.get(position).copied(),
+                Some(content),
+                "{writer} edited a line the reader skips, in {body:?} -> {written:?}"
+            );
+        }
+    }
+
     #[test]
     fn test_normalize_slug() {
         // Spaces and out-of-charset runs collapse to a single hyphen, so the

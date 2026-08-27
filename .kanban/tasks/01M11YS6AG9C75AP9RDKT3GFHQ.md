@@ -1,8 +1,27 @@
 ---
 assignees:
 - claude-code
-position_column: todo
-position_ordinal: fff780
+comments:
+- actor: claude-code
+  id: 01m129121z7tdc5z9nysqndcf4
+  text: |-
+    Research. The production fix this card asks for was already in the tree. What was missing is the contract that holds it there.
+
+    `markdown_lines` flags a fence line, a line inside a fenced block, and a heading as not tag-bearing, and BOTH writers already honor that flag. That landed on 2026-07-31 in `f1ad4bc61` ("stop remove_tag from mutating bystander task bodies") and `4a7bbf7e0`, with the single-walker refactor `d312017bb` the day before. Every one of them is an ancestor of HEAD, so the code was in place weeks before the sweep that filed this card.
+
+    Measured, not assumed:
+
+    - The three cards this card names are intact and byte-clean against HEAD. `01KQM6VWQTK6KCQMQNKS0BX5V3` still reads `### Notes on offender #2 (perspective-tab-bar)`; `01KT57BGTASD8W45HE708FM01R` still reads `### ⚠️ #1 TRAP …`; `01KT57DNAKPKRHSXJ1KH7NQSQJ` still reads `## RESOLVED — absorbed by card #4 …`.
+    - A test built from those exact three headings passes against unchanged production code.
+
+    So the reported heading loss does not reproduce on current source. The most probable single cause of the damage the sweep saw is ^7rh0bvj, whose write side WAS genuinely unguarded and destroyed 16 cards: a card mangled by that defect loses body text, which reads as lost heading text. ^7rh0bvj is fixed and done.
+
+    What this card adds is the contract, stated as a rule rather than as three examples: a line the reader skips is a line neither writer may edit. `test_writers_copy_every_line_the_reader_skips` builds a body out of every ordered triple of 21 line shapes under both `\n` and `\r\n` endings, and asserts each skipped line survives in place through `remove_tag` and `rename_tag`. `test_writers_leave_a_heading_only_marker_untouched` pins the three real headings.
+
+    The card's three work items are met: the writers honor the flag, `append_tag` and `rename_tag` are checked against it, and the heading-only test exists.
+  timestamp: 2026-08-27T18:51:57.887551+00:00
+position_column: doing
+position_ordinal: '8380'
 title: kanban delete tag strips a `#word` out of a markdown heading
 ---
 `tag_parser::parse_tags` does not count a `#word` inside a markdown heading

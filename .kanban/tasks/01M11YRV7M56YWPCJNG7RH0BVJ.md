@@ -229,8 +229,25 @@ comments:
     - evidence: 1 file — crates/swissarmyhammer-entity/src/error.rs. Documented every field of every struct variant of `EntityError`, not only the two lines the findings named. Measured with the rule's own tool: `RUSTFLAGS="-W missing_docs" cargo clippy -p swissarmyhammer-entity --message-format=json | jq ... | grep error.rs` answered 21 lines before and 0 lines after. `cargo nextest run --workspace` gives 14234 passed, 0 failed, 0 skipped. `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --check` are clean. Both `## Review Findings` items are now `- [x]`.
     - next: /review
   timestamp: 2026-08-27T16:41:27.115055+00:00
-position_column: doing
-position_ordinal: '8380'
+- actor: claude-code
+  id: 01m121q43aj7avejwmz2eba23h
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (64c3e758f) — 0 findings, 0 confirmed, 0 refuted, 7 validators attempted, 0 failed. 1 file reviewed (crates/swissarmyhammer-entity/src/error.rs); 10 .kanban files excluded by .reviewignore. The 2 prior `code-hygiene/missing-docs-rust` findings are checked.
+    - next: task moved to done.
+  timestamp: 2026-08-27T16:44:12.266695+00:00
+- actor: claude-code
+  id: 01m121qsesre2z9qherka85en6
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — crates/swissarmyhammer-entity/src/error.rs; missing_docs in that file went 21 to 0, measured with the lint's own tool
+    - test: green — cargo nextest run --workspace, 14234 passed, 0 failed, 0 skipped; clippy and fmt clean
+    - commit: 64c3e758f
+    - review: clean — 0 findings, 7 validators attempted, both prior findings checked
+    - next: none — the card is in done
+  timestamp: 2026-08-27T16:44:34.137339+00:00
+position_column: done
+position_ordinal: ffffffffffffffffffffffffffffffffffffffffffb080
 title: kanban task write corrupts a card whose front matter holds a `---` run
 ---
 A read-write round trip of a task destroys the card when the stored front

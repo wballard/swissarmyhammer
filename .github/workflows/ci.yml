@@ -113,6 +113,9 @@ jobs:
           if ! command -v swiftlint &>/dev/null; then
             brew install swiftlint
           fi
+          if ! command -v swiftformat &>/dev/null; then
+            brew install swiftformat
+          fi
           # `periphery` comes from homebrew-core, not from the vendor tap. The
           # tap ships 2.21.2, whose scan output `dead-code-swift` cannot read,
           # so the rule reports nothing on a fixture that must report. Drop a

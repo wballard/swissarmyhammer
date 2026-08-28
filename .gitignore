@@ -89,6 +89,14 @@ doc/book
 # Kanban perspective trash (local cleanup, not source)
 .kanban/perspectives/.trash/
 
+# Stray kanban boards under crates and apps. The only board this repository
+# tracks is the one at the root; a board anywhere else is state a tool wrote
+# into its working directory, and committing it is what happened to
+# crates/swissarmyhammer-mcp-proxy. These patterns are anchored to the crate
+# and app directories so the tracked root board stays tracked.
+/crates/*/.kanban/
+/apps/*/.kanban/
+
 # Stray fixture output at workspace root.
 # `agent-client-protocol-extras::get_fixture_path_for()` resolves to the
 # per-crate `<crate>/.fixtures/` layout (acp-conformance,

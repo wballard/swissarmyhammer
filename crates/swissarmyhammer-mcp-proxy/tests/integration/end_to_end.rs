@@ -1,3 +1,4 @@
+use super::upstream::shared_upstream_url;
 use std::sync::Arc;
 use swissarmyhammer_mcp_proxy::{start_proxy_server, FilteringMcpProxy, ToolFilter};
 use swissarmyhammer_templating::TemplateLibrary;
@@ -26,17 +27,12 @@ async fn test_proxy_filters_tool_discovery() {
         all_tool_count
     );
 
-    // Start HTTP server for the upstream MCP server
-    let upstream_handle = {
-        use swissarmyhammer_tools::mcp::unified_server::{start_mcp_server, McpServerMode};
-        start_mcp_server(McpServerMode::Http { port: None }, None, None)
-            .await
-            .unwrap()
-    };
-    let upstream_port = upstream_handle.info().port.unwrap();
-    let upstream_url = format!("http://127.0.0.1:{}/mcp", upstream_port);
+    // Use the shared upstream, which runs against a temporary working
+    // directory. Starting one here without an explicit working directory would
+    // write the server's state into this crate's source tree.
+    let upstream_url = shared_upstream_url();
 
-    println!("Upstream server started on port {}", upstream_port);
+    println!("Using shared upstream server at {}", upstream_url);
 
     // Create restrictive filter: only allow the unified files tool
     let filter = ToolFilter::new(vec!["^files$".to_string()], vec![]).unwrap();
@@ -62,7 +58,7 @@ async fn test_proxy_filters_tool_discovery() {
     println!("✓ Filtering logic verified in unit tests");
     println!("✓ End-to-end proxy infrastructure test passed!");
 
-    // Cleanup
+    // Cleanup — the shared upstream is owned by the test binary and outlives
+    // this test, so only the proxy server is torn down here.
     handle.abort();
-    drop(upstream_handle);
 }

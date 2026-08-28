@@ -44,8 +44,24 @@ comments:
     2. `dispatch.rs` doc comment — "... an alias read through the same [`list_param`] path, so it accepts every shape the plural key does — the alias names the key, it does not narrow the shape."
     3. Added `dispatch_add_task_singular_assignee_array_shape_persists`, a fixture for the singular key's array shape. This is the precedent for the test this card asks for, so the new `tag` test follows it rather than inventing a form.
   timestamp: 2026-08-27T22:20:08.480920+00:00
-position_column: doing
-position_ordinal: '8380'
+- actor: claude-code
+  id: 01m133f6f7tnt2bsne0wse3y9p
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — crates/swissarmyhammer-kanban/src/dispatch.rs (the `tag_refs` doc comment), dispatch/tests/tags.rs (tests pinning the corrected claim), and crates/swissarmyhammer-tools/src/mcp/tools/kanban/description.md. The docs called the singular `tag` a "one-element alias", which understates the contract: since 7af361e16 it is read through the same `list_param` path as `tags`, so it takes every shape the plural key takes and each element is one tag. The alias names the key; it does not narrow the shape.
+    - test: green — cargo nextest run --workspace, 14254 passed, 0 failed, 0 skipped; clippy clean; fmt no change
+    - commit: 637f8cae2
+    - review: clean — 0 findings, 7 validators attempted, 2 files reviewed (6 .kanban files excluded, description.md matched no validator)
+    - next: none — the card is in done
+
+    Two notes on how this ran, because neither is visible from the diff:
+
+    The implement sub-agent was killed by its stream watchdog during its final full-suite run. Its work was already in the tree and was verified rather than restarted.
+
+    That kill left the agent's own `cargo nextest run --workspace` running as an orphan (PID 16894). It collided with the next full-suite run and produced 5 failures in `swissarmyhammer-treesitter` — four `index::tests::test_status*` and one 60-second timeout in `unified::tests::test_find_duplicates_in_file_finds_similar_code`. Those tests share a workspace index, so two concurrent suites contend on it. All 365 treesitter tests passed alone; after killing the orphan the full suite passed at 14254. The failures belonged to the orphan, not to this change — worth knowing, because that failure signature will recur whenever a suite is orphaned.
+  timestamp: 2026-08-28T02:34:04.135790+00:00
+position_column: done
+position_ordinal: ffffffffffffffffffffffffffffffffffffffffffb580
 title: Singular tag key docs repeat the corrected one-element alias claim
 ---
 `^n36mc1q` corrected two places that described the singular `assignee` key as "a one-element alias". The identical phrasing survives for the singular `tag` key:

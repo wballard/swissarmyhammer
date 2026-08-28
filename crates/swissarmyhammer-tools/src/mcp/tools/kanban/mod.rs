@@ -25,7 +25,9 @@ use std::path::{Path, PathBuf};
 use swissarmyhammer_common::lifecycle::{InitResult, InitScope};
 use swissarmyhammer_common::reporter::{InitEvent, InitReporter};
 use swissarmyhammer_kanban::{
-    parse::parse_input, task::ListTasks, Execute, KanbanContext, KanbanOperation, Noun, Verb,
+    parse::parse_input,
+    task::{ListTasks, MAX_PAGE_SIZE},
+    Execute, KanbanContext, KanbanOperation, Noun, Verb,
 };
 
 // Operations and schema are provided by the kanban crate's single source of truth:
@@ -117,6 +119,90 @@ fn task_to_plan_entry(task: &Value) -> PlanEntry {
     entry.with_column(column)
 }
 
+/// Key under which `ListTasks::execute` returns one page of cards.
+///
+/// The operation answers with an OBJECT — `tasks`, `count`, `total`, `page`,
+/// `page_size`, `total_pages` — so the card array lives one level in. Reading
+/// the object itself as an array is the defect
+/// [`read_task_page`] exists to make impossible.
+const LIST_TASKS_ARRAY_KEY: &str = "tasks";
+
+/// Key under which `ListTasks::execute` reports how many pages its listing
+/// spans.
+const LIST_TASKS_TOTAL_PAGES_KEY: &str = "total_pages";
+
+/// Read one `list tasks` page: its cards, and how many pages the listing has.
+///
+/// Returns `None` when the page does not carry both in the expected shape.
+/// A shape this cannot read is never degraded into "no cards" — an empty plan
+/// tells an ACP client the board is empty, which is a silent lie. The caller
+/// drops the plan instead, the same way it drops one it could not list.
+fn read_task_page(listing: &Value) -> Option<(&[Value], u64)> {
+    let tasks = listing.get(LIST_TASKS_ARRAY_KEY)?.as_array()?.as_slice();
+    let total_pages = listing.get(LIST_TASKS_TOTAL_PAGES_KEY)?.as_u64()?;
+    Some((tasks, total_pages))
+}
+
+/// Collect every card on the board, across as many `list tasks` pages as it
+/// takes.
+///
+/// Two `ListTasks` defaults stand between a plain call and a complete list,
+/// and the plan needs both overridden:
+///
+/// - It serves ten cards a page and at most [`MAX_PAGE_SIZE`] per call, so a
+///   board wider than one page needs several. This asks for the widest page
+///   `ListTasks` will serve, then follows `total_pages` to the end.
+/// - An unscoped listing hides the terminal column, which would drop finished
+///   cards from the plan and leave `complete task` naming a card its own plan
+///   does not carry.
+///
+/// The per-card payload stays at the default `slim` detail: pulling every
+/// card's description into every mutation response is the prompt-token
+/// blowup pagination was added to prevent. Plan entries therefore carry no
+/// notes.
+///
+/// Returns `None` when any page fails to list or cannot be read, so the
+/// caller reports the failure by attaching no plan at all.
+async fn list_all_tasks_for_plan(ctx: &KanbanContext) -> Option<Vec<Value>> {
+    let mut cards = Vec::new();
+    let mut page = 1;
+
+    loop {
+        let listing = ListTasks::new()
+            .with_exclude_done(false)
+            .with_page(page)
+            .with_page_size(MAX_PAGE_SIZE)
+            .execute(ctx)
+            .await
+            .into_result();
+
+        let listing = match listing {
+            Ok(listing) => listing,
+            Err(e) => {
+                tracing::warn!("failed to list tasks for plan: {}", e);
+                return None;
+            }
+        };
+
+        let Some((tasks, total_pages)) = read_task_page(&listing) else {
+            tracing::warn!(
+                page,
+                "`list tasks` page is not shaped as a plan can read; \
+                 attaching no plan rather than an empty one: {}",
+                listing
+            );
+            return None;
+        };
+
+        cards.extend(tasks.iter().cloned());
+
+        if page as u64 >= total_pages {
+            return Some(cards);
+        }
+        page += 1;
+    }
+}
+
 /// Build plan data from current kanban tasks
 ///
 /// Returns a JSON object containing the complete plan in a format that can be
@@ -129,20 +215,10 @@ async fn build_plan_data(
     trigger: &str,
     affected_task_id: Option<&str>,
 ) -> Option<Value> {
-    // Fetch all tasks
-    let tasks_result = ListTasks::new().execute(ctx).await.into_result();
-    let tasks = match tasks_result {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::warn!("failed to list tasks for plan: {}", e);
-            return None;
-        }
-    };
+    let tasks = list_all_tasks_for_plan(ctx).await?;
 
     // Convert tasks to plan entries
     let entries: Vec<Value> = tasks
-        .as_array()
-        .unwrap_or(&Vec::new())
         .iter()
         .map(|task| {
             let entry = task_to_plan_entry(task);
@@ -1169,6 +1245,173 @@ mod tests {
             json!({"op": "add actor", "id": "assistant", "name": "Assistant", "type": "agent"}),
         )
         .await;
+    }
+
+    /// Add one more card to a probe board and return its id.
+    async fn add_probe_task(tool: &KanbanTool, context: &ToolContext, title: &str) -> String {
+        let added = run_op(tool, context, json!({"op": "add task", "title": title})).await;
+        added["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("`add task` echoes the new card id, got: {added}"))
+            .to_string()
+    }
+
+    /// Borrow the `_plan.entries` array a tool response carries.
+    ///
+    /// Panics naming the whole response, because an absent or unreadable
+    /// entries list is exactly the defect the probes below exist for: the
+    /// failure has to say what the plan did carry.
+    fn plan_entries<'a>(data: &'a Value, op: &str) -> &'a [Value] {
+        data["_plan"]["entries"]
+            .as_array()
+            .unwrap_or_else(|| panic!("`{op}` attached no `_plan.entries` array, got: {data}"))
+    }
+
+    /// Read the plan status `data` carries for the card `task_id`.
+    fn plan_entry_status(data: &Value, task_id: &str, op: &str) -> String {
+        let entry = plan_entries(data, op)
+            .iter()
+            .find(|entry| entry["_meta"]["id"] == json!(task_id))
+            .unwrap_or_else(|| {
+                panic!("`{op}` left card {task_id} out of `_plan.entries`, got: {data}")
+            });
+
+        entry["status"]
+            .as_str()
+            .unwrap_or_else(|| panic!("`{op}` gave card {task_id} no plan status, got: {data}"))
+            .to_string()
+    }
+
+    /// `_plan.entries` names every card on the board, each carrying the
+    /// status its column implies.
+    ///
+    /// The entries list is the whole point of `_plan` — ACP replaces the
+    /// prior plan entirely on each update, so shipping an empty list tells
+    /// the client the board is empty. `build_plan_data` used to read the
+    /// `list tasks` response OBJECT as if it were an array; `as_array()`
+    /// answered `None` on it, and the `None` became an empty entry list.
+    #[tokio::test]
+    async fn test_plan_entries_name_every_card_with_its_column_status() {
+        let temp = TempDir::new().unwrap();
+        let (tool, context, added) = plan_probe_board(&temp, "Plan pending card").await;
+        let pending_id = added["id"].as_str().unwrap().to_string();
+
+        let doing_id = add_probe_task(&tool, &context, "Plan doing card").await;
+        run_op(
+            &tool,
+            &context,
+            json!({"op": "move task", "id": doing_id, "column": "doing"}),
+        )
+        .await;
+
+        let done_id = add_probe_task(&tool, &context, "Plan done card").await;
+        let data = run_op(
+            &tool,
+            &context,
+            json!({"op": "complete task", "id": done_id}),
+        )
+        .await;
+
+        assert_eq!(
+            plan_entry_status(&data, &pending_id, "complete task"),
+            "pending",
+            "a card in the first column plans as pending"
+        );
+        assert_eq!(
+            plan_entry_status(&data, &doing_id, "complete task"),
+            "in_progress",
+            "a card in the doing column plans as in_progress"
+        );
+        assert_eq!(
+            plan_entry_status(&data, &done_id, "complete task"),
+            "completed",
+            "a card in the done column plans as completed"
+        );
+    }
+
+    /// Every card reaches `_plan.entries`, not just the ones on the first
+    /// `list tasks` page.
+    ///
+    /// `list tasks` paginates: it defaults to ten cards and serves at most
+    /// [`MAX_PAGE_SIZE`] per call. A plan built from a single page names
+    /// those cards and no others, so on a busy board — this project's own
+    /// board carries hundreds of cards — the card the caller just touched is
+    /// usually missing from its own plan. The board here is one card wider
+    /// than the widest page, so a builder that reads one page cannot pass.
+    #[tokio::test]
+    async fn test_plan_entries_reach_past_one_list_tasks_page() {
+        let temp = TempDir::new().unwrap();
+        let (tool, context, added) = plan_probe_board(&temp, "Plan page card 0").await;
+
+        let mut ids = vec![added["id"].as_str().unwrap().to_string()];
+        for n in 1..=MAX_PAGE_SIZE {
+            ids.push(add_probe_task(&tool, &context, &format!("Plan page card {n}")).await);
+        }
+
+        let touched = ids.last().expect("the board was seeded").clone();
+        let data = run_op(
+            &tool,
+            &context,
+            json!({"op": "tag task", "id": touched, "tag": "bug"}),
+        )
+        .await;
+
+        let planned: Vec<&Value> = plan_entries(&data, "tag task")
+            .iter()
+            .map(|entry| &entry["_meta"]["id"])
+            .collect();
+
+        for id in &ids {
+            assert!(
+                planned.contains(&&json!(id)),
+                "card {id} is on the board but missing from `_plan.entries` \
+                 ({} of {} cards planned)",
+                planned.len(),
+                ids.len()
+            );
+        }
+    }
+
+    /// A `list tasks` page that carries no readable task array is refused.
+    ///
+    /// This is the guard on the defect itself. `ListTasks::execute` answers
+    /// with an object; the old builder called `as_array()` on that object,
+    /// got `None`, and turned the `None` into an empty entry list. A shape
+    /// it cannot read must fail, so the caller drops the plan loudly instead
+    /// of publishing one that says the board is empty.
+    #[test]
+    fn test_read_task_page_refuses_a_listing_it_cannot_read() {
+        for unreadable in [
+            json!({"count": 0, "total_pages": 1}),
+            json!({"tasks": "not an array", "total_pages": 1}),
+            json!({"tasks": [], "total_pages": "not a number"}),
+            json!({"tasks": []}),
+            json!([]),
+        ] {
+            assert!(
+                read_task_page(&unreadable).is_none(),
+                "an unreadable `list tasks` page must be refused, not read as empty: {unreadable}"
+            );
+        }
+    }
+
+    /// A well-formed `list tasks` page yields its cards and its page count.
+    #[test]
+    fn test_read_task_page_reads_a_well_formed_listing() {
+        let listing = json!({
+            "tasks": [{"id": "01ABC"}],
+            "count": 1,
+            "total": 3,
+            "page": 1,
+            "page_size": 1,
+            "total_pages": 3,
+        });
+
+        let (tasks, total_pages) =
+            read_task_page(&listing).expect("a well-formed listing is readable");
+
+        assert_eq!(tasks, [json!({"id": "01ABC"})]);
+        assert_eq!(total_pages, 3);
     }
 
     /// Add one comment to `task_id` and return its member id.

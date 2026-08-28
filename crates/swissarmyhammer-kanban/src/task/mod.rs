@@ -30,7 +30,7 @@ pub use cut::CutTask;
 pub use delete::DeleteTask;
 pub use embedding_cache::{content_hash, task_embedding_text, EmbeddingCache};
 pub use get::GetTask;
-pub use list::ListTasks;
+pub use list::{ListTasks, MAX_PAGE_SIZE};
 pub use mv::MoveTask;
 pub use next::NextTask;
 pub use paste::PasteTask;

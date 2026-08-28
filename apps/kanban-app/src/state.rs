@@ -8,6 +8,7 @@ use swissarmyhammer_commands::{load_yaml_dir, Command, CommandsRegistry, UIState
 use swissarmyhammer_entity::Entity;
 use swissarmyhammer_entity_search::EntitySearchIndex;
 use swissarmyhammer_focus::{SpatialRegistry, SpatialState};
+use swissarmyhammer_kanban::auto_color::palette_color;
 use swissarmyhammer_kanban::clipboard::ClipboardProvider;
 use swissarmyhammer_kanban::KanbanContext;
 use swissarmyhammer_tools::mcp::unified_server::{
@@ -1292,18 +1293,14 @@ const ACTOR_COLORS: &[&str] = &[
     "2b6cb0", "c05621", "2f855a", "2c7a7b", "6b46c1", "b83280",
 ];
 
-/// The DJB2 starting hash. Part of the published algorithm, not a tunable.
-const DJB2_SEED: u64 = 5381;
-
-/// The DJB2 per-byte multiplier. Part of the published algorithm, not a tunable.
-const DJB2_MULTIPLIER: u64 = 33;
-
 /// Derive a deterministic hex color from a username.
+///
+/// The username picks one entry of [`ACTOR_COLORS`] through the shared djb2
+/// hash, so the same person always arrives at the same colour. The palette
+/// stays here because it is this surface's own; only the hash is shared, with
+/// the MCP server that colours agent actors.
 fn deterministic_color(username: &str) -> String {
-    let hash: u64 = username.bytes().fold(DJB2_SEED, |h, b| {
-        h.wrapping_mul(DJB2_MULTIPLIER).wrapping_add(b as u64)
-    });
-    ACTOR_COLORS[(hash as usize) % ACTOR_COLORS.len()].to_string()
+    palette_color(ACTOR_COLORS, username).to_string()
 }
 
 /// The first byte of a JPEG start-of-image marker (`FF D8`).
@@ -1715,6 +1712,36 @@ mod tests {
         // Different usernames should (usually) get different colors
         // Not guaranteed but very likely with a 15-color palette
         assert_ne!(c1, c2);
+    }
+
+    /// The colour every listed username has always been given.
+    ///
+    /// The colour is written onto the human actor the first time the app opens
+    /// a board and is read back on every board that already holds that actor,
+    /// so a new answer here re-colours people who exist. The table was computed
+    /// from the djb2 definition and [`ACTOR_COLORS`] alone, not from this
+    /// module's code, so it fails whenever the two stop agreeing.
+    const PINNED_ACTOR_COLORS: &[(&str, &str)] = &[
+        ("alice", "b83280"),
+        ("bob", "3182ce"),
+        ("will", "5a67d8"),
+        ("claude-code", "e53e3e"),
+        ("carol", "38a169"),
+        ("dave", "b83280"),
+        ("", "2f855a"),
+        ("a", "c05621"),
+        ("z", "3182ce"),
+    ];
+
+    #[test]
+    fn test_deterministic_color_matches_pinned_table() {
+        for (username, expected) in PINNED_ACTOR_COLORS {
+            assert_eq!(
+                deterministic_color(username),
+                *expected,
+                "the colour of user {username:?} changed"
+            );
+        }
     }
 
     // =========================================================================

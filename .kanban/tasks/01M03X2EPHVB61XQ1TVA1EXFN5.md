@@ -62,8 +62,20 @@ comments:
     - evidence: 6 files. New: crates/swissarmyhammer-mcp-proxy/tests/integration/upstream.rs, crates/swissarmyhammer-mcp-proxy/tests/integration/workspace_isolation.rs. Modified: crates/swissarmyhammer-mcp-proxy/tests/integration/handler_tests.rs, crates/swissarmyhammer-mcp-proxy/tests/integration/end_to_end.rs, crates/swissarmyhammer-mcp-proxy/tests/integration/mod.rs, .gitignore. Deleted: all 11 tracked files of crates/swissarmyhammer-mcp-proxy/.kanban. Tests: cargo nextest run --workspace = 14255 run, 14255 passed, 0 skipped. cargo clippy --workspace --all-targets -- -D warnings = exit 0. RED verified before the fix, GREEN after.
     - next: /review
   timestamp: 2026-08-28T02:49:58.579355+00:00
-position_column: doing
-position_ordinal: '8380'
+- actor: claude-code
+  id: 01m149spa0qnfm3cfy5w68hdyd
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 6 files plus the 11 deleted board files. The cause was found and proved, not guessed: the proxy's integration tests started the upstream with `working_dir: None`, so calling the `kanban` tool wrote a board into the crate directory. Verified RED by calling the tool by name (the old test used `tools[0]`, and the kanban tool no longer sits at index 0, so the defect survived on luck of tool ordering).
+    - test: green — cargo nextest run --workspace, 14255 passed, 0 failed, 0 skipped; clippy exit 0; fmt applied. The count went 14254 → 14255, so the 112 lines cut from handler_tests.rs were duplicated helpers moved into the new shared upstream.rs, not tests removed.
+    - commit: 09d46aa40
+    - review: clean — 0 findings, 1 candidate refuted, 7 validators attempted, 5 files reviewed
+    - next: none — the card is in done
+
+    Sweep result: a full workspace run now leaves no `.kanban` anywhere under `crates/` or `apps/`. `.gitignore` gained `/crates/*/.kanban/` and `/apps/*/.kanban/` as defense in depth, anchored so the tracked root board stays tracked — verified both directions, root board still not ignored at 7309 tracked files.
+  timestamp: 2026-08-28T13:43:53.920690+00:00
+position_column: done
+position_ordinal: ffffffffffffffffffffffffffffffffffffffffffb680
 title: Stray .kanban board directory sits under crates/swissarmyhammer-mcp-proxy
 ---
 `crates/swissarmyhammer-mcp-proxy/.kanban` is an untracked board directory dated 5 July. It predates the current work by weeks, and no `.gitignore` entry covers it.

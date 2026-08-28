@@ -25,6 +25,7 @@ use crate::types::{
 };
 use crate::{KanbanContext, KanbanError, KanbanOperationProcessor, OperationProcessor};
 use serde_json::Value;
+use swissarmyhammer_operations::forgiving::expand_list_entry;
 
 /// Helper: require a string param, returning KanbanError on missing.
 fn req<'a>(op: &'a KanbanOperation, key: &str) -> Result<&'a str, KanbanError> {
@@ -183,7 +184,10 @@ async fn resolve_opt_placement_ref(
 /// - a single JSON string holding one ref;
 /// - a stringified JSON array (`"[\"01K…\"]"`), which is parsed back into its
 ///   elements; a string that does not parse as a JSON array of strings is
-///   treated as one ref.
+///   treated as one ref. That reading belongs to
+///   [`swissarmyhammer_operations::forgiving::expand_list_entry`], which the CLI
+///   argument extractor calls as well, so one value names the same refs on the
+///   command line as it does over MCP.
 ///
 /// Anything else — a number, a bool, an object, or an array holding a
 /// non-string — is malformed and errors. It is never silently dropped, because
@@ -202,10 +206,7 @@ fn ref_list(field: &str, value: &Value) -> Result<Vec<String>, KanbanError> {
             .collect();
     }
     if let Some(s) = value.as_str() {
-        if let Ok(parsed) = serde_json::from_str::<Vec<String>>(s) {
-            return Ok(parsed);
-        }
-        return Ok(vec![s.to_string()]);
+        return Ok(expand_list_entry(s));
     }
     Err(malformed())
 }

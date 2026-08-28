@@ -59,8 +59,28 @@ comments:
     - evidence: 5 files — crates/swissarmyhammer-kanban/src/auto_color.rs, crates/swissarmyhammer-tools/src/mcp/server/agent_identity.rs, apps/kanban-app/src/state.rs, apps/kanban-app/ui/src/lib/actor-colors.ts, apps/kanban-app/ui/src/lib/actor-colors.test.ts (new). `cargo nextest run --workspace`: 14264 tests run, 14264 passed, 0 skipped. `npm test` in apps/kanban-app/ui: 243 test files, 2253 tests, all passed, tsc clean. `cargo fmt --all --check` clean. `cargo clippy --workspace --all-targets -- -D warnings` clean.
     - next: ready for /review. New card ^gym7gr1 files the non-ASCII UTF-8 vs UTF-16 divergence the TypeScript copy carries.
   timestamp: 2026-08-28T14:38:04.024501+00:00
-position_column: doing
-position_ordinal: '8380'
+- actor: claude-code
+  id: 01m14d7kwk908a7bjskkerwa7z
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 5 files. One shared `palette_color(palette, key)` in auto_color.rs over a private djb2 with named seed and multiplier; each palette stays with its caller.
+    - test: green — cargo nextest run --workspace 14264 passed, 0 skipped; npm test in apps/kanban-app/ui 2253 tests passed with tsc clean; fmt and clippy clean
+    - commit: 00a910dd0
+    - review: clean — 0 findings, 1 candidate refuted, 9 validators attempted, 5 files reviewed
+    - next: none — the card is in done
+
+    The behaviour-preservation requirement was met the way it should be: input-to-colour tables were computed from the djb2 definition independently of the code, asserted at each site against the UN-refactored code, then each table was proved live by mutation — one wrong colour failed both Rust tests, and multiplier `34n` failed the TypeScript test. The same tables pass after the refactor, so no existing actor changes colour.
+
+    Two decisions recorded rather than made silently:
+
+    The FNV-1a fourth copy stays FNV-1a. A tag colour is written into the tag file at creation, so moving it to djb2 would re-colour tags on every existing board — a visible change with nothing to gain.
+
+    The TypeScript copy stays a copy. `Avatar` derives the colour while it renders, and the only route from the webview into Rust is an async Tauri command — one round trip per avatar, which a render cannot wait on. The reason is in the module comment, and a new TypeScript test asserts the same table the Rust test asserts so the copy cannot drift in silence.
+
+    One discovery filed separately as ^gym7gr1: the TypeScript copy folds `charCodeAt` (UTF-16 code units) where Rust folds `bytes()` (UTF-8), so the two disagree for a non-ASCII id. No id in play today is non-ASCII, and correcting it would change a colour, so it is out of this behaviour-preserving card.
+  timestamp: 2026-08-28T14:43:55.923361+00:00
+position_column: done
+position_ordinal: ffffffffffffffffffffffffffffffffffffffffffb880
 title: Share one djb2 actor-colour helper instead of three copies
 ---
 ## Problem

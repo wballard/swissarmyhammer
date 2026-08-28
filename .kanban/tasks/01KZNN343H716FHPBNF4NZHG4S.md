@@ -212,6 +212,37 @@ comments:
     - review: clean — 0 findings. The HEAD~1..HEAD pass scanned 0 files (all 317 excluded by .reviewignore), so a second pass ran over 7af361e16, the code half, which had never reached the engine: 8 files, 14 validator pairs, 0 findings.
     - next: none — the card is in done. Two follow-ons stand open: ^18kd3j9 (the same defect class is still live on the CLI) and the recovery of ^7rh0bvj's own card file.
   timestamp: 2026-08-27T19:39:11.162852+00:00
+- actor: claude-code
+  id: 01m14dkqyxzkgq34qd5c637sc6
+  text: |
+    Correction to the sweep verification above, made while working ^jp77n3a.
+
+    The sweep comment says: "`01M11YRV7M56YWPCJNG7RH0BVJ` (^7rh0bvj) is already
+    `Untitled` in HEAD, damaged by the very defect it documents". That is wrong.
+    The card is whole. Nothing was lost.
+
+    The measurement was a `grep "^title: Untitled$"`, which cannot tell front
+    matter from body prose. The one match is line 267 of that card, in the BODY,
+    inside a fenced code block. The block quotes the corrupt output the card
+    reports. The card's CREATE record already carried the line.
+
+    Line 251, in the front matter, carries the real title:
+
+        title: kanban task write corrupts a card whose front matter holds a `---` run
+
+    Proof: I replayed all 17 records of the card's `.jsonl` from an empty document
+    with the `patch` utility. The result is byte-identical to the file on disk,
+    `sha256 351db22cb...`, 16725 bytes. All four committed versions carry the same
+    title.
+
+    A front-matter-aware sweep of all 3314 cards finds ZERO live cards without a
+    title. The only 2 `Untitled` cards are the two empty trashed tasks, which never
+    had a title.
+
+    The sweep this card records is therefore correct and complete. Only its
+    `Untitled` reading was wrong. Measure with a front-matter-aware check, never a
+    bare grep.
+  timestamp: 2026-08-28T14:50:33.309875+00:00
 depends_on:
 - 01M11YRV7M56YWPCJNG7RH0BVJ
 - 01M11YS6AG9C75AP9RDKT3GFHQ

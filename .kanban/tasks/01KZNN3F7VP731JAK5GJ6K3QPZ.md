@@ -101,8 +101,18 @@ comments:
     - evidence: 1 file — crates/swissarmyhammer-kanban/src/dispatch/tests/tasks.rs (+102 / -24). `cargo nextest run --workspace` 14253 passed / 0 failed; `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt` no change. Production code unchanged: `git diff` on dispatch.rs is empty.
     - next: /review. The card stays in `doing`.
   timestamp: 2026-08-27T22:12:24.551596+00:00
-position_column: doing
-position_ordinal: '8380'
+- actor: claude-code
+  id: 01m12mp6gptk7s53sjhwwvhn9r
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — crates/swissarmyhammer-kanban/src/dispatch/tests/tasks.rs (+102/-24), tests only. `true` spellings now asserted under `column: "done"`, where the default is `false`, so the assertion changes the answer. Each seen RED through three separate mutations of `bool_param`.
+    - test: green — cargo nextest run --workspace, 14253 passed, 0 failed; clippy clean; fmt no change
+    - commit: 91fc23cfb
+    - review: clean — 0 findings, 7 validators attempted, 1 file reviewed (2 .kanban files excluded)
+    - next: none — the card is in done, and ^qd9z2xt closes with it
+  timestamp: 2026-08-27T22:15:44.918472+00:00
+position_column: done
+position_ordinal: ffffffffffffffffffffffffffffffffffffffffffb380
 title: 'kanban list tasks: the tag parameter is ignored and returns the whole board'
 ---
 `list tasks` accepts a `tag` parameter and then does not filter on it.

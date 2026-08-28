@@ -113,6 +113,42 @@ async fn dispatch_update_task_tags_stringified_array_applies() {
     assert_eq!(stored_tags(&ctx, &id).await, vec!["bug", "kanban"]);
 }
 
+/// The singular `tag` is an alias for the same list and takes every shape
+/// `tags` takes — it names the key, it does not narrow the shape. The
+/// stringified array is the shape a client with no array type-hint sends, so
+/// drive it under both keys and require the same stored set. `tag task`
+/// already holds this shape; `update task` reaches it through the same
+/// `tag_refs` helper, and measuring it here keeps the documented claim
+/// resting on a fixture rather than on reading the code.
+#[tokio::test]
+async fn dispatch_update_task_singular_and_plural_tag_keys_agree_on_a_stringified_array() {
+    let (_temp, ctx) = setup().await;
+    let stringified = serde_json::to_string(&["bug", "kanban"]).unwrap();
+
+    let singular = add_one_task(&ctx, "Singular key").await;
+    let ops =
+        parse_input(json!({"op": "update task", "id": singular, "tag": &stringified})).unwrap();
+    execute_operation(&ctx, &ops[0])
+        .await
+        .expect("the singular key must read a stringified array");
+
+    let plural = add_one_task(&ctx, "Plural key").await;
+    let ops =
+        parse_input(json!({"op": "update task", "id": plural, "tags": &stringified})).unwrap();
+    execute_operation(&ctx, &ops[0]).await.unwrap();
+
+    assert_eq!(
+        stored_tags(&ctx, &singular).await,
+        vec!["bug", "kanban"],
+        "a stringified array under `tag` is one tag per element"
+    );
+    assert_eq!(
+        stored_tags(&ctx, &singular).await,
+        stored_tags(&ctx, &plural).await,
+        "the singular key must not narrow the shapes the plural key takes"
+    );
+}
+
 /// A tag ref given as the tag entity's full ULID resolves to that tag's
 /// name — the exact form that was silently dropped.
 #[tokio::test]
@@ -306,8 +342,8 @@ async fn dispatch_tag_task_array_applies_one_tag_per_element() {
     );
 }
 
-/// `tags` is documented as the canonical key and `tag` as its one-element
-/// alias, so `tag task` must answer to both.
+/// `tags` is the canonical key and `tag` is its alias, taking every shape the
+/// plural key takes, so `tag task` must answer to both.
 #[tokio::test]
 async fn dispatch_tag_task_accepts_the_plural_tags_key() {
     let (_temp, ctx) = setup().await;

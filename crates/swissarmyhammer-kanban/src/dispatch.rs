@@ -312,9 +312,11 @@ async fn resolve_depends_on(
 ///
 /// Resolution (name, full ULID, `^<short>`, short id) happens inside the
 /// commands, in the one shared path `tag task` also uses — the dispatch layer
-/// only normalizes the wire shape. The singular `tag` is accepted as a
-/// one-element alias, because that is the key `tag task` teaches. Returns
-/// `Ok(None)` when neither key is present.
+/// only normalizes the wire shape. The singular `tag` is an alias read through
+/// the same [`list_param`] path, because that is the key `tag task` teaches,
+/// so it accepts every shape the plural key does — the alias names the key, it
+/// does not narrow the shape. Each element is one tag ref under either key.
+/// Returns `Ok(None)` when neither key is present.
 fn tag_refs(op: &KanbanOperation) -> Result<Option<Vec<String>>, KanbanError> {
     aliased_list_param(op, "tags", "tag")
 }

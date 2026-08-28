@@ -23,7 +23,8 @@ On `add task`, `update task`, `tag task` and `untag task`, `tags` applies tags.
 It is as forgiving as `depends_on`:
 
 - Shape: a single tag, a JSON array, or a stringified JSON array all work. The
-  singular `tag` is accepted as a one-element alias.
+  singular `tag` is an alias for the same list and takes every shape `tags`
+  takes.
 - Ref format: each entry may be a tag name, a full tag ULID, `^<short>`, or a
   7-char short id. A name that names no tag yet creates it; an **id** reference
   that names no tag is an error, not a silent no-op.

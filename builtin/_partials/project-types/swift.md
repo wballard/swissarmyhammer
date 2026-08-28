@@ -39,6 +39,20 @@ let id = ULID()
 - Run: `swift run`
 - Deps: edit `Package.swift`; `swift package resolve`, `swift package update`
 
+**Build directory hygiene — reset when you start a task.**
+
+```
+swift package reset
+```
+
+`.build/` gets larger with each build. It holds the object files of every dependency, every target and every earlier configuration, and it is never trimmed. On a package you work on for a long time, the directory can fill the disk.
+
+Run `swift package reset` when you start a new task. It removes the full build directory and the resolved-dependency state. The next `swift build` or `swift test` resolves the dependencies again and builds from the start, so it is slow — do this once at the start of a task, not between builds inside one task.
+
+`swift package clean` removes only the build artifacts and keeps the dependency checkouts. Use `clean` for a rebuild inside a task. Use `reset` to get the disk space back.
+
+For Xcode builds the same files accumulate in `~/Library/Developer/Xcode/DerivedData/`. Remove the DerivedData directory of the project when the disk gets full.
+
 **Formatting and linting.** Format before you commit.
 
 `swift format` and `swiftformat` are DIFFERENT programs. Each one reads its own config file and applies its own rules:

@@ -46,8 +46,28 @@ comments:
     - evidence: 5 files — crates/swissarmyhammer-operations/src/forgiving.rs (new), crates/swissarmyhammer-operations/src/lib.rs, crates/swissarmyhammer-operations/src/cli_gen.rs, crates/swissarmyhammer-kanban/src/dispatch.rs, apps/kanban-cli/tests/forgiving_list_args_e2e.rs (new). Tests: 14279 workspace tests pass, 0 skipped.
     - next: /review
   timestamp: 2026-08-28T16:45:09.012241+00:00
-position_column: doing
-position_ordinal: '8380'
+- actor: claude-code
+  id: 01m15gg1zna1e3zy5079h7e444
+  text: |-
+    ### finish iteration 1 — stuck on the review engine, not on the code
+    - implement: changed — 5 files. `expand_list_entry` in the new crates/swissarmyhammer-operations/src/forgiving.rs; the CLI generator's array branch and `dispatch::ref_list` both call it, so the CLI and MCP surfaces share one normalizer.
+    - test: green — cargo nextest run --workspace --no-fail-fast, 14279 passed, 0 failed, 0 skipped; clippy --workspace --all-targets -D warnings clean; fmt clean. RED first: 7 of 8 e2e tests and 2 of 3 generator tests failed before the change.
+    - commit: 7a005e0b4
+    - review: NOT COMPLETED. The engine could not finish, and the card stays in `review` for that reason alone.
+    - next: re-run `/review` when the review engine is healthy. Do not re-implement — the code half is done and verified.
+
+    What happened with the review, stated plainly so nobody reads this card as passed:
+
+    - `review sha HEAD~1..HEAD`, first attempt: aborted after 32 minutes of silence by the MCP idle timeout.
+    - Second attempt: ran 1 hour 1 minute without finishing; I stopped it.
+    - `review file` on the single 60-line `forgiving.rs`: still running after 17 minutes; I stopped it.
+
+    A one-file review taking more than 17 minutes is the engine being degraded, not this diff being hard. This session hit an account rate limit earlier, and the review engine drives its own sub-agents, so the likeliest cause is upstream throttling. No stuck review process was left behind; both runs were stopped cleanly.
+
+    So this card has NOT passed the review gate. Its code is green and committed, and the gate is the only thing outstanding.
+  timestamp: 2026-08-29T01:00:12.661854+00:00
+position_column: review
+position_ordinal: '8180'
 title: 'kanban CLI: --tags joins an array into one hyphen-joined tag'
 ---
 The `kanban` CLI does not split a `--tags` array. It joins the whole argument

@@ -165,8 +165,8 @@ const SWIFT_OPTIONALS_PROMPT_RULE: &str = "optionals";
 /// The prompt rule that decides how an empty collection is declared.
 const SWIFT_IDIOMS_PROMPT_RULE: &str = "idioms";
 
-/// The prompt rule that decides when a class is a value type.
-const SWIFT_VALUE_SEMANTICS_PROMPT_RULE: &str = "value-semantics";
+/// The prompt rule that decides where a value may be mutable.
+const SWIFT_IMMUTABILITY_PROMPT_RULE: &str = "immutability";
 
 /// The prompt rule that decides how a failure is raised and caught.
 const SWIFT_ERROR_HANDLING_PROMPT_RULE: &str = "error-handling";
@@ -2225,20 +2225,6 @@ const RUST_PROJECT_TYPES: &[&str] = &["rust"];
 
 /// The project types a Swift workspace carries, as the plan holds them.
 const SWIFT_PROJECT_TYPES: &[&str] = &["swift"];
-
-/// The file a project states its Swift language version in.
-const SWIFT_VERSION_PATH: &str = ".swift-version";
-
-/// The Swift language version a probe repository states, which is the version
-/// Airbnb's own SwiftFormat configuration pins.
-const SWIFT_PROBE_VERSION: &str = "6.3\n";
-
-/// The support files a Swift probe stages to make every enabled rule live.
-///
-/// Five rules of the `idioms-swift` roster read the Swift language version, so
-/// a probe that stated none would buy its answer from the version gate rather
-/// than from the Swift it staged.
-const SWIFT_VERSION_SUPPORT: &[(&str, &str)] = &[(SWIFT_VERSION_PATH, SWIFT_PROBE_VERSION)];
 
 /// Drives the shipped script of `gate` over `source`, staged at `probe_path`
 /// beside `support`, and answers the rule name of each finding it reported.

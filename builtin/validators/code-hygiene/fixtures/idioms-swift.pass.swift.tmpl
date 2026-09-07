@@ -1,205 +1,93 @@
 // The passing fixture of the `idioms-swift` tool rule.
 //
 // It holds the same declarations the failing fixture holds, each written in
-// the form the enabled SwiftFormat rules ask for, so the tool must report
-// none of them.
+// the form its rule asks for, so the gate must report none of them.
 
-import SwiftUI
-import Testing
+// MARK: - AlwaysUseLiteralForEmptyCollectionInit
 
-// MARK: - The idioms group
+/// Empty collections declared with an annotated literal, which
+/// `AlwaysUseLiteralForEmptyCollectionInit` asks for.
+public struct Holder {
+    /// The readings the holder holds.
+    public var items: [Int] = []
 
-/// Shorthand generic sugar, which `typeSugar` asks for.
-public struct Sugar {
-    public var maybe: Int?
-    public var list: [String]
-    public var table: [String: Int]
+    /// The readings the holder holds by name.
+    public var table: [String: Int] = [:]
 }
 
-/// A `Void` return type, which `void` asks for.
-public typealias Callback = () -> Void
+// MARK: - UseShorthandTypeNames
+
+/// Shorthand generic type names, which `UseShorthandTypeNames` asks for.
+public enum Sugar {
+    /// How many readings the array holds.
+    public static func read(_ values: [Int]) -> Int {
+        values.count
+    }
+
+    /// How many readings the table holds.
+    public static func table(_ pairs: [String: Int]) -> Int {
+        pairs.count
+    }
+
+    /// How many letters the name holds.
+    public static func name(_ value: String?) -> Int {
+        value?.count ?? 0
+    }
+}
+
+// MARK: - NoVoidReturnOnFunctionSignature
+
+/// Signatures with no return clause at all, which
+/// `NoVoidReturnOnFunctionSignature` asks for.
+public enum Returns {
+    /// A run that answers nothing.
+    public static func run() {}
+
+    /// A second run that answers nothing.
+    public static func typed() {}
+}
+
+// MARK: - UseSynthesizedInitializer
 
 /// A type that lets the compiler synthesize its memberwise initializer, which
-/// `redundantMemberwiseInit` asks for.
-public struct Point {
-    var x: Int
-    var y: Int
+/// `UseSynthesizedInitializer` asks for.
+public struct Reading {
+    /// How many readings stand.
+    public var count: Int
 }
 
-/// A `for` loop, which `preferForLoop` asks for.
-public func walk(_ names: [String]) {
-    for name in names {
-        print(name)
-        print(name.count)
-    }
-}
+// MARK: - ReplaceForEachWithForLoop
 
-/// The shape the enum of the pattern group binds.
-public enum Shape {
-    case circle(Int)
-    case square(Int, Int)
-}
-
-/// A `let` binding on each case variable, which `hoistPatternLet` asks for
-/// under `--pattern-let inline`.
-public func describe(_ shape: Shape) -> String {
-    switch shape {
-    case .circle(let radius):
-        return "circle \(radius)"
-    case .square(let width, let height):
-        return "square \(width)x\(height)"
+/// A `for` loop, which `ReplaceForEachWithForLoop` asks for.
+public enum Looping {
+    /// Writes each reading over the limit.
+    public static func walk(_ things: [Int]) {
+        for thing in things where thing > 2 { print(thing) }
     }
 }
 
-/// A `final` class, which `preferFinalClasses` asks for.
-public final class Worker {
-    public func work() {}
+// MARK: - UseLetInEveryBoundCaseVariable
+
+/// The shape the pattern below binds.
+public enum Corner {
+    /// A corner at two readings.
+    case at(Int, Int)
 }
 
-// MARK: - The performance group
-
-public enum Readings {
-    /// `count(where:)`, which `preferCountWhere` asks for.
-    public static func overLimit(_ values: [Int]) -> Int {
-        values.count(where: { $0 > 10 })
-    }
-
-    /// `isEmpty`, which `isEmpty` asks for.
-    public static func hasNone(_ values: [Int]) -> Bool {
-        values.isEmpty
-    }
-
-    /// `contains(where:)`, which `preferContains` asks for.
-    public static func holds(_ values: [Int]) -> Bool {
-        values.contains(where: { $0 == 3 })
-    }
-
-    /// `first(where:)`, which `preferFirstWhere` asks for.
-    public static func firstOver(_ values: [Int]) -> Int? {
-        values.first(where: { $0 > 10 })
-    }
-
-    /// `min()`, which `preferMinOverSorted` asks for.
-    public static func smallest(_ values: [Int]) -> Int? {
-        values.min()
-    }
-
-    /// `flatMap { }`, which `preferFlatMap` asks for.
-    public static func flattened(_ sections: [[Int]]) -> [Int] {
-        sections.flatMap { $0 }
-    }
-
-    /// The reading a forced call of the failing fixture stands in for.
-    public static func load() throws {}
-}
-
-// MARK: - The other group
-
-/// A type that lets the compiler synthesize `==`, which `redundantEquatable`
-/// asks for.
-public struct Pair: Equatable {
-    let left: Int
-    let right: Int
-}
-
-/// An angle-bracket generic extension, which `genericExtensions` asks for,
-/// written with the sugar `typeSugar` asks for.
-extension [Int] {
-    /// The first reading of the array.
-    public var head: Int? { first }
-}
-
-/// An opaque generic parameter, which `opaqueGenericParameters` asks for.
-public func handle(_ value: some Collection) {
-    print(value.count)
-}
-
-/// A conditional assignment written as an `if` expression, which
-/// `conditionalAssignment` asks for.
-public func label(_ ready: Bool) -> String {
-    let name =
-        if ready {
-            "ready"
-        } else {
-            "waiting"
-        }
-    return name
-}
-
-// MARK: - The SwiftUI group
-
-extension EnvironmentValues {
-    /// The screen name the environment carries, declared with the `@Entry`
-    /// macro `environmentEntry` asks for.
-    @Entry var screenName: String = "undefined"
-}
-
-/// An `if` with no `else`, which `redundantEmptyView` asks for.
-public struct Banner: View {
-    /// Whether the banner shows its text.
-    public var ready: Bool
-
-    public var body: some View {
-        if ready {
-            Text("ready")
-        }
+/// A `let` on each bound case variable, which
+/// `UseLetInEveryBoundCaseVariable` asks for.
+public func describe(_ corner: Corner) -> Int {
+    switch corner {
+    case .at(let x, let y):
+        return x + y
     }
 }
 
-/// A body with no `Group` wrapper, which `redundantSwiftUIGroup` asks for,
-/// and a helper with no `@ViewBuilder`, which `redundantViewBuilder` asks
-/// for.
-public struct Panel: View {
-    public var body: some View {
-        Text("left")
-        Text("right")
-    }
+// MARK: - DontRepeatTypeInStaticProperties
 
-    var footer: some View {
-        Text("footer")
-    }
-}
-
-// MARK: - The Swift Testing group
-
-/// A suite with no redundant `@Suite`, which `redundantSwiftTestingSuite`
-/// asks for.
-struct ReadingsTests {
-    /// A raw-identifier name, which `swiftTestingTestCaseNames` asks for, on
-    /// an internal test method, which `testSuiteAccessControl` asks for.
-    @Test func `readings hold their values`() {
-        #expect(Readings.hasNone([]))
-    }
-
-    /// A `throws` test rather than a `try!`, which `noForceTryInTests` asks
-    /// for.
-    @Test func `readings load`() throws {
-        try Readings.load()
-    }
-
-    /// A `#require` rather than a force unwrap, which `noForceUnwrapInTests`
-    /// asks for.
-    @Test func `the smallest reading stands`() throws {
-        let value = try #require(Readings.smallest([1]))
-        #expect(value == 1)
-    }
-
-    /// A private helper, which `testSuiteAccessControl` asks for, named so
-    /// that `validateTestCases` reads no test in it.
-    private func stagedReadings() -> [Int] {
-        [1, 2, 3]
-    }
-
-    /// A `#require` rather than a `guard`, which `noGuardInTests` asks for.
-    @Test func `the first reading over the limit stands`() throws {
-        let value = try #require(Readings.firstOver([11]))
-        #expect(value == 11)
-    }
-
-    /// A `#require` rather than a trailing `if let`, which `noGuardInTests`
-    /// asks for under `--guard-like-if-statements convert`.
-    @Test func `the flattened readings stand`() throws {
-        let value = try #require(Readings.flattened([[1]]).first)
-        #expect(value == 1)
-    }
+/// A static member whose name states no type name, which
+/// `DontRepeatTypeInStaticProperties` asks for.
+public struct Color {
+    /// The red color.
+    public static let red = Color()
 }

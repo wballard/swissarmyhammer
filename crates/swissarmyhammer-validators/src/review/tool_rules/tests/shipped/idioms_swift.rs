@@ -1,25 +1,22 @@
 //! Acceptance tests for the shipped `idioms-swift` tool rule.
 //!
 //! Each test drives the SHIPPED script over a probe repository and reads what
-//! the real swiftformat reported.
+//! the real `swift format` reported.
 //!
-//! Four answers stand apart from every other Swift rule of this set, and one
-//! test holds each. The script INTERSECTS its own rule roster with
-//! `swiftformat --rules`, because a name SwiftFormat does not know breaks the
-//! whole run. It hands swiftformat ONE path for each run, because one refusing
-//! path otherwise costs the run every finding it made. Two enabled rules read
-//! the same declaration, and only the first of them reports it. And five
-//! enabled rules read the Swift language version, which the project states in
-//! a `.swift-version` file.
+//! Three answers stand apart from every other Swift rule of this set, and one
+//! test holds each. `swift format lint` writes NINE tags that no key of the
+//! configuration can stop, so the script reads the tag off each output line
+//! and keeps only a tag its own ALLOWLIST names. A path that holds no file
+//! exits 0 and writes NOTHING, so the script tests each path before the tool
+//! starts. And a path that names a DIRECTORY costs a shared run every finding
+//! it made, so the script hands `swift format` one path for each run.
 //!
 //! One more test stands apart because of what it protects rather than what it
-//! measures. This gate took six requirements out of the Swift prompt rules —
-//! four whole bullets, and half of each of two more — and a requirement
-//! deleted without a tool that reads it is one the set states nowhere. The
-//! last test in this file holds each of those six to being reported by its
-//! tool, over Swift written in the SHAPE the bullet named, AND stated by no
-//! prompt rule. The half of each split bullet the gate misses has a test of
-//! its own beside it.
+//! measures. This gate took five bullets out of the Swift prompt rules, and a
+//! requirement deleted without a tool that reads it is one the set states
+//! nowhere. `the_shipped_swift_idioms_tool_rule_owns_each_bullet_it_took`
+//! holds each of the five to being reported by its tool, over Swift written in
+//! the SHAPE the bullet named, AND stated by no prompt rule.
 
 use super::*;
 
@@ -37,59 +34,37 @@ fn every_shipped_idioms_tool_rule_passes_its_fixtures() {
     verify_shipped_tool_rules_pass_fixtures(SHIPPED_IDIOMS_RULES, IDIOMS_RULE_KIND);
 }
 
-/// The line of the shipped script that opens its rule roster.
+/// The line of the shipped script that opens its tag allowlist.
 ///
-/// The roster is the argument list of one `printf`, so the words between this
-/// head and the pipe under it ARE the names the gate enables. Reading them off
-/// the shipped script is what makes the guard below hold the rule that ships
-/// rather than a copy this file wrote.
-const SWIFT_IDIOMS_ROSTER_HEAD: &str = r"printf '%s\n' ";
+/// The allowlist is the argument list of one `printf`, so the words between
+/// this head and the pipe under it ARE the tags the gate keeps. Reading them
+/// off the shipped script is what makes each guard below hold the rule that
+/// ships rather than a copy this file wrote.
+const SWIFT_IDIOMS_ALLOWLIST_HEAD: &str = r"printf '%s\n' ";
 
-/// The word that closes the roster: the pipe the `printf` writes into.
-const SWIFT_IDIOMS_ROSTER_END: &str = "|";
+/// The word that closes the allowlist: the pipe the `printf` writes into.
+const SWIFT_IDIOMS_ALLOWLIST_END: &str = "|";
 
-/// How many rule names the shipped roster holds.
+/// How many rule tags the shipped allowlist holds.
 ///
-/// Twenty-nine, which is Airbnb's list narrowed to the rules that decide an
-/// idiom. The count is the assertion that a name added or dropped later
-/// reaches this guard rather than moving the gate without a word.
-const SWIFT_IDIOMS_ROSTER_SIZE: usize = 29;
+/// Seven, which is the part of the toolchain's fixed set of 43 rules that
+/// decides an IDIOM. The count is the assertion that a tag added or dropped
+/// later reaches this guard rather than moving the gate without a word.
+const SWIFT_IDIOMS_ALLOWLIST_SIZE: usize = 7;
 
-/// The roster names no released SwiftFormat knows.
+/// The rule tags the shipped `idioms-swift` script keeps, read off the script
+/// itself.
 ///
-/// Both stand in Airbnb's `airbnb.swiftformat` on `master`, which tracks
-/// SwiftFormat's `main` branch. Measured against SwiftFormat 0.62.1, the
-/// newest release: `swiftformat --rules` lists 153 rules and neither of these
-/// two is among them. The script intersects its roster with that answer, so
-/// each takes effect the day SwiftFormat ships it, with no edit.
-const SWIFT_IDIOMS_UNRELEASED_RULES: &[&str] = &["preferLazyMap", "ifExpressions"];
-
-/// The command that asks swiftformat which rules it knows.
-const SWIFT_FORMAT_TOOL: &str = "swiftformat";
-
-/// The flag that makes swiftformat write its whole rule list.
-const SWIFT_FORMAT_RULES_FLAG: &str = "--rules";
-
-/// What swiftformat writes after the name of a rule it leaves off by default.
-///
-/// The script strips it, because `--rules` enables a rule whatever its default
-/// is: measured on 0.62.1, `isEmpty` reads ` isEmpty (disabled)` in the list
-/// and reports when the run names it.
-const SWIFT_FORMAT_DISABLED_MARK: &str = "(disabled)";
-
-/// The rule names the shipped `idioms-swift` script enables, read off the
-/// script itself.
-///
-/// The words stand between [`SWIFT_IDIOMS_ROSTER_HEAD`] and the pipe under it,
-/// over as many lines as the script writes, each continuation line joined with
-/// a trailing backslash.
-fn swift_idioms_roster(script: &str) -> Vec<String> {
+/// The words stand between [`SWIFT_IDIOMS_ALLOWLIST_HEAD`] and the pipe under
+/// it, over as many lines as the script writes, each continuation line joined
+/// with a trailing backslash.
+fn swift_idioms_allowlist(script: &str) -> Vec<String> {
     let mut names = Vec::new();
     let mut inside = false;
 
     for line in script.lines() {
         let trimmed = line.trim();
-        let rest = match trimmed.strip_prefix(SWIFT_IDIOMS_ROSTER_HEAD) {
+        let rest = match trimmed.strip_prefix(SWIFT_IDIOMS_ALLOWLIST_HEAD) {
             Some(rest) => {
                 inside = true;
                 rest
@@ -101,7 +76,7 @@ fn swift_idioms_roster(script: &str) -> Vec<String> {
             .trim_end_matches(SWIFT_IDIOMS_LINE_JOIN)
             .split_whitespace()
         {
-            if word == SWIFT_IDIOMS_ROSTER_END {
+            if word == SWIFT_IDIOMS_ALLOWLIST_END {
                 return names;
             }
             names.push(word.to_string());
@@ -111,71 +86,113 @@ fn swift_idioms_roster(script: &str) -> Vec<String> {
     names
 }
 
-/// Every rule name the installed swiftformat knows.
-///
-/// The reading matches the script's own: the `(disabled)` mark comes off, and
-/// the surrounding space with it.
-fn swift_format_known_rules() -> Vec<String> {
-    let listed = std::process::Command::new(SWIFT_FORMAT_TOOL)
-        .arg(SWIFT_FORMAT_RULES_FLAG)
-        .output()
-        .expect("the installed swiftformat must write its rule list");
-
-    String::from_utf8_lossy(&listed.stdout)
-        .lines()
-        .map(|line| {
-            line.replace(SWIFT_FORMAT_DISABLED_MARK, "")
-                .trim()
-                .to_string()
-        })
-        .filter(|name| !name.is_empty())
-        .collect()
+/// Every rule name the installed toolchain knows, read out of its own
+/// configuration dump.
+fn swift_format_rule_names() -> Vec<String> {
+    swift_format_dumped_rules().keys().cloned().collect()
 }
 
-/// Acceptance: every rule the shipped script names is one the installed
-/// swiftformat knows, but for the two no release carries yet.
+/// Acceptance: every tag the shipped allowlist names is a rule the installed
+/// toolchain knows.
 ///
-/// The script enables the INTERSECTION of its roster with
-/// `swiftformat --rules`, because `--unknown-rules ignore` moves nothing on
-/// the command line and an unknown name breaks the whole run at status 70.
-/// That intersection is what makes the roster forward-compatible, and it is
-/// also what would swallow a misspelling: a name no swiftformat knows drops
-/// out and the gate stops measuring it, silently.
+/// The allowlist is the gate. `swift format lint` writes a `[<Name>]` tag for
+/// each finding, the script keeps only the tags this list names, and the
+/// configuration it writes turns those same rules ON. A tag misspelled there
+/// stops matching any line the tool writes, and the gate goes silent about the
+/// bullet that tag decides — with no error, because a tag that matches nothing
+/// looks exactly like a clean file.
 ///
-/// This is the guard on that. Every name but the two
-/// [`SWIFT_IDIOMS_UNRELEASED_RULES`] records must stand in swiftformat's own
-/// list, so a misspelling and a rule SwiftFormat renames each fail by name.
+/// This is the guard on that. Every name must stand in the `rules` table of
+/// `swift format dump-configuration`, so a misspelling and a rule the
+/// toolchain renames each fail here by name.
 #[test]
-fn the_shipped_swift_idioms_tool_rule_names_only_rules_swiftformat_knows() {
+fn the_shipped_swift_idioms_tool_rule_names_only_rules_swift_format_knows() {
     let loader = builtin_loader();
     require_tool_installed(&loader, SWIFT_PROJECT_TYPES, SWIFT_IDIOMS_RULE);
     let shipped = required_shipped_tool_rule(&loader, SWIFT_IDIOMS_RULE);
 
-    let roster = swift_idioms_roster(&shipped.script);
+    let allowed = swift_idioms_allowlist(&shipped.script);
     assert_eq!(
-        roster.len(),
-        SWIFT_IDIOMS_ROSTER_SIZE,
-        "the shipped roster must name {SWIFT_IDIOMS_ROSTER_SIZE} rules; it names {roster:?}"
+        allowed.len(),
+        SWIFT_IDIOMS_ALLOWLIST_SIZE,
+        "the shipped allowlist must name {SWIFT_IDIOMS_ALLOWLIST_SIZE} rules; it names \
+         {allowed:?}"
     );
 
-    let known = swift_format_known_rules();
-    assert!(
-        !known.is_empty(),
-        "`{SWIFT_FORMAT_TOOL} {SWIFT_FORMAT_RULES_FLAG}` wrote no rule name, so the \
-         comparison below holds nothing and this test cannot fail"
+    let known = swift_format_rule_names();
+    assert_eq!(
+        known.len(),
+        SWIFT_FORMAT_RULE_COUNT,
+        "`{SWIFT_TOOLCHAIN_TOOL} {SWIFT_FORMAT_SUBCOMMAND} {SWIFT_FORMAT_DUMP_VERB}` must write \
+         the {SWIFT_FORMAT_RULE_COUNT} rules this gate is measured against; it wrote {}",
+        known.len()
     );
 
-    let unknown: Vec<&String> = roster
+    let unknown: Vec<&String> = allowed
         .iter()
-        .filter(|name| !SWIFT_IDIOMS_UNRELEASED_RULES.contains(&name.as_str()))
         .filter(|name| !known.contains(name))
         .collect();
 
     assert!(
         unknown.is_empty(),
-        "the shipped script names these rules and the installed swiftformat knows none \
-         of them, so the intersection drops each one and the gate stops measuring it: \
+        "the shipped allowlist names these tags and the installed toolchain knows none of \
+         them, so each one matches no output line and the gate stops measuring it: \
          {unknown:?}"
+    );
+}
+
+/// The rule that rewrites a `for` loop's nested `if` into a `where` clause.
+const SWIFT_IDIOMS_WHERE_CLAUSE_RULE: &str = "UseWhereClausesInForLoops";
+
+/// A `for` loop that filters with a nested `if`.
+///
+/// `builtin/validators/swift/rules/immutability.md` names this shape as a
+/// DON'T whose fix is `map` or `filter`, and
+/// [`SWIFT_IDIOMS_WHERE_CLAUSE_RULE`] rewrites it into the `where` clause that
+/// rule names as its OTHER DON'T.
+const SWIFT_IDIOMS_NESTED_IF_FOR_LOOP: &str = concat!(
+    "public enum Nesting {\n",
+    "    public static func walk(_ things: [Int]) {\n",
+    "        for thing in things { if thing > 2 { print(thing) } }\n",
+    "    }\n",
+    "}\n",
+);
+
+/// Acceptance: the gate leaves `UseWhereClausesInForLoops` OFF.
+///
+/// Row 5 of the measurement table of `idioms-swift.md` records the reason, and
+/// it is a conflict rather than a preference. `immutability.md` names BOTH the
+/// nested `if` and the `where` clause as DON'Ts, and its fix is `map` or
+/// `filter`. Measured with that rule ON: it reports the nested `if`, and
+/// `swift format --in-place` rewrites the probe below into the `where` clause
+/// `immutability.md` refuses, character for character. So an author who takes
+/// the finding and applies the tool's own correction lands on a DON'T.
+///
+/// The body of `idioms-swift.md` states two answers for that and chooses
+/// neither, because the choice is a person's. Until a person makes it, the
+/// rule stays OFF, and this test is what holds it there: the allowlist must
+/// not name it, the script must not name it anywhere else either — a
+/// configuration key would turn it on with no allowlist entry — and the gate
+/// must stay silent over the shape.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_leaves_the_where_clause_rule_off() {
+    let loader = builtin_loader();
+    require_tool_installed(&loader, SWIFT_PROJECT_TYPES, SWIFT_IDIOMS_RULE);
+    let shipped = required_shipped_tool_rule(&loader, SWIFT_IDIOMS_RULE);
+
+    assert!(
+        !shipped.script.contains(SWIFT_IDIOMS_WHERE_CLAUSE_RULE),
+        "the shipped script must name `{SWIFT_IDIOMS_WHERE_CLAUSE_RULE}` nowhere, because \
+         `{SWIFT_IMMUTABILITY_PROMPT_RULE}.md` refuses the shape its own fix writes and no \
+         person has chosen between the two answers `{SWIFT_IDIOMS_RULE}.md` records"
+    );
+
+    let reported = swift_idioms_reporting_rules(SWIFT_IDIOMS_NESTED_IF_FOR_LOOP, NO_SUPPORT_FILES);
+    assert!(
+        !reported.contains(&SWIFT_IDIOMS_WHERE_CLAUSE_RULE.to_string()),
+        "the gate must stay silent over a `for` loop that filters with a nested `if`, \
+         because `{SWIFT_IMMUTABILITY_PROMPT_RULE}.md` decides that shape; the run reported \
+         {reported:?}"
     );
 }
 
@@ -196,11 +213,17 @@ const SWIFT_IDIOMS_ABSENT_PATH: &str = "Absent.swift";
 
 /// How many findings the shipped failing fixture reports.
 ///
-/// Measured with the shipped script and SwiftFormat 0.62.1, over a probe
-/// repository that states no `.swift-version`: 42 findings, at exit 0. The
-/// count states that a refusing path beside the fixture costs the run nothing,
-/// because the run reports the same 42 either way.
-const SWIFT_IDIOMS_FAIL_FIXTURE_FINDINGS: usize = 42;
+/// Measured with the shipped script and Apple Swift 6.4: 11 findings, at exit
+/// 0, carrying all seven rules of the allowlist. The count states that a
+/// refusing path beside the fixture costs the run nothing, because the run
+/// reports the same 11 either way.
+const SWIFT_IDIOMS_FAIL_FIXTURE_FINDINGS: usize = 11;
+
+/// How many rules the findings of the shipped failing fixture carry.
+///
+/// All seven of the allowlist, so the fixture measures each rule the gate
+/// keeps rather than a part of them.
+const SWIFT_IDIOMS_FAIL_FIXTURE_RULES: usize = SWIFT_IDIOMS_ALLOWLIST_SIZE;
 
 /// What the marked line the script writes for a path it could not judge opens
 /// with, after the engine takes the `sah-diagnostic:` marker off.
@@ -212,7 +235,7 @@ const SWIFT_IDIOMS_DECLINED_HEAD: &str = "idioms-swift found no file at";
 /// The fixture is staged through `prepare` so the run reads the bytes the set
 /// ships. `files` is the argument list the run carries, which is where a probe
 /// names a path the repository holds no file at.
-fn swift_idioms_run(files: &[&str]) -> (Vec<String>, Vec<String>) {
+fn swift_idioms_run(files: &[&str]) -> SwiftIdiomsFixtureRun {
     let loader = builtin_loader();
     require_tool_installed(&loader, SWIFT_PROJECT_TYPES, SWIFT_IDIOMS_RULE);
 
@@ -237,104 +260,91 @@ fn swift_idioms_run(files: &[&str]) -> (Vec<String>, Vec<String>) {
         .outcome
         .expect("the shipped Swift idioms script must judge the probe files and exit 0");
 
-    (
-        finding_rows(&outcome, &run.repo_root),
-        script_diagnostics(&outcome, &run.repo_root),
-    )
+    SwiftIdiomsFixtureRun {
+        findings: finding_rows(&outcome, &run.repo_root),
+        rules: finding_rule_names(&outcome, &run.repo_root),
+        declined: script_diagnostics(&outcome, &run.repo_root),
+    }
+}
+
+/// What one run of the shipped script over the failing fixture said.
+struct SwiftIdiomsFixtureRun {
+    /// Each finding as the `path:line` row a probe states.
+    findings: Vec<String>,
+
+    /// The rule name each of those findings carries.
+    rules: Vec<String>,
+
+    /// Each path the run could not judge.
+    declined: Vec<String>,
 }
 
 /// Acceptance: a path the shipped Swift idioms rule cannot judge costs the run
 /// that one path, and no finding of the files it did judge.
 ///
-/// swiftformat throws away the WHOLE run for one refusing path. Measured on
-/// 0.62.1 over a file holding one finding beside a path that holds no file:
-/// status 70, ZERO findings, and the healthy file judged in none of it. That
-/// is the answer `builtin/validators/README.md` refuses — "a nonzero exit
-/// fails the WHOLE run, so one unjudged path throws away every finding the run
-/// did make".
+/// A path that holds no file is the dangerous shape, and it is dangerous for a
+/// reason no status carries: measured with Apple Swift 6.4,
+/// `swift format lint --strict` over such a path exits 0 and writes NOTHING,
+/// which reads exactly like a clean pass over a file the run never opened. The
+/// script therefore tests each path itself with `[ ! -e "$file" ]` before the
+/// tool starts.
 ///
-/// The script therefore hands swiftformat one path for each run. The two
-/// halves of this test are both load-bearing: the run keeps every finding of
-/// the file it judged, AND it states the path it declined on the marked
-/// stderr channel. A run that lost either half is a run that answered for a
-/// file it never read.
+/// The one path for each run is what keeps the rest of the work list. Measured
+/// over a file holding one finding beside a path that names a DIRECTORY:
+/// a shared run exits 64, reports ZERO findings, and judges the healthy file
+/// in none of it. That is the answer `builtin/validators/README.md` refuses —
+/// "a nonzero exit fails the WHOLE run, so one unjudged path throws away every
+/// finding the run did make".
+///
+/// The two halves of this test are both load-bearing: the run keeps every
+/// finding of the file it judged, AND it states the path it declined on the
+/// marked stderr channel. A run that lost either half is a run that answered
+/// for a file it never read.
 #[test]
 fn the_shipped_swift_idioms_tool_rule_reports_a_file_beside_one_it_declined() {
-    let (judged, _) = swift_idioms_run(&[SWIFT_IDIOMS_JUDGED_PATH]);
+    let alone = swift_idioms_run(&[SWIFT_IDIOMS_JUDGED_PATH]);
     assert_eq!(
-        judged.len(),
+        alone.findings.len(),
         SWIFT_IDIOMS_FAIL_FIXTURE_FINDINGS,
         "the shipped failing fixture must report \
-         {SWIFT_IDIOMS_FAIL_FIXTURE_FINDINGS} findings on its own; it reported {judged:?}"
+         {SWIFT_IDIOMS_FAIL_FIXTURE_FINDINGS} findings on its own; it reported {:?}",
+        alone.findings
     );
 
-    let (beside, declined) =
-        swift_idioms_run(&[SWIFT_IDIOMS_ABSENT_PATH, SWIFT_IDIOMS_JUDGED_PATH]);
+    let carried: std::collections::BTreeSet<&String> = alone.rules.iter().collect();
+    assert_eq!(
+        carried.len(),
+        SWIFT_IDIOMS_FAIL_FIXTURE_RULES,
+        "the findings of the shipped failing fixture must carry all \
+         {SWIFT_IDIOMS_FAIL_FIXTURE_RULES} rules of the allowlist; they carry {carried:?}"
+    );
+
+    let beside = swift_idioms_run(&[SWIFT_IDIOMS_ABSENT_PATH, SWIFT_IDIOMS_JUDGED_PATH]);
 
     assert_eq!(
-        beside, judged,
+        beside.findings, alone.findings,
         "a path the run cannot judge must cost that path alone; the run beside \
          `{SWIFT_IDIOMS_ABSENT_PATH}` reported another finding list than the run without it"
     );
     assert_eq!(
-        declined.len(),
+        beside.declined.len(),
         1,
-        "the run must state the one path it declined; it stated {declined:?}"
+        "the run must state the one path it declined; it stated {:?}",
+        beside.declined
     );
     assert!(
-        declined[0].starts_with(SWIFT_IDIOMS_DECLINED_HEAD)
-            && declined[0].contains(SWIFT_IDIOMS_ABSENT_PATH),
+        beside.declined[0].starts_with(SWIFT_IDIOMS_DECLINED_HEAD)
+            && beside.declined[0].contains(SWIFT_IDIOMS_ABSENT_PATH),
         "the marked line must name the path it declined; it reads `{}`",
-        declined[0]
+        beside.declined[0]
     );
 }
 
 /// Where a probe stages the Swift file it measures a rule set over.
 const SWIFT_IDIOMS_PROBE_PATH: &str = "Probe.swift";
 
-/// A test suite holding one internal method whose NAME says test and whose
-/// attribute does not.
-///
-/// `testSuiteAccessControl` reads it as a member that should be `private`, and
-/// `validateTestCases` reads it as a test that should carry `@Test`. The two
-/// rules read the same declaration.
-const SWIFT_IDIOMS_TEST_COLLISION: &str = concat!(
-    "import Testing\n\n",
-    "struct ProbeTests {\n",
-    "    @Test func `the probe holds`() {\n",
-    "        #expect(true)\n",
-    "    }\n\n",
-    "    func testAnother() {\n",
-    "        #expect(true)\n",
-    "    }\n",
-    "}\n",
-);
-
-/// The rule that reports the declaration of [`SWIFT_IDIOMS_TEST_COLLISION`].
-const SWIFT_IDIOMS_REPORTING_RULE: &str = "testSuiteAccessControl";
-
-/// The rule that reads the same declaration and never reports it.
-const SWIFT_IDIOMS_SILENT_RULE: &str = "validateTestCases";
-
-/// A `filter { }.count`, which `preferCountWhere` reports, and a constrained
-/// generic parameter, which `opaqueGenericParameters` reports.
-///
-/// Both rules read the Swift language version, so both stay silent when the
-/// project states none.
-const SWIFT_IDIOMS_VERSION_GATED: &str = concat!(
-    "public enum Readings {\n",
-    "    public static func overLimit(_ values: [Int]) -> Int {\n",
-    "        values.filter { $0 > 10 }.count\n",
-    "    }\n",
-    "}\n\n",
-    "public func handle<T: Collection>(_ value: T) {\n",
-    "    print(value.count)\n",
-    "}\n",
-);
-
-/// The rules [`SWIFT_IDIOMS_VERSION_GATED`] reports only when the project
-/// states its Swift language version.
-const SWIFT_IDIOMS_VERSION_GATED_RULES: &[&str] = &["preferCountWhere", "opaqueGenericParameters"];
+/// Where a probe stages a SECOND Swift file of the same run.
+const SWIFT_IDIOMS_SECOND_PROBE_PATH: &str = "Second.swift";
 
 /// Drives the shipped script over `source` staged at
 /// [`SWIFT_IDIOMS_PROBE_PATH`], beside `support`, and answers the rule name of
@@ -343,65 +353,80 @@ fn swift_idioms_reporting_rules(source: &str, support: &[(&str, &str)]) -> Vec<S
     swift_gate_reporting_rules(SWIFT_IDIOMS_RULE, SWIFT_IDIOMS_PROBE_PATH, source, support)
 }
 
-/// Acceptance: the shipped Swift idioms rule reports the rule swiftformat
-/// reports first, and states the one it therefore never reaches.
+/// A Swift file holding one defect of the gate allowlist.
 ///
-/// `testSuiteAccessControl` and `validateTestCases` read the SAME declaration,
-/// and in a run holding both, only the first of them reports it. Measured on
-/// SwiftFormat 0.62.1 over three shapes, `validateTestCases` alone reports one
-/// finding on each, and the pair reports `testSuiteAccessControl` on each.
-///
-/// The rule enables both, because the roster it takes names both and because a
-/// SwiftFormat that separates them later needs no edit. This test is what
-/// makes that measured rather than assumed: a release that changed the order
-/// fails here rather than moving a finding without a word.
-#[test]
-fn the_shipped_swift_idioms_tool_rule_reads_the_rule_swiftformat_reports_first() {
-    let reported = swift_idioms_reporting_rules(SWIFT_IDIOMS_TEST_COLLISION, NO_SUPPORT_FILES);
+/// The empty-collection call is the shape `AlwaysUseLiteralForEmptyCollection\
+/// Init` reports, and the rule is OFF in the toolchain's own configuration, so
+/// a run that wrote no configuration of its own stays silent here.
+const SWIFT_IDIOMS_REPORTING_SOURCE: &str = concat!(
+    "public struct Holder {\n",
+    "    public var items = [Int]()\n",
+    "}\n",
+);
 
-    assert!(
-        reported.contains(&SWIFT_IDIOMS_REPORTING_RULE.to_string()),
-        "`{SWIFT_IDIOMS_REPORTING_RULE}` must report the internal test-named method; \
-         the run reported {reported:?}"
-    );
-    assert!(
-        !reported.contains(&SWIFT_IDIOMS_SILENT_RULE.to_string()),
-        "`{SWIFT_IDIOMS_SILENT_RULE}` reads the same declaration and \
-         `{SWIFT_IDIOMS_REPORTING_RULE}` reports it first, so a run holding both must \
-         report it once; the run reported {reported:?}"
-    );
+/// Acceptance: a run over two files that both report gives the findings of
+/// both.
+///
+/// The script hands `swift format` one path for each run, so the findings of
+/// one file reach the report through a run of their own. A loop that stopped
+/// at the first file that reported, or that let `set -e` end the run on the
+/// status 1 a finding answers, would report the first file alone — and the
+/// second file would read as clean.
+///
+/// Both halves are load-bearing. Each file must carry a finding of its own, so
+/// the run states a row for each path, and the run must exit 0 so the engine
+/// reads the rows at all.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_reports_every_file_that_reports() {
+    let loader = builtin_loader();
+    require_tool_installed(&loader, SWIFT_PROJECT_TYPES, SWIFT_IDIOMS_RULE);
+
+    let staged = [
+        (SWIFT_IDIOMS_PROBE_PATH, SWIFT_IDIOMS_REPORTING_SOURCE),
+        (
+            SWIFT_IDIOMS_SECOND_PROBE_PATH,
+            SWIFT_IDIOMS_REPORTING_SOURCE,
+        ),
+    ];
+    let rows = shipped_script_findings(
+        &loader,
+        SWIFT_IDIOMS_RULE,
+        &staged,
+        &[SWIFT_IDIOMS_PROBE_PATH, SWIFT_IDIOMS_SECOND_PROBE_PATH],
+    )
+    .expect("the shipped Swift idioms script must judge both probe files and exit 0");
+
+    for path in [SWIFT_IDIOMS_PROBE_PATH, SWIFT_IDIOMS_SECOND_PROBE_PATH] {
+        assert!(
+            rows.iter().any(|row| row.starts_with(path)),
+            "a run over two files that both report must state a row for `{path}`; the run \
+             reported {rows:?}"
+        );
+    }
 }
 
-/// Acceptance: the shipped Swift idioms rule reads the Swift language version
-/// out of the project's own `.swift-version`, and asks for no API the project
-/// may lack without one.
+/// Acceptance: the shipped Swift idioms rule drops every tag its allowlist
+/// does not name.
 ///
-/// Five rules of the roster read that version. The run passes no
-/// `--swift-version` of its own, because a project that never stated one would
-/// then be told to write `values.count(where:)`, which needs Swift 6.0 — a
-/// finding its own toolchain cannot satisfy.
+/// `swift format lint` writes nine tags that come from the PRETTY-PRINTER and
+/// the WHITESPACE LINTER rather than from the 43 rules, and no key of the
+/// configuration reaches any of them. The script therefore reads the tag off
+/// each output line and keeps only a tag the allowlist names.
 ///
-/// The two halves are both load-bearing. Without the file the version-gated
-/// rules stay silent, and with it they report, so the file is the only
-/// difference between the two runs.
+/// Each probe of [`SWIFT_FORMAT_TAG_PROBES`] is the smallest file that draws
+/// one of those nine tags, and
+/// `the_shipped_swift_idioms_rule_body_names_every_tag_swift_format_writes`
+/// holds each one to drawing it from the live tool. This test drives the same
+/// probes through the SHIPPED SCRIPT, so a script that dropped the filter
+/// reports layout here and fails BY NAME.
 #[test]
-fn the_shipped_swift_idioms_tool_rule_reads_the_project_swift_version() {
-    let without = swift_idioms_reporting_rules(SWIFT_IDIOMS_VERSION_GATED, NO_SUPPORT_FILES);
-    let with = swift_idioms_reporting_rules(
-        SWIFT_IDIOMS_VERSION_GATED,
-        &[(SWIFT_VERSION_PATH, SWIFT_PROBE_VERSION)],
-    );
-
-    for rule in SWIFT_IDIOMS_VERSION_GATED_RULES {
+fn the_shipped_swift_idioms_tool_rule_drops_every_tag_outside_its_allowlist() {
+    for (tag, source) in SWIFT_FORMAT_TAG_PROBES {
+        let reported = swift_idioms_reporting_rules(source, NO_SUPPORT_FILES);
         assert!(
-            !without.contains(&(*rule).to_string()),
-            "`{rule}` reads the Swift language version, so it must stay silent for a \
-             project that states none; the run reported {without:?}"
-        );
-        assert!(
-            with.contains(&(*rule).to_string()),
-            "`{rule}` must report beside a `{SWIFT_VERSION_PATH}` of \
-             {SWIFT_PROBE_VERSION:?}; the run reported {with:?}"
+            reported.is_empty(),
+            "the `[{tag}]` probe holds a layout defect and no idiom, so the gate must report \
+             nothing over it; the run reported {reported:?}"
         );
     }
 }
@@ -427,54 +452,35 @@ const SWIFT_PROMPT_RULE_ANSWER: &str = concat!(
     "}\n",
 );
 
-/// The same suite written the way `optionals.md` states NOT to: a `guard`
-/// that returns takes the test out before its assertion runs.
-const SWIFT_PROMPT_RULE_REFUSAL: &str = concat!(
-    "import Testing\n\n",
-    "struct HolderTests {\n",
-    "    @Test func `the holder holds its readings`() {\n",
-    "        let source: Int? = 1\n",
-    "        guard let value = source else { return }\n",
-    "        #expect(value == 1)\n",
-    "    }\n",
-    "}\n",
-);
-
-/// The rule that reports the `guard` of [`SWIFT_PROMPT_RULE_REFUSAL`].
-const SWIFT_NO_GUARD_IN_TESTS_RULE: &str = "noGuardInTests";
-
-/// Each form the probes above are written in, with the prompt rule that
-/// states it.
+/// Each form the probe above is written in, with the prompt rule that states
+/// it.
 ///
-/// The pairs are what make [`SWIFT_PROMPT_RULE_ANSWER`] and
-/// [`SWIFT_PROMPT_RULE_REFUSAL`] the PROMPT RULES' own answer rather than a
-/// shape this file invented: every form must stand, word for word, in the body
-/// of the rule that names it.
+/// The pairs are what make [`SWIFT_PROMPT_RULE_ANSWER`] the PROMPT RULES' own
+/// answer rather than a shape this file invented: every form must stand, word
+/// for word, in the body of the rule that names it.
 const SWIFT_PROMPT_RULE_FORMS: &[(&str, &str)] = &[
     (SWIFT_IDIOMS_PROMPT_RULE, "var items: [Int] = []"),
     (SWIFT_IDIOMS_PROMPT_RULE, "var ids: Set<String> = []"),
     (SWIFT_OPTIONALS_PROMPT_RULE, "try #require("),
-    (
-        SWIFT_OPTIONALS_PROMPT_RULE,
-        "guard let value = source else { return }",
-    ),
 ];
 
-/// Acceptance: the two halves agree — Swift written the way the prompt rules
-/// ask for draws no finding from this gate, and the shape they refuse does.
+/// Acceptance: Swift written the way the prompt rules ask for draws no finding
+/// from this gate.
 ///
 /// A tool and a prompt rule that disagree produce churn on every review round,
-/// so agreement is a fact to measure rather than one to assume. Both halves
-/// are load-bearing. The answer file must report NOTHING, or the gate fights
-/// the prompt rule the author is reading; the refusal file must report
-/// `noGuardInTests`, or the carve-out `optionals.md` states is a bullet no
-/// tool backs.
+/// so agreement is a fact to measure rather than one to assume. The answer
+/// file must report NOTHING, or the gate fights the prompt rule the author is
+/// reading.
 ///
-/// The probe stages a `.swift-version`, so every enabled rule is live and a
-/// clean run cannot be one the version gate bought.
+/// The `Set<String>` row is the load-bearing one. `idioms.md` states
+/// `var ids: Set<String> = []` as its DO, and measured with Apple Swift 6.4,
+/// `AlwaysUseLiteralForEmptyCollectionInit` reports `[Int]()` and
+/// `[String: Int]()` and stays SILENT for `Set<String>()`. So the gate decides
+/// the array and the dictionary and leaves the set alone, in the direction the
+/// prompt rule asks for either way.
 ///
-/// Each form the two probes are written in is held to standing in the body of
-/// the prompt rule that states it. Without that, an edit to either prompt rule
+/// Each form the probe is written in is held to standing in the body of the
+/// prompt rule that states it. Without that, an edit to either prompt rule
 /// would leave this test measuring a house style nothing ships.
 #[test]
 fn the_shipped_swift_idioms_tool_rule_agrees_with_the_swift_prompt_rules() {
@@ -484,87 +490,71 @@ fn the_shipped_swift_idioms_tool_rule_agrees_with_the_swift_prompt_rules() {
         let body = swift_prompt_rule_body(&loader, rule);
         assert!(
             body.contains(form),
-            "`{rule}.md` must state `{form}`, or the probes below measure a form no \
+            "`{rule}.md` must state `{form}`, or the probe below measures a form no \
              prompt rule asks for"
         );
         assert!(
-            SWIFT_PROMPT_RULE_ANSWER.contains(form) || SWIFT_PROMPT_RULE_REFUSAL.contains(form),
-            "`{form}` stands in `{rule}.md` and in neither probe, so nothing measures it"
+            SWIFT_PROMPT_RULE_ANSWER.contains(form),
+            "`{form}` stands in `{rule}.md` and in no probe, so nothing measures it"
         );
     }
 
-    let answered = swift_idioms_reporting_rules(SWIFT_PROMPT_RULE_ANSWER, SWIFT_VERSION_SUPPORT);
+    let answered = swift_idioms_reporting_rules(SWIFT_PROMPT_RULE_ANSWER, NO_SUPPORT_FILES);
     assert!(
         answered.is_empty(),
         "Swift written the way the prompt rules ask for must draw no finding from this \
          gate; the run reported {answered:?}"
     );
-
-    let refused = swift_idioms_reporting_rules(SWIFT_PROMPT_RULE_REFUSAL, SWIFT_VERSION_SUPPORT);
-    assert!(
-        refused.contains(&SWIFT_NO_GUARD_IN_TESTS_RULE.to_string()),
-        "`{SWIFT_NO_GUARD_IN_TESTS_RULE}` must report the `guard` `optionals.md` refuses \
-         in a test; the run reported {refused:?}"
-    );
 }
 
-/// A test whose assertion stands inside an `if let` that trails the body.
-const SWIFT_IDIOMS_TRAILING_IF: &str = concat!(
-    "import Testing\n\n",
-    "struct TrailingTests {\n",
-    "    @Test func `the reading stands`() {\n",
-    "        let source: Int? = 1\n",
-    "        if let value = source {\n",
-    "            #expect(value == 1)\n",
-    "        }\n",
+/// The rule that reports an explicit memberwise initializer the compiler
+/// would synthesize.
+const SWIFT_SYNTHESIZED_INITIALIZER_RULE: &str = "UseSynthesizedInitializer";
+
+/// A `public` struct carrying a `public` memberwise initializer.
+///
+/// Swift synthesizes an INTERNAL memberwise initializer and never a `public`
+/// one, so this initializer is identical to nothing the compiler writes.
+const SWIFT_IDIOMS_PUBLIC_INIT: &str = concat!(
+    "public struct Point {\n",
+    "    public var x: Int\n",
+    "    public var y: Int\n",
+    "\n",
+    "    public init(x: Int, y: Int) {\n",
+    "        self.x = x\n",
+    "        self.y = y\n",
     "    }\n",
     "}\n",
 );
 
-/// The same suite with one assertion written after the `if let`, so the `if`
-/// no longer trails the body.
-const SWIFT_IDIOMS_UNTRAILED_IF: &str = concat!(
-    "import Testing\n\n",
-    "struct TrailingTests {\n",
-    "    @Test func `the reading stands`() {\n",
-    "        let source: Int? = 1\n",
-    "        if let value = source {\n",
-    "            #expect(value == 1)\n",
-    "        }\n",
-    "        #expect(source != nil)\n",
-    "    }\n",
-    "}\n",
-);
-
-/// Acceptance: the shipped Swift idioms rule reads a trailing `if let` in a
-/// test, which is the shape `--guard-like-if-statements convert` decides.
+/// Acceptance: the gate owns the INTERNAL half of the redundant memberwise
+/// initializer and no more.
 ///
-/// The option is what puts that shape in reach: measured on SwiftFormat
-/// 0.62.1 over the trailing probe, `noGuardInTests` alone reports NOTHING and
-/// the same rule under `--guard-like-if-statements convert` reports three
-/// lines. So this test is the guard on the option standing on the shipped
-/// command line — a run that dropped it goes quiet here rather than losing a
-/// shape without a word.
+/// Row 4 of the measurement table of `idioms-swift.md` holds both answers, and
+/// the silent half is correct rather than a hole: Swift synthesizes an
+/// internal memberwise initializer and never a `public` one, so a
+/// `public init` is identical to nothing and deleting it would take a
+/// declaration off the package surface.
 ///
-/// The two halves are both load-bearing. The trailing `if` must report,
-/// because the assertions inside it never run when the binding fails and the
-/// test passes anyway. The untrailed `if` must NOT, because an `if` a test
-/// asserts after is a branch rather than an early exit. The two probes differ
-/// in that one line and in nothing else.
+/// Both halves are load-bearing. The internal form must report, or the bullet
+/// `idioms.md` no longer states has no owner; the public form must stay
+/// silent, or the gate asks for an edit that breaks every caller outside the
+/// package.
 #[test]
-fn the_shipped_swift_idioms_tool_rule_reads_a_trailing_if_in_a_test() {
-    let trailing = swift_idioms_reporting_rules(SWIFT_IDIOMS_TRAILING_IF, NO_SUPPORT_FILES);
+fn the_shipped_swift_idioms_tool_rule_reads_the_internal_synthesized_initializer() {
+    let internal = swift_idioms_reporting_rules(SWIFT_IDIOMS_REDUNDANT_INIT, NO_SUPPORT_FILES);
     assert!(
-        trailing.contains(&SWIFT_NO_GUARD_IN_TESTS_RULE.to_string()),
-        "`{SWIFT_NO_GUARD_IN_TESTS_RULE}` must report a test whose assertion stands \
-         inside a trailing `if let`; the run reported {trailing:?}"
+        internal.contains(&SWIFT_SYNTHESIZED_INITIALIZER_RULE.to_string()),
+        "`{SWIFT_SYNTHESIZED_INITIALIZER_RULE}` must report an internal memberwise \
+         initializer the compiler would synthesize; the run reported {internal:?}"
     );
 
-    let untrailed = swift_idioms_reporting_rules(SWIFT_IDIOMS_UNTRAILED_IF, NO_SUPPORT_FILES);
+    let public = swift_idioms_reporting_rules(SWIFT_IDIOMS_PUBLIC_INIT, NO_SUPPORT_FILES);
     assert!(
-        !untrailed.contains(&SWIFT_NO_GUARD_IN_TESTS_RULE.to_string()),
-        "an `if let` a test asserts AFTER does not trail the body, so \
-         `{SWIFT_NO_GUARD_IN_TESTS_RULE}` must stay silent; the run reported {untrailed:?}"
+        !public.contains(&SWIFT_SYNTHESIZED_INITIALIZER_RULE.to_string()),
+        "Swift synthesizes no `public` memberwise initializer, so \
+         `{SWIFT_SYNTHESIZED_INITIALIZER_RULE}` must stay silent for a `public init`; the \
+         run reported {public:?}"
     );
 }
 
@@ -575,47 +565,54 @@ fn the_shipped_swift_idioms_tool_rule_reads_a_trailing_if_in_a_test() {
 const SWIFT_IDIOMS_INFERRED_PROPERTY: &str = concat!(
     "public struct Holder {\n",
     "    public var items = [Int]()\n",
+    "    public var table = [String: Int]()\n",
     "    public var ids = Set<String>()\n",
     "}\n",
 );
 
-/// Acceptance: the gate decides NEITHER form of an empty-collection
-/// declaration, so `idioms.md` owns that bullet alone.
-///
-/// SwiftFormat's `propertyTypes` rule under `--property-types inferred` is
-/// Airbnb's answer here, and it rewrites the DO of `idioms.md` into its DON'T
-/// — measured on 0.62.1, `var items: [Int] = []` becomes
-/// `var items = [Int]()` and `var ids: Set<String> = []` becomes
-/// `var ids = Set<String>()`. Enabling it would set the tool against the
-/// prompt rule on every review round, so the roster names neither the rule nor
-/// the option, and the rule body carries the measurement.
-///
-/// This test and the one above are what make that decision fail loudly, and
-/// each catches one direction of the option. Measured on 0.62.1 over the two
-/// forms:
-///
-/// | the option | the DO of `idioms.md` | the DON'T |
-/// |---|---|---|
-/// | `--property-types inferred` | 2 findings | silent |
-/// | `--property-types explicit` | silent | 2 findings |
-///
-/// So `inferred` fails the test above, on the DO, and `explicit` fails this
-/// one, on the DON'T. Neither direction can be added without a test naming it.
-#[test]
-fn the_shipped_swift_idioms_tool_rule_decides_no_empty_collection_declaration() {
-    let reported =
-        swift_idioms_reporting_rules(SWIFT_IDIOMS_INFERRED_PROPERTY, SWIFT_VERSION_SUPPORT);
+/// The rule that reports the empty-collection call.
+const SWIFT_EMPTY_COLLECTION_RULE: &str = "AlwaysUseLiteralForEmptyCollectionInit";
 
-    assert!(
-        reported.is_empty(),
-        "the gate must report neither form of an empty-collection declaration, because \
-         `idioms.md` decides that bullet and `propertyTypes` would decide it the other \
-         way; the run reported {reported:?}"
+/// Acceptance: the gate reports the empty-collection call, and it reports it
+/// in the direction `idioms.md` asks for.
+///
+/// The rule is OFF in the toolchain's own configuration, so the configuration
+/// the script writes is what turns it ON. The direction is the whole point:
+/// its message reads `replace '[Int]()' with ': [Int] = []'`, which is the DO
+/// of `idioms.md` word for word, and it is the OPPOSITE direction from
+/// SwiftFormat's `propertyTypes` under `--property-types inferred`, which this
+/// gate refused for exactly that reason.
+///
+/// The `Set` row is load-bearing beside them. Measured with Apple Swift 6.4,
+/// the rule reports `[Int]()` and `[String: Int]()` and stays SILENT for
+/// `Set<String>()`, so the set form has no owner in this gate and
+/// `idioms.md` keeps it.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_reports_the_empty_collection_call() {
+    let rows = swift_idioms_reporting_rules(SWIFT_IDIOMS_INFERRED_PROPERTY, NO_SUPPORT_FILES);
+
+    let reported = rows
+        .iter()
+        .filter(|rule| *rule == SWIFT_EMPTY_COLLECTION_RULE)
+        .count();
+
+    assert_eq!(
+        reported, SWIFT_EMPTY_COLLECTION_REPORTED_FORMS,
+        "`{SWIFT_EMPTY_COLLECTION_RULE}` must report the array call and the dictionary call \
+         and stay silent for the `Set` call, which is \
+         {SWIFT_EMPTY_COLLECTION_REPORTED_FORMS} findings over the three; the run reported \
+         {rows:?}"
     );
 }
 
-/// The rule that converts a `forEach` call into a `for` loop.
-const SWIFT_PREFER_FOR_LOOP_RULE: &str = "preferForLoop";
+/// How many of the three empty-collection calls the gate reports.
+///
+/// Two: the array and the dictionary. Measured with Apple Swift 6.4,
+/// `Set<String>()` draws nothing.
+const SWIFT_EMPTY_COLLECTION_REPORTED_FORMS: usize = 2;
+
+/// The rule that asks for a `for` loop where the code calls `forEach`.
+const SWIFT_REPLACE_FOR_EACH_RULE: &str = "ReplaceForEachWithForLoop";
 
 /// A `forEach` whose closure holds an `if`, written on ONE line.
 ///
@@ -630,8 +627,7 @@ const SWIFT_IDIOMS_SINGLE_LINE_FOR_EACH: &str = concat!(
     "}\n",
 );
 
-/// The same walk written as a `filter` chain feeding a `forEach`, which is
-/// the shape a `for … where` clause replaces.
+/// The same walk written as a `filter` chain feeding a `forEach`.
 ///
 /// The line stands, character for character, in the `idioms.md` bullet that
 /// states the `where` half.
@@ -643,178 +639,102 @@ const SWIFT_IDIOMS_FILTER_CHAIN: &str = concat!(
     "}\n",
 );
 
-/// The DON'T of the `idioms.md` bullet that keeps the `where` half, word for
+/// The DON'T of the `idioms.md` bullet that states the `where` half, word for
 /// word as [`SWIFT_IDIOMS_FILTER_CHAIN`] writes it.
 const SWIFT_IDIOMS_FILTER_CHAIN_FORM: &str =
     "things.filter { $0 > 2 }.forEach { thing in print(thing) }";
 
-/// The same walk written as a `for` loop that filters with a nested `if`.
+/// Acceptance: `ReplaceForEachWithForLoop` reports the `filter` chain, and its
+/// message asks for a for-in loop rather than for the `where` clause the
+/// prompt bullet asks for.
 ///
-/// This is the line `preferForLoop` itself WRITES. Measured on 0.62.1,
-/// `swiftformat --rules preferForLoop --single-line-for-each convert` rewrites
-/// [`SWIFT_IDIOMS_SINGLE_LINE_FOR_EACH`] into exactly this, and never into a
-/// `where` clause. So the author who takes the finding
-/// [`the_shipped_swift_idioms_tool_rule_reads_a_single_line_for_each`] holds
-/// the gate to, and applies the tool's own fix, lands here.
-const SWIFT_IDIOMS_NESTED_IF_FOR_LOOP: &str = concat!(
-    "public enum Nesting {\n",
-    "    public static func walk(_ things: [Int]) {\n",
-    "        for thing in things { if thing > 2 { print(thing) } }\n",
-    "    }\n",
-    "}\n",
-);
-
-/// The other DON'T of the `idioms.md` bullet that keeps the `where` half, word
-/// for word as [`SWIFT_IDIOMS_NESTED_IF_FOR_LOOP`] writes it.
-const SWIFT_IDIOMS_NESTED_IF_FOR_LOOP_FORM: &str =
-    "for thing in things { if thing > 2 { print(thing) } }";
-
-/// Every shape of the `where` half `idioms.md` keeps, beside the form the
-/// bullet writes it in.
+/// This is the row the body of `idioms-swift.md` records under "Which rule
+/// reports a filter chain", and it answers a question a person has to see: an
+/// author who takes this finding is told to write a for-in loop, and the
+/// `where` clause the bullet wants is a further edit the tool never names.
 ///
-/// The half is a requirement on the LOOP — filter with a `where` clause — and
-/// two walks break it. A `filter` chain feeding a `forEach` never becomes a
-/// loop at all, and a `for` loop that filters with a nested `if` is a loop that
-/// says no `where`. A table holding one of them would guard one shape and read
-/// as if it guarded the half.
-const SWIFT_IDIOMS_WHERE_HALF_SHAPES: &[(&str, &str)] = &[
-    (SWIFT_IDIOMS_FILTER_CHAIN, SWIFT_IDIOMS_FILTER_CHAIN_FORM),
-    (
-        SWIFT_IDIOMS_NESTED_IF_FOR_LOOP,
-        SWIFT_IDIOMS_NESTED_IF_FOR_LOOP_FORM,
-    ),
-];
-
-/// Acceptance: the shipped Swift idioms rule reads a single-line `forEach`,
-/// which is the shape `--single-line-for-each convert` decides.
+/// The tool CORRECTS nothing here. Measured with Apple Swift 6.4,
+/// `swift format --in-place` with this rule ON leaves the file byte for byte
+/// as it was, so the message is the whole of what the author receives.
 ///
-/// The option is what puts that shape in reach, and its default is the other
-/// way: `swiftformat --rule-info preferForLoop` states
-/// `--single-line-for-each … "ignore" (default) or "convert"`. Measured on
-/// SwiftFormat 0.62.1 under the shipped script, over the probe below:
-/// without the option the run reports NOTHING, and with it the run reports
-/// `preferForLoop`. So this test is the guard on the option standing on the
-/// shipped command line — a run that dropped it goes quiet here rather than
-/// losing a shape without a word.
-///
-/// The shape matters more than the option. `forEach` + `if` written on one
-/// line is exactly what the deleted `idioms.md` bullet named, so a run that
-/// stays silent here leaves that bullet with no owner in either set.
+/// Both halves are load-bearing. The gate must report the chain, or the row
+/// the body records is not true; and `idioms.md` must state the chain word for
+/// word, or the probe measures a shape no prompt rule asks for.
 #[test]
-fn the_shipped_swift_idioms_tool_rule_reads_a_single_line_for_each() {
-    let reported =
-        swift_idioms_reporting_rules(SWIFT_IDIOMS_SINGLE_LINE_FOR_EACH, SWIFT_VERSION_SUPPORT);
-
-    assert!(
-        reported.contains(&SWIFT_PREFER_FOR_LOOP_RULE.to_string()),
-        "`{SWIFT_PREFER_FOR_LOOP_RULE}` must report a single-line `forEach` holding an \
-         `if`, which is the shape the deleted `idioms.md` bullet named; the run \
-         reported {reported:?}"
-    );
-}
-
-/// Acceptance: the gate decides NO shape of the `where` half, so `idioms.md`
-/// owns that half of the bullet alone.
-///
-/// `preferForLoop` converts a `forEach` into a `for` loop and never suggests a
-/// `where` clause, and SwiftFormat states the limit in its own rule
-/// information: "Doesn't affect long multiline functional chains". Measured on
-/// 0.62.1 under the shipped script, and under the same script with
-/// `--single-line-for-each convert`, both walks below report NOTHING either
-/// way. No option reaches either one.
-///
-/// The nested-`if` `for` loop is the shape the tool's own fix WRITES, so it is
-/// the one an author reaches by obeying the finding
-/// [`the_shipped_swift_idioms_tool_rule_reads_a_single_line_for_each`] holds
-/// the gate to. A guard that measured the `filter` chain alone would leave the
-/// tool free to walk the author into a shape no rule of either set asks about.
-///
-/// Both halves of each row are load-bearing. The gate must stay silent, or the
-/// bullet has two owners and every review round produces churn. And
-/// `idioms.md` must state the walk word for word, or the probe measures a
-/// shape no prompt rule asks for.
-#[test]
-fn the_shipped_swift_idioms_tool_rule_decides_no_shape_of_the_where_half() {
+fn the_shipped_swift_idioms_tool_rule_reports_a_filter_chain() {
     let loader = builtin_loader();
     let body = swift_prompt_rule_body(&loader, SWIFT_IDIOMS_PROMPT_RULE);
 
-    for (probe, form) in SWIFT_IDIOMS_WHERE_HALF_SHAPES {
-        assert!(
-            body.contains(form),
-            "`{SWIFT_IDIOMS_PROMPT_RULE}.md` must state `{form}`, because no rule of this \
-             roster decides it and the probe below would otherwise measure a shape nothing \
-             asks for"
-        );
-        assert!(
-            probe.contains(form),
-            "the probe must hold the form `{SWIFT_IDIOMS_PROMPT_RULE}.md` states, or the two \
-             measure different shapes"
-        );
+    assert!(
+        body.contains(SWIFT_IDIOMS_FILTER_CHAIN_FORM),
+        "`{SWIFT_IDIOMS_PROMPT_RULE}.md` must state `{SWIFT_IDIOMS_FILTER_CHAIN_FORM}`, or \
+         the probe below measures a shape no prompt rule asks for"
+    );
+    assert!(
+        SWIFT_IDIOMS_FILTER_CHAIN.contains(SWIFT_IDIOMS_FILTER_CHAIN_FORM),
+        "the probe must hold the form `{SWIFT_IDIOMS_PROMPT_RULE}.md` states, or the two \
+         measure different shapes"
+    );
 
-        let reported = swift_idioms_reporting_rules(probe, SWIFT_VERSION_SUPPORT);
-        assert!(
-            reported.is_empty(),
-            "the gate must report no `{form}`, because \
-             `{SWIFT_IDIOMS_PROMPT_RULE}.md` decides that half and \
-             `{SWIFT_PREFER_FOR_LOOP_RULE}` never suggests a `where` clause; the run \
-             reported {reported:?}"
-        );
-    }
+    let reported = swift_idioms_reporting_rules(SWIFT_IDIOMS_FILTER_CHAIN, NO_SUPPORT_FILES);
+    assert!(
+        reported.contains(&SWIFT_REPLACE_FOR_EACH_RULE.to_string()),
+        "`{SWIFT_REPLACE_FOR_EACH_RULE}` must report a `filter` chain feeding a `forEach`; \
+         the run reported {reported:?}"
+    );
 }
 
+/// The rule that asks for a signature with no return clause at all.
+const SWIFT_VOID_RETURN_RULE: &str = "NoVoidReturnOnFunctionSignature";
+
 /// A function whose return clause names `Void` where it could name nothing.
-///
-/// This is the line `void` itself WRITES. Measured on 0.62.1,
-/// `swiftformat --rules void` rewrites [`SWIFT_IDIOMS_PAREN_RETURN`] into
-/// exactly this and stops there, so the author who takes the `void` finding
-/// and applies the tool's own fix lands here.
 const SWIFT_IDIOMS_VOID_RETURN: &str = concat!(
     "public enum Typed {\n",
     "    public static func f() -> Void {}\n",
     "}\n",
 );
 
-/// The DON'T of the `idioms.md` bullet that keeps the omit-the-clause half,
-/// word for word as [`SWIFT_IDIOMS_VOID_RETURN`] writes it.
-const SWIFT_IDIOMS_VOID_RETURN_FORM: &str = "func f() -> Void {}";
+/// A closure PARAMETER whose result names the empty tuple.
+///
+/// The rule reads a function SIGNATURE, so this shape belongs to
+/// `ReturnVoidInsteadOfEmptyTuple`, which the allowlist does not name.
+const SWIFT_IDIOMS_CLOSURE_RETURN: &str = concat!(
+    "public enum Handlers {\n",
+    "    public static func handler(_ body: (Int) -> ()) {}\n",
+    "}\n",
+);
 
-/// Acceptance: the gate decides no `Void` return clause, so `idioms.md` owns
-/// the omit-the-clause half of that bullet alone.
+/// Acceptance: the gate decides BOTH halves of the `Void` return clause.
 ///
-/// `void` rewrites `()` INTO `Void` and stops there. Removing the clause is
-/// SwiftFormat's separate `redundantVoidReturnType` rule, which this roster
-/// does not name, so the shape the fix lands on is the shape the surviving
-/// half forbids. Measured on 0.62.1 under the shipped script, the probe below
-/// reports NOTHING.
+/// `idioms.md` stated two requirements in one bullet: write `Void` rather than
+/// `()`, and omit the return clause entirely when it is `Void`. Measured with
+/// Apple Swift 6.4, `NoVoidReturnOnFunctionSignature` reports BOTH shapes —
+/// `remove the explicit return type '()' from this function` and
+/// `remove the explicit return type 'Void' from this function` — so one rule
+/// answers the whole bullet, and the shape its message asks for is the shape
+/// the bullet's own DO names.
 ///
-/// Both halves are load-bearing, and they are the same pair the `where` half
-/// stands on: the gate must stay silent, or the bullet has two owners, and
-/// `idioms.md` must state the declaration word for word, or the probe measures
-/// a shape no prompt rule asks for.
+/// The closure row is the boundary. The rule reads a function SIGNATURE, so a
+/// closure parameter written `(Int) -> ()` draws nothing from it; that shape
+/// belongs to `ReturnVoidInsteadOfEmptyTuple`, and the allowlist does not name
+/// that rule. A gate that reported it would decide a shape no bullet of this
+/// set states.
 #[test]
-fn the_shipped_swift_idioms_tool_rule_decides_no_void_return_clause() {
-    let loader = builtin_loader();
-    let body = swift_prompt_rule_body(&loader, SWIFT_IDIOMS_PROMPT_RULE);
+fn the_shipped_swift_idioms_tool_rule_decides_both_halves_of_the_void_return_clause() {
+    for probe in [SWIFT_IDIOMS_PAREN_RETURN, SWIFT_IDIOMS_VOID_RETURN] {
+        let reported = swift_idioms_reporting_rules(probe, NO_SUPPORT_FILES);
+        assert!(
+            reported.contains(&SWIFT_VOID_RETURN_RULE.to_string()),
+            "`{SWIFT_VOID_RETURN_RULE}` must report every return clause that names nothing, \
+             and this probe holds one; the run reported {reported:?}"
+        );
+    }
 
+    let closure = swift_idioms_reporting_rules(SWIFT_IDIOMS_CLOSURE_RETURN, NO_SUPPORT_FILES);
     assert!(
-        body.contains(SWIFT_IDIOMS_VOID_RETURN_FORM),
-        "`{SWIFT_IDIOMS_PROMPT_RULE}.md` must state `{SWIFT_IDIOMS_VOID_RETURN_FORM}`, \
-         because no rule of this roster decides it and the probe below would otherwise \
-         measure a shape nothing asks for"
-    );
-    assert!(
-        SWIFT_IDIOMS_VOID_RETURN.contains(SWIFT_IDIOMS_VOID_RETURN_FORM),
-        "the probe must hold the form `{SWIFT_IDIOMS_PROMPT_RULE}.md` states, or the two \
-         measure different shapes"
-    );
-
-    let reported = swift_idioms_reporting_rules(SWIFT_IDIOMS_VOID_RETURN, SWIFT_VERSION_SUPPORT);
-
-    assert!(
-        reported.is_empty(),
-        "the gate must report no `Void` return clause, because \
-         `{SWIFT_IDIOMS_PROMPT_RULE}.md` decides that half and this roster names no \
-         `redundantVoidReturnType`; the run reported {reported:?}"
+        !closure.contains(&SWIFT_VOID_RETURN_RULE.to_string()),
+        "`{SWIFT_VOID_RETURN_RULE}` reads a function signature, so it must stay silent for a \
+         closure parameter; the run reported {closure:?}"
     );
 }
 
@@ -871,80 +791,56 @@ const SWIFT_IDIOMS_HOISTED_LET: &str = concat!(
     "}\n",
 );
 
-/// A class that is neither `final` nor a stated extension point.
-const SWIFT_IDIOMS_OPEN_CLASS: &str = concat!(
-    "public class Worker {\n",
-    "    public var count = 0\n",
-    "\n",
-    "    public init() {}\n",
-    "}\n",
-);
-
 /// Every requirement this gate took out of a Swift prompt rule.
 ///
 /// Each `defect` is written in the SHAPE the deleted bullet named, so a row
 /// reports what the bullet was about rather than a neighbouring shape the same
 /// rule happens to read.
 ///
-/// Two rows are HALF of the bullet `idioms.md` used to state, and each stands
-/// beside a test of its own that holds the other half to the prompt rule.
+/// The `NoVoidReturnOnFunctionSignature` row carries the `()` half of the
+/// bullet `idioms.md` split, and the rule decides the omit-the-clause half as
+/// well. `idioms.md` still states that second half, so it is not a row here:
+/// the bullet has two owners until a person moves it, and the task that moves
+/// it is the one that rebalances the Swift prompt rules.
 ///
-/// The `void` row: measured on 0.62.1, `void` reports `func run() -> ()` and
-/// stays SILENT on `func run() -> Void {}`: it rewrites `()` INTO `Void` and
-/// stops there. SwiftFormat removes the clause under `redundantVoidReturnType`,
-/// which this roster does not name. So the `()` half came out of `idioms.md`
-/// and the omit-the-clause half stays there.
+/// `ReplaceForEachWithForLoop` carries the `forEach` + `if` half the same way,
+/// and it reports the `filter` chain of the surviving `where` bullet as well —
+/// `the_shipped_swift_idioms_tool_rule_reports_a_filter_chain` measures that.
 ///
-/// The `preferForLoop` row: measured on 0.62.1 under the shipped script,
-/// `preferForLoop` reports `forEach` + `if` — on one line under
-/// `--single-line-for-each convert`, and over several lines with or without it
-/// — and stays SILENT on `things.filter { … }.forEach { … }`, by SwiftFormat's
-/// own documented design. So the `forEach` + `if` half came out of `idioms.md`
-/// and the `where`-clause half stays there.
-///
-/// Two bullets this gate touches are NOT here, and each was measured before it
-/// was left alone. `optionals.md` never `guard` in a test stays whole, because
-/// `noGuardInTests` reports `guard let value = source else { return }` and
-/// stays silent on the shorthand `guard let value else { return }`, which binds
-/// the same name from the same optional. `idioms.md` empty-collection
-/// declarations stay whole, because the roster names neither `propertyTypes`
-/// nor its option, for the reason the test above states.
+/// One bullet this gate USED to own is not here at all. `value-semantics.md`
+/// "Mark classes not designed for subclassing" was `preferFinalClasses`, and
+/// the toolchain carries no rule like it, so that requirement waits for the
+/// prompt rule to state it again.
 const SWIFT_IDIOMS_SUPERSEDED_BULLETS: &[SupersededSwiftBullet] = &[
     SupersededSwiftBullet {
         prompt_rule: SWIFT_IDIOMS_PROMPT_RULE,
-        tool_rule: "typeSugar",
+        tool_rule: "UseShorthandTypeNames",
         defect: SWIFT_IDIOMS_LONG_TYPE,
         words: "shorthand type sugar",
     },
     SupersededSwiftBullet {
         prompt_rule: SWIFT_IDIOMS_PROMPT_RULE,
-        tool_rule: "void",
+        tool_rule: SWIFT_VOID_RETURN_RULE,
         defect: SWIFT_IDIOMS_PAREN_RETURN,
         words: "Return `Void`, not `()`",
     },
     SupersededSwiftBullet {
         prompt_rule: SWIFT_IDIOMS_PROMPT_RULE,
-        tool_rule: "redundantMemberwiseInit",
+        tool_rule: SWIFT_SYNTHESIZED_INITIALIZER_RULE,
         defect: SWIFT_IDIOMS_REDUNDANT_INIT,
         words: "memberwise initializer identical to the synthesized one",
     },
     SupersededSwiftBullet {
         prompt_rule: SWIFT_IDIOMS_PROMPT_RULE,
-        tool_rule: SWIFT_PREFER_FOR_LOOP_RULE,
+        tool_rule: SWIFT_REPLACE_FOR_EACH_RULE,
         defect: SWIFT_IDIOMS_SINGLE_LINE_FOR_EACH,
         words: "over `forEach` + `if`",
     },
     SupersededSwiftBullet {
         prompt_rule: SWIFT_IDIOMS_PROMPT_RULE,
-        tool_rule: "hoistPatternLet",
+        tool_rule: "UseLetInEveryBoundCaseVariable",
         defect: SWIFT_IDIOMS_HOISTED_LET,
         words: "Bind each case variable with its own `let`",
-    },
-    SupersededSwiftBullet {
-        prompt_rule: SWIFT_VALUE_SEMANTICS_PROMPT_RULE,
-        tool_rule: "preferFinalClasses",
-        defect: SWIFT_IDIOMS_OPEN_CLASS,
-        words: "Mark classes not designed for subclassing",
     },
 ];
 
@@ -961,16 +857,64 @@ const SWIFT_IDIOMS_SUPERSEDED_BULLETS: &[SupersededSwiftBullet] = &[
 /// that read the shape rather than a neighbour that read the same file, and it
 /// holds that defect in the SHAPE the bullet named — a probe staging some other
 /// shape the same rule happens to report proves ownership of a requirement the
-/// bullet never stated. The probes stage a `.swift-version`, so no answer here
-/// is one the version gate bought.
+/// bullet never stated.
 #[test]
 fn the_shipped_swift_idioms_tool_rule_owns_each_bullet_it_took() {
     let loader = builtin_loader();
 
     for bullet in SWIFT_IDIOMS_SUPERSEDED_BULLETS {
-        let reported = swift_idioms_reporting_rules(bullet.defect, SWIFT_VERSION_SUPPORT);
+        let reported = swift_idioms_reporting_rules(bullet.defect, NO_SUPPORT_FILES);
         verify_superseded_swift_bullet(&loader, bullet, &reported);
     }
+}
+
+/// The rule that reports a static member whose name repeats its own type.
+const SWIFT_TYPE_NAME_RULE: &str = "DontRepeatTypeInStaticProperties";
+
+/// A static member whose initializer CALLS the type that holds it.
+const SWIFT_IDIOMS_REPEATED_TYPE_NAME: &str = concat!(
+    "public struct Color {\n",
+    "    public static let redColor = Color()\n",
+    "}\n",
+);
+
+/// The same member with an initializer that infers `Int`.
+///
+/// The rule reads the member's own TYPE off an initializer that calls the
+/// enclosing type, so a literal of another type draws nothing.
+const SWIFT_IDIOMS_INFERRED_TYPE_NAME: &str = concat!(
+    "public struct Color {\n",
+    "    public static let redColor = 1\n",
+    "}\n",
+);
+
+/// Acceptance: the gate reads ONE shape of type-name repetition.
+///
+/// Row 3 of the measurement table of `idioms-swift.md` holds eleven shapes,
+/// and the rule reports four of them. It reads three facts at one time: the
+/// member is `static`, its own type is the type that holds it, and its name
+/// ends in that type name as a SUFFIX. The bullet of `idioms.md` names no
+/// type, so the rule decides one shape of many and the prompt rule keeps the
+/// bullet.
+///
+/// Both halves are load-bearing. The calling form must report, or the row is
+/// not true; the inferred form must stay silent, or the row that records the
+/// limit is not true either.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_reads_one_shape_of_type_name_repetition() {
+    let repeated = swift_idioms_reporting_rules(SWIFT_IDIOMS_REPEATED_TYPE_NAME, NO_SUPPORT_FILES);
+    assert!(
+        repeated.contains(&SWIFT_TYPE_NAME_RULE.to_string()),
+        "`{SWIFT_TYPE_NAME_RULE}` must report a static member whose initializer calls the \
+         type that holds it; the run reported {repeated:?}"
+    );
+
+    let inferred = swift_idioms_reporting_rules(SWIFT_IDIOMS_INFERRED_TYPE_NAME, NO_SUPPORT_FILES);
+    assert!(
+        !inferred.contains(&SWIFT_TYPE_NAME_RULE.to_string()),
+        "`{SWIFT_TYPE_NAME_RULE}` reads the member's own type off its initializer, so a \
+         member that infers `Int` must draw nothing; the run reported {inferred:?}"
+    );
 }
 
 /// The command that reaches the Swift toolchain's own formatter.
@@ -1022,6 +966,22 @@ fn shipped_swift_idioms_source(loader: &ValidatorLoader) -> String {
 /// well. A tag the run still writes under this configuration is a tag no
 /// configuration can stop.
 fn swift_format_configuration_with_every_rule_off() -> String {
+    let mut configuration = swift_format_dumped_configuration();
+
+    let rules = configuration
+        .get_mut(SWIFT_FORMAT_RULES_KEY)
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("the swift-format configuration must carry a `rules` table");
+
+    for switch in rules.values_mut() {
+        *switch = serde_json::Value::Bool(false);
+    }
+
+    configuration.to_string()
+}
+
+/// The whole configuration `swift format dump-configuration` writes.
+fn swift_format_dumped_configuration() -> serde_json::Value {
     let dumped = std::process::Command::new(SWIFT_TOOLCHAIN_TOOL)
         .arg(SWIFT_FORMAT_SUBCOMMAND)
         .arg(SWIFT_FORMAT_DUMP_VERB)
@@ -1031,34 +991,28 @@ fn swift_format_configuration_with_every_rule_off() -> String {
     assert!(
         dumped.status.success(),
         "`{SWIFT_TOOLCHAIN_TOOL} {SWIFT_FORMAT_SUBCOMMAND} {SWIFT_FORMAT_DUMP_VERB}` must write \
-         the configuration this measurement switches off; it exited {} and wrote {:?} on stderr. \
-         A run that read the stdout alone would land on the JSON below and name the wrong cause",
+         the configuration every measurement of this rule reads; it exited {} and wrote {:?} on \
+         stderr. A run that read the stdout alone would land on empty JSON and name the wrong \
+         cause",
         dumped.status,
         String::from_utf8_lossy(&dumped.stderr)
     );
 
-    let mut configuration: serde_json::Value = serde_json::from_slice(&dumped.stdout)
-        .expect("`swift format dump-configuration` must write JSON");
+    serde_json::from_slice(&dumped.stdout)
+        .expect("`swift format dump-configuration` must write JSON")
+}
+
+/// The `rules` table of that configuration, one switch for each rule the
+/// installed toolchain carries.
+fn swift_format_dumped_rules() -> serde_json::Map<String, serde_json::Value> {
+    let mut configuration = swift_format_dumped_configuration();
 
     let rules = configuration
         .get_mut(SWIFT_FORMAT_RULES_KEY)
         .and_then(serde_json::Value::as_object_mut)
         .expect("the swift-format configuration must carry a `rules` table");
 
-    assert_eq!(
-        rules.len(),
-        SWIFT_FORMAT_RULE_COUNT,
-        "the measured toolchain carries {SWIFT_FORMAT_RULE_COUNT} rules, and the tables of \
-         `{SWIFT_IDIOMS_RULE}.md` state that every one of them is switched OFF; this toolchain \
-         carries {}",
-        rules.len()
-    );
-
-    for switch in rules.values_mut() {
-        *switch = serde_json::Value::Bool(false);
-    }
-
-    configuration.to_string()
+    rules.clone()
 }
 
 /// What `swift format lint` answered: its exit status, its stdout, its stderr.

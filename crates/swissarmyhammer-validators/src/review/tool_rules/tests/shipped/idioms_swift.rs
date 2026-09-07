@@ -972,3 +972,468 @@ fn the_shipped_swift_idioms_tool_rule_owns_each_bullet_it_took() {
         verify_superseded_swift_bullet(&loader, bullet, &reported);
     }
 }
+
+/// The command that reaches the Swift toolchain's own formatter.
+///
+/// `swift format` is a SUBCOMMAND of the toolchain, spelled with a space. It
+/// is a different program from `swiftformat`, which is what the shipped gate
+/// runs, and the rule body carries the measurements that separate the two.
+const SWIFT_TOOLCHAIN_TOOL: &str = "swift";
+
+/// The subcommand that reaches the toolchain's formatter.
+const SWIFT_FORMAT_SUBCOMMAND: &str = "format";
+
+/// The `swift format` verb that reports a finding and rewrites nothing.
+const SWIFT_FORMAT_LINT_VERB: &str = "lint";
+
+/// The flag that makes a `swift format lint` finding answer a nonzero status.
+const SWIFT_FORMAT_STRICT_FLAG: &str = "--strict";
+
+/// The flag that hands `swift format` a configuration, as a path or as the
+/// JSON itself.
+const SWIFT_FORMAT_CONFIGURATION_FLAG: &str = "--configuration";
+
+/// The `swift format` verb that writes the configuration it would read.
+const SWIFT_FORMAT_DUMP_VERB: &str = "dump-configuration";
+
+/// The configuration key that carries one switch for each rule.
+const SWIFT_FORMAT_RULES_KEY: &str = "rules";
+
+/// How many rules the configuration of the measured toolchain carries.
+///
+/// Measured with Apple Swift 6.4: `swift format dump-configuration` writes 43
+/// keys under `rules`. The count is the assertion that a release that adds or
+/// drops a rule reaches this guard, because the tables below state that every
+/// one of the 43 is switched OFF.
+const SWIFT_FORMAT_RULE_COUNT: usize = 43;
+
+/// The markdown source of the shipped `idioms-swift` rule, front matter and
+/// body alike.
+fn shipped_swift_idioms_source(loader: &ValidatorLoader) -> String {
+    std::fs::read_to_string(shipped_asset(loader, &RULE_SOURCE_ASSET, SWIFT_IDIOMS_RULE))
+        .expect("read the shipped Swift idioms rule source")
+}
+
+/// The `swift format` configuration of the installed toolchain, with every
+/// rule switched OFF.
+///
+/// The switches come from the toolchain's own dump rather than from a list
+/// this file writes, so a release that adds a rule turns that rule off here as
+/// well. A tag the run still writes under this configuration is a tag no
+/// configuration can stop.
+fn swift_format_configuration_with_every_rule_off() -> String {
+    let dumped = std::process::Command::new(SWIFT_TOOLCHAIN_TOOL)
+        .arg(SWIFT_FORMAT_SUBCOMMAND)
+        .arg(SWIFT_FORMAT_DUMP_VERB)
+        .output()
+        .expect("the installed Swift toolchain must write its swift-format configuration");
+
+    let mut configuration: serde_json::Value = serde_json::from_slice(&dumped.stdout)
+        .expect("`swift format dump-configuration` must write JSON");
+
+    let rules = configuration
+        .get_mut(SWIFT_FORMAT_RULES_KEY)
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("the swift-format configuration must carry a `rules` table");
+
+    assert_eq!(
+        rules.len(),
+        SWIFT_FORMAT_RULE_COUNT,
+        "the measured toolchain carries {SWIFT_FORMAT_RULE_COUNT} rules, and the tables of \
+         `{SWIFT_IDIOMS_RULE}.md` state that every one of them is switched OFF; this toolchain \
+         carries {}",
+        rules.len()
+    );
+
+    for switch in rules.values_mut() {
+        *switch = serde_json::Value::Bool(false);
+    }
+
+    configuration.to_string()
+}
+
+/// What `swift format lint` answered: its exit status, its stdout, its stderr.
+type SwiftFormatLintRun = (i32, String, String);
+
+/// Runs `swift format lint --strict` over `path`, under `configuration` when
+/// the caller states one.
+fn swift_format_lint(path: &Path, configuration: Option<&str>) -> SwiftFormatLintRun {
+    let mut command = std::process::Command::new(SWIFT_TOOLCHAIN_TOOL);
+    command
+        .arg(SWIFT_FORMAT_SUBCOMMAND)
+        .arg(SWIFT_FORMAT_LINT_VERB)
+        .arg(SWIFT_FORMAT_STRICT_FLAG);
+
+    if let Some(configuration) = configuration {
+        command
+            .arg(SWIFT_FORMAT_CONFIGURATION_FLAG)
+            .arg(configuration);
+    }
+
+    let run = command
+        .arg(path)
+        .output()
+        .expect("the installed Swift toolchain must run `swift format lint`");
+
+    (
+        run.status
+            .code()
+            .expect("`swift format lint` must exit rather than be stopped by a signal"),
+        String::from_utf8_lossy(&run.stdout).into_owned(),
+        String::from_utf8_lossy(&run.stderr).into_owned(),
+    )
+}
+
+/// What opens and closes every cell of a markdown table row.
+const RULE_BODY_TABLE_EDGE: char = '|';
+
+/// What the rule under a table head is drawn with.
+const RULE_BODY_TABLE_RULE: char = '-';
+
+/// What a rule body wraps a name in.
+const RULE_BODY_CODE_MARK: char = '`';
+
+/// Every measurement row of the markdown table that stands under `heading` in
+/// `body`, as its cells.
+///
+/// The head row and the rule under it are dropped, so what comes back is the
+/// rows the table measures and nothing else. A heading the body does not state
+/// answers NO row, which is what makes a test that reads a table it expects
+/// fail rather than pass over a table nobody wrote.
+fn rule_body_table(body: &str, heading: &str) -> Vec<Vec<String>> {
+    let mut rows: Vec<Vec<String>> = Vec::new();
+    let mut under_heading = false;
+
+    for line in body.lines() {
+        let trimmed = line.trim();
+
+        if trimmed == heading {
+            under_heading = true;
+            continue;
+        }
+        if !under_heading {
+            continue;
+        }
+        if !trimmed.starts_with(RULE_BODY_TABLE_EDGE) {
+            if rows.is_empty() {
+                continue;
+            }
+            break;
+        }
+
+        let cells: Vec<String> = trimmed
+            .trim_matches(RULE_BODY_TABLE_EDGE)
+            .split(RULE_BODY_TABLE_EDGE)
+            .map(|cell| cell.trim().to_string())
+            .collect();
+
+        let is_rule = cells
+            .iter()
+            .all(|cell| !cell.is_empty() && cell.chars().all(|mark| mark == RULE_BODY_TABLE_RULE));
+        if !is_rule {
+            rows.push(cells);
+        }
+    }
+
+    if rows.is_empty() {
+        return rows;
+    }
+    rows.split_off(1)
+}
+
+/// The heading of the rule-body table that names every tag the pretty-printer
+/// writes.
+const SWIFT_FORMAT_TAG_TABLE_HEADING: &str = "## The tags no configuration can stop";
+
+/// How many cells each row of that table holds.
+const SWIFT_FORMAT_TAG_TABLE_WIDTH: usize = 3;
+
+/// A line the pretty-printer reports for its length alone.
+///
+/// The default `lineLength` is 100 columns, so the name and the literal beside
+/// it have to run past that.
+const SWIFT_FORMAT_LINE_LENGTH_PROBE: &str = concat!(
+    "let overLongName = ",
+    "\"this string literal and the name beside it run well past the hundred \
+     column line the default configuration states\"\n",
+);
+
+/// Swift that draws ONE pretty-printer tag, for each tag the rule body names.
+///
+/// Each probe is the smallest file that draws its own tag, so the run names
+/// the tag that read the shape rather than a neighbour that read the same
+/// file. A tag the body names and this list does not, and a probe this list
+/// holds and the body does not, each fail the test below by name.
+const SWIFT_FORMAT_TAG_PROBES: &[(&str, &str)] = &[
+    (
+        "AddLines",
+        "struct Probe { let alpha: Int\n  let beta: Int }\n",
+    ),
+    (
+        "EndOfLineComment",
+        "let alpha = 1  // an end of line comment long enough to push this line well past the \
+         hundred column line the configuration states\n",
+    ),
+    (
+        "Indentation",
+        "struct Probe {\n  let alpha = 1\n        let beta = 2\n}\n",
+    ),
+    ("LineLength", SWIFT_FORMAT_LINE_LENGTH_PROBE),
+    ("RemoveLine", "let alpha = 1\n\n\n\nlet beta = 2\n"),
+    ("Spacing", "let alpha = 1+2\n"),
+    ("TrailingComma", "let alpha = [\n  1,\n  2\n]\n"),
+    ("TrailingWhitespace", "let alpha = 1   \n"),
+];
+
+/// Acceptance: every tag the rule body records as one no configuration can
+/// stop is a tag the installed toolchain still writes.
+///
+/// `swift format lint` writes a `[<Name>]` tag for each finding, and the tags
+/// this table names come from the PRETTY-PRINTER rather than from the 43
+/// rules. No key of the configuration reaches them: each probe below runs with
+/// every one of the 43 rules switched OFF and still draws its own tag.
+///
+/// That is why a gate built on `swift format` has to read the tag off each
+/// output line and keep only the tags an allowlist states. This test is what
+/// holds the allowlist the rule body states to the tags the tool really
+/// writes: a toolchain release that stops writing one fails here BY NAME,
+/// rather than leaving the gate filtering for a tag nothing sends.
+///
+/// Both halves are load-bearing. The body must name the same tags this test
+/// probes, or the allowlist and the measurement drift apart; and each probe
+/// must draw its tag from the live tool, or the row records a fact no run
+/// makes.
+#[test]
+fn the_shipped_swift_idioms_rule_body_names_every_tag_swift_format_writes() {
+    let loader = builtin_loader();
+    let source = shipped_swift_idioms_source(&loader);
+    let recorded = rule_body_table(&source, SWIFT_FORMAT_TAG_TABLE_HEADING);
+
+    let named: Vec<String> = recorded
+        .iter()
+        .map(|row| {
+            assert_eq!(
+                row.len(),
+                SWIFT_FORMAT_TAG_TABLE_WIDTH,
+                "every row of the `{SWIFT_FORMAT_TAG_TABLE_HEADING}` table must hold \
+                 {SWIFT_FORMAT_TAG_TABLE_WIDTH} cells; this one holds {row:?}"
+            );
+            row[0].trim_matches(RULE_BODY_CODE_MARK).to_string()
+        })
+        .collect();
+    let probed: Vec<String> = SWIFT_FORMAT_TAG_PROBES
+        .iter()
+        .map(|(tag, _)| (*tag).to_string())
+        .collect();
+
+    assert_eq!(
+        named, probed,
+        "the `{SWIFT_FORMAT_TAG_TABLE_HEADING}` table of `{SWIFT_IDIOMS_RULE}.md` must name the \
+         tags this test probes, in the order it probes them; it names {named:?}"
+    );
+
+    let configuration = swift_format_configuration_with_every_rule_off();
+    let probe = tempfile::tempdir().expect("stage a probe directory");
+
+    for (tag, source) in SWIFT_FORMAT_TAG_PROBES {
+        let path = probe.path().join(format!("{tag}.swift"));
+        std::fs::write(&path, source).expect("stage a pretty-printer probe file");
+
+        let (status, wrote_out, wrote_err) = swift_format_lint(&path, Some(&configuration));
+
+        assert!(
+            wrote_err.contains(&format!("[{tag}]")),
+            "`{SWIFT_TOOLCHAIN_TOOL} {SWIFT_FORMAT_SUBCOMMAND} {SWIFT_FORMAT_LINT_VERB}` must \
+             write `[{tag}]` for its own probe with every one of the \
+             {SWIFT_FORMAT_RULE_COUNT} rules switched OFF, or the allowlist \
+             `{SWIFT_IDIOMS_RULE}.md` states filters for a tag nothing sends; the run exited \
+             {status} and wrote {wrote_err:?} on stderr and {wrote_out:?} on stdout"
+        );
+    }
+}
+
+/// The heading of the rule-body table that records every status the lint run
+/// writes.
+const SWIFT_FORMAT_STATUS_TABLE_HEADING: &str = "## Every status the lint run writes";
+
+/// How many cells each row of that table holds.
+const SWIFT_FORMAT_STATUS_TABLE_WIDTH: usize = 4;
+
+/// What the rule body writes for a channel a run left empty.
+const SWIFT_FORMAT_EMPTY_CHANNEL: &str = "0 bytes";
+
+/// Where a status probe stages the path the run carries.
+const SWIFT_FORMAT_STATUS_PROBE_PATH: &str = "Probe.swift";
+
+/// Swift holding one defect the shipped configuration reports.
+const SWIFT_FORMAT_DIRTY_SOURCE: &str = "let alpha = 1+2\n";
+
+/// The same declaration written the way the pretty-printer asks for.
+const SWIFT_FORMAT_CLEAN_SOURCE: &str = "let alpha = 1 + 2\n";
+
+/// Swift the parser cannot read, because `@@@` opens an attribute that names
+/// nothing.
+const SWIFT_FORMAT_UNPARSABLE_SOURCE: &str =
+    concat!("public struct Broken {\n", "  @@@ let alpha = 1\n", "}\n");
+
+/// Swift written in Latin-1 rather than in UTF-8.
+///
+/// The byte `0xE9` is `é` in Latin-1, and it is not a UTF-8 sequence. The
+/// declaration under it holds a defect, so a run that DID decode the file
+/// would report one.
+const SWIFT_FORMAT_UNDECODABLE_SOURCE: &[u8] = b"let name = \"caf\xe9\"\nlet alpha = 1+2\n";
+
+/// How one row of [`SWIFT_FORMAT_STATUS_PROBES`] is staged.
+enum SwiftFormatProbeShape {
+    /// Swift source the run can read, written at the probe path.
+    Readable(&'static str),
+
+    /// A path the run cannot read, staged the way [`ShippedUnreadableFile`]
+    /// states.
+    Refusing(ShippedUnreadableFile),
+
+    /// A directory, at the probe path.
+    Directory,
+}
+
+/// One shape `swift format lint --strict` answers, beside the rule-body row
+/// that records the status it answers with.
+struct SwiftFormatStatusProbe {
+    /// The first cell of the rule-body row this probe measures.
+    run: &'static str,
+
+    /// What the probe directory holds when the run starts.
+    shape: SwiftFormatProbeShape,
+}
+
+/// Every shape the rule-body status table records, in the order it records
+/// them.
+///
+/// The four refusing shapes are the ones the rule body records for
+/// `swiftformat` today, and this gate's replacement has to answer each of them
+/// again, because `swift format` is a different program with statuses of its
+/// own. The directory row stands beside them because a path that names one is
+/// the shape a work list reaches by naming a package.
+const SWIFT_FORMAT_STATUS_PROBES: &[SwiftFormatStatusProbe] = &[
+    SwiftFormatStatusProbe {
+        run: "a file with findings",
+        shape: SwiftFormatProbeShape::Readable(SWIFT_FORMAT_DIRTY_SOURCE),
+    },
+    SwiftFormatStatusProbe {
+        run: "a file with no finding",
+        shape: SwiftFormatProbeShape::Readable(SWIFT_FORMAT_CLEAN_SOURCE),
+    },
+    SwiftFormatStatusProbe {
+        run: "a path that holds no file",
+        shape: SwiftFormatProbeShape::Refusing(ShippedUnreadableFile::Absent),
+    },
+    SwiftFormatStatusProbe {
+        run: "a file with no read permission",
+        shape: SwiftFormatProbeShape::Refusing(ShippedUnreadableFile::Forbidden(
+            SWIFT_FORMAT_DIRTY_SOURCE,
+        )),
+    },
+    SwiftFormatStatusProbe {
+        run: "a file whose bytes are not UTF-8",
+        shape: SwiftFormatProbeShape::Refusing(ShippedUnreadableFile::Undecodable(
+            SWIFT_FORMAT_UNDECODABLE_SOURCE,
+        )),
+    },
+    SwiftFormatStatusProbe {
+        run: "a file the parser cannot read",
+        shape: SwiftFormatProbeShape::Readable(SWIFT_FORMAT_UNPARSABLE_SOURCE),
+    },
+    SwiftFormatStatusProbe {
+        run: "a path that names a directory",
+        shape: SwiftFormatProbeShape::Directory,
+    },
+];
+
+/// Stages `shape` inside `repo`, and answers the path the run carries.
+fn stage_swift_format_probe(repo: &Path, shape: &SwiftFormatProbeShape) -> PathBuf {
+    match shape {
+        SwiftFormatProbeShape::Readable(source) => {
+            stage_probe_bytes(repo, SWIFT_FORMAT_STATUS_PROBE_PATH, source.as_bytes());
+        }
+        SwiftFormatProbeShape::Refusing(unreadable) => {
+            stage_probe_unreadable(repo, SWIFT_FORMAT_STATUS_PROBE_PATH, unreadable);
+        }
+        SwiftFormatProbeShape::Directory => {
+            std::fs::create_dir_all(repo.join(SWIFT_FORMAT_STATUS_PROBE_PATH))
+                .expect("stage a probe directory at the path the run carries");
+        }
+    }
+
+    repo.join(SWIFT_FORMAT_STATUS_PROBE_PATH)
+}
+
+/// Acceptance: the rule body records the status `swift format lint --strict`
+/// really writes for each shape a work list reaches.
+///
+/// A gate reads a status before it reads a finding, and one of these rows is
+/// the shape that costs a gate everything: measured with Apple Swift 6.4, a
+/// path that holds no file exits 0 and writes NOTHING, which reads exactly
+/// like a clean pass over a file the run never opened. A gate that trusted the
+/// status alone would answer clean for a work list of paths that are all gone.
+///
+/// The stdout column is load-bearing beside the status. `swift format` writes
+/// every finding and every error on STDERR, so a gate that read stdout would
+/// read an empty channel for a file holding findings.
+///
+/// The rows come from the body and the statuses come from the live tool, so a
+/// release that moves one fails here rather than moving the gate's behaviour
+/// without a word.
+#[test]
+fn the_shipped_swift_idioms_rule_body_records_every_status_the_lint_run_writes() {
+    let loader = builtin_loader();
+    let source = shipped_swift_idioms_source(&loader);
+    let recorded = rule_body_table(&source, SWIFT_FORMAT_STATUS_TABLE_HEADING);
+
+    assert_eq!(
+        recorded.len(),
+        SWIFT_FORMAT_STATUS_PROBES.len(),
+        "the `{SWIFT_FORMAT_STATUS_TABLE_HEADING}` table of `{SWIFT_IDIOMS_RULE}.md` must record \
+         the {} shapes this test probes; it records {recorded:?}",
+        SWIFT_FORMAT_STATUS_PROBES.len()
+    );
+
+    for (row, probe) in recorded.iter().zip(SWIFT_FORMAT_STATUS_PROBES) {
+        assert_eq!(
+            row.len(),
+            SWIFT_FORMAT_STATUS_TABLE_WIDTH,
+            "every row of the `{SWIFT_FORMAT_STATUS_TABLE_HEADING}` table must hold \
+             {SWIFT_FORMAT_STATUS_TABLE_WIDTH} cells; this one holds {row:?}"
+        );
+        assert_eq!(
+            row[0], probe.run,
+            "the rows must stand in the order this test probes them; the body reads `{}` where \
+             the probe reads `{}`",
+            row[0], probe.run
+        );
+
+        let staged = tempfile::tempdir().expect("stage a probe directory");
+        let path = stage_swift_format_probe(staged.path(), &probe.shape);
+        let (status, wrote_out, wrote_err) = swift_format_lint(&path, None);
+
+        assert_eq!(
+            row[1],
+            status.to_string(),
+            "the `{}` row must record the status the run writes; it records `{}` and the run \
+             exited {status}, writing {wrote_err:?} on stderr",
+            probe.run,
+            row[1]
+        );
+        assert_eq!(
+            row[2], SWIFT_FORMAT_EMPTY_CHANNEL,
+            "`{SWIFT_TOOLCHAIN_TOOL} {SWIFT_FORMAT_SUBCOMMAND} {SWIFT_FORMAT_LINT_VERB}` writes \
+             every finding and every error on stderr, so the stdout cell of the `{}` row must \
+             read `{SWIFT_FORMAT_EMPTY_CHANNEL}`; it reads `{}`",
+            probe.run, row[2]
+        );
+        assert!(
+            wrote_out.is_empty(),
+            "the `{}` row records an empty stdout, and the run wrote {wrote_out:?} on it",
+            probe.run
+        );
+    }
+}

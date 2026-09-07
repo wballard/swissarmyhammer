@@ -550,3 +550,352 @@ path, so neither fixture reads the other. The fixtures carry no
 `.swift-version`, so the five version-gated rules stay silent in the doctor's
 run; the acceptance tests stage a probe repository of their own and hold those
 five to reporting beside a `.swift-version` and to staying silent without one.
+
+## What the Swift toolchain measures, and what it cannot
+
+`swift format` is a SUBCOMMAND of the Swift toolchain, spelled with a space. It
+is a different program from `swiftformat`, which is what this gate runs today.
+A move from one to the other needs facts, and the eight sections below are
+those facts. **This section changes no gate. `swiftformat` still runs the gate.**
+
+Every measurement below was made with the toolchain of this machine and of the
+self-hosted macOS CI runner:
+
+    Apple Swift version 6.4 (swiftlang-6.4.0.33.1 clang-2100.3.33.1)
+    Target: arm64-apple-macosx27.0.0
+
+`swift format --version` writes `main`, so it names no release. The Swift
+version above is the only version a measurement can carry. The binary stands at
+`/Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-format`.
+
+`swift format dump-configuration` writes the configuration the tool would read.
+It holds 43 keys under `rules`, and each key is one rule.
+
+## The tags no configuration can stop
+
+`swift format lint` writes one line for each finding, and each line carries a
+`[<Name>]` tag. Eight of those tags come from the PRETTY-PRINTER, not from the
+43 rules. No key of the configuration reaches them.
+
+Each row below was measured over its own probe file, with every one of the 43
+rules switched OFF:
+
+    swift format dump-configuration > all-off.json    # then each rule set to false
+    swift format lint --strict --configuration all-off.json <probe>.swift
+
+| the tag | what draws it | what the run wrote |
+|---|---|---|
+| `AddLines` | two members on the brace line of a `struct` | `add 1 line break`, at 1:15 and at 2:16 |
+| `EndOfLineComment` | a trailing comment that runs past column 100 | `move end-of-line comment that exceeds the line length` |
+| `Indentation` | a member indented 8 spaces where 2 are asked for | `unindent by 6 spaces` |
+| `LineLength` | a declaration that runs past column 100 | `line is too long` |
+| `RemoveLine` | four blank lines between two declarations | `remove line break`, at 1:14 and at 2:1 |
+| `Spacing` | `let alpha = 1+2` | `add 1 space`, at 1:14 and at 1:15 |
+| `TrailingComma` | an array literal over several lines, with no trailing comma | `add trailing comma to the last element in multiline collection literal` |
+| `TrailingWhitespace` | three spaces after a declaration | `remove trailing whitespace` |
+
+The eight names come from the tool itself. `PrettyPrintFindingCategory` stands
+in the binary, and the reflection data beside it lists the same eight cases the
+eight probes draw.
+
+So the configuration is only a SECOND gate. A gate built on `swift format` must
+read the tag off each output line, and it must KEEP only a tag that stands in an
+allowlist the script states. A gate that kept every line would report layout.
+
+`the_shipped_swift_idioms_rule_body_names_every_tag_swift_format_writes` holds
+this table. It reads the tag column out of this body, and it drives one probe
+for each tag through the live toolchain. A release that stops writing a tag
+fails that test BY NAME.
+
+## What the shipped passing fixture draws from the pretty-printer
+
+The leak is not a corner case. `missing-docs-swift.pass.swift.tmpl` is a fixture
+this set ships, and every declaration in it is correct:
+
+    swift format lint --strict missing-docs-swift.pass.swift.tmpl
+
+| the configuration | findings | the tags |
+|---|---|---|
+| all 43 rules OFF | 2 | `[Indentation]`, at 9:1 and at 10:1 |
+| the default, all 43 rules as shipped | 2 | `[Indentation]`, at the same two rows |
+
+The fixture is written with 4-space indentation. `swift format` asks for 2. The
+two rows are the two members of `DocumentedStructure`. A gate with no allowlist
+would fail this set's own passing fixture.
+
+## Every status the lint run writes
+
+`swift format lint --strict` was run over each shape below. The run states no
+configuration, so it reads the 43 rules as shipped:
+
+    swift format lint --strict Probe.swift
+
+| the run | status | stdout | stderr |
+|---|---|---|---|
+| a file with findings | 1 | 0 bytes | `Probe.swift:1:14: error: [Spacing] add 1 space`, twice |
+| a file with no finding | 0 | 0 bytes | 0 bytes |
+| a path that holds no file | 0 | 0 bytes | 0 bytes |
+| a file with no read permission | 1 | 0 bytes | `<unknown>: error: Unable to open Probe.swift: file is not readable or does not exist` |
+| a file whose bytes are not UTF-8 | 1 | 0 bytes | `<unknown>: error: Unable to lint Probe.swift: file is not readable or does not exist.` |
+| a file the parser cannot read | 1 | 0 bytes | `Probe.swift:2:4: error: expected name in attribute`, three times |
+| a path that names a directory | 64 | 0 bytes | `Error: 'Probe.swift' is a path to a directory, not a Swift source file.` |
+
+Three answers in that table decide how a gate is shaped.
+
+**Row 3 is the dangerous one.** A path that holds no file exits 0 and writes
+NOTHING. That reads exactly like a clean pass over a file the run never opened.
+A gate must test the path itself before it starts the tool, the way the shipped
+script already does with `[ ! -e "$file" ]`.
+
+**Every line stands on STDERR.** Findings and errors share that one channel, and
+stdout holds 0 bytes in every row. A gate that read stdout would read an empty
+channel for a file that holds findings.
+
+**A refusing path costs its own file alone.** This is where `swift format`
+differs from `swiftformat`. Measured with each refusing path beside a file that
+holds two findings: the run reports both findings each time, and it exits 1.
+
+The section "Why the script runs swiftformat once for each file" holds four
+rows for the same four refusing paths, and it records the opposite answer: under
+`swiftformat`, one refusing path costs the WHOLE run and every finding with it.
+**Those four rows are about `swiftformat`, and they stay true for the gate that
+ships today. The table above replaces them the day the gate moves to
+`swift format`, and not before.** A gate that moves therefore needs no loop of
+one path for each run, because `swift format` takes a whole work list and keeps
+the findings of every path it could read.
+
+`the_shipped_swift_idioms_rule_body_records_every_status_the_lint_run_writes`
+holds this table. It reads the run column and the status column out of this
+body, and it drives each shape through the live toolchain.
+
+## `DontRepeatTypeInStaticProperties` reports one shape
+
+The rule DOES report. An earlier probe found it silent, because that probe named
+a property of type `Int`.
+
+Each row below is a `public struct Color` that holds one member, over three
+lines, with that one rule ON:
+
+| the declaration | reported |
+|---|---|
+| `public static let redColor = Color()` | YES — `remove the suffix 'Color' from the name of the variable 'redColor'` |
+| `public static let redColor = 1` | NO |
+| `public static let redColor: Color = Color()` | NO |
+| `public static var redColor: Color { Color() }` | NO |
+| `public static let colorRed = Color()` | NO |
+| `public static let red = Color()` | NO |
+| `public static func makeColor() -> Color { Color() }` | NO |
+| `public static let bluePalette = Palette()`, in `public enum Palette` | YES |
+| `public static let darkTheme = Theme()`, in `public final class Theme` | YES |
+| `public static let greenColor = Color()`, in `extension Color` | YES |
+| `static var redColor: Color { get }`, in `public protocol Color` | NO |
+
+The rule reads three facts at one time. The member must be `static` or `class`.
+Its TYPE must be the type that holds it, and the rule reads that type from an
+initializer that CALLS the type. And the member name must end in the type name
+as a SUFFIX: `colorRed` and `redColor2` each pass.
+
+An annotation makes the rule silent when an initializer stands beside it. Row 3
+holds `redColor: Color = Color()` and draws nothing, and row 1 holds the same
+member with the annotation off and reports.
+
+Two more shapes were measured, and neither stands in the table, because Swift
+compiles neither. `struct Sandwich { static let bolognaSandwich: Sandwich }`
+written over three lines reports
+`remove the suffix 'Sandwich' from the name of the variable 'bolognaSandwich'`,
+and the same declaration written on ONE line draws nothing. `swiftc -typecheck`
+refuses both: `'static let' declaration requires an initializer expression or an
+explicitly stated getter`.
+
+So `idioms.md` KEEPS the type-name bullet. The bullet states `static let redColor`
+on `Color` and it names no type. The tool decides that bullet only where the
+member's own type is the enclosing type, which is one shape of many.
+
+## `UseSynthesizedInitializer` reads the access level
+
+Each row below is a `struct Point` that holds `var x: Int` and `var y: Int`,
+beside one explicit memberwise initializer, with that one rule ON. The
+`swiftformat` column names what the gate that ships reports over the same file:
+
+| the initializer | `swift format` | `swiftformat --rules redundantMemberwiseInit` |
+|---|---|---|
+| an `internal` `init` of an `internal` struct | YES | 5 findings |
+| a `public` `init` of a `public` struct | NO | 0 findings |
+| an `internal` `init` of a `public` struct | YES | 5 findings |
+| a `private` `init` of an `internal` struct | NO | 0 findings |
+| an `init` whose parameter carries a default value | YES | 0 findings |
+| a `public` `init` of a `public` struct that holds `internal` properties | NO | 0 findings |
+| an `init` whose body writes `self.x = max(0, x)` | NO | 0 findings |
+
+The message reads `remove this explicit initializer, which is identical to the
+compiler-synthesized initializer`.
+
+The silent half is correct, and it is not a hole. Swift synthesizes an INTERNAL
+memberwise initializer, never a `public` one, so a `public init` is not identical
+to it. Deleting a `public init` takes a declaration off the package surface.
+
+The rule is therefore the OWNER of the internal half and of nothing more. A
+prompt bullet that wants the public half must state it in words, and it must
+state that half alone: a bullet that named both halves would fight the tool on
+every review round.
+
+Row 5 is where the two tools differ. `swift format` reports the default-value
+form, and `swiftformat` stays silent about it.
+
+## `UseWhereClausesInForLoops` and `immutability.md` disagree
+
+`builtin/validators/swift/rules/immutability.md` names TWO shapes as a DON'T, in
+one bullet, and its fix is `map` or `filter`:
+
+```swift
+// the first DON'T
+for user in users where user.isActive { names.append(user.name) }
+// the second DON'T
+for user in users { if user.isActive { names.append(user.name) } }
+```
+
+Measured with `UseWhereClausesInForLoops` ON, over one file for each shape:
+
+| the walk | reported | the fix `swift format --in-place` wrote |
+|---|---|---|
+| the second DON'T, the nested `if` | YES — `replace this 'if' statement with a 'where' clause` | the FIRST DON'T, character for character |
+| the first DON'T, the `where` clause | NO | — |
+| `let names = users.filter(\.isActive).map(\.name)`, the DO | NO | — |
+
+The conflict is real and it is measured. An author who takes the finding, and who
+applies the tool's own correction, lands on the first DON'T of `immutability.md`,
+word for word. The rule is `false` in the shipped configuration, so a gate that
+turned it ON would create this conflict rather than find it.
+
+This is the same class of conflict this repository already refused for
+`--property-types inferred`. A tool and a prompt rule that disagree make churn on
+every review round.
+
+A person must choose one of two answers:
+
+1. **Keep `UseWhereClausesInForLoops` OFF.** `idioms.md` and `immutability.md`
+   then keep the whole question, and the tool decides nothing here.
+2. **Rewrite the carve-out of `immutability.md`** so the two rules cannot
+   disagree. The bullet would then stop naming the `where` form as a DON'T.
+
+**This body chooses neither.** The evidence stands above. The choice is a
+person's.
+
+## Which rule reports a filter chain
+
+The `where` bullet of `idioms.md` names a filter chain as its second DON'T:
+
+```swift
+things.filter { $0 > 2 }.forEach { thing in print(thing) }
+```
+
+Measured over one file for each walk, each rule ON alone and then both together:
+
+| the walk | `UseWhereClausesInForLoops` | `ReplaceForEachWithForLoop` | the two together |
+|---|---|---|---|
+| `things.filter { $0 > 2 }.forEach { thing in print(thing) }` | NO | YES, at 2:28 | `ReplaceForEachWithForLoop` |
+| `things.forEach { if $0 > 2 { print($0) } }` | NO | YES, at 2:10 | `ReplaceForEachWithForLoop` |
+| `for thing in things where thing > 2 { print(thing) }` | NO | NO | NO |
+
+`ReplaceForEachWithForLoop` reports the chain. Its message reads `replace use of
+'.forEach { ... }' with for-in loop`.
+
+The shape its fix lands on is NOTHING. Measured: `swift format --in-place` with
+that rule ON leaves the file byte for byte as it was, with the rule alone and
+with both rules together. The rule REPORTS and it CORRECTS nothing.
+
+That is the opposite of `preferForLoop`, which the section "`preferForLoop`
+decides half of the bullet it took, under an option" records. `preferForLoop`
+rewrites the walk, and this body has to name the shape it writes. A rule that
+writes no fix needs no such row: the author writes the edit, and the message
+names the shape.
+
+## The directive an author writes for `swift format`
+
+The shipped documents tell an author to write `// swiftformat:disable:next <rule>`.
+`swift format` reads no such comment.
+
+Each row below is one file holding `let Bad_One = 1`, with
+`AlwaysUseLowerCamelCase` ON:
+
+| the directive | where it stands | reported |
+|---|---|---|
+| `// swiftformat:disable:next AlwaysUseLowerCamelCase` | the line above | YES — the comment does nothing |
+| `// swift-format-ignore` | the line above | NO |
+| `// swift-format-ignore: AlwaysUseLowerCamelCase` | the line above | NO |
+| `// swift-format-ignore-file` | the top of the file | NO, for every declaration |
+| `// swift-format-ignore-file: AlwaysUseLowerCamelCase` | the top of the file | NO, for every declaration |
+| `// swift-format-ignore` | above the first of two declarations | the SECOND declaration alone |
+| `// swift-format-ignore` | after the declaration, on the same line | YES — a trailing comment does nothing |
+
+So both forms work, and each covers ONE declaration. The line form is
+`// swift-format-ignore` on the line above the declaration, and
+`// swift-format-ignore: <RuleName>` names one rule. The file form is
+`// swift-format-ignore-file` at the top, and it takes the whole file out.
+
+A rule name the tool does not know is accepted, and it silences nothing.
+Measured: `// swift-format-ignore: NoSuchRuleName` above `let Bad_One = 1` still
+reports.
+
+The directive reaches the pretty-printer as well, and only in its bare form. Each
+row below is a file with a member indented 8 spaces, with all 43 rules OFF:
+
+| the directive | the `[Indentation]` finding |
+|---|---|
+| none | YES |
+| `// swift-format-ignore` above the declaration | NO |
+| `// swift-format-ignore: Indentation` above the declaration | YES |
+| `// swift-format-ignore-file` at the top | NO |
+
+A tag is not a rule name, so the named form cannot reach one. An author who wants
+to keep one layout finding out must write the bare form, and that form takes
+every rule off the declaration with it.
+
+## The Swift version floor, and the version CI runs
+
+The floor is **Swift 6.0**, and the `swift format` SUBCOMMAND sets it. Neither
+rule of this section sets it, because each shipped long before the subcommand
+did.
+
+| the question | how it was measured | the answer |
+|---|---|---|
+| when `UseWhereClausesInForLoops` first shipped | `Sources/SwiftFormatRules/UseWhereClausesInForLoops.swift` on `release/5.6` | HTTP 200, so Swift 5.6 or older |
+| when `AlwaysUseLiteralForEmptyCollectionInit` first shipped | the same directory on `release/5.9`, then `Sources/SwiftFormat/Rules/` on `release/5.10` | HTTP 404, then HTTP 200, so Swift 5.10 |
+| when `swift format` first ran | the `README.md` of `release/5.10` and of `release/6.0` | Swift 6.0 |
+
+Each row is one `curl` against the `swiftlang/swift-format` repository, over the
+release branch of each Swift version. The `README.md` of `release/6.0` states the
+answer to row 3 in its own words: "Xcode 16 and above include swift-format in the
+toolchain. You can run `swift-format` from anywhere on the system using
+`swift format` (notice the space instead of dash)." The `README.md` of
+`release/5.10` carries no such line.
+
+**`swift format` reads no `.swift-version` file.** Measured over two directories
+that hold the same file, with `AlwaysUseLiteralForEmptyCollectionInit` ON:
+
+| the directory | findings |
+|---|---|
+| beside a `.swift-version` holding `6.0` | 2 |
+| with no `.swift-version` | 2 |
+
+`swift format lint --help` names no `--swift-version` option, and the binary
+carries no `.swift-version` string. This is the opposite of `swiftformat`, which
+the section "The Swift language version, which the project states" records as
+reading that file for five rules of the roster.
+
+The rule under measurement writes the DO of `idioms.md` as its fix:
+`replace '[Int]()' with ': [Int] = []'`, and
+`replace '[String: Int]()' with ': [String: Int] = [:]'`. That is the opposite
+direction from `swiftformat --property-types inferred`, which the section "Why
+`--property-types inferred` is NOT enabled" records.
+
+**The CI runner runs the same toolchain.** The self-hosted macOS runner writes
+`swift --version` in the step "Ensure the language toolchains the roster tests
+need are available". Read from run `34129568075`, at `2026-09-07T14:09:18Z`:
+
+    Apple Swift version 6.4 (swiftlang-6.4.0.33.1 clang-2100.3.33.1)
+    Target: arm64-apple-macosx27.0.0
+    swift-driver version: 1.168.6
+
+6.4 stands over the floor of 6.0, so a gate that moved to `swift format` would
+not turn CI red for want of a toolchain.

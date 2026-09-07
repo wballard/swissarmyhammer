@@ -1,0 +1,1 @@
+{"id":"01M1Y5GDA3HHGNP2FFKNV4EYX7","timestamp":"2026-09-07T14:49:10.723120Z","op":"create","item_id":"01M1Y5GDA2EGQFFH7N345SPQFR","forward_patch":"--- original\n+++ modified\n@@ -0,0 +1,2 @@\n+color: d876e3\n+tag_name: swift\n","reverse_patch":"--- original\n+++ modified\n@@ -1,2 +0,0 @@\n-color: d876e3\n-tag_name: swift\n","transaction_id":null}

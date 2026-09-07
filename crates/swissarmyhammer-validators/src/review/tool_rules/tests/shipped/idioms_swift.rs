@@ -261,16 +261,7 @@ fn swift_idioms_run(files: &[&str]) -> SwiftIdiomsRun {
         restore: &stage_nothing_more,
     };
 
-    let run = drive_shipped_script_whole(&loader, SWIFT_IDIOMS_RULE, &staging, files);
-    let outcome = run
-        .outcome
-        .expect("the shipped Swift idioms script must judge the probe files and exit 0");
-
-    SwiftIdiomsRun {
-        findings: finding_rows(&outcome, &run.repo_root),
-        rules: finding_rule_names(&outcome, &run.repo_root),
-        declined: script_diagnostics(&outcome, &run.repo_root),
-    }
+    swift_idioms_from_staging(&loader, &staging, files)
 }
 
 /// Drives the shipped script over `source` staged at `path`, with `path` as
@@ -283,15 +274,26 @@ fn swift_idioms_staged_run(path: &str, source: &str) -> SwiftIdiomsRun {
     require_tool_installed(&loader, SWIFT_PROJECT_TYPES, SWIFT_IDIOMS_RULE);
 
     let staged = [(path, source)];
-    let run = drive_shipped_script_whole(
-        &loader,
-        SWIFT_IDIOMS_RULE,
-        &ShippedStaging::of(&staged),
-        &[path],
-    );
+
+    swift_idioms_from_staging(&loader, &ShippedStaging::of(&staged), &[path])
+}
+
+/// Drives the shipped script over `staging` with `files` as the work list, and
+/// answers the whole of what that one run said.
+///
+/// The two helpers above differ in their STAGING alone — one copies the
+/// shipped fixture into the probe repository, and the other writes a probe
+/// file of its own — so the run itself and the three readings a probe takes
+/// off it stand here, once.
+fn swift_idioms_from_staging(
+    loader: &ValidatorLoader,
+    staging: &ShippedStaging<'_>,
+    files: &[&str],
+) -> SwiftIdiomsRun {
+    let run = drive_shipped_script_whole(loader, SWIFT_IDIOMS_RULE, staging, files);
     let outcome = run
         .outcome
-        .expect("the shipped Swift idioms script must judge the probe file and exit 0");
+        .expect("the shipped Swift idioms script must judge the probe files and exit 0");
 
     SwiftIdiomsRun {
         findings: finding_rows(&outcome, &run.repo_root),
@@ -567,6 +569,99 @@ fn the_shipped_swift_idioms_tool_rule_declines_a_file_named_for_a_diagnostic_hea
         "the marked line must name the file it declined; it reads `{}`",
         run.declined[0]
     );
+}
+
+/// A file name a real repository holds that carries a PRECOMPOSED character.
+///
+/// `swift format` writes the path back in NFD, and the argument list carries
+/// it in NFC. Measured with Apple Swift 6.4: the argument list holds
+/// `63 61 66 c3a9 2e 73 77 69 66 74`, and the head of the output line holds
+/// `63 61 66 65 cc81 2e 73 77 69 66 74`. So a reading that compares the path
+/// the tool WROTE with the path the argument list SPELLED matches no line of
+/// this file, and every finding it draws is lost.
+const SWIFT_IDIOMS_ACCENTED_PATH: &str = "café.swift";
+
+/// A file name a real repository holds that carries an alternation bar.
+///
+/// `|` is the alternation operator of an extended regular expression and the
+/// delimiter an `s` command reaches for, so a reading that writes the path
+/// into either one has to escape it — and an escaped delimiter is a delimiter
+/// still. Of the 22 characters measured against the earlier reading, this is
+/// the one that defeated it.
+const SWIFT_IDIOMS_ALTERNATION_PATH: &str = "a|b.swift";
+
+/// The declaration of [`SWIFT_IDIOMS_LONG_TYPE`] whose row a probe of an
+/// unusual file name states.
+const SWIFT_IDIOMS_LONG_TYPE_HEAD: &str = "public static func read(";
+
+/// Holds `run` to reporting the long type names of [`SWIFT_IDIOMS_LONG_TYPE`]
+/// over the file staged at `path`, in the shape the script rewrites the tool's
+/// own line into.
+///
+/// Three readings, and each one holds a half no other holds. A run that
+/// DECLINED the file reports nothing and states the path on the marked
+/// channel. A run that wrote the tool's line UNREWRITTEN states the same
+/// `path:line` row all the same, because the engine reads the first
+/// `:<digits>:` of a line, so the row cannot separate the two shapes. The rule
+/// NAME can: the rewritten line carries `<path>:<line>: <RuleName>: <reason>`,
+/// and the raw line carries the COLUMN number where the name stands.
+fn assert_swift_idioms_reports_the_long_type(run: &SwiftIdiomsRun, path: &str) {
+    assert!(
+        run.declined.is_empty(),
+        "the gate must judge `{path}` rather than decline it; it stated {:?}",
+        run.declined
+    );
+
+    let expected = expected_row(path, SWIFT_IDIOMS_LONG_TYPE, SWIFT_IDIOMS_LONG_TYPE_HEAD);
+    assert!(
+        run.findings.contains(&expected),
+        "the gate must state the row `{expected}` for the long type name of `{path}`; it \
+         reported {:?}",
+        run.findings
+    );
+
+    let carried: std::collections::BTreeSet<&str> = run.rules.iter().map(String::as_str).collect();
+    assert_eq!(
+        carried,
+        std::collections::BTreeSet::from([SWIFT_SHORTHAND_TYPE_RULE]),
+        "every finding over `{path}` must carry `{SWIFT_SHORTHAND_TYPE_RULE}`, in the shape \
+         the script rewrites the tool's own line into; the run reported {:?}",
+        run.rules
+    );
+}
+
+/// Acceptance: the gate reports a file whose name carries a precomposed
+/// character.
+///
+/// The name is a legitimate one, and the reading that anchors on the head of a
+/// diagnostic must not cost it its findings. Measured with Apple Swift 6.4 and
+/// a reading that compared the two spellings of the path: the run wrote
+/// `sah-diagnostic: idioms-swift declined café.swift: ...` and reported
+/// NOTHING, because the tool writes the path in NFD and the argument list
+/// carries it in NFC. The `ünïcodé.swift` name broke the same way, and
+/// `日本語.swift` did not, because those characters have no decomposed form.
+/// So the break is the precomposed Latin letter a real repository writes.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_reports_a_file_whose_name_carries_an_accent() {
+    let run = swift_idioms_staged_run(SWIFT_IDIOMS_ACCENTED_PATH, SWIFT_IDIOMS_LONG_TYPE);
+
+    assert_swift_idioms_reports_the_long_type(&run, SWIFT_IDIOMS_ACCENTED_PATH);
+}
+
+/// Acceptance: the gate reports a file whose name carries an alternation bar.
+///
+/// The name is a legitimate one, and the rewrite that states each finding must
+/// not cost it its shape. Measured with Apple Swift 6.4, BSD sed and a rewrite
+/// that wrote the path into an `s` command delimited by `|`: the run wrote the
+/// tool's own line, `a|b.swift:2:39: error: [UseShorthandTypeNames] use
+/// shorthand syntax for this 'Array' type`, because the escaper spelled the
+/// bar `\|` and BSD sed reads that as an escaped DELIMITER rather than as a
+/// literal bar, so the substitution was skipped without a word.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_reports_a_file_whose_name_carries_an_alternation_bar() {
+    let run = swift_idioms_staged_run(SWIFT_IDIOMS_ALTERNATION_PATH, SWIFT_IDIOMS_LONG_TYPE);
+
+    assert_swift_idioms_reports_the_long_type(&run, SWIFT_IDIOMS_ALTERNATION_PATH);
 }
 
 /// A Swift file written the way the two Swift prompt rules ASK for.

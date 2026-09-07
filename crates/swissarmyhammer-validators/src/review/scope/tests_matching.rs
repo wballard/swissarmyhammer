@@ -670,8 +670,8 @@ async fn file_scope_of_an_ignored_path_yields_empty_scope() {
 }
 
 /// A commit range that holds a file whose bytes are not UTF-8 must still
-/// produce a REPORT. The binary file is named among the files the run did
-/// not review, and the source edit beside it is reviewed as usual. Before
+/// produce a REPORT. The report names the binary file among the files the run
+/// did not review. The run reviews the source edit beside it as usual. Before
 /// this, the blob read failed the whole run and there was no report at all.
 #[tokio::test]
 async fn sha_scope_reports_a_binary_file_rather_than_failing_the_run() {
@@ -725,9 +725,9 @@ async fn sha_scope_reports_a_binary_file_rather_than_failing_the_run() {
 }
 
 /// `.reviewignore` must be able to exclude a file that is not UTF-8. The
-/// ignore rules are applied BEFORE the blob is read, so the pattern claims
-/// the path and its bytes never reach the engine. Before this the read came
-/// first, so the pattern never got its chance.
+/// stage applies the ignore rules BEFORE it reads the blob. So the pattern
+/// claims the path, and its bytes never reach the engine. Before this the read
+/// came first, so the pattern never got its chance.
 #[tokio::test]
 async fn reviewignore_excludes_a_file_that_is_not_utf8() {
     let repo = TestRepo::new();

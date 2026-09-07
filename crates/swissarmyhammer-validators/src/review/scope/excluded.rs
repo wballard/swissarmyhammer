@@ -55,8 +55,8 @@ impl ExclusionKind {
     /// that, so it can never carry that claim — it is the exact reading
     /// `^g7d3tzq` exists to prevent. A file that is not text gives the same
     /// reading. Nobody asked for a picture to go unreviewed. A repository that
-    /// wants one deliberately excluded writes the `.reviewignore` pattern.
-    /// That pattern makes it [`ExclusionKind::ReviewIgnore`] instead.
+    /// deliberately excludes one writes the `.reviewignore` pattern. That
+    /// pattern makes it [`ExclusionKind::ReviewIgnore`] instead.
     pub fn is_deliberate(self) -> bool {
         match self {
             ExclusionKind::ReviewIgnore | ExclusionKind::ValidatorFixture => true,

@@ -2541,16 +2541,17 @@ for f in "$@"; do awk -v f="$f" '/TODO/ {{ print f ":" NR ": TODO left in code" 
 
     // ---- a file whose bytes are not text ----------------------------------
 
-    /// A picture committed beside a source edit. Its bytes are not text, so
-    /// the scope stage can read no side of it.
+    /// A picture the test commits beside a source edit. Its bytes are not
+    /// text, so the scope stage can read no side of it.
     const PICTURE_FILE: &str = "image.png";
 
     /// Bytes that are not UTF-8. The first byte cannot start a UTF-8
     /// sequence, so the blob read rejects them. This models a picture.
     const PICTURE_BYTES: &[u8] = &[0xff, 0xfe, 0x00, 0x01];
 
-    /// The source edit committed beside [`PICTURE_FILE`]. It keeps the TODO,
-    /// so the tool rule still reports one finding on the file it can read.
+    /// The source edit the test commits beside [`PICTURE_FILE`]. It keeps the
+    /// TODO, so the tool rule still reports one finding on the file it can
+    /// read.
     const SOURCE_EDITED_BESIDE_THE_PICTURE: &str = "fn a() {}\n// TODO: fix this\nfn added() {}\n";
 
     /// Acceptance: a range that holds a file which is not text still gives a
@@ -2559,8 +2560,8 @@ for f in "$@"; do awk -v f="$f" '/TODO/ {{ print f ":" NR ": TODO left in code" 
     /// The reason phrase is the whole signal to a reader. Without it the
     /// picture leaves the run in silence. Zero findings over a file nothing
     /// read must never look like zero findings over a file the engine read.
-    /// The source edit beside the picture proves the rest of the range is
-    /// still reviewed.
+    /// The source edit beside the picture proves the run still reviews the
+    /// rest of the range.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn review_sha_over_a_file_that_is_not_text_names_the_reason_in_the_report() {
         let (repo, conn) = todo_repo();

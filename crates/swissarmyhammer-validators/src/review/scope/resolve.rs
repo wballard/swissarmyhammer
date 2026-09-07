@@ -71,11 +71,11 @@ pub(super) fn resolve_scope_files(scope: &Scope, repo_path: &Path) -> Result<Sco
     // and non-code, so it never enters the working scope resolved below.
     ensure_reviewignore(repo_path)?;
 
-    // The matcher is built BEFORE any resolver runs. Each resolver then
-    // applies it to its candidate paths BEFORE it reads their content. See
-    // `split_ignored`. This stage used to read first. A pattern could then not
-    // reach a path whose own read failed. A `*.png` line could not exclude a
-    // tracked picture, because the blob read raised first.
+    // `resolve_scope_files` builds the matcher BEFORE any resolver runs. Each
+    // resolver then applies it to its candidate paths BEFORE it reads their
+    // content. See `split_ignored`. This stage used to read first. A pattern
+    // could then not reach a path whose own read failed. A `*.png` line could
+    // not exclude a tracked picture, because the blob read raised first.
     let matcher = load_review_ignore_matcher(repo_path)?;
     match scope {
         Scope::Working => resolve_working(repo_path, &matcher),
@@ -85,8 +85,9 @@ pub(super) fn resolve_scope_files(scope: &Scope, repo_path: &Path) -> Result<Sco
     }
 }
 
-/// Split a scope's candidate paths into the ones left to read and one
-/// [`ExcludedFile`] per path the review-scope ignore `matcher` excludes.
+/// Split a scope's candidate paths into the ones this function keeps to read,
+/// and one [`ExcludedFile`] per path the review-scope ignore `matcher`
+/// excludes.
 ///
 /// The uniform choke point every scope passes its candidates through. Thus the
 /// stage drops a `.kanban/` board or a gitignored artifact identically. The
@@ -94,8 +95,8 @@ pub(super) fn resolve_scope_files(scope: &Scope, repo_path: &Path) -> Result<Sco
 /// filter runs BEFORE the content read. Thus a pattern can exclude a path the
 /// engine cannot decode at all. [`confine_to_repo`] rejects an escaping path
 /// independently and earlier. So this filter is about relevance, not
-/// containment. The matcher is only ever handed a repo-relative path, which is
-/// what [`Gitignore::matched_path_or_any_parents`] requires.
+/// containment. This function only ever hands the matcher a repo-relative
+/// path, which is what [`Gitignore::matched_path_or_any_parents`] requires.
 ///
 /// A `Scope::File` naming an ignored path therefore resolves to a scope with
 /// nothing left to review — consistent with the other scopes, never an error.
@@ -256,9 +257,9 @@ pub(super) fn confine_to_repo(repo_path: &Path, path: &str) -> Result<PathBuf, A
 /// [`read_to_string`](std::fs::read_to_string) cannot decode it. The two
 /// states stay apart. Thus the stage never silently diffs an unreadable
 /// tracked file as wholly added or wholly removed. Its caller drops that file
-/// out of scope and reports it instead. Any *other* failure, a permission
-/// error for one, is propagated as [`AvpError::Context`]. A containment
-/// violation surfaces as [`AvpError::Validator`].
+/// out of scope and reports it instead. This function propagates any *other*
+/// failure, a permission error for one, as [`AvpError::Context`]. A
+/// containment violation surfaces as [`AvpError::Validator`].
 ///
 /// # Errors
 ///
@@ -363,16 +364,16 @@ impl std::fmt::Display for FilePath {
 /// Returns [`FileText::NotUtf8`] when the blob is there and its bytes are not
 /// text. The two states stay apart. Thus the stage never silently diffs an
 /// undecodable tracked file as wholly added or wholly removed. Its caller
-/// drops that file out of scope and reports it instead. Any other libgit2
-/// failure is propagated as [`AvpError::Context`].
+/// drops that file out of scope and reports it instead. This function
+/// propagates any other libgit2 failure as [`AvpError::Context`].
 pub(super) fn read_at_ref(
     repo: &GitOperations,
     refspec: GitRefSpec,
     path: FilePath,
 ) -> Result<FileText, AvpError> {
-    // The blob address, composed once. The read, the failure message and the
-    // undecodable log all reuse it. Thus the `refspec:path` form lives in a
-    // single place.
+    // The blob address. This function composes it one time. The read, the
+    // failure message and the undecodable log all reuse it. Thus the
+    // `refspec:path` form lives in a single place.
     let spec = format!("{refspec}:{path}");
     let inner = repo.repository().inner();
     let object = match inner.revparse_single(&spec) {
@@ -415,14 +416,19 @@ pub(super) enum FileText {
     Text(String),
     /// The side holds no content.
     ///
-    /// Two producers answer `Absent`, and they mean different things. A
-    /// reader answers `Absent` when the file does not exist at the revision.
-    /// That is the Added or Deleted signal. A resolver instead CHOOSES
-    /// `Absent` for a base side it never reads, because its scope reviews
-    /// whole content. The file can be present at that revision. See the base
-    /// side of `resolve_file` and of `resolve_glob`.
+    /// Two kinds of producer answer `Absent`, and they mean different things.
+    /// A reader answers `Absent` when the file does not exist at the
+    /// revision. That is the Added or Deleted signal. A resolver instead
+    /// CHOOSES `Absent` for a base side, because its scope reviews whole
+    /// content. The file can be present at that revision.
     ///
-    /// Both producers mean one thing to the diff. There is no before text, so
+    /// The two resolvers reach that choice differently. `resolve_glob` reads
+    /// no base side at all, and it gives every matched file `Absent`.
+    /// `resolve_file` DOES read a base side, at HEAD. It keeps that side when
+    /// the bytes differ from the working side. It discards that side, and
+    /// records `Absent` instead, only when the two sides are equal.
+    ///
+    /// Both kinds mean one thing to the diff. There is no before text, so
     /// every entity in the file reads as added work. The variant states that
     /// one downstream fact, never the cause behind it.
     Absent,
@@ -435,9 +441,9 @@ impl FileText {
     /// `Some(None)`. A side that holds text gives `Some(Some(text))`. A side
     /// whose bytes are not text gives `None`.
     ///
-    /// The outer option is whether the side could be READ. The inner one is
-    /// whether the side holds any CONTENT. They are never the same question,
-    /// which is exactly what a bare `Option<String>` could not say.
+    /// The outer option says whether a reader could READ the side. The inner
+    /// one says whether the side holds any CONTENT. They are never the same
+    /// question, which is exactly what a bare `Option<String>` could not say.
     fn text(self) -> Option<Option<String>> {
         match self {
             FileText::Text(text) => Some(Some(text)),
@@ -452,9 +458,9 @@ impl FileText {
 ///
 /// The single place a [`FileText`] becomes a [`BeforeContent`] and
 /// [`AfterContent`] pair. Thus no resolver can quietly turn an undecodable
-/// side into an absent one. A caller handed `None` has no content to record,
-/// and must exclude the file instead. One undecodable side is enough. A file
-/// that is binary at either revision cannot be diffed at all.
+/// side into an absent one. A caller that gets `None` has no content to
+/// record, and must exclude the file instead. One undecodable side is enough.
+/// The sem differ cannot diff a file that is binary at either revision.
 fn readable_sides(before: FileText, after: FileText) -> Option<(BeforeContent, AfterContent)> {
     let before = BeforeContent::new(before.text()?);
     let after = AfterContent::new(after.text()?);
@@ -470,9 +476,10 @@ fn readable_sides(before: FileText, after: FileText) -> Option<(BeforeContent, A
 /// identically. `sides` reads one path's base and post-change content, so a
 /// resolver's only job is to say where each side comes from.
 ///
-/// Returns the paths that really were read, in the candidate order, beside the
-/// builder holding their sem-diff inputs. A candidate missing from that list is
-/// in `excluded`, so reviewed plus excluded still accounts for every candidate.
+/// Returns the paths this function really read, in the candidate order, beside
+/// the builder holding their sem-diff inputs. A candidate missing from that
+/// list is in `excluded`, so reviewed plus excluded still accounts for every
+/// candidate.
 fn read_candidates<F>(
     files: &[String],
     renames: &BTreeMap<String, String>,
@@ -695,8 +702,9 @@ pub(super) fn resolve_working(
     // carries rather than the whole file over again.
     let renames = working_rename_sources(&repo);
 
-    // Each candidate's working-tree content is read once. A file with no
-    // content is a deletion. It reads as absent and is diffed as a deletion.
+    // This closure reads each candidate's working-tree content one time. A
+    // file with no content is a deletion. It reads as absent, so the sem
+    // differ treats it as a deletion.
     let (files, builder) = read_candidates(&candidates, &renames, &mut excluded, |path| {
         let after = read_working(repo_path, path)?;
         let base = base_path(&renames, path);
@@ -780,8 +788,8 @@ pub(super) fn resolve_file(
 
     let (candidates, mut excluded) = split_ignored(vec![path.to_string()], matcher);
 
-    // A single named file is reviewed whole, so there is no move to recognize:
-    // its base side is its own path at HEAD or nothing.
+    // This scope reviews a single named file whole, so there is no move to
+    // recognize. Its base side is its own path at HEAD, or nothing.
     let renames = BTreeMap::new();
     let (files, builder) = read_candidates(&candidates, &renames, &mut excluded, |candidate| {
         let working = read_working(repo_path, candidate)?;

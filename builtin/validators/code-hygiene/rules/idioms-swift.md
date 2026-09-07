@@ -610,16 +610,53 @@ written as `[SpacingCharacter]`.
   `lineLength`. The WHITESPACE LINTER writes them.
 
 `strings` cannot answer this question, and an earlier version of this section
-was wrong because it tried. Six of the nine names are 15 bytes or shorter, so
-Swift keeps each of them inside the instruction stream and not as data:
+gave a wrong reason for that. Each name has TWO forms, and both of them were
+measured on the Apple Swift 6.4 binary. The number is what `grep -cx` writes:
 
-    strings -a "$(xcrun --find swift-format)" | grep -cx AddLines
+    B="$(xcrun --find swift-format)"
+    strings -a "$B" | grep -cx <name>
 
-writes 0, and it writes 0 for `Indentation`, `LineLength`, `RemoveLine`,
-`Spacing` and `TrailingComma` as well.
+    addLines             1   AddLines             0
+    indentation          5   Indentation          0
+    lineLength           2   LineLength           0
+    removeLine           1   RemoveLine           0
+    spacing              1   Spacing              0
+    trailingComma        1   TrailingComma        0
+    endOfLineComment     1   EndOfLineComment     1
+    spacingCharacter     1   SpacingCharacter     1
+    trailingWhitespace   1   TrailingWhitespace   1
 
-The CASE names do stand in the binary, in the `__swift5_fieldmd` section, which
-is Swift's own reflection metadata. This command reads them:
+So EVERY one of the nine CASE names stands in the binary as data. The earlier
+version of this section said they did not, and that is the sentence this one
+corrects.
+
+The TAG form is a second string, and `strings` finds three of the nine. Those
+three are exactly the three that are 16 bytes or longer. A name of 15 bytes or
+fewer is invisible to `strings` whether the tool holds it or not, because Swift
+keeps a string literal of that size inside the instruction stream and not in a
+data section. A two-line probe measures that limit by itself:
+
+    func fifteen() -> String { return "AAAAAAAAAAAAAAA" }
+    func sixteen() -> String { return "BBBBBBBBBBBBBBBB" }
+    print(fifteen(), sixteen())
+
+    xcrun swiftc -O Probe.swift -o Probe
+    strings -a Probe | grep -cx 'AAAAAAAAAAAAAAA'    # writes 0
+    strings -a Probe | grep -cx 'BBBBBBBBBBBBBBBB'   # writes 1
+
+So the number `strings` writes for a TAG form measures the LENGTH of that name,
+and not whether the tool knows it.
+
+Neither number answers the question this section asks, and the length is not
+why. `strings` writes a run of bytes and it NEVER writes the type that owns the
+run. The name `indentation` stands five times in the binary, and no line of the
+output says which of the five is a case of `WhitespaceFindingCategory`. The
+question is WHICH names are the finding categories, so the answer must come
+from the metadata that holds a name beside its type.
+
+That metadata is the `__swift5_fieldmd` section. It carries one field
+descriptor for each type of the image, and a descriptor names its own type and
+points at the name of each of its cases. This command reads them:
 
     python3 cases.py "$(xcrun --find swift-format)"
 

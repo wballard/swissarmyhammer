@@ -1028,6 +1028,15 @@ fn swift_format_configuration_with_every_rule_off() -> String {
         .output()
         .expect("the installed Swift toolchain must write its swift-format configuration");
 
+    assert!(
+        dumped.status.success(),
+        "`{SWIFT_TOOLCHAIN_TOOL} {SWIFT_FORMAT_SUBCOMMAND} {SWIFT_FORMAT_DUMP_VERB}` must write \
+         the configuration this measurement switches off; it exited {} and wrote {:?} on stderr. \
+         A run that read the stdout alone would land on the JSON below and name the wrong cause",
+        dumped.status,
+        String::from_utf8_lossy(&dumped.stderr)
+    );
+
     let mut configuration: serde_json::Value = serde_json::from_slice(&dumped.stdout)
         .expect("`swift format dump-configuration` must write JSON");
 
@@ -1153,11 +1162,16 @@ fn rule_body_table(body: &str, heading: &str) -> Vec<Vec<String>> {
 /// `swift format` writes a `[<Name>]` tag for every finding, and the tags the
 /// 43 configurable rules do NOT own are the cases of two enumerations inside
 /// the tool. Neither the command line nor `dump-configuration` names those
-/// cases, and `strings` cannot find them: six of the nine names are 15 bytes or
-/// shorter, so Swift keeps them inside the instruction stream rather than as
-/// data, and `strings -a <binary> | grep -cx AddLines` writes 0. The CASE names
-/// stand in the `__swift5_fieldmd` section of the image, which is what this
-/// module reads.
+/// cases, and `strings` cannot answer the question either, for a reason that
+/// has nothing to do with which names stand in the file. Measured on the Apple
+/// Swift 6.4 binary, `strings -a <binary> | grep -cx <case>` writes 1 or more
+/// for every one of the nine CASE names, each of them in `__swift5_reflstr`.
+/// What `strings` never writes is the OWNER of a name: `indentation` alone
+/// stands five times, in `__objc_methname` as well, and nothing in the output
+/// says which of the five is a case of `WhitespaceFindingCategory`. Only the
+/// reflection metadata pairs a name with the type that holds it, and that
+/// pairing is the whole question, so that is what this module reads, out of
+/// the `__swift5_fieldmd` section of the image.
 ///
 /// It reads a Mach-O image, so it stands under macOS alone. That is the image
 /// format of the toolchain the self-hosted CI runner ships, and it is the
@@ -1228,204 +1242,15 @@ mod swift_reflection {
     /// a person reads.
     const SWIFT_DIRECT_SYMBOLIC_REFERENCE: u8 = 0x01;
 
-    /// How many bytes a relative pointer holds.
-    const SWIFT_RELATIVE_POINTER_SIZE: usize = 4;
-
-    /// One section of a Mach-O image.
-    struct Section {
-        /// The section's own name, as `__swift5_fieldmd`.
-        name: String,
-
-        /// The address the image maps the section at.
-        address: u64,
-
-        /// How many bytes the section holds.
-        bytes: u64,
-
-        /// Where those bytes stand in the file.
-        file_offset: usize,
-    }
-
-    /// The four bytes at `offset`.
-    fn four_bytes(image: &[u8], offset: usize) -> [u8; SWIFT_RELATIVE_POINTER_SIZE] {
-        image[offset..offset + SWIFT_RELATIVE_POINTER_SIZE]
-            .try_into()
-            .expect("a four byte window inside the image")
-    }
-
-    /// The unsigned 32-bit word at `offset`.
-    fn word(image: &[u8], offset: usize) -> u32 {
-        u32::from_le_bytes(four_bytes(image, offset))
-    }
-
-    /// The signed 32-bit word at `offset`.
-    fn signed_word(image: &[u8], offset: usize) -> i32 {
-        i32::from_le_bytes(four_bytes(image, offset))
-    }
-
     /// How many bytes a 16-bit word holds.
     const HALF_WORD_SIZE: usize = 2;
 
+    /// How many bytes a 32-bit word holds, which is also the width of every
+    /// relative pointer of Swift's reflection metadata.
+    const WORD_SIZE: usize = 4;
+
     /// How many bytes a 64-bit word holds.
     const LONG_WORD_SIZE: usize = 8;
-
-    /// The unsigned 16-bit word at `offset`.
-    fn half_word(image: &[u8], offset: usize) -> u16 {
-        let bytes: [u8; HALF_WORD_SIZE] = image[offset..offset + HALF_WORD_SIZE]
-            .try_into()
-            .expect("a two byte window inside the image");
-        u16::from_le_bytes(bytes)
-    }
-
-    /// The unsigned 64-bit word at `offset`.
-    fn long_word(image: &[u8], offset: usize) -> u64 {
-        let bytes: [u8; LONG_WORD_SIZE] = image[offset..offset + LONG_WORD_SIZE]
-            .try_into()
-            .expect("an eight byte window inside the image");
-        u64::from_le_bytes(bytes)
-    }
-
-    /// The name a `section_64` record at `record` carries.
-    fn section_name(image: &[u8], record: usize) -> String {
-        let raw = &image[record..record + MACH_O_SECTION_NAME_SIZE];
-        let named = raw.split(|byte| *byte == 0).next().unwrap_or_default();
-        String::from_utf8_lossy(named).into_owned()
-    }
-
-    /// Every section of `image`, in the order the load commands name them.
-    fn sections(image: &[u8]) -> Vec<Section> {
-        assert_eq!(
-            word(image, 0),
-            MACH_O_MAGIC_64,
-            "the toolchain binary must be a 64-bit little-endian Mach-O image"
-        );
-
-        let mut found = Vec::new();
-        let mut command = MACH_O_HEADER_SIZE;
-
-        for _ in 0..word(image, MACH_O_COMMAND_COUNT_OFFSET) {
-            if word(image, command) == MACH_O_SEGMENT_COMMAND_64 {
-                let count = word(image, command + MACH_O_SEGMENT_SECTION_COUNT_OFFSET);
-                for index in 0..count as usize {
-                    let record =
-                        command + MACH_O_SEGMENT_SECTIONS_OFFSET + index * MACH_O_SECTION_SIZE;
-                    found.push(Section {
-                        name: section_name(image, record),
-                        address: long_word(image, record + MACH_O_SECTION_ADDRESS_OFFSET),
-                        bytes: long_word(image, record + MACH_O_SECTION_BYTES_OFFSET),
-                        file_offset: word(image, record + MACH_O_SECTION_FILE_OFFSET_OFFSET)
-                            as usize,
-                    });
-                }
-            }
-            command += word(image, command + MACH_O_COMMAND_SIZE_OFFSET) as usize;
-        }
-
-        found
-    }
-
-    /// Where the byte mapped at `address` stands in the file.
-    fn file_offset(sections: &[Section], address: u64) -> usize {
-        sections
-            .iter()
-            .find(|section| section.address <= address && address < section.address + section.bytes)
-            .map(|section| section.file_offset + (address - section.address) as usize)
-            .expect("a reflection address must stand inside a section of the image")
-    }
-
-    /// The NUL-terminated bytes that start at `address`.
-    fn text(image: &[u8], sections: &[Section], address: u64) -> Vec<u8> {
-        let start = file_offset(sections, address);
-        let length = image[start..]
-            .iter()
-            .position(|byte| *byte == 0)
-            .expect("a reflection string must be NUL terminated");
-        image[start..start + length].to_vec()
-    }
-
-    /// The address the Swift relative pointer at `address` names.
-    ///
-    /// Swift writes every pointer of its reflection metadata as a signed 32-bit
-    /// offset from the field that HOLDS it, so the image runs wherever it is
-    /// mapped.
-    fn relative_target(image: &[u8], sections: &[Section], address: u64) -> u64 {
-        let offset = signed_word(image, file_offset(sections, address));
-        address.wrapping_add(offset as i64 as u64)
-    }
-
-    /// The name of the type a field descriptor at `descriptor` describes.
-    ///
-    /// A descriptor whose mangled name is not a direct symbolic reference to a
-    /// nominal type descriptor answers NOTHING. This reads the shape the
-    /// measured toolchain writes, so a release that wrote another shape drops
-    /// the type out of the answer rather than making a name up for it.
-    fn type_name(image: &[u8], sections: &[Section], descriptor: u64) -> Option<String> {
-        if signed_word(image, file_offset(sections, descriptor)) == 0 {
-            return None;
-        }
-
-        let mangled = relative_target(image, sections, descriptor);
-        if text(image, sections, mangled).first() != Some(&SWIFT_DIRECT_SYMBOLIC_REFERENCE) {
-            return None;
-        }
-
-        let nominal = relative_target(image, sections, mangled + 1);
-        let named = relative_target(image, sections, nominal + SWIFT_TYPE_DESCRIPTOR_NAME_OFFSET);
-        Some(String::from_utf8_lossy(&text(image, sections, named)).into_owned())
-    }
-
-    /// The names of the `count` field records of the descriptor at
-    /// `descriptor`, each `record_size` bytes wide.
-    fn record_names(
-        image: &[u8],
-        sections: &[Section],
-        descriptor: u64,
-        record_size: u64,
-        count: u64,
-    ) -> Vec<String> {
-        (0..count)
-            .map(|index| {
-                let record =
-                    descriptor + SWIFT_FIELD_DESCRIPTOR_HEAD_SIZE as u64 + index * record_size;
-                let named =
-                    relative_target(image, sections, record + SWIFT_FIELD_RECORD_NAME_OFFSET);
-                String::from_utf8_lossy(&text(image, sections, named)).into_owned()
-            })
-            .collect()
-    }
-
-    /// The case names of every type of `image` whose name ends in `suffix`,
-    /// keyed by the type's own name.
-    pub fn cases_of_types_named(image: &[u8], suffix: &str) -> BTreeMap<String, Vec<String>> {
-        let sections = sections(image);
-        let metadata = sections
-            .iter()
-            .find(|section| section.name == SWIFT_FIELD_METADATA_SECTION)
-            .expect("the toolchain binary must carry a `__swift5_fieldmd` section");
-
-        let mut found = BTreeMap::new();
-        let mut walked: u64 = 0;
-
-        while walked + SWIFT_FIELD_DESCRIPTOR_HEAD_SIZE as u64 <= metadata.bytes {
-            let descriptor = metadata.address + walked;
-            let head = metadata.file_offset + walked as usize;
-            let record_size = u64::from(half_word(image, head + SWIFT_FIELD_RECORD_SIZE_OFFSET));
-            let count = u64::from(word(image, head + SWIFT_FIELD_RECORD_COUNT_OFFSET));
-
-            if let Some(name) = type_name(image, &sections, descriptor) {
-                if name.ends_with(suffix) {
-                    found.insert(
-                        name,
-                        record_names(image, &sections, descriptor, record_size, count),
-                    );
-                }
-            }
-
-            walked += SWIFT_FIELD_DESCRIPTOR_HEAD_SIZE as u64 + count * record_size;
-        }
-
-        found
-    }
 
     /// The suffix the name of every `swift format` finding-category type ends
     /// in.
@@ -1456,6 +1281,406 @@ mod swift_reflection {
     /// The binary the `swift format` subcommand runs.
     const SWIFT_FORMAT_BINARY: &str = "swift-format";
 
+    /// Why this walk could not answer which tags the toolchain owns.
+    ///
+    /// Every arm is an EXPECTED answer rather than a defect of the walk: a
+    /// machine with no Swift toolchain, a release that rebuilt the binary in
+    /// another shape, and a path that names a file this walk cannot read all
+    /// reach one of them. So the walk answers each of them, and the caller
+    /// states the one it met. Nothing here panics, because a panic would put
+    /// the wrong cause in front of the person reading the run.
+    #[derive(Debug, thiserror::Error)]
+    pub enum ReflectionFailure {
+        /// The locator command could not be started at all.
+        #[error("`{command}` could not be started: {source}")]
+        LocatorFailed {
+            /// The command, written the way a person would run it.
+            command: String,
+
+            /// What the operating system answered.
+            source: std::io::Error,
+        },
+
+        /// The locator ran and named no path.
+        ///
+        /// This is the answer a machine with no Swift toolchain gives, and it
+        /// is the one shape whose own message names the cause. Measured with
+        /// Apple Swift 6.4, `xcrun --find swift-format-does-not-exist` exits
+        /// 72, writes NOTHING on stdout, and writes `unable to find utility
+        /// ...` on stderr. A caller that read the status alone would carry an
+        /// empty path forward and report a missing file, which names the wrong
+        /// cause, so the status and the stderr both stand here.
+        #[error("`{command}` exited {status} and named no path; it wrote {stderr:?} on stderr")]
+        NotLocated {
+            /// The command, written the way a person would run it.
+            command: String,
+
+            /// How the run ended.
+            status: String,
+
+            /// What the run wrote on stderr, which names the cause.
+            stderr: String,
+        },
+
+        /// The path the locator named could not be read.
+        #[error("read the toolchain binary at `{path}`: {source}")]
+        Unreadable {
+            /// The path the locator named.
+            path: String,
+
+            /// What the operating system answered.
+            source: std::io::Error,
+        },
+
+        /// The file the locator named is not the image shape this walk reads.
+        #[error(
+            "`{path}` is not a 64-bit little-endian Mach-O image; it opens with {magic:#010x}"
+        )]
+        NotMachO {
+            /// The path the locator named.
+            path: String,
+
+            /// The word the file opens with.
+            magic: u32,
+        },
+
+        /// A window this walk asked for runs past the end of the image.
+        #[error(
+            "the toolchain binary holds {held} bytes, and this walk asked for {wanted} at {offset}"
+        )]
+        Truncated {
+            /// Where the window opens.
+            offset: usize,
+
+            /// How many bytes the window holds.
+            wanted: usize,
+
+            /// How many bytes the image holds.
+            held: usize,
+        },
+
+        /// A load command of zero bytes, which no walk can step over.
+        #[error("the load command at {offset} states a length of zero bytes")]
+        EmptyLoadCommand {
+            /// Where that load command stands.
+            offset: usize,
+        },
+
+        /// A reflection address that falls inside no section of the image.
+        #[error(
+            "the reflection address {address:#x} falls inside no section of the toolchain binary"
+        )]
+        Unmapped {
+            /// The address that falls outside every section.
+            address: u64,
+        },
+
+        /// A reflection string that runs to the end of the image with no NUL.
+        #[error("the reflection string at {address:#x} runs to the end of the toolchain binary")]
+        Unterminated {
+            /// Where that string opens.
+            address: u64,
+        },
+
+        /// An image that carries no field metadata for this walk to read.
+        #[error("the toolchain binary carries no `{section}` section")]
+        NoFieldMetadata {
+            /// The section the walk reads.
+            section: &'static str,
+        },
+
+        /// An image whose finding-category types are not the ones measured.
+        ///
+        /// A release that adds a category type, renames one, or drops one
+        /// reaches this arm, rather than answering a short list that the two
+        /// hand-written lists of the rule body still match.
+        #[error(
+            "the reflection metadata of `{path}` must carry the finding-category types the \
+             `{rule}.md` measurement names, which are {expected:?}; it carries {named:?}"
+        )]
+        UnexpectedCategories {
+            /// The path the locator named.
+            path: String,
+
+            /// The shipped rule whose measurement names the types.
+            rule: &'static str,
+
+            /// The type names the measurement records.
+            expected: Vec<String>,
+
+            /// The type names the binary carries.
+            named: Vec<String>,
+        },
+    }
+
+    /// One section of a Mach-O image.
+    struct Section {
+        /// The section's own name, as `__swift5_fieldmd`.
+        name: String,
+
+        /// The address the image maps the section at.
+        address: u64,
+
+        /// How many bytes the section holds.
+        bytes: u64,
+
+        /// Where those bytes stand in the file.
+        file_offset: usize,
+    }
+
+    /// The locator command, written the way a person would run it.
+    fn locator_command() -> String {
+        format!("{XCRUN_TOOL} {XCRUN_FIND_FLAG} {SWIFT_FORMAT_BINARY}")
+    }
+
+    /// The `N` bytes of `image` at `offset`.
+    ///
+    /// A window that runs past the end answers a failure rather than panicking,
+    /// because a file that is not the image this walk reads is one of the
+    /// answers the locator can give.
+    fn window<const N: usize>(image: &[u8], offset: usize) -> Result<[u8; N], ReflectionFailure> {
+        image
+            .get(offset..offset.saturating_add(N))
+            .and_then(|bytes| <[u8; N]>::try_from(bytes).ok())
+            .ok_or(ReflectionFailure::Truncated {
+                offset,
+                wanted: N,
+                held: image.len(),
+            })
+    }
+
+    /// The unsigned 32-bit word at `offset`.
+    fn word(image: &[u8], offset: usize) -> Result<u32, ReflectionFailure> {
+        Ok(u32::from_le_bytes(window::<WORD_SIZE>(image, offset)?))
+    }
+
+    /// The signed 32-bit word at `offset`.
+    fn signed_word(image: &[u8], offset: usize) -> Result<i32, ReflectionFailure> {
+        Ok(i32::from_le_bytes(window::<WORD_SIZE>(image, offset)?))
+    }
+
+    /// The unsigned 16-bit word at `offset`.
+    fn half_word(image: &[u8], offset: usize) -> Result<u16, ReflectionFailure> {
+        Ok(u16::from_le_bytes(window::<HALF_WORD_SIZE>(image, offset)?))
+    }
+
+    /// The unsigned 64-bit word at `offset`.
+    fn long_word(image: &[u8], offset: usize) -> Result<u64, ReflectionFailure> {
+        Ok(u64::from_le_bytes(window::<LONG_WORD_SIZE>(image, offset)?))
+    }
+
+    /// The name a `section_64` record at `record` carries.
+    fn section_name(image: &[u8], record: usize) -> Result<String, ReflectionFailure> {
+        let raw = window::<MACH_O_SECTION_NAME_SIZE>(image, record)?;
+        let named = raw.split(|byte| *byte == 0).next().unwrap_or_default();
+        Ok(String::from_utf8_lossy(named).into_owned())
+    }
+
+    /// Every section of `image`, in the order the load commands name them.
+    fn sections(image: &[u8], path: &str) -> Result<Vec<Section>, ReflectionFailure> {
+        let magic = word(image, 0)?;
+        if magic != MACH_O_MAGIC_64 {
+            return Err(ReflectionFailure::NotMachO {
+                path: path.to_string(),
+                magic,
+            });
+        }
+
+        let mut found = Vec::new();
+        let mut command = MACH_O_HEADER_SIZE;
+
+        for _ in 0..word(image, MACH_O_COMMAND_COUNT_OFFSET)? {
+            if word(image, command)? == MACH_O_SEGMENT_COMMAND_64 {
+                let count = word(
+                    image,
+                    command.saturating_add(MACH_O_SEGMENT_SECTION_COUNT_OFFSET),
+                )?;
+                for index in 0..count as usize {
+                    let record = command
+                        .saturating_add(MACH_O_SEGMENT_SECTIONS_OFFSET)
+                        .saturating_add(index.saturating_mul(MACH_O_SECTION_SIZE));
+                    found.push(Section {
+                        name: section_name(image, record)?,
+                        address: long_word(
+                            image,
+                            record.saturating_add(MACH_O_SECTION_ADDRESS_OFFSET),
+                        )?,
+                        bytes: long_word(
+                            image,
+                            record.saturating_add(MACH_O_SECTION_BYTES_OFFSET),
+                        )?,
+                        file_offset: word(
+                            image,
+                            record.saturating_add(MACH_O_SECTION_FILE_OFFSET_OFFSET),
+                        )? as usize,
+                    });
+                }
+            }
+
+            let length = word(image, command.saturating_add(MACH_O_COMMAND_SIZE_OFFSET))? as usize;
+            if length == 0 {
+                return Err(ReflectionFailure::EmptyLoadCommand { offset: command });
+            }
+            command = command.saturating_add(length);
+        }
+
+        Ok(found)
+    }
+
+    /// Where the byte mapped at `address` stands in the file.
+    fn file_offset(sections: &[Section], address: u64) -> Result<usize, ReflectionFailure> {
+        sections
+            .iter()
+            .find(|section| {
+                section.address <= address
+                    && address < section.address.saturating_add(section.bytes)
+            })
+            .map(|section| {
+                section
+                    .file_offset
+                    .saturating_add((address - section.address) as usize)
+            })
+            .ok_or(ReflectionFailure::Unmapped { address })
+    }
+
+    /// The NUL-terminated bytes that start at `address`.
+    fn text(
+        image: &[u8],
+        sections: &[Section],
+        address: u64,
+    ) -> Result<Vec<u8>, ReflectionFailure> {
+        let start = file_offset(sections, address)?;
+        let rest = image.get(start..).ok_or(ReflectionFailure::Truncated {
+            offset: start,
+            wanted: 0,
+            held: image.len(),
+        })?;
+        let length = rest
+            .iter()
+            .position(|byte| *byte == 0)
+            .ok_or(ReflectionFailure::Unterminated { address })?;
+        Ok(rest[..length].to_vec())
+    }
+
+    /// The address the Swift relative pointer at `address` names.
+    ///
+    /// Swift writes every pointer of its reflection metadata as a signed 32-bit
+    /// offset from the field that HOLDS it, so the image runs wherever it is
+    /// mapped.
+    fn relative_target(
+        image: &[u8],
+        sections: &[Section],
+        address: u64,
+    ) -> Result<u64, ReflectionFailure> {
+        let offset = signed_word(image, file_offset(sections, address)?)?;
+        Ok(address.wrapping_add(offset as i64 as u64))
+    }
+
+    /// The name of the type a field descriptor at `descriptor` describes.
+    ///
+    /// A descriptor whose mangled name is not a direct symbolic reference to a
+    /// nominal type descriptor answers NOTHING. This reads the shape the
+    /// measured toolchain writes, so a release that wrote another shape drops
+    /// the type out of the answer rather than making a name up for it.
+    fn type_name(
+        image: &[u8],
+        sections: &[Section],
+        descriptor: u64,
+    ) -> Result<Option<String>, ReflectionFailure> {
+        if signed_word(image, file_offset(sections, descriptor)?)? == 0 {
+            return Ok(None);
+        }
+
+        let mangled = relative_target(image, sections, descriptor)?;
+        if text(image, sections, mangled)?.first() != Some(&SWIFT_DIRECT_SYMBOLIC_REFERENCE) {
+            return Ok(None);
+        }
+
+        let nominal = relative_target(image, sections, mangled.saturating_add(1))?;
+        let named = relative_target(
+            image,
+            sections,
+            nominal.saturating_add(SWIFT_TYPE_DESCRIPTOR_NAME_OFFSET),
+        )?;
+        Ok(Some(
+            String::from_utf8_lossy(&text(image, sections, named)?).into_owned(),
+        ))
+    }
+
+    /// The names of the `count` field records of the descriptor at
+    /// `descriptor`, each `record_size` bytes wide.
+    fn record_names(
+        image: &[u8],
+        sections: &[Section],
+        descriptor: u64,
+        record_size: u64,
+        count: u64,
+    ) -> Result<Vec<String>, ReflectionFailure> {
+        (0..count)
+            .map(|index| {
+                let record = descriptor
+                    .saturating_add(SWIFT_FIELD_DESCRIPTOR_HEAD_SIZE as u64)
+                    .saturating_add(index.saturating_mul(record_size));
+                let named = relative_target(
+                    image,
+                    sections,
+                    record.saturating_add(SWIFT_FIELD_RECORD_NAME_OFFSET),
+                )?;
+                Ok(String::from_utf8_lossy(&text(image, sections, named)?).into_owned())
+            })
+            .collect()
+    }
+
+    /// The case names of every type of `image` whose name ends in `suffix`,
+    /// keyed by the type's own name.
+    ///
+    /// `path` names the file the bytes came from, so a failure states which
+    /// image it read rather than leaving a person to find that out.
+    fn cases_of_types_named(
+        image: &[u8],
+        path: &str,
+        suffix: &str,
+    ) -> Result<BTreeMap<String, Vec<String>>, ReflectionFailure> {
+        let sections = sections(image, path)?;
+        let metadata = sections
+            .iter()
+            .find(|section| section.name == SWIFT_FIELD_METADATA_SECTION)
+            .ok_or(ReflectionFailure::NoFieldMetadata {
+                section: SWIFT_FIELD_METADATA_SECTION,
+            })?;
+
+        let mut found = BTreeMap::new();
+        let mut walked: u64 = 0;
+
+        while walked.saturating_add(SWIFT_FIELD_DESCRIPTOR_HEAD_SIZE as u64) <= metadata.bytes {
+            let descriptor = metadata.address.saturating_add(walked);
+            let head = metadata.file_offset.saturating_add(walked as usize);
+            let record_size = u64::from(half_word(
+                image,
+                head.saturating_add(SWIFT_FIELD_RECORD_SIZE_OFFSET),
+            )?);
+            let count = u64::from(word(
+                image,
+                head.saturating_add(SWIFT_FIELD_RECORD_COUNT_OFFSET),
+            )?);
+
+            if let Some(name) = type_name(image, &sections, descriptor)? {
+                if name.ends_with(suffix) {
+                    found.insert(
+                        name,
+                        record_names(image, &sections, descriptor, record_size, count)?,
+                    );
+                }
+            }
+
+            walked = walked
+                .saturating_add(SWIFT_FIELD_DESCRIPTOR_HEAD_SIZE as u64)
+                .saturating_add(count.saturating_mul(record_size));
+        }
+
+        Ok(found)
+    }
+
     /// The `[<Name>]` tag a finding-category case reaches the output as.
     ///
     /// `swift format` writes the case name with its first letter in upper
@@ -1477,38 +1702,55 @@ mod swift_reflection {
     /// stood outside both of them. The tool wrote this list.
     ///
     /// The guard on the type names is what keeps the answer whole. A release
-    /// that adds a finding-category type, renames one, or drops one fails
-    /// here, rather than answering a short list that the two hand-written
-    /// lists still match.
-    pub fn tags_no_configuration_stops() -> BTreeSet<String> {
+    /// that adds a finding-category type, renames one, or drops one answers
+    /// [`ReflectionFailure::UnexpectedCategories`] here, rather than answering
+    /// a short list that the two hand-written lists still match.
+    pub fn tags_no_configuration_stops() -> Result<BTreeSet<String>, ReflectionFailure> {
+        let command = locator_command();
         let located = std::process::Command::new(XCRUN_TOOL)
             .arg(XCRUN_FIND_FLAG)
             .arg(SWIFT_FORMAT_BINARY)
             .output()
-            .expect("the installed toolchain must state where `swift-format` stands");
-        let path = String::from_utf8_lossy(&located.stdout).trim().to_string();
-        let image = std::fs::read(&path).expect("read the toolchain's swift-format binary");
+            .map_err(|source| ReflectionFailure::LocatorFailed {
+                command: command.clone(),
+                source,
+            })?;
 
-        let categories = cases_of_types_named(&image, CATEGORY_SUFFIX);
+        if !located.status.success() {
+            return Err(ReflectionFailure::NotLocated {
+                command,
+                status: located.status.to_string(),
+                stderr: String::from_utf8_lossy(&located.stderr).trim().to_string(),
+            });
+        }
+
+        let path = String::from_utf8_lossy(&located.stdout).trim().to_string();
+        let image = std::fs::read(&path).map_err(|source| ReflectionFailure::Unreadable {
+            path: path.clone(),
+            source,
+        })?;
+
+        let categories = cases_of_types_named(&image, &path, CATEGORY_SUFFIX)?;
 
         let mut expected: Vec<&str> = UNSTOPPABLE_CATEGORIES.to_vec();
         expected.push(RULE_CATEGORY);
         expected.sort_unstable();
         let named: Vec<&str> = categories.keys().map(String::as_str).collect();
 
-        assert_eq!(
-            named,
-            expected,
-            "the reflection metadata of `{path}` must carry the finding-category types the \
-             `{}.md` measurement names; it carries {named:?}",
-            super::SWIFT_IDIOMS_RULE
-        );
+        if named != expected {
+            return Err(ReflectionFailure::UnexpectedCategories {
+                rule: super::SWIFT_IDIOMS_RULE,
+                expected: expected.iter().map(|name| (*name).to_string()).collect(),
+                named: named.iter().map(|name| (*name).to_string()).collect(),
+                path,
+            });
+        }
 
-        UNSTOPPABLE_CATEGORIES
-            .iter()
-            .flat_map(|category| categories[*category].iter())
-            .map(|case| tag_of_case(case))
-            .collect()
+        Ok(categories
+            .into_iter()
+            .filter(|(name, _)| UNSTOPPABLE_CATEGORIES.contains(&name.as_str()))
+            .flat_map(|(_, cases)| cases.into_iter().map(|case| tag_of_case(&case)))
+            .collect())
     }
 }
 
@@ -1634,7 +1876,12 @@ fn the_shipped_swift_idioms_rule_body_names_every_tag_swift_format_writes() {
 
     #[cfg(target_os = "macos")]
     {
-        let owned = swift_reflection::tags_no_configuration_stops();
+        let owned = swift_reflection::tags_no_configuration_stops().unwrap_or_else(|failure| {
+            panic!(
+                "the tag set of `{SWIFT_IDIOMS_RULE}.md` comes from the toolchain binary itself, \
+                 and this run could not read it: {failure}"
+            )
+        });
         let listed: std::collections::BTreeSet<String> = probed.iter().cloned().collect();
 
         assert_eq!(

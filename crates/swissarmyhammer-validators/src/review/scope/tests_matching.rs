@@ -669,6 +669,108 @@ async fn file_scope_of_an_ignored_path_yields_empty_scope() {
     );
 }
 
+/// A commit range that holds a file whose bytes are not UTF-8 must still
+/// produce a REPORT. The binary file is named among the files the run did
+/// not review, and the source edit beside it is reviewed as usual. Before
+/// this, the blob read failed the whole run and there was no report at all.
+#[tokio::test]
+async fn sha_scope_reports_a_binary_file_rather_than_failing_the_run() {
+    let repo = TestRepo::new();
+    repo.write("src/lib.rs", "fn base() {}\n");
+    repo.commit("initial");
+    repo.write("src/lib.rs", "fn base() {}\n\nfn added() {}\n");
+    std::fs::write(repo.path().join("image.png"), BINARY_BYTES).unwrap();
+    repo.commit("add a picture beside a source edit");
+
+    let conn = index_conn();
+    let loader = loader_with("everything", "*", &[]);
+    let embedder = MockEmbedder::new(DIM);
+
+    let work = scope_review(
+        Scope::Sha("HEAD~1..HEAD".to_string()),
+        repo.path(),
+        &loader,
+        &conn,
+        &embedder,
+        None,
+    )
+    .await
+    .expect("a binary file in the range must not fail the whole run");
+
+    let paths = work_paths(&work);
+    assert!(
+        paths.iter().any(|p| p == "src/lib.rs"),
+        "the source edit beside the picture must still be reviewed, got: {paths:?}"
+    );
+    assert!(
+        !paths.iter().any(|p| p == "image.png"),
+        "a file that is not UTF-8 must never be diffed, got: {paths:?}"
+    );
+
+    let excluded = work
+        .excluded()
+        .iter()
+        .find(|file| file.path() == "image.png")
+        .expect("the binary file must be named among the files the run did not review");
+    assert_eq!(
+        excluded.kind(),
+        ExclusionKind::NotUtf8,
+        "the binary file's reason must name the content, got: {}",
+        excluded.reason()
+    );
+    assert!(
+        !excluded.kind().is_deliberate(),
+        "nobody asked for the picture to go unread, so it can never carry the clean full-exclusion claim"
+    );
+}
+
+/// `.reviewignore` must be able to exclude a file that is not UTF-8. The
+/// ignore rules are applied BEFORE the blob is read, so the pattern claims
+/// the path and its bytes never reach the engine. Before this the read came
+/// first, so the pattern never got its chance.
+#[tokio::test]
+async fn reviewignore_excludes_a_file_that_is_not_utf8() {
+    let repo = TestRepo::new();
+    repo.write(".reviewignore", "*.png\n");
+    repo.write("src/lib.rs", "fn base() {}\n");
+    repo.commit("initial");
+    repo.write("src/lib.rs", "fn base() {}\n\nfn added() {}\n");
+    std::fs::write(repo.path().join("image.png"), BINARY_BYTES).unwrap();
+    repo.commit("add a picture beside a source edit");
+
+    let conn = index_conn();
+    let loader = loader_with("everything", "*", &[]);
+    let embedder = MockEmbedder::new(DIM);
+
+    let work = scope_review(
+        Scope::Sha("HEAD~1..HEAD".to_string()),
+        repo.path(),
+        &loader,
+        &conn,
+        &embedder,
+        None,
+    )
+    .await
+    .expect("an ignored binary file must not fail the run");
+
+    let excluded = work
+        .excluded()
+        .iter()
+        .find(|file| file.path() == "image.png")
+        .expect("the ignored picture must be named among the files the run did not review");
+    assert_eq!(
+        excluded.kind(),
+        ExclusionKind::ReviewIgnore,
+        "the ignore pattern must claim the file BEFORE its bytes are read, got reason: {}",
+        excluded.reason()
+    );
+    assert!(
+        excluded.reason().contains("*.png"),
+        "the reason must name the excluding pattern, got: {}",
+        excluded.reason()
+    );
+}
+
 // ---- read_working / read_at_ref error discipline --------------------
 
 /// A non-UTF8 byte sequence: a lone continuation byte that is invalid as
@@ -676,43 +778,43 @@ async fn file_scope_of_an_ignored_path_yields_empty_scope() {
 /// it. Models a binary/unreadable tracked blob.
 const BINARY_BYTES: &[u8] = &[0xff, 0xfe, 0x00, 0x01];
 
-/// An absent working-tree path resolves to `Ok(None)` — the intended
+/// An absent working-tree path reads as [`FileText::Absent`] — the intended
 /// deletion signal — not an error.
 #[test]
-fn read_working_maps_an_absent_path_to_ok_none() {
+fn read_working_maps_an_absent_path_to_absent() {
     let repo = TestRepo::new();
     let got = read_working(repo.path(), "src/does_not_exist.rs")
         .expect("an absent path must not be an error");
-    assert_eq!(got, None, "an absent path is the deletion signal: Ok(None)");
+    assert_eq!(
+        got,
+        FileText::Absent,
+        "an absent path is the deletion signal"
+    );
 }
 
-/// A present, readable working-tree path resolves to `Ok(Some(content))`.
+/// A present, readable working-tree path reads as its text.
 #[test]
 fn read_working_reads_a_present_file() {
     let repo = TestRepo::new();
     repo.write("src/lib.rs", "pub fn compute() {}\n");
     let got = read_working(repo.path(), "src/lib.rs").expect("a readable file must succeed");
-    assert_eq!(got.as_deref(), Some("pub fn compute() {}\n"));
+    assert_eq!(got, FileText::Text("pub fn compute() {}\n".to_string()));
 }
 
-/// A binary/non-UTF8 working-tree file is a genuine read failure, NOT the
-/// deletion signal — it must surface as an error, never as `Ok(None)`.
+/// A binary/non-UTF8 working-tree file reads as [`FileText::NotUtf8`], its own
+/// state — never the deletion signal, which would diff the whole file as
+/// removed, and never an error, which would fail the whole run.
 #[test]
-fn read_working_propagates_a_non_utf8_file_as_an_error() {
+fn read_working_reads_a_non_utf8_file_as_its_own_state() {
     let repo = TestRepo::new();
     std::fs::write(repo.path().join("blob.bin"), BINARY_BYTES).unwrap();
 
-    let err = read_working(repo.path(), "blob.bin")
-        .expect_err("a non-UTF8 file must not be silently treated as absent");
-    match err {
-        AvpError::Context(msg) => {
-            assert!(
-                msg.contains("blob.bin"),
-                "the error must name the path: {msg}"
-            );
-        }
-        other => panic!("expected AvpError::Context, got: {other:?}"),
-    }
+    let got = read_working(repo.path(), "blob.bin").expect("a non-UTF8 file must not be an error");
+    assert_eq!(
+        got,
+        FileText::NotUtf8,
+        "a non-UTF8 file must not be silently treated as absent"
+    );
 }
 
 // ---- read_working containment: reject paths escaping the repo root --
@@ -816,12 +918,12 @@ fn read_working_reads_a_nested_relative_path_unchanged() {
     repo.write("src/deep/nested.rs", "pub fn nested() {}\n");
     let got = read_working(repo.path(), "src/deep/nested.rs")
         .expect("a nested repo-relative file must read normally");
-    assert_eq!(got.as_deref(), Some("pub fn nested() {}\n"));
+    assert_eq!(got, FileText::Text("pub fn nested() {}\n".to_string()));
 }
 
-/// A path absent at the requested ref resolves to `Ok(None)`.
+/// A path absent at the requested ref reads as [`FileText::Absent`].
 #[test]
-fn read_at_ref_maps_a_path_absent_at_ref_to_ok_none() {
+fn read_at_ref_maps_a_path_absent_at_ref_to_absent() {
     let repo = TestRepo::new();
     repo.write("src/lib.rs", "pub fn compute() {}\n");
     repo.commit("initial");
@@ -833,10 +935,14 @@ fn read_at_ref_maps_a_path_absent_at_ref_to_ok_none() {
         FilePath::new("src/never_committed.rs"),
     )
     .expect("a path absent at the ref must not be an error");
-    assert_eq!(got, None, "absent at the ref is Ok(None)");
+    assert_eq!(
+        got,
+        FileText::Absent,
+        "absent at the ref is the Added signal"
+    );
 }
 
-/// A blob present at the ref resolves to `Ok(Some(content))`.
+/// A blob present at the ref reads as its text.
 #[test]
 fn read_at_ref_reads_a_committed_blob() {
     let repo = TestRepo::new();
@@ -846,7 +952,7 @@ fn read_at_ref_reads_a_committed_blob() {
 
     let got = read_at_ref(&git, GitRefSpec::head(), FilePath::new("src/lib.rs"))
         .expect("a committed blob must succeed");
-    assert_eq!(got.as_deref(), Some("pub fn compute() {}\n"));
+    assert_eq!(got, FileText::Text("pub fn compute() {}\n".to_string()));
 }
 
 /// The two halves of a `refspec:path` blob address are DISTINCT types, so a
@@ -863,39 +969,35 @@ fn read_at_ref_addresses_the_path_within_the_refspec_never_the_transposition() {
 
     let got = read_at_ref(&git, GitRefSpec::head(), FilePath::new("src/lib.rs"))
         .expect("the path within the refspec must read");
-    assert_eq!(got.as_deref(), Some("pub fn compute() {}\n"));
+    assert_eq!(got, FileText::Text("pub fn compute() {}\n".to_string()));
 
     // Swapping the halves yields the meaningless spec `src/lib.rs:HEAD`,
     // whose revision half resolves to nothing — the absent-at-ref signal,
     // never this file's content.
     let transposed = read_at_ref(&git, GitRefSpec::new("src/lib.rs"), FilePath::new("HEAD"));
     assert!(
-        matches!(transposed, Ok(None)),
+        matches!(transposed, Ok(FileText::Absent)),
         "a transposed refspec/path addresses nothing: {transposed:?}"
     );
 }
 
-/// A binary/non-UTF8 blob committed at the ref is a genuine read failure,
-/// NOT a missing-path signal — it must surface as an error so the file is
-/// never silently diffed as wholly added/removed.
+/// A binary/non-UTF8 blob committed at the ref reads as [`FileText::NotUtf8`],
+/// its own state — never the missing-path signal, which would diff the whole
+/// file as added, and never an error, which would fail the whole run.
 #[test]
-fn read_at_ref_propagates_a_non_utf8_blob_as_an_error() {
+fn read_at_ref_reads_a_non_utf8_blob_as_its_own_state() {
     let repo = TestRepo::new();
     std::fs::write(repo.path().join("blob.bin"), BINARY_BYTES).unwrap();
     repo.commit("add a binary blob");
     let git = open_repo(repo.path()).unwrap();
 
-    let err = read_at_ref(&git, GitRefSpec::head(), FilePath::new("blob.bin"))
-        .expect_err("a non-UTF8 blob must not be silently treated as absent");
-    match err {
-        AvpError::Context(msg) => {
-            assert!(
-                msg.contains("blob.bin"),
-                "the error must name the path: {msg}"
-            );
-        }
-        other => panic!("expected AvpError::Context, got: {other:?}"),
-    }
+    let got = read_at_ref(&git, GitRefSpec::head(), FilePath::new("blob.bin"))
+        .expect("a non-UTF8 blob must not be an error");
+    assert_eq!(
+        got,
+        FileText::NotUtf8,
+        "a non-UTF8 blob must not be silently treated as absent"
+    );
 }
 
 // ---- typed parameter pairs: a transposition must not compile ----------
@@ -941,7 +1043,7 @@ fn an_absent_before_side_is_an_addition_and_an_absent_after_side_a_deletion() {
     builder.push(
         FilePath::new("added.rs"),
         FileVersions {
-            before: BeforeContent::absent(),
+            before: BeforeContent::new(None),
             after: AfterContent::new(Some("fn added() {}\n".to_string())),
             moved_from: None,
         },

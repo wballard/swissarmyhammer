@@ -715,16 +715,14 @@ pub async fn scope_review(
     // The op is the only thing that decides what this run REVIEWS. Read once,
     // here, and carried on the work-list from this point on.
     let subject = scope.subject();
-    let ScopeFiles {
-        resolved,
-        ignored: excluded,
-    } = resolve_scope_files(&scope, repo_path)?;
+    let ScopeFiles { resolved, excluded } = resolve_scope_files(&scope, repo_path)?;
 
     // How many files this scope REACHED, read before the fixture split narrows
-    // it any further: the reviewable set plus everything the ignore filter
-    // already took out. It is the denominator that lets the report state a
-    // FULL exclusion as a fact — a `.reviewignore` that covers the whole scope
-    // is a deliberate clean review, not an empty one.
+    // it any further: the reviewable set plus everything the scope stage
+    // already took out — an ignored path, and a path whose bytes are not text.
+    // It is the denominator that lets the report state a FULL exclusion as a
+    // fact — a `.reviewignore` that covers the whole scope is a deliberate
+    // clean review, not an empty one.
     let resolved_files = resolved.files.len() + excluded.len();
 
     // A validator set's own fixture data is not source: a fail fixture holds
@@ -735,9 +733,10 @@ pub async fn scope_review(
     // tool-rule argument list.
     let (resolved, fixtures) = split_validator_fixtures(resolved, repo_path, loader);
 
-    // The two deliberate exclusions share one list, ignore-excluded first, in
-    // the order each stage dropped them; the pairing stage appends its own
-    // below. The report tells them apart by their kind, never by their order.
+    // The scope-stage exclusions and the fixture split share one list, the
+    // scope stage's own first, in the order each stage dropped them; the
+    // pairing stage appends its own below. The report tells them apart by their
+    // kind, never by their order.
     let excluded: Vec<ExcludedFile> = excluded.into_iter().chain(fixtures).collect();
 
     // The base-revision content per file, keyed for the line-mark diff below.

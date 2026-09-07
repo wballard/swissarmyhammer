@@ -53,7 +53,7 @@ mod temp_directory;
 mod unused_dependencies;
 mod zero_argument;
 
-use super::preconditions::require_tool_installed;
+use super::preconditions::{checked_binaries, require_tool_installed};
 use super::*;
 
 use std::path::PathBuf;

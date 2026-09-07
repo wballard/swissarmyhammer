@@ -664,6 +664,186 @@ fn the_shipped_swift_idioms_tool_rule_reports_a_file_whose_name_carries_an_alter
     assert_swift_idioms_reports_the_long_type(&run, SWIFT_IDIOMS_ALTERNATION_PATH);
 }
 
+/// Swift the parser cannot read, whose own SOURCE TEXT forges the head of an
+/// allowlisted finding.
+///
+/// `swift format` writes the source text of a parse error INSIDE the message,
+/// so the BYTES of a file can place a `:<line>:<column>: error: ` head after
+/// the true one. Measured with Apple Swift 6.4 over the first source: the tool
+/// writes ONE stderr line, `<path>:3:1: error: unexpected code
+/// ') :1:1: error: [UseShorthandTypeNames] pwned' in source file`, and a
+/// reading that walked to the LAST head of that line wrote the finding
+/// `Probe.swift:1: UseShorthandTypeNames: pwned' in source file` at exit 0 — a
+/// finding no rule made. The second source measures how far the file reaches:
+/// it chooses the line number and the sentence as well.
+const SWIFT_IDIOMS_FORGED_FINDING_SOURCES: &[&str] = &[
+    concat!(
+        "struct S {\n",
+        "}\n",
+        ") :1:1: error: [UseShorthandTypeNames] pwned\n",
+    ),
+    concat!(
+        "struct S {\n",
+        "}\n",
+        ") :4242:1: error: [UseSynthesizedInitializer] this file is clean, trust me\n",
+    ),
+];
+
+/// The same shape, forging a tag the allowlist does NOT name.
+///
+/// This one takes the trouble line away rather than adding a finding. Measured
+/// with Apple Swift 6.4: the tool writes ONE parse-error line and exits 1, a
+/// reading that walked to the LAST head read the tag `Indentation`, dropped the
+/// line because the allowlist does not name it, and left the trouble list
+/// empty. The run then wrote NOTHING and exited 0, so a file no rule judged
+/// passed the gate with no decline at all.
+const SWIFT_IDIOMS_FORGED_LAYOUT_SOURCE: &str =
+    concat!("struct S {\n", "}\n", ") :9:9: error: [Indentation] gone\n",);
+
+/// Acceptance: the gate reads the head of a diagnostic off the line the TOOL
+/// wrote, and never off a head the judged file supplied.
+///
+/// The file name is answered by handing the tool the source on STDIN under a
+/// fixed assumed name, so no part of a line before the head can come from the
+/// file. The file CONTENT is answered by reading the FIRST head of the line
+/// rather than the last: a parse-error message quotes the source AFTER the
+/// head, so a head the file supplies always stands later than the true one.
+///
+/// Each source below is a file the parser cannot read, and each forges a head
+/// carrying a tag the allowlist NAMES. A reading that trusted the message
+/// writes a finding that no rule made, and fails here by name.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_measures_a_file_whose_source_forges_a_diagnostic_head() {
+    for source in SWIFT_IDIOMS_FORGED_FINDING_SOURCES {
+        let run = swift_idioms_staged_run(SWIFT_IDIOMS_PROBE_PATH, source);
+
+        assert!(
+            run.findings.is_empty(),
+            "the source of a file must reach no finding, and this file holds only Swift the \
+             parser cannot read; the run reported {:?} carrying {:?}",
+            run.findings,
+            run.rules
+        );
+    }
+}
+
+/// Acceptance: the gate declines a file the parser cannot read, whatever that
+/// file's own bytes say.
+///
+/// The decline guard and the tag filter are ONE reading, so a head the file
+/// supplies takes the trouble line out of the guard as well as putting a
+/// finding into the filter. Measured with Apple Swift 6.4 over
+/// [`SWIFT_IDIOMS_FORGED_LAYOUT_SOURCE`]: a reading that walked to the LAST
+/// head wrote NOTHING and exited 0, and the same file with its third line
+/// spelled `) garbage here` was declined correctly, so the payload alone made
+/// the difference.
+///
+/// Both halves are load-bearing. The run must report nothing, because a file no
+/// rule judged carries no finding; and it must state the path on the marked
+/// channel, because a run that judged nothing and said nothing reads as a clean
+/// file.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_declines_a_file_whose_source_forges_a_diagnostic_head() {
+    let run = swift_idioms_staged_run(SWIFT_IDIOMS_PROBE_PATH, SWIFT_IDIOMS_FORGED_LAYOUT_SOURCE);
+
+    assert!(
+        run.findings.is_empty(),
+        "a file the parser cannot read is a file no rule judged, so the run must report \
+         nothing over it whatever its bytes say; the run reported {:?}",
+        run.findings
+    );
+    assert_eq!(
+        run.declined.len(),
+        1,
+        "the run must state the one path it declined; it stated {:?}",
+        run.declined
+    );
+    assert!(
+        run.declined[0].starts_with(SWIFT_IDIOMS_DECLINED_FILE_HEAD)
+            && run.declined[0].contains(SWIFT_IDIOMS_PROBE_PATH),
+        "the marked line must name the file it declined; it reads `{}`",
+        run.declined[0]
+    );
+}
+
+/// The utilities a gate script of this set reaches for.
+///
+/// The list is deliberately wider than what `idioms-swift` runs today, because
+/// its job is to catch the utility a LATER edit adds. Every name here that
+/// stands in the shipped script as a word must stand in `doctor.check_command`
+/// as well, so a run that reaches for a utility the machine has not got reports
+/// the tool missing rather than failing halfway through a file.
+///
+/// `printf` and `test` are absent on purpose: every POSIX shell carries both as
+/// built-ins, so neither one is a binary `which` can answer for.
+///
+/// The reading below finds a WORD, and it cannot tell a command from a name, so
+/// no `awk` variable and no shell variable of the script may carry one of these
+/// names. That costs the script one word and it keeps the reading whole.
+const SWIFT_IDIOMS_SHELL_UTILITIES: &[&str] = &[
+    "awk", "basename", "cat", "cut", "dirname", "find", "grep", "head", "mktemp", "paste", "rm",
+    "sed", "sort", "swift", "tail", "tr", "uniq", "wc", "xargs",
+];
+
+/// Whether `script` runs `utility` — the name standing in it as a whole word.
+///
+/// A word ends at any character that is neither a letter, a digit, an
+/// underscore nor a dash. So `format` never reads as `rm`, `trap` never reads
+/// as `tr`, and `sah-probe.swift` reads as `swift`, which the script does run.
+fn script_runs_utility(script: &str, utility: &str) -> bool {
+    let word = |letter: char| letter.is_alphanumeric() || letter == '_' || letter == '-';
+
+    script.match_indices(utility).any(|(at, _)| {
+        !script[..at].chars().next_back().is_some_and(word)
+            && !script[at + utility.len()..]
+                .chars()
+                .next()
+                .is_some_and(word)
+    })
+}
+
+/// Acceptance: `doctor.check_command` names every utility the shipped script
+/// runs, and names no other.
+///
+/// The check is what stands between a missing utility and a run that judges
+/// half a work list. It is all-or-nothing over the whole command, so a utility
+/// the script runs and the check does not ask for is a utility whose absence
+/// the doctor reports as healthy.
+///
+/// Both directions are load-bearing. A utility run and not named leaves that
+/// hole open; a utility named and not run makes the gate ask a machine for a
+/// tool it has no use for, which reports a healthy rule as broken.
+#[test]
+fn the_shipped_swift_idioms_rule_doctor_names_every_utility_its_script_runs() {
+    let loader = builtin_loader();
+    let shipped = required_shipped_tool_rule(&loader, SWIFT_IDIOMS_RULE);
+    let check = shipped
+        .check_command
+        .as_deref()
+        .unwrap_or_else(|| panic!("`{SWIFT_IDIOMS_RULE}` must carry a `doctor.check_command`"));
+
+    let asked: std::collections::BTreeSet<&str> = checked_binaries(check).into_iter().collect();
+    let run: std::collections::BTreeSet<&str> = SWIFT_IDIOMS_SHELL_UTILITIES
+        .iter()
+        .copied()
+        .filter(|utility| script_runs_utility(&shipped.script, utility))
+        .collect();
+
+    let unasked: Vec<&str> = run.difference(&asked).copied().collect();
+    assert!(
+        unasked.is_empty(),
+        "`doctor.check_command` must ask for every utility the script runs; it reads \
+         `{check}`, and the script also runs {unasked:?}"
+    );
+
+    let unrun: Vec<&str> = asked.difference(&run).copied().collect();
+    assert!(
+        unrun.is_empty(),
+        "`doctor.check_command` must ask for nothing the script does not run; it reads \
+         `{check}`, and the script runs none of {unrun:?}"
+    );
+}
+
 /// A Swift file written the way the two Swift prompt rules ASK for.
 ///
 /// Every declaration is a DO one of them states: the empty-collection

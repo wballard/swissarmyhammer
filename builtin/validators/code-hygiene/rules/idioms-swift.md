@@ -15,6 +15,7 @@ tool:
     fi
     work="$(mktemp -d)"
     trap 'rm -rf "$work"' EXIT
+    probe=sah-probe.swift
     printf '%s\n' AlwaysUseLiteralForEmptyCollectionInit \
       DontRepeatTypeInStaticProperties NoVoidReturnOnFunctionSignature \
       ReplaceForEachWithForLoop UseLetInEveryBoundCaseVariable \
@@ -34,34 +35,41 @@ tool:
         printf 'sah-diagnostic: idioms-swift found no file at %s, so its declarations are unread\n' "$file" >&2
         continue
       fi
+      if [ ! -f "$file" ] || [ ! -r "$file" ]; then
+        printf 'sah-diagnostic: idioms-swift declined %s: the path is not a readable file\n' "$file" >&2
+        continue
+      fi
       status=0
-      swift format lint --strict --configuration "$work/rules.json" "$file" \
-        > /dev/null 2> "$work/lint.err" || status=$?
+      swift format lint --strict --configuration "$work/rules.json" \
+        --assume-filename "$probe" - < "$file" > /dev/null 2> "$work/lint.err" || status=$?
       : > "$work/kept"
       : > "$work/refused"
-      awk -v file="$file" -v allowed="$allowed" \
+      awk -v file="$file" -v probe="$probe" -v allowed="$allowed" \
         -v kept="$work/kept" -v refused="$work/refused" '
         BEGIN {
           total = split(allowed, names, "|")
           for (i = 1; i <= total; i++) keep[names[i]] = 1
+          opening = probe ":"
+          size = length(opening)
         }
         {
-          rest = $0
-          head = ""
-          while (match(rest, /:[0-9]+:[0-9]+: error: /) > 0) {
-            head = substr(rest, RSTART, RLENGTH)
-            rest = substr(rest, RSTART + RLENGTH)
-          }
-          if (head != "" && rest ~ /^\[[A-Za-z]+\] /) {
-            shut = index(rest, "]")
-            tag = substr(rest, 2, shut - 2)
-            split(head, part, ":")
-            if (tag in keep) {
-              print file ":" part[2] ": " tag ": " substr(rest, shut + 2) > kept
-            }
+          at = index($0, opening)
+          rest = at > 0 ? substr($0, at + size) : ""
+          if (at == 0 || match(rest, /^[0-9]+:[0-9]+: error: /) == 0) {
+            print $0 > refused
             next
           }
-          print $0 > refused
+          split(substr(rest, 1, RLENGTH), part, ":")
+          mark = substr(rest, RLENGTH + 1)
+          if (mark !~ /^\[[A-Za-z]+\] /) {
+            print rest > refused
+            next
+          }
+          shut = index(mark, "]")
+          tag = substr(mark, 2, shut - 2)
+          if (tag in keep) {
+            print file ":" part[1] ": " tag ": " substr(mark, shut + 2) > kept
+          }
         }' "$work/lint.err"
       trouble="$(sed -n '1p' "$work/refused")"
       if [ -n "$trouble" ] || { [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; }; then
@@ -72,7 +80,7 @@ tool:
       cat "$work/kept"
     done
   doctor:
-    check_command: "which swift mktemp awk sed sort paste && printf '' | swift format lint --strict -"
+    check_command: "which swift mktemp awk cat rm sed sort paste && printf '' | swift format lint --strict -"
     check_version_command: "swift --version"
     fix_hint: "install the Swift toolchain, Swift 6.0 or newer — Xcode 16 and above ship it"
 ---
@@ -346,18 +354,30 @@ The script therefore tests the path itself before it starts the tool, with
 `[ ! -e "$file" ]`, and writes its own marked line for it. The tool gives no
 error to read.
 
+The script tests the path a SECOND time, with
+`[ ! -f "$file" ] || [ ! -r "$file" ]`, because it hands the source to the tool
+on standing input. Rows 4 and 7 would otherwise fail at the REDIRECT rather
+than in the tool, and a redirect that fails writes the shell's own words on the
+channel the engine reads. Those two tests answer rows 3, 4 and 7 before the
+tool starts, and row 5 stays with the tool, which answers it over standing
+input with `<unknown>: error: Unable to lint sah-probe.swift: file is not
+readable or does not exist.` at status 1. Measured with the shipped script,
+each of the five refusing paths staged beside a file that holds one finding:
+every run reported that finding, wrote one marked line, and exited 0.
+
 **Every line stands on STDERR.** Findings and errors share that one channel, and
 stdout holds 0 bytes in every row. The script reads stderr. A gate that read
 stdout would read an empty channel for a file that holds findings.
 
 **One status carries a finding and an error alike.** Rows 1, 4, 5 and 6 all
 exit 1, so the status cannot tell a judged file from a refused one. The script
-therefore reads the SHAPE of each stderr line: a line whose LAST
-`:<line>:<column>: error: ` carries a `[<Tag>] ` after it is a tagged finding,
-and every other line is trouble. A file that wrote a trouble line is declined
-whole, because a file the parser could not read is a file no rule judged. The
-section under this one states why the reading finds that head by its STRUCTURE
-and never by the name of the file.
+therefore reads the SHAPE of each stderr line: a line whose FIRST
+`sah-probe.swift:` carries `<line>:<column>: error: [<Tag>] ` right after it is
+a tagged finding, and every other line is trouble. A file that wrote a trouble
+line is declined whole, because a file the parser could not read is a file no
+rule judged. The section under this one states why the reading finds that head
+by its POSITION, and why neither the name of the file nor the bytes in it can
+move that position.
 
 `--strict` is what makes those lines say `error:`. Without it the same findings
 arrive as `warning:` and the run exits 0, and the filter would match nothing.
@@ -366,11 +386,13 @@ arrive as `warning:` and the run exits 0, and the filter would match nothing.
 holds this table. It reads the run column and the status column out of this
 body, and it drives each shape through the live toolchain.
 
-## The reading finds the head of a diagnostic by its STRUCTURE
+## The reading finds the head of a diagnostic by its POSITION
 
-`swift format` writes the PATH FIRST on every line it writes, and the path is
-the one part of that line a person names. Two readings of such a line are
-therefore wrong, and this rule shipped each of them once:
+A line `swift format` writes carries TWO parts a person can choose. The tool
+writes the PATH FIRST on every line, so the NAME of the file stands at the head.
+And it writes the SOURCE TEXT of a parse error inside the message, so the BYTES
+of the file stand in the middle. Three readings of such a line are therefore
+wrong, and this rule shipped each of them once:
 
 - A LOOSE reading matches its text at ANY position. It reads the name of the
   file as well, so a file NAME can give the pattern the reading looks for.
@@ -378,48 +400,84 @@ therefore wrong, and this rule shipped each of them once:
   the head of the line. The path then has to pass through a regular expression
   and through a substitution, and a legitimate name that does not pass through
   both costs its file every finding it drew.
+- A LAST-HEAD reading walks to the LAST `:<line>:<column>: error: ` of the
+  line. It names the path nowhere, so no NAME reaches it. But the message
+  quotes the source AFTER the true head, so the BYTES of a file can put a
+  second head where that reading stops.
 
-The shipped reading names the path NOWHERE. The script hands `swift format` ONE
-path for each run, so on any line the true head is the LAST
-`:<line>:<column>: error: ` of that line. One `awk` walks to that head, and that
-one reading answers the decline guard and the tag filter together:
+The shipped reading takes both parts out of the file's hands, and it takes them
+in that order.
 
-    while (match(rest, /:[0-9]+:[0-9]+: error: /) > 0) {
-      head = substr(rest, RSTART, RLENGTH)
-      rest = substr(rest, RSTART + RLENGTH)
+**The name goes first.** The script hands the tool the SOURCE on standing
+input, under one assumed name that holds no `:`:
+
+    swift format lint --strict --configuration "$work/rules.json" \
+      --assume-filename sah-probe.swift - < "$file"
+
+The tool then writes `sah-probe.swift:<line>:<column>: error: ...` whatever the
+file is named. Measured over a file named
+`w: error: [UseShorthandTypeNames] s.swift` holding one `Array<Int>` parameter,
+the one output line reads `sah-probe.swift:2:39: error: [UseShorthandTypeNames]
+use shorthand syntax for this 'Array' type`, so the name reaches no line at all.
+
+**The bytes go second.** One `awk` reads the FIRST `sah-probe.swift:` of the
+line and asks for the head immediately after it:
+
+    at = index($0, opening)
+    rest = at > 0 ? substr($0, at + size) : ""
+    if (at == 0 || match(rest, /^[0-9]+:[0-9]+: error: /) == 0) {
+      print $0 > refused
+      next
     }
 
-What stands AFTER that head decides the line. A `[<Tag>] ` there makes the line
-a finding of that tag, and the script keeps the line only where the allowlist
-names the tag. Every other line is trouble, and a file that wrote one is
-declined whole.
+Nothing the file holds can stand BEFORE the path the tool wrote, so the FIRST
+head is the true head and no content can move it. What stands after that head
+decides the line: a `[<Tag>] ` makes the line a finding of that tag, and the
+script keeps the line only where the allowlist names the tag. Every other line
+is trouble, and a file that wrote one is declined whole. So ONE reading answers
+the decline guard and the tag filter together, and the two cannot disagree.
 
 The finding the script writes carries the path the ARGUMENT LIST spelled, and
-the line number off the head. So the path reaches no pattern and no
-replacement, and neither the SPELLING of a name nor the CHARACTERS in it can
-reach the reading. `awk` is the one tool this reading adds, and
-`doctor.check_command` names it beside the others.
+the line number off the head. The path therefore reaches no pattern, no
+replacement and no line of the tool, so neither the SPELLING of a name, nor the
+CHARACTERS in it, nor the BYTES of the file can reach the reading. `awk` is the
+one tool this reading adds, and `doctor.check_command` names it beside `swift`,
+`mktemp`, `cat`, `rm`, `sed`, `sort` and `paste`, which are every other utility
+the run block calls.
+`the_shipped_swift_idioms_rule_doctor_names_every_utility_its_script_runs`
+holds that list to the script in BOTH directions.
 
-Each row below was measured with Apple Swift 6.4, BSD sed and BSD grep
-2.6.0-FreeBSD, under `LC_ALL=en_US.UTF-8`. The loose reading is the first shape
-of this run, with the guard spelled `grep -v ': error: \['` and the filter
-spelled `grep -E ": error: \[($allowed)\] "`. The anchored reading is the
-second, with both readings anchored on `^$quoted:[0-9]+:[0-9]+: error: ` and
-with the rewrite an `s` command delimited by `|`:
+Standing input costs the run nothing else. Measured over the shipped fixture
+pair with Apple Swift 6.4: the failing fixture reports the same 11 findings
+carrying the same 7 rules as a run that named the path, line for line, and the
+passing fixture reports 0. A run over standing input reads the same rule set,
+obeys the same `--configuration`, and reads the same `// swift-format-ignore`
+directives.
 
-| the file name | what the file holds | the loose reading | the anchored reading | the shipped script |
-|---|---|---|---|---|
-| `Plain.swift` | one member indented 8 spaces | 0 findings | 0 findings | 0 findings |
-| `x: error: [UseShorthandTypeNames] y.swift` | the same member | 1 finding — `Indentation: unindent by 6 spaces` | 0 findings | 0 findings |
-| `yy:1:1: error: [UseShorthandTypeNames] y.swift` | the same member | 1 `Indentation` finding | 0 findings | 0 findings |
-| `PlainBroken.swift` | Swift the parser cannot read | 0 findings, 1 marked line | 0 findings, 1 marked line | 0 findings, 1 marked line |
-| `z: error: [UseShorthandTypeNames] q.swift` | the same bytes | the raw `error: expected name in attribute` lines as findings, and NO marked line | 0 findings, 1 marked line | 0 findings, 1 marked line |
-| `zz:1:1: error: [UseShorthandTypeNames] q.swift` | the same bytes | 1 finding, a raw parser line the `sed` rewrote in part, and NO marked line | 0 findings, 1 marked line | 0 findings, 1 marked line |
-| `w: error: [UseShorthandTypeNames] s.swift` | one `Array<Int>` parameter | 1 `UseShorthandTypeNames` finding | 1 `UseShorthandTypeNames` finding | 1 `UseShorthandTypeNames` finding |
-| `café.swift` | the same parameter | 1 `UseShorthandTypeNames` finding | 0 findings, 1 marked line | 1 `UseShorthandTypeNames` finding |
-| `ünïcodé.swift` | the same parameter | 1 `UseShorthandTypeNames` finding | 0 findings, 1 marked line | 1 `UseShorthandTypeNames` finding |
-| `日本語.swift` | the same parameter | 1 `UseShorthandTypeNames` finding | 1 `UseShorthandTypeNames` finding | 1 `UseShorthandTypeNames` finding |
-| `a\|b.swift` | the same parameter | 1 `UseShorthandTypeNames` finding | 1 RAW tool line, unrewritten | 1 `UseShorthandTypeNames` finding |
+### What each reading answers over a file NAME
+
+Each row below was measured with Apple Swift 6.4, BSD sed, BSD grep
+2.6.0-FreeBSD and BSD awk 20200816, under `LC_ALL=en_US.UTF-8`. The loose
+reading is the first shape of this run, with the guard spelled
+`grep -v ': error: \['` and the filter spelled
+`grep -E ": error: \[($allowed)\] "`. The anchored reading is the second, with
+both readings anchored on `^$quoted:[0-9]+:[0-9]+: error: ` and with the rewrite
+an `s` command delimited by `|`. The last-head reading is the third, with the
+`awk` walking to the last head of a run that named the path:
+
+| the file name | what the file holds | the loose reading | the anchored reading | the last-head reading | the shipped script |
+|---|---|---|---|---|---|
+| `Plain.swift` | one member indented 8 spaces | 0 findings | 0 findings | 0 findings | 0 findings |
+| `x: error: [UseShorthandTypeNames] y.swift` | the same member | 1 finding — `Indentation: unindent by 6 spaces` | 0 findings | 0 findings | 0 findings |
+| `yy:1:1: error: [UseShorthandTypeNames] y.swift` | the same member | 1 `Indentation` finding | 0 findings | 0 findings | 0 findings |
+| `PlainBroken.swift` | Swift the parser cannot read, with no payload | 0 findings, 1 marked line | 0 findings, 1 marked line | 0 findings, 1 marked line | 0 findings, 1 marked line |
+| `z: error: [UseShorthandTypeNames] q.swift` | the same bytes | the raw `error: expected name in attribute` lines as findings, and NO marked line | 0 findings, 1 marked line | 0 findings, 1 marked line | 0 findings, 1 marked line |
+| `zz:1:1: error: [UseShorthandTypeNames] q.swift` | the same bytes | 1 finding, a raw parser line the `sed` rewrote in part, and NO marked line | 0 findings, 1 marked line | 0 findings, 1 marked line | 0 findings, 1 marked line |
+| `w: error: [UseShorthandTypeNames] s.swift` | one `Array<Int>` parameter | 1 `UseShorthandTypeNames` finding | 1 `UseShorthandTypeNames` finding | 1 `UseShorthandTypeNames` finding | 1 `UseShorthandTypeNames` finding |
+| `café.swift` | the same parameter | 1 `UseShorthandTypeNames` finding | 0 findings, 1 marked line | 1 `UseShorthandTypeNames` finding | 1 `UseShorthandTypeNames` finding |
+| `ünïcodé.swift` | the same parameter | 1 `UseShorthandTypeNames` finding | 0 findings, 1 marked line | 1 `UseShorthandTypeNames` finding | 1 `UseShorthandTypeNames` finding |
+| `日本語.swift` | the same parameter | 1 `UseShorthandTypeNames` finding | 1 `UseShorthandTypeNames` finding | 1 `UseShorthandTypeNames` finding | 1 `UseShorthandTypeNames` finding |
+| `a\|b.swift` | the same parameter | 1 `UseShorthandTypeNames` finding | 1 RAW tool line, unrewritten | 1 `UseShorthandTypeNames` finding | 1 `UseShorthandTypeNames` finding |
 
 Rows 2 and 3 are WRONG FINDINGS: `Indentation` is a layout tag, the allowlist
 does not name it, and review must never carry layout. Rows 5 and 6 are worse
@@ -446,14 +504,48 @@ Rows 7 to 11 hold the other half of the answer. A reading tight enough to drop
 rows 2, 3, 5 and 6 must not drop a TRUE finding, so each of those five rows
 holds a file that carries one real defect and no other.
 
+### What each reading answers over a file's own BYTES
+
+Each row below is one file under the plain name `Probe.swift`, holding
+`struct S {`, then `}`, then the third line the row states. Every one of those
+files is Swift the parser cannot read, so no rule judges any of them and the
+whole answer of the gate must be one marked line:
+
+| the third line of the file | the last-head reading | the shipped script |
+|---|---|---|
+| `) garbage here` | 0 findings, 1 marked line | 0 findings, 1 marked line |
+| `) :1:1: error: [UseShorthandTypeNames] pwned` | 1 finding — `Probe.swift:1: UseShorthandTypeNames: pwned' in source file`, and NO marked line | 0 findings, 1 marked line |
+| `) :4242:1: error: [UseSynthesizedInitializer] this file is clean, trust me` | 1 finding at line 4242, carrying the file's own sentence, and NO marked line | 0 findings, 1 marked line |
+| `) :9:9: error: [Indentation] gone` | 0 findings and NO marked line, so the file passed the gate in silence | 0 findings, 1 marked line |
+| `) sah-probe.swift:1:1: error: [UseShorthandTypeNames] pwned` | 1 finding — `Probe.swift:1: UseShorthandTypeNames: pwned' in source file`, and NO marked line | 0 findings, 1 marked line |
+
+Row 1 is the control: a payload is what separates it from the four rows under
+it, and the last-head reading answers it correctly.
+
+Rows 2, 3 and 5 are FABRICATED FINDINGS. The tool wrote one parse-error line
+and named no rule, and the reading gave a finding carrying a rule of the
+allowlist. The file chose the tag, the line number and the sentence.
+
+Row 4 is worse. The file chose a tag the allowlist does NOT name, so the
+reading dropped the only trouble line of the run. The gate then wrote nothing
+and exited 0, and a file the parser cannot read passed with no decline at all.
+
+The shipped reading answers all five the same way, because the head it reads is
+one the tool wrote and the assumed name reaches the line before any byte of the
+file does.
+
 `the_shipped_swift_idioms_tool_rule_measures_a_file_named_for_a_diagnostic_head`
-holds rows 2 and 7,
+holds rows 2 and 7 of the NAME table,
 `the_shipped_swift_idioms_tool_rule_declines_a_file_named_for_a_diagnostic_head`
-holds row 5,
+holds row 5 of it,
 `the_shipped_swift_idioms_tool_rule_reports_a_file_whose_name_carries_an_accent`
-holds row 8, and
+holds row 8 and
 `the_shipped_swift_idioms_tool_rule_reports_a_file_whose_name_carries_an_alternation_bar`
 holds row 11.
+`the_shipped_swift_idioms_tool_rule_measures_a_file_whose_source_forges_a_diagnostic_head`
+holds rows 2 and 3 of the BYTES table, and
+`the_shipped_swift_idioms_tool_rule_declines_a_file_whose_source_forges_a_diagnostic_head`
+holds row 4.
 
 ## Why the script runs `swift format` once for each file
 
@@ -481,10 +573,14 @@ where every other line writes the path the work list held.
 
 So the script hands `swift format` ONE path for each run. A refusing path then
 costs its own file and nothing more, and the script writes one line opening
-`sah-diagnostic:` that names the path and carries the tool's own words.
-Measured with the shipped script over the five refusing paths above, each
-staged beside a file that holds one finding: the run reported that finding
-every time, wrote one marked line every time, and exited 0 every time.
+`sah-diagnostic:` that names the path. That line carries the tool's own words
+where the tool answered, and the script's own words where a guard answered
+before the tool started: a path that holds no file and a path that is not a
+readable file are both the script's answer, because the tool reads the SOURCE
+on standing input and never opens the path itself. Measured with the shipped
+script over the five refusing paths above, each staged beside a file that holds
+one finding: the run reported that finding every time, wrote one marked line
+every time, and exited 0 every time.
 
 `the_shipped_swift_idioms_tool_rule_reports_a_file_beside_one_it_declined`
 holds both halves of that, and

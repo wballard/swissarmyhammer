@@ -412,6 +412,180 @@ comments:
     - evidence: 2 files — builtin/validators/code-hygiene/rules/idioms-swift.md, crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs (232 insertions, 71 deletions). All 4 findings of round 2 flipped to `- [x]`. `cargo nextest run -p swissarmyhammer-validators swift` — 90 run, 90 passed (88 before, plus 2 new). `cargo nextest run -p swissarmyhammer-validators` — 858 run, 819 passed, 39 failed; with the change stashed the same run gives the IDENTICAL failing name set, so every one is pre-existing (missing go, revive, staticcheck, golangci-lint and eslint-plugin-sonarjs). One Dart name, `the_shipped_dart_missing_docs_tool_rule_declines_a_file_it_may_not_read`, is flaky under load: it fails in one whole-crate run and passes 3 of 3 times on its own. `cargo fmt --all --check` clean. `cargo clippy -p swissarmyhammer-validators --all-targets -D warnings` clean.
     - next: /review
   timestamp: 2026-09-07T19:02:38.283621+00:00
+- actor: claude-code
+  id: 01m1ym2qs2j3thdt5ct2j5svzh
+  text: |-
+    ### finish iteration 3 — pending review
+    - implement: changed — 2 files, 232 insertions and 71 deletions. All 4 findings of round 2 closed. The fix removes the class: no path goes into a pattern or a replacement. One `awk` walks to the LAST `:<line>:<column>: error: ` of each line, thus the decline guard and the tag filter are one reading.
+    - test: green — cargo nextest -p swissarmyhammer-validators swift, 90 run, 90 passed (88 before, plus 2 new); cargo fmt --all --check clean. The driver ran these.
+    - commit: 8b57b40f0
+    - review: pending
+    - Both new tests failed first against the shipped script, each by name.
+    - `doctor.check_command` adds `awk` and drops `grep`, because the script runs `grep` no longer.
+  timestamp: 2026-09-07T19:03:51.330669+00:00
+- actor: claude-code
+  id: 01m1ymym438bcdm7nw27whzjw6
+  text: |-
+    ### review — findings
+    - evidence: 5 findings, round 3, scope `review sha HEAD~1..HEAD` (checkpoint 8b57b40f0). The engine returned 0 findings and skipped `idioms-swift.md`, because no validator matches `*.md`. The 5 items come from direct verification of that uncovered gate script — `builtin/validators/code-hygiene/rules/idioms-swift.md:51`, `:67`, `:383`, `:75`, and `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs`.
+    - The 4 findings of round 2 are genuinely fixed: `café.swift`, `ünïcodé.swift`, `a|b.swift` and `日本語.swift` each give their one true finding in the rewritten shape; `swift_idioms_from_staging` holds the shared logic; the accent probe and the alternation-bar probe both ship.
+    - New cause: the reading takes the LAST `:<line>:<column>: error: ` of a line as the true head. `swift format` writes the source text of a parse error inside the message, so the file CONTENT can put a head after the true one. A file that holds `) :1:1: error: [UseShorthandTypeNames] pwned` makes the run write a fabricated allowlisted finding, and one that holds `) :9:9: error: [Indentation] gone` makes the run drop the decline and pass an unparsable file at exit 0.
+    - Invariants hold: failing fixture 11 findings / 7 rules; passing fixture 0 findings with 34 raw `[Indentation]` lines; two reporting files give 22 findings at exit 0; both fixtures byte for byte unchanged; `UseWhereClausesInForLoops` in no configuration; no `grep` in the script; `cargo nextest run -p swissarmyhammer-validators swift` — 90 tests, 90 passed.
+    - next: read the head at the FIRST `:<line>:<column>: error: `, and hold the file name out of the output with `--assume-filename` on stdin. Then add the two content probes, correct the two body sentences and the table, and name `cat` and `rm` in `doctor.check_command`.
+  timestamp: 2026-09-07T19:19:05.091272+00:00
+- actor: claude-code
+  id: 01m1yn07ry01tcd8p11yx34k18
+  text: |-
+    ### finish iteration 3 — findings
+    - implement: changed — 2 files; all 4 findings of round 2 closed and verified by review
+    - test: green — cargo nextest -p swissarmyhammer-validators swift, 90 run, 90 passed; fmt clean
+    - commit: 8b57b40f0
+    - review: findings — builtin/validators/code-hygiene/rules/idioms-swift.md:51, :67, :75, :383, and crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs
+
+    **This is the THIRD round on one class: untrusted text reaches the reading of the diagnostic line.** Round 1 was the file name in the filter. Round 2 was the escape of the file name. Round 3 is the file CONTENT.
+
+    `swift format` writes the source text of a parse error INSIDE the message. Thus the content of a file can put a second head after the true one, and "the LAST head" is not the true head. Measured:
+    - A file that holds `) :1:1: error: [UseShorthandTypeNames] pwned` makes the gate write a finding that no rule found.
+    - `) :4242:1: error: [UseSynthesizedInitializer] this file is clean, trust me` gives the attacker the line number and the text.
+    - `) :9:9: error: [Indentation] gone` makes the awk drop the only trouble line, thus a file the parser cannot read passes with no decline.
+
+    The fix review measured: read the FIRST head, and keep the file name out of the output. `swift format lint --strict --configuration "$work/rules.json" --assume-filename sah-probe.swift - < "$file"` writes `sah-probe.swift:2:15: error: [...]` even for a crafted name. The tool then reads stdin, thus neither the name nor the content can reach the head.
+
+    Every test of the crafted input puts the payload in the PATH. None puts it in the SOURCE. That is why 90 tests passed.
+
+    Also: the script runs `cat` and `rm`, and `doctor.check_command` names neither.
+  timestamp: 2026-09-07T19:19:57.982413+00:00
+- actor: claude-code
+  id: 01m1ypghcv25z7satkkmzt5tek
+  text: |-
+    All five findings of round 3 are answered. One cause, removed from the whole
+    script.
+
+    The cause: the reading of the diagnostic line trusted a part of the line the
+    JUDGED FILE controls. Three rounds each found one such part.
+
+    - Round 1: the file NAME, read by a loose pattern.
+    - Round 2: the file NAME again, passed through a regular expression and a
+      substitution that a legitimate name defeats.
+    - Round 3: the file BYTES. `swift format` writes the source text of a parse
+      error INSIDE the message, so a file can put a second `:<line>:<column>:
+      error: ` head after the true one, and "the LAST head" is not the true head.
+
+    The fix takes BOTH parts out of the file's hands, in that order.
+
+    The NAME goes first. The script hands the tool the SOURCE on standing input,
+    under one assumed name that holds no `:`:
+
+        swift format lint --strict --configuration "$work/rules.json" \
+          --assume-filename sah-probe.swift - < "$file"
+
+    Measured with Apple Swift 6.4: a file named
+    `w: error: [UseShorthandTypeNames] s.swift` writes
+    `sah-probe.swift:2:39: error: [UseShorthandTypeNames] use shorthand syntax for
+    this 'Array' type`. The name reaches no line at all.
+
+    The BYTES go second. The `awk` reads the FIRST `sah-probe.swift:` of the line
+    and asks for the head IMMEDIATELY after it:
+
+        at = index($0, opening)
+        rest = at > 0 ? substr($0, at + size) : ""
+        if (at == 0 || match(rest, /^[0-9]+:[0-9]+: error: /) == 0) {
+          print $0 > refused
+          next
+        }
+
+    Nothing the file holds can stand BEFORE the path the tool wrote, so the FIRST
+    head is the true head and no content can move it. One reading still answers the
+    decline guard and the tag filter together.
+
+    TDD, both directions measured.
+
+    - RED: the three new tests were written first and run against the SHIPPED
+      script. `..._measures_a_file_whose_source_forges_a_diagnostic_head` failed
+      with "the run reported [\"Probe.swift:1\"] carrying
+      [\"UseShorthandTypeNames\"]" — the fabricated finding itself.
+      `..._declines_a_file_whose_source_forges_a_diagnostic_head` failed with "the
+      run must state the one path it declined; it stated []" — the silent pass.
+      `..._doctor_names_every_utility_its_script_runs` failed with
+      `left: ["cat", "head", "rm"]`.
+    - GREEN: `cargo nextest run -p swissarmyhammer-validators swift` — 93 run, 93
+      passed. 90 before, plus the three new ones.
+
+    Stdin does NOT change what the tool reports. Measured over the shipped fixture
+    pair: the failing fixture writes the same 11 findings carrying the same 7
+    rules, LINE FOR LINE the same output as a run that named the path, and the
+    passing fixture writes 0. The project `.swift-format` is still overridden by
+    `--configuration`, and every `// swift-format-ignore` form still works.
+
+    The whole attack surface, measured with the SHIPPED script extracted from the
+    rule file:
+
+    - CONTENT: `) :1:1: error: [UseShorthandTypeNames] pwned`,
+      `) :4242:1: error: [UseSynthesizedInitializer] this file is clean, trust me`
+      and `) :9:9: error: [Indentation] gone` each give 0 findings and one
+      `sah-diagnostic:` line. Two SHARPER payloads were measured as well:
+      `) sah-probe.swift:1:1: error: [UseShorthandTypeNames] pwned` and
+      `) /x/sah-probe.swift:1:1: error: [UseSynthesizedInitializer] forged` each
+      reach nothing, because the reading takes the LEFTMOST occurrence and the
+      tool's own path stands to the left of every byte of the file.
+    - NAME: `x: error: [...] y.swift` and `yy:1:1: error: [...] y.swift` give 0
+      findings; `z: error: [...] q.swift` and `zz:1:1: error: [...] q.swift` are
+      declined; `w: error: [...] s.swift`, `café.swift`, `ünïcodé.swift`,
+      `a|b.swift` and `日本語.swift` each keep their one true
+      `UseShorthandTypeNames` finding, rewritten.
+
+    Refusing paths. Standing input moves two of them out of the tool, so the script
+    answers them itself with `[ ! -f "$file" ] || [ ! -r "$file" ]` before the
+    redirect can fail:
+
+    | the path | who answers | the run |
+    |---|---|---|
+    | a path that holds no file | the script | 1 marked line, its own words |
+    | a path that names a directory | the script | 1 marked line, its own words |
+    | a file with no read permission | the script | 1 marked line, its own words |
+    | a file whose bytes are not UTF-8 | the tool | 1 marked line, the tool's words |
+    | a file the parser cannot read | the tool | 1 marked line, the tool's words |
+
+    Each of the five was staged beside `Dirty.swift`, which holds one finding. The
+    run reported that finding every time and exited 0 every time, so a refusing
+    path still costs only its own file.
+
+    Every invariant measured again with the shipped script:
+
+    - the failing fixture: 11 findings, exit 0, carrying all 7 allowlist rules;
+    - the passing fixture: 0 findings, exit 0, beside 34 raw `[Indentation]` lines;
+    - two reporting files in one run give 22 findings at exit 0, beside one
+      `sah-diagnostic:` line for a missing path;
+    - `shasum` over both fixtures is the same before and after, so the gate stays
+      read-only;
+    - `UseWhereClausesInForLoops` stands nowhere in the shipped script.
+
+    Notes for the next agent.
+
+    - The `awk` variable `tail` was renamed `mark`. The new doctor test reads a
+      utility name as a WORD of the script, and it cannot tell a command from a
+      variable, so no `awk` or shell variable of this script may carry the name of
+      a utility. That rule is written into the doc comment of
+      `SWIFT_IDIOMS_SHELL_UTILITIES`.
+    - The decline line now carries the tool's words with the assumed probe name
+      taken off the head where the tool wrote one, so it reads
+      `declined Unparsable.swift: 2:4: error: expected name in attribute` rather
+      than naming a temporary file the author cannot find.
+    - `checked_binaries` in `tests/preconditions.rs` is now `pub(super)`, so the
+      new doctor test reads the `which` list with the engine's own reading rather
+      than a copy.
+    - The body section is rewritten and renamed "The reading finds the head of a
+      diagnostic by its POSITION". It now carries TWO tables: one over eleven file
+      NAMES across four readings, and a new one over five file CONTENTS across two
+      readings. Every cell was measured on this machine.
+  timestamp: 2026-09-07T19:46:20.699726+00:00
+- actor: claude-code
+  id: 01m1ypgsy7hxqv06mt9a6xrwjy
+  text: |-
+    ### implement — changed
+    - evidence: 3 files — builtin/validators/code-hygiene/rules/idioms-swift.md, crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs, crates/swissarmyhammer-validators/src/review/tool_rules/tests/preconditions.rs (and one import line in tests/shipped.rs). All 5 findings of round 3 flipped to `- [x]`. `cargo nextest run -p swissarmyhammer-validators swift` — 93 run, 93 passed (90 before, plus 3 new). `cargo nextest run -p swissarmyhammer-validators` — 861 run, 823 passed, 38 failed; with the change stashed the same run gives 858 run, 819 passed, 39 failed, and the failing name set after the change is a strict SUBSET of the failing name set before it — the one difference is `the_shipped_dart_missing_docs_tool_rule_declines_a_path_that_holds_no_file`, which is flaky under load. Every failure is pre-existing (missing go, revive, staticcheck, golangci-lint and eslint-plugin-sonarjs). `cargo fmt --all --check` clean. `cargo clippy -p swissarmyhammer-validators --all-targets -D warnings` clean.
+    - next: /review
+  timestamp: 2026-09-07T19:46:29.447163+00:00
 depends_on:
 - 01M1Y65VQ8V4TEWXDXD4Y2ZQNX
 position_column: doing
@@ -519,3 +693,21 @@ Remove the `--rules` intersection with `swiftformat --rules`, the `--min-version
 - [x] `builtin/validators/code-hygiene/rules/idioms-swift.md:49` `gate-script/rewrite` — the rewrite is a `sed -E` that uses `|` as the s-command delimiter, and the escaper writes `|` as `\|`. BSD sed then reads `\|` as an escaped DELIMITER and not as a literal `|`, so the pattern matches no line and the substitution is silently skipped. Measured over `a|b.swift` holding one `Array<Int>` parameter: the `grep -E` matches, so the line IS reported, and the run writes the raw tool line `a|b.swift:2:15: error: [UseShorthandTypeNames] use shorthand syntax for this 'Array' type` instead of `a|b.swift:2: UseShorthandTypeNames: ...`. The same expression with a `,` delimiter rewrites the line correctly. An unrewritten raw line as a finding is the same failure round 1 named in its second item. Use a delimiter the path cannot hold, or escape the delimiter apart from the regex operators. `|` is the ONLY character of the 22 measured that defeats the rewrite. The body states at line 357 that "the path stands in the pattern as TEXT" and that "no file name can make one"; both sentences are false for `|`, so correct the body with the same edit.
 - [x] `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs:281` `reuse/reuse` — The new function `swift_idioms_staged_run` duplicates the outcome-extraction and return-construction logic already in `swift_idioms_run` (lines 264–273). Both functions have identical sequences: drive the script, extract the outcome, build and return the same `SwiftIdiomsRun` struct. This pattern should have been extracted into a shared helper rather than written twice. Extract the common logic into a helper function — e.g., `fn swift_idioms_from_staging(staging: &ShippedStaging, files: &[&str]) -> SwiftIdiomsRun` — and have both `swift_idioms_run` and `swift_idioms_staged_run` set up their staging differently, then call this helper to do the run, outcome extraction, and return. This eliminates ~13 lines of duplication.
 - [x] `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs` `tests/anchor-coverage` — the two new tests hold the anchor against a CRAFTED name only. No test holds it against a LEGITIMATE name that the anchor breaks, so both defects above pass the suite. Add one probe for an accented name, such as `café.swift`, and one probe for a name holding `|`, each staged with the same `Array<Int>` parameter the crafted-name test already uses, and hold each run to the one true `UseShorthandTypeNames` finding in the REWRITTEN shape `<path>:<line>: UseShorthandTypeNames: ...`. A run that declines the file, and a run that writes the raw tool line, then each fail by name.
+
+## Review Findings (2026-09-07 14:15)
+
+> Scope: `review sha HEAD~1..HEAD` (checkpoint 8b57b40f0). Round 3. The engine reviewed the diffs and returned 0 findings. It again did NOT review `builtin/validators/code-hygiene/rules/idioms-swift.md`, which carries the gate script, because no validator matches `*.md`. The gate-script items below come from direct verification of that uncovered script. Each one carries a reproduction, measured with Apple Swift 6.4 and BSD `awk` version 20200816, under `LC_ALL=en_US.UTF-8`.
+
+> The four findings of round 2 are GENUINELY FIXED. `café.swift`, which the argument list holds in NFC and the tool writes back in NFD, gives its one true finding in the rewritten shape `café.swift:2: UseShorthandTypeNames: use shorthand syntax for this 'Array' type`. `a|b.swift` gives the same. `ünïcodé.swift` and `日本語.swift` give the same. The reuse item is fixed: `swift_idioms_from_staging` holds the drive, the outcome and the return, and both `swift_idioms_run` and `swift_idioms_staged_run` call it. The anchor-coverage item is fixed: `the_shipped_swift_idioms_tool_rule_reports_a_file_whose_name_carries_an_accent` and `the_shipped_swift_idioms_tool_rule_reports_a_file_whose_name_carries_an_alternation_bar` both ship, and both hold the run to the rewritten shape.
+
+> The round-1 guarantees still hold over a file NAME. `x: error: [UseShorthandTypeNames] y.swift` over an over-indented member gives 0 findings. `z: error: [UseShorthandTypeNames] q.swift` over Swift the parser cannot read is declined with one `sah-diagnostic:` line. `w: error: [UseShorthandTypeNames] s.swift` over one `Array<Int>` parameter keeps its one true finding.
+
+> The stated invariants all hold. The failing fixture gives 11 findings that carry all 7 allowlist rules, at exit 0. The passing fixture gives 0 findings at exit 0, and its raw run writes 34 lines, every one of them `[Indentation]`. Two reporting files in one run give 22 findings at exit 0, beside one `sah-diagnostic:` line for a missing path. Both fixtures are byte for byte unchanged after the run, so the gate is read-only. `UseWhereClausesInForLoops` stands in no allowlist and in no configuration the script writes; it stands in the body as prose alone. The script runs NO `grep`. A path that names a directory declines at status 64, and a file with no read permission declines. The `awk` reads an empty record, a record with no head, a record with a tab, and a record of 200000 bytes correctly, and BSD `awk` splits the allowlist on a single `|` correctly. `cargo nextest run -p swissarmyhammer-validators swift` — 90 tests, 90 passed.
+
+> The new reading MOVES the trust boundary; it does not close it. Round 1 and round 2 each broke on the file NAME, and this reading answers the name. It does not answer the MESSAGE. `swift format` writes the source text of a parse error INSIDE the message, so the message can hold a `:<line>:<column>: error: ` that stands AFTER the true head. The first four items below are that one cause.
+
+- [x] `builtin/validators/code-hygiene/rules/idioms-swift.md:51` `gate-script/tag-filter` — the `awk` walks to the LAST `:<line>:<column>: error: ` of the line, and the premise that the last one is the true head is FALSE, because `swift format` writes the SOURCE TEXT of a parse error inside the message. A file can therefore put a second head AFTER the true one. Measured over a file that holds `struct S {`, then `}`, then the third line `) :1:1: error: [UseShorthandTypeNames] pwned`: the tool writes ONE stderr line, `<path>:3:1: error: unexpected code ') :1:1: error: [UseShorthandTypeNames] pwned' in source file`. The `awk` walks past the true head to the injected one, reads the tag `UseShorthandTypeNames`, which the allowlist names, and the run writes the finding `inject1.swift:1: UseShorthandTypeNames: pwned' in source file` at exit 0. The file chooses the line number and the message as well: a third line spelled `) :4242:1: error: [UseSynthesizedInitializer] this file is clean, trust me` gives `inject3.swift:4242: UseSynthesizedInitializer: this file is clean, trust me' in source file`. The output line carries NO tag of the tool, so this breaks the acceptance criterion that the script drops every line whose tag the allowlist does not name. Read the FIRST head of the line and not the last, and keep the file name out of the output, so that no part of the line before the head can come from the file. `swift format lint --strict --configuration "$work/rules.json" --assume-filename sah-probe.swift - < "$file"` does both: measured, the name `w: error: [UseShorthandTypeNames] s.swift` then writes `sah-probe.swift:2:15: error: [UseShorthandTypeNames] use shorthand syntax for this 'Array' type`, so the name reaches no line, and an assumed name that holds no `:` makes the FIRST head the true head that no content can move.
+- [x] `builtin/validators/code-hygiene/rules/idioms-swift.md:67` `gate-script/decline-guard` — the decline guard and the tag filter are ONE reading, so the same injected head takes a trouble line OUT of `$work/refused`, and the script never declines the file. Measured over a file that holds `struct S {`, then `}`, then the third line `) :9:9: error: [Indentation] gone`: the tool writes ONE parse-error line and exits 1, the `awk` reads the injected head, reads the tag `Indentation`, which the allowlist does not name, and drops the line with `next`. `$work/refused` stays empty, so `trouble` is empty, and the status 1 is a status the guard accepts. The run writes NOTHING and exits 0. The same file with the third line spelled `) garbage here` is declined correctly with one `sah-diagnostic:` line, so the payload alone makes the difference. A file the parser cannot read thus passes the gate silently, and that breaks the guarantee the body states at line 357, that a file which wrote a trouble line is declined whole. One reading for both jobs is correct, but it must read the head the TOOL wrote and not one the FILE supplied. The fix of the item above closes this item as well.
+- [x] `builtin/validators/code-hygiene/rules/idioms-swift.md:383` `gate-script/body` — the body states the false premise twice, and its comparison table measures no payload in the file CONTENT. Line 355 states that a line whose LAST `:<line>:<column>: error: ` carries a `[<Tag>] ` after it is a tagged finding, and line 383 states that on any line the true head is the LAST `:<line>:<column>: error: ` of that line. The two items above measure both sentences as false. The table at line 410 measures ELEVEN file NAMES and no file CONTENT, and its row for `PlainBroken.swift` states that the shipped script gives 0 findings and 1 marked line for Swift the parser cannot read, which the measurement above refutes. Correct both sentences with the same edit, and add one row that measures a file whose BYTES hold a diagnostic head.
+- [x] `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs` `tests/content-coverage` — every crafted-input test of this file names the file NAME. `the_shipped_swift_idioms_tool_rule_measures_a_file_named_for_a_diagnostic_head` and `the_shipped_swift_idioms_tool_rule_declines_a_file_named_for_a_diagnostic_head` each stage the payload in the PATH, and no test stages it in the SOURCE, so the suite gives 90 tests and 90 passed while both defects above are live. The trust boundary moved from the path to the message, and no test moved with it. Add two probes that hold the payload in the CONTENT, each under a plain name: one that stages `) :1:1: error: [UseShorthandTypeNames] pwned` and holds the run to ZERO findings, and one that stages `) :9:9: error: [Indentation] gone` and holds the run to one `sah-diagnostic:` line. A reading that trusts the message then fails by name.
+- [x] `builtin/validators/code-hygiene/rules/idioms-swift.md:75` `gate-script/doctor` — `doctor.check_command` names `swift`, `mktemp`, `awk`, `sed`, `sort` and `paste`, and the run block also calls `cat` and `rm`, which the command names nowhere. The `trap` calls `rm -rf "$work"`, and the last statement of the file loop calls `cat "$work/kept"`. The body states at line 400 that `doctor.check_command` names `awk` beside the others, so the rule holds itself to naming each tool it runs. The rest of this item is correct as measured: the script runs NO `grep`, and `grep` is correctly gone from the command, and the command itself exits 0 on this machine. Name `cat` and `rm` beside the six.

@@ -181,8 +181,44 @@ comments:
     - evidence: 2 files — `/Users/wballard/github/swissarmyhammer/swissarmyhammer/builtin/validators/code-hygiene/rules/idioms-swift.md` (+47/-10, one hunk that opens at line 613, so the front matter and the `run:` gate script are untouched and `swiftformat` still runs the gate), `/Users/wballard/github/swissarmyhammer/swissarmyhammer/crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs` (+531/-152). All 7 findings of round 2 flipped to `- [x]`. `cargo nextest run -p swissarmyhammer-validators swift` — 85 run, 85 passed. Whole crate — 853 run, 815 passed, 38 failed, the failing set identical to a stashed re-run and every one of them a Go or TypeScript rule this machine has no tool for. `cargo fmt --all --check` clean. `cargo clippy -p swissarmyhammer-validators --all-targets -D warnings` clean.
     - next: `/review`
   timestamp: 2026-09-07T16:56:27.932628+00:00
-position_column: doing
-position_ordinal: '8380'
+- actor: claude-code
+  id: 01m1ycvzvynbc8vs1y1zmp27kh
+  text: |-
+    ### finish iteration 3 — pending review
+    - implement: changed — 2 files; all 7 findings of round 2 closed. The implementer refused the replacement reason the finding proposed, because measurement showed that reason is also wrong, and it wrote the measured reason instead. The reflection walk now answers a ReflectionFailure enum and panics nowhere.
+    - test: green — cargo nextest -p swissarmyhammer-validators swift, 85 run, 85 passed; cargo fmt --all --check clean; cargo clippy -p swissarmyhammer-validators --all-targets -D warnings clean. The driver ran these.
+    - commit: 088603d2c
+    - review: pending
+  timestamp: 2026-09-07T16:57:50.206012+00:00
+- actor: claude-code
+  id: 01m1yd7d18hw9zwx9g3dnd5dwh
+  text: |-
+    ### review — clean
+
+    - evidence: `review sha HEAD~1..HEAD` over commit 088603d2c. The engine ran 7 validators and gave 0 findings, 0 confirmed, 0 refuted, 0 failed. `cargo nextest run -p swissarmyhammer-validators swift` gave 85 passed, 0 failed.
+    - The driver measured the rule body, because no validator reads a `*.md` file. All seven items of round 2 are addressed. Each measurement below was made again on Apple Swift 6.4 (swiftlang-6.4.0.33.1), the same toolchain the table names.
+
+    1. The count table of the body is correct, name for name. `strings -a "$(xcrun --find swift-format)" | grep -cx <name>` gave `addLines` 1, `indentation` 5, `lineLength` 2, `removeLine` 1, `spacing` 1, `trailingComma` 1, `endOfLineComment` 1, `spacingCharacter` 1, `trailingWhitespace` 1, and for the TAG form 0 for the first six and 1 for `EndOfLineComment`, `SpacingCharacter` and `TrailingWhitespace`.
+    2. The 15-byte probe of the body is correct. The driver made `Probe.swift` from the block in the body, with no edit, ran `xcrun swiftc -O Probe.swift -o Probe`, and got 0 for the 15-byte literal and 1 for the 16-byte literal.
+    3. The three TAG forms that stand in the file are exactly the three of 16 bytes or more. The driver read the section of each: all three stand in `__cstring`, beside the message text `use spaces`, which is the shape of a Swift string literal that is too long for the small form.
+    4. The new reason is correct. The driver read the section of each CASE name: `addLines` and `trailingWhitespace` stand in `__swift5_reflstr`, and `indentation` stands five times — four times in `__swift5_reflstr` and once in `__objc_methname`. Thus `strings` writes the run of bytes and never the type that owns it, word for word as the body and the doc comment now state.
+    5. `ReflectionFailure` is reachable and no path panics. The walk holds ten arms, and every arm answers a `Result`. No `unwrap`, no `expect` and no `panic!` stands inside `mod swift_reflection`. `file_offset` answers `Unmapped`, `text` answers `Unterminated`, and each byte window goes through `window::<N>`, which answers `Truncated`. The subtraction `address - section.address` cannot go below zero, because the `find` above it holds `section.address <= address`.
+    6. The zero-byte load command cannot make an endless loop. The walk of the load commands is a `for` over the command count of the header, and a length of zero answers `EmptyLoadCommand` before the step.
+    7. `xcrun` and `dump-configuration` both read their status and carry their stderr.
+    - next: The gate is not changed. The hunk of `idioms-swift.md` opens at line 613, and the gate script stands at lines 14 to 50. `swiftformat --lint` still runs the gate. The task moves to done.
+  timestamp: 2026-09-07T17:04:04.136562+00:00
+- actor: claude-code
+  id: 01m1yd8jf4trdmvwf5m7jabekk
+  text: |-
+    ### finish iteration 3 — clean
+    - implement: changed — 2 files; all 7 findings of round 2 closed
+    - test: green — cargo nextest -p swissarmyhammer-validators swift, 85 run, 85 passed; fmt and clippy clean
+    - commit: 088603d2c
+    - review: clean — 0 findings, 7 validators attempted, 0 failed. Review re-measured all 7 items of round 2 on Apple Swift 6.4 and confirmed each one. It compiled the two-line probe of the body without an edit, and it read the section that holds each name.
+    - The task is in done. Three rounds: 4 findings, then 7 findings, then clean.
+  timestamp: 2026-09-07T17:04:42.468246+00:00
+position_column: done
+position_ordinal: ffffffffffffffffffffffffffffffffffffffffffb080
 title: Measure the Swift toolchain rules the gate needs
 ---
 ## What

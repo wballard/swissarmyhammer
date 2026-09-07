@@ -760,7 +760,7 @@ struct ShippedEmptyRun {
 
 /// One shipped rule that carries a `tool` block.
 ///
-/// A guard over the whole set reads these four fields and no other, so one
+/// A guard over the whole set reads these five fields and no other, so one
 /// shape serves every guard and one walk of the set answers them all.
 struct ShippedToolRule {
     /// The name of the rule, for the failure messages.
@@ -776,6 +776,12 @@ struct ShippedToolRule {
     /// the rule carries no `doctor` block at all. A rule that names no check
     /// names no tool either.
     check_command: Option<String>,
+
+    /// The `doctor.fix_hint` the set ships for the rule, or `None` when the
+    /// rule carries no hint. The hint is the prose a person reads when the
+    /// check fails, so a guard that holds a rule to what it PROMISES a reader
+    /// reads it here.
+    fix_hint: Option<String>,
 }
 
 /// Every shipped rule that carries a `tool` block.
@@ -797,6 +803,11 @@ fn shipped_tool_rules(loader: &ValidatorLoader) -> Vec<ShippedToolRule> {
                 .doctor
                 .as_ref()
                 .map(|doctor| doctor.check_command.clone()),
+            fix_hint: tool
+                .doctor
+                .as_ref()
+                .and_then(|doctor| doctor.fix_hint.as_ref())
+                .map(std::string::ToString::to_string),
         })
         .collect()
 }

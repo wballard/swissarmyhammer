@@ -586,6 +586,161 @@ comments:
     - evidence: 3 files — builtin/validators/code-hygiene/rules/idioms-swift.md, crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs, crates/swissarmyhammer-validators/src/review/tool_rules/tests/preconditions.rs (and one import line in tests/shipped.rs). All 5 findings of round 3 flipped to `- [x]`. `cargo nextest run -p swissarmyhammer-validators swift` — 93 run, 93 passed (90 before, plus 3 new). `cargo nextest run -p swissarmyhammer-validators` — 861 run, 823 passed, 38 failed; with the change stashed the same run gives 858 run, 819 passed, 39 failed, and the failing name set after the change is a strict SUBSET of the failing name set before it — the one difference is `the_shipped_dart_missing_docs_tool_rule_declines_a_path_that_holds_no_file`, which is flaky under load. Every failure is pre-existing (missing go, revive, staticcheck, golangci-lint and eslint-plugin-sonarjs). `cargo fmt --all --check` clean. `cargo clippy -p swissarmyhammer-validators --all-targets -D warnings` clean.
     - next: /review
   timestamp: 2026-09-07T19:46:29.447163+00:00
+- actor: claude-code
+  id: 01m1ypk2f1c6fvt0zzn5pvy2gn
+  text: |-
+    ### finish iteration 4 — pending review
+    - implement: changed — 4 files. All 5 findings of round 3 closed. The fix removes the class at its root: the judged file controls no part of the line the script reads.
+    - test: green — cargo nextest -p swissarmyhammer-validators swift, 93 run, 93 passed (90 before, plus 3 new); cargo fmt --all --check clean. The driver ran these.
+    - commit: f2067c6d1
+    - review: pending
+    - The name goes first: the source goes on standing input, under `--assume-filename sah-probe.swift`, a name that holds no `:`. The bytes go second: the awk reads the FIRST `sah-probe.swift:` of the line and needs the head immediately after it.
+    - Three tests written first, each RED by name. Standing input does not change what the tool reports: the failing fixture writes the same 11 findings over the same 7 rules, line for line.
+  timestamp: 2026-09-07T19:47:43.714001+00:00
+- actor: claude-code
+  id: 01m1yqcr2h4xfgqpk6qdemvgnv
+  text: |-
+    ### review — findings
+    - evidence: round 4, `review sha HEAD~1..HEAD` (checkpoint f2067c6d1). The engine gave 0 findings and skipped `builtin/validators/code-hygiene/rules/idioms-swift.md`, because no validator matches `*.md`. Direct verification of that script gives 3 findings — `builtin/validators/code-hygiene/rules/idioms-swift.md:44`, `builtin/validators/code-hygiene/rules/idioms-swift.md:83`, `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs`. All 5 findings of round 3 are genuinely fixed. The content-forgery attack is CLOSED: every payload that spells a diagnostic head in the file bytes gives 0 findings, at the first line, in a string, in a comment, split over lines, and behind a parse trigger; a multi-line payload makes the tool elide the quoted source, so no payload can make a record of its own. `#sourceLocation` does not move the name the tool writes. Standing input loses nothing: 48 stderr lines, identical line for line to a path-named run. The failing fixture gives 11 findings over 7 rules at exit 0; the passing fixture gives 0. Eleven paths in one run give 5 findings and 5 `sah-diagnostic:` lines at exit 0. The gate is read-only. `cargo nextest run -p swissarmyhammer-validators swift` — 93 tests, 93 passed. The NEW cause is the version floor: `--assume-filename` beside `-` is accepted only at Swift 6.2 and newer, and the rule states a floor of Swift 6.0.
+    - next: raise the stated floor to Swift 6.2 in `doctor.fix_hint`, in the floor section and in its table row; give `doctor.check_command` the same option pair the run block uses; add a test that binds the run block options to the doctor check and the two stated floors to each other.
+  timestamp: 2026-09-07T20:01:45.041287+00:00
+- actor: claude-code
+  id: 01m1yqdtawp0dmx6nm9j25ra4y
+  text: |-
+    ### finish iteration 4 — findings
+    - implement: changed — 4 files; all 5 findings of round 3 closed
+    - test: green — cargo nextest -p swissarmyhammer-validators swift, 93 run, 93 passed; fmt and clippy clean
+    - commit: f2067c6d1
+    - review: findings — builtin/validators/code-hygiene/rules/idioms-swift.md:44, builtin/validators/code-hygiene/rules/idioms-swift.md:83, crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs
+
+    **The injection class is CLOSED.** Review drove a full set of payloads through the file bytes: the first line, a string literal, a comment, a payload behind a parse trigger, a payload over two lines, `#sourceLocation` with a crafted file name, a Swift 6.2 raw identifier, a file truly named `sah-probe.swift`, and a file that names the probe in a comment. Each gives 0 forged findings. A payload over two lines makes the tool ELIDE the quoted source, thus the tool writes no newline inside a message and no payload can make a record of its own.
+
+    Standing input loses nothing: 48 stderr lines, identical line for line to a run that named the path.
+
+    **The new cause is the version floor, and it is a different problem.** `--assume-filename` beside `-` is accepted only at Swift 6.2 and newer. `release/6.0` and `release/6.1` guard it with `if assumeFilename != nil && !paths.isEmpty`, and `-` IS a path, thus each raises a ValidationError and exits 64. The script reads 64 as trouble, thus it declines EVERY file. `release/6.2` changed the guard.
+
+    The rule states a floor of Swift 6.0, and `doctor.check_command` does not use `--assume-filename`. Thus at Swift 6.1 the doctor says HEALTHY over a gate that judges nothing.
+
+    Review read 6.0 and 6.1 from the release source, because it could not run those toolchains. It measured the same guard on 6.4 at exit 64.
+  timestamp: 2026-09-07T20:02:20.124105+00:00
+- actor: claude-code
+  id: 01m1yrc8nsqnk19akcbwhw6v97
+  text: |-
+    All three findings of round 4 are answered. One cause: the run block asks the
+    toolchain for more than the rule STATES and more than the doctor MEASURES.
+
+    The cause, in two halves.
+
+    - The STATED floor was Swift 6.0, which is the floor of the `swift format`
+      SUBCOMMAND. The run block gives the tool `--assume-filename "$probe" -`, and
+      only Swift 6.2 and above accept that pair.
+    - `doctor.check_command` ended in `printf '' | swift format lint --strict -`,
+      which gives the tool no `--assume-filename` at all. At Swift 6.1 that check
+      exits 0 and the rule reports HEALTHY, while the run block then declines every
+      file at status 64. A green doctor over a gate that judges nothing.
+
+    TDD, both directions measured.
+
+    - RED: the two new tests were written first and run against the SHIPPED rule.
+      `..._doctor_measures_every_option_its_script_gives_the_tool` failed with
+      "the run block gives {"--assume-filename", "--configuration", "--strict"} and
+      the check gives {"--strict"}".
+      `..._states_one_swift_version_floor` failed with "the body of `idioms-swift`
+      must state `The floor of this GATE is **Swift `". 2 run, 0 passed, 2 failed.
+    - GREEN: the same two tests, 2 run, 2 passed.
+    - `cargo nextest run -p swissarmyhammer-validators swift` — 95 run, 95 passed.
+      93 before, plus the two new ones.
+
+    What changed in the rule.
+
+    - `doctor.fix_hint` now reads "install the Swift toolchain, Swift 6.2 or newer
+      — Xcode 26 and above ship it".
+    - `doctor.check_command` now ends in
+      `printf '' | swift format lint --strict --configuration '{}'
+      --assume-filename sah-probe.swift -`, which gives the tool the SAME three
+      options the run block gives it. Measured on this machine, Apple Swift 6.4:
+      exit 0.
+    - The floor section is rewritten. It states the floor of the GATE as Swift 6.2,
+      it keeps the finding that the SUBCOMMAND arrived at Swift 6.0, and it states
+      plainly that row 4 is the floor and row 3 is not. Two rows are new: when
+      `--assume-filename` beside `-` was first accepted, and which Xcode ships
+      Swift 6.2.
+
+    Every claim the new prose makes was measured on this machine or read from the
+    release source, and each one is named as which.
+
+    | the claim | how it was measured | the answer |
+    |---|---|---|
+    | the guard of `release/6.0` and `release/6.1` | `curl` of `LintFormatOptions.swift` | `if assumeFilename != nil && !paths.isEmpty` at line 104 and line 122 |
+    | the guard of `release/6.2` and `main` | the same | `!(paths.isEmpty || paths == ["-"])` at line 110 and line 122 |
+    | what the guard does | Swift 6.4, a NAMED path beside the option | `Error: '--assume-filename' is only valid when reading from stdin`, exit 64 |
+    | the new `doctor.check_command` | run as `sh` on this machine | exit 0 |
+    | which Xcode ships Swift 6.2 | `https://www.swift.org/api/v1/install/releases.json` | Xcode 26, released 2025-09-15 |
+    | `release/6.0` has no `-` branch | `curl` of `Frontend.swift`, count of `"-"` | 0 |
+    | `release/6.1` has a `-` branch | the same, line 100 | `if lintFormatOptions.paths == ["-"]` |
+    | the deprecation warning for an empty path list | Swift 6.4, the run block with `-` dropped | TEN lines, opening `<unknown>: error: Running swift-format without input paths is deprecated` |
+    | what that form costs | the shipped script with `-` dropped, over the failing fixture | 0 findings and 1 `sah-diagnostic:` line — every file declined |
+
+    I could NOT run a Swift 6.0 or a Swift 6.1 toolchain either, so the guard of
+    those two branches is READ and not run. The body says so in as many words.
+
+    The CI runner is re-checked and stays green. Run `34135649101` on `main`, at
+    `2026-09-07T14:57:21Z`, writes:
+
+        Apple Swift version 6.4 (swiftlang-6.4.0.33.1 clang-2100.3.33.1)
+        Target: arm64-apple-macosx27.0.0
+        swift-driver version: 1.168.6
+
+    6.4 stands over the floor of 6.2, so the option pair is accepted there and CI
+    does not turn red. The body now records this run rather than the older one.
+
+    Every invariant measured again with the SHIPPED script.
+
+    - the failing fixture: 11 findings, exit 0, carrying all 7 allowlist rules;
+    - the passing fixture: 0 findings, exit 0;
+    - two reporting files beside a missing path: 22 findings at exit 0, and one
+      `sah-diagnostic:` line;
+    - `shasum` over both judged files is the same before and after, so the gate
+      stays read-only;
+    - `UseWhereClausesInForLoops` stands nowhere in the shipped script;
+    - the injection matrix still gives 0 forged findings. Eight content payloads
+      were driven through — `) :1:1: error: [UseShorthandTypeNames] pwned`,
+      `) :9:9: error: [Indentation] gone`,
+      `) :4242:1: error: [UseSynthesizedInitializer] this file is clean, trust me`,
+      `) sah-probe.swift:1:1: error: [...] pwned`,
+      `) /x/sah-probe.swift:1:1: error: [...] forged`, the head as the first line of
+      the file, the head in a string literal and the head in a comment. Each gives
+      0 findings;
+    - every legitimate name keeps its one true finding, rewritten:
+      `w: error: [UseShorthandTypeNames] s.swift`, `café.swift`, `a|b.swift`,
+      `ünïcodé.swift` and `日本語.swift`. The crafted indented name gives 0
+      findings, and the crafted unparsable name is declined with one marked line.
+
+    Notes for the next agent.
+
+    - `ShippedToolRule` carries a fifth field, `fix_hint`. The new floor test reads
+      the hint where the set SHIPS it rather than off a copy, and the struct is the
+      one place the whole test set reads a shipped tool block.
+    - `swift_format_lint_options` reads the options of ONE command: it opens at
+      `swift format lint`, joins the backslash line continuations first, and closes
+      at the next `|`, `;`, `&` or newline. So the `which` list before the check and
+      the `|| status=$?` after the run block reach neither answer. A new option in
+      the run block therefore fails the test by name.
+    - `--configuration` takes a JSON STRING as well as a path, and `release/6.0`
+      already documents that, so `'{}'` in the check adds no version cost of its
+      own. It keeps the check's option set equal to the run block's.
+    - Another process edited `src/review/scope/excluded.rs`,
+      `src/review/scope/tests_matching.rs` and `src/review/synthesize.rs` in this
+      working tree while this task ran. Those three files are NOT the work of this
+      task.
+  timestamp: 2026-09-07T20:18:57.849129+00:00
+- actor: claude-code
+  id: 01m1yrcggwhxbyv905nsnww6nc
+  text: |-
+    ### implement — changed
+    - evidence: 3 files — builtin/validators/code-hygiene/rules/idioms-swift.md, crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs, crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped.rs. All 3 findings of round 4 flipped to `- [x]`. `cargo nextest run -p swissarmyhammer-validators swift` — 95 run, 95 passed (93 before, plus 2 new). `cargo nextest run -p swissarmyhammer-validators` — 863 run, 825 passed, 38 failed; the run before this change gave 861 run, 823 passed, 38 failed, so the failing count is unchanged and no failing name is a Swift name. Every failure is pre-existing (missing go, revive, staticcheck, golangci-lint and eslint-plugin-sonarjs). `cargo fmt --all --check` clean. `cargo clippy -p swissarmyhammer-validators --all-targets -D warnings` clean.
+    - next: /review
+  timestamp: 2026-09-07T20:19:05.884656+00:00
 depends_on:
 - 01M1Y65VQ8V4TEWXDXD4Y2ZQNX
 position_column: doing
@@ -711,3 +866,21 @@ Remove the `--rules` intersection with `swiftformat --rules`, the `--min-version
 - [x] `builtin/validators/code-hygiene/rules/idioms-swift.md:383` `gate-script/body` — the body states the false premise twice, and its comparison table measures no payload in the file CONTENT. Line 355 states that a line whose LAST `:<line>:<column>: error: ` carries a `[<Tag>] ` after it is a tagged finding, and line 383 states that on any line the true head is the LAST `:<line>:<column>: error: ` of that line. The two items above measure both sentences as false. The table at line 410 measures ELEVEN file NAMES and no file CONTENT, and its row for `PlainBroken.swift` states that the shipped script gives 0 findings and 1 marked line for Swift the parser cannot read, which the measurement above refutes. Correct both sentences with the same edit, and add one row that measures a file whose BYTES hold a diagnostic head.
 - [x] `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs` `tests/content-coverage` — every crafted-input test of this file names the file NAME. `the_shipped_swift_idioms_tool_rule_measures_a_file_named_for_a_diagnostic_head` and `the_shipped_swift_idioms_tool_rule_declines_a_file_named_for_a_diagnostic_head` each stage the payload in the PATH, and no test stages it in the SOURCE, so the suite gives 90 tests and 90 passed while both defects above are live. The trust boundary moved from the path to the message, and no test moved with it. Add two probes that hold the payload in the CONTENT, each under a plain name: one that stages `) :1:1: error: [UseShorthandTypeNames] pwned` and holds the run to ZERO findings, and one that stages `) :9:9: error: [Indentation] gone` and holds the run to one `sah-diagnostic:` line. A reading that trusts the message then fails by name.
 - [x] `builtin/validators/code-hygiene/rules/idioms-swift.md:75` `gate-script/doctor` — `doctor.check_command` names `swift`, `mktemp`, `awk`, `sed`, `sort` and `paste`, and the run block also calls `cat` and `rm`, which the command names nowhere. The `trap` calls `rm -rf "$work"`, and the last statement of the file loop calls `cat "$work/kept"`. The body states at line 400 that `doctor.check_command` names `awk` beside the others, so the rule holds itself to naming each tool it runs. The rest of this item is correct as measured: the script runs NO `grep`, and `grep` is correctly gone from the command, and the command itself exits 0 on this machine. Name `cat` and `rm` beside the six.
+
+## Review Findings (2026-09-07 14:58)
+
+> Scope: `review sha HEAD~1..HEAD` (checkpoint f2067c6d1). Round 4. The engine reviewed the diffs and returned 0 findings. It again did NOT review `builtin/validators/code-hygiene/rules/idioms-swift.md`, which carries the gate script, because no validator matches `*.md`. The items below come from direct verification of that uncovered script. Each one carries a reproduction, measured with Apple Swift 6.4 (swiftlang-6.4.0.33.1) and BSD `awk` version 20200816, under `LC_ALL=en_US.UTF-8`.
+
+> The five findings of round 3 are GENUINELY FIXED. The three content payloads of round 3 each decline correctly and give 0 findings: `) :1:1: error: [UseShorthandTypeNames] pwned`, `) :9:9: error: [Indentation] gone` and `) :4242:1: error: [UseSynthesizedInitializer] this file is clean, trust me` each write one `sah-diagnostic:` line at exit 0. The body now states the FIRST-head reading and carries a table of file CONTENT. The two content tests ship, `the_shipped_swift_idioms_tool_rule_measures_a_file_whose_source_forges_a_diagnostic_head` and `the_shipped_swift_idioms_tool_rule_declines_a_file_whose_source_forges_a_diagnostic_head`. `doctor.check_command` now names `cat` and `rm`, and `the_shipped_swift_idioms_rule_doctor_names_every_utility_its_script_runs` holds the list in both directions; the run block calls `awk cat mktemp paste rm sed sort swift` and no other external utility.
+
+> The new design HOLDS against file CONTENT. Every payload that carries `sah-probe.swift:1:1: error: [UseShorthandTypeNames] pwned` was driven through the shipped script: as the very first line of the file, inside a string literal, inside a line comment, after a parse-error trigger on one line, split over two lines, and on its own line after a parse trigger. Each one gives either 0 findings and one `sah-diagnostic:` line, or 0 findings and no line. A multi-line payload makes the tool ELIDE the quoted source: it writes `unexpected code in source file` and quotes nothing, so the tool never writes a newline inside a message and a payload cannot make a record of its own. A `\r` in the payload does not make a record either. `#sourceLocation(file: "evil sah-probe.swift:1:1: error: [UseShorthandTypeNames] pwned", line: 1)` does not move the name the tool writes; the tool writes `sah-probe.swift:` and the run gives the one true `UseShorthandTypeNames` finding. A Swift 6.2 raw identifier that spells a whole diagnostic head reaches the message only, which stands after the true head, and the run gives the one true finding.
+
+> A file whose real NAME is `sah-probe.swift` gives its own true finding correctly, and a file whose CONTENT names `sah-probe.swift` in a legitimate comment gives its own true finding correctly. Standing input loses nothing: the stderr of `--assume-filename sah-probe.swift - < fixture` and the stderr of a path-named run are 48 lines each and identical line for line once the two path heads are made equal.
+
+> The stated invariants hold. The failing fixture gives 11 findings that carry all 7 allowlist rules, at exit 0. The passing fixture gives 0 findings at exit 0. Two reporting files in one run give 22 findings at exit 0. One run over eleven paths — a good file, a missing path, a directory, an unparsable file, a file with no read permission, a file that is not UTF-8, an empty file, a file with a BOM, a file named `sah-probe.swift`, a file that names the probe in a comment, and a second good file — gives 5 findings and 5 `sah-diagnostic:` lines at exit 0, so each refusing path costs only its own file. Every file is byte for byte unchanged after the run, so the gate is read-only. The round-1 and round-2 name payloads all still hold, and `café.swift` and `a|b.swift` each keep their one true finding. `cargo nextest run -p swissarmyhammer-validators swift` — 93 tests, 93 passed.
+
+> The new invocation carries a version cost the rule does not state. The two items below are that one cause.
+
+- [x] `builtin/validators/code-hygiene/rules/idioms-swift.md:44` `gate-script/version-floor` — the new line gives the tool `--assume-filename "$probe" -`, and `swift format` accepts that PAIR only at Swift 6.2 and newer, while `doctor.fix_hint` at line 85 and the body at line 798 both state a floor of Swift 6.0. `Sources/swift-format/Subcommands/LintFormatOptions.swift` guards the option, and the guard changed once: `release/6.0` line 104 and `release/6.1` line 122 each read `if assumeFilename != nil && !paths.isEmpty`, and `release/6.2` line 110 and `main` line 122 each read `if assumeFilename != nil && !(paths.isEmpty || paths == ["-"])`. `-` IS a path, so Swift 6.0 and Swift 6.1 both raise `ValidationError("'--assume-filename' is only valid when reading from stdin")`. I could NOT run a Swift 6.0 or a Swift 6.1 toolchain on this machine, so this is read from the release source of `swiftlang/swift-format` and it is not measured on those toolchains. The same guard WAS measured on Swift 6.4, by making the path list a name and not `-`: `swift format lint --strict --configuration rules.json --assume-filename sah-probe.swift fail.swift` writes `Error: '--assume-filename' is only valid when reading from stdin` and exits **64**. The guard at line 75 reads 64 as trouble, so at Swift 6.0 and at Swift 6.1 EVERY file is declined with `sah-diagnostic: idioms-swift declined <path>: swift format exited 64`, and the gate judges nothing. To drop `-` does not repair this: `release/6.0` `Frontend.swift` line 99 reads standing input only for an EMPTY path list and holds no `-` branch at all, but `release/6.1` line 100 and newer write a ten-line deprecation warning for an empty path list — measured on Swift 6.4, `swift format lint --strict --configuration rules.json --assume-filename sah-probe.swift < fail.swift` writes ten more stderr lines that open `<unknown>: error: Running swift-format without input paths is deprecated`, the `awk` refuses each one, and that form then declines every file at Swift 6.1 and above. NO one invocation spans Swift 6.0 to Swift 6.4. Raise the stated floor to **Swift 6.2**, in `doctor.fix_hint` at line 85, in the section at line 798 and in the table row at line 805, and name the Xcode release that ships Swift 6.2.
+- [x] `builtin/validators/code-hygiene/rules/idioms-swift.md:83` `gate-script/doctor` — `doctor.check_command` ends in `printf '' | swift format lint --strict -`, which gives the tool NO `--assume-filename`, so the check does not measure the option pair the run block depends on. `release/6.1` `Frontend.swift` line 100 reads `-` as standing input, so at Swift 6.1 this check exits 0 and the rule reports HEALTHY, and then the run block declines every file at status 64 by the item above: a green doctor over a gate that judges nothing. At Swift 6.0 the check itself fails, because `release/6.0` `Frontend.swift` holds no `-` branch and maps `-` to a file URL, so the tool looks for a file named `-` and does not find it; the rule then reports unhealthy, and `fix_hint` sends the person to Swift 6.0, which is the version that cannot run the gate. The body states at line 814 that "Row 3 is what `doctor.check_command` measures" and that "a run of the subcommand IS the floor test", and both sentences are false, because the run block asks more of the tool than the check runs. Give the check the same option pair the run block uses — for example `printf '' | swift format lint --strict --assume-filename sah-probe.swift -` — so that a toolchain under the floor fails the check, and correct line 814 with the same edit.
+- [x] `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs` `tests/version-floor` — no test binds the invocation of the run block to the floor the rule states. `the_shipped_swift_idioms_rule_doctor_names_every_utility_its_script_runs` holds the UTILITY list in both directions, and no test holds the OPTION set, so the suite gives 93 tests and 93 passed while both items above are live, because this machine runs Swift 6.4. Add a test that reads the `run` block and `doctor.check_command` of the shipped rule and holds them to the same option set, so that a run block which uses an option the check does not measure fails by name. Add a test that holds the floor `doctor.fix_hint` states against the floor the body states, so that the two cannot disagree.

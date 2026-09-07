@@ -844,6 +844,189 @@ fn the_shipped_swift_idioms_rule_doctor_names_every_utility_its_script_runs() {
     );
 }
 
+/// Where one command of a shell line ends: at a pipe, a semicolon, an
+/// ampersand or a newline.
+///
+/// A backslash before a newline CONTINUES the command rather than ending it,
+/// so the reading below joins those pairs before it splits.
+const SWIFT_IDIOMS_COMMAND_END: &[char] = &['|', ';', '&', '\n'];
+
+/// What opens an option word rather than an operand.
+///
+/// The lone `-` the run block and the check each hand the tool is an OPERAND,
+/// the path that names standing input, so this head leaves it out.
+const SWIFT_IDIOMS_OPTION_HEAD: &str = "--";
+
+/// A shell line continued onto the next: a backslash, then the newline.
+const SWIFT_IDIOMS_LINE_CONTINUATION: &str = "\\\n";
+
+/// Every option the `swift format lint` invocation inside `command` gives the
+/// tool.
+///
+/// The reading opens at the lint verb and closes where that one command
+/// closes, so a `which` list standing before it and a `|| status=$?` standing
+/// after it reach the answer neither.
+fn swift_format_lint_options(command: &str, what: &str) -> std::collections::BTreeSet<String> {
+    let head = format!("{SWIFT_TOOLCHAIN_TOOL} {SWIFT_FORMAT_SUBCOMMAND} {SWIFT_FORMAT_LINT_VERB}");
+    let joined = command.replace(SWIFT_IDIOMS_LINE_CONTINUATION, " ");
+    let at = joined
+        .find(&head)
+        .unwrap_or_else(|| panic!("the {what} of `{SWIFT_IDIOMS_RULE}` must run `{head}`"));
+
+    joined[at + head.len()..]
+        .split(SWIFT_IDIOMS_COMMAND_END)
+        .next()
+        .unwrap_or_default()
+        .split_whitespace()
+        .filter(|word| word.len() > SWIFT_IDIOMS_OPTION_HEAD.len())
+        .filter(|word| word.starts_with(SWIFT_IDIOMS_OPTION_HEAD))
+        .map(str::to_string)
+        .collect()
+}
+
+/// Acceptance: `doctor.check_command` gives `swift format lint` every option
+/// the run block gives it, and gives it no other.
+///
+/// The check is the only thing that stands between a toolchain under the floor
+/// and a run that declines every file. It reports one answer for the whole
+/// rule, so an option the run block depends on and the check does not exercise
+/// is an option whose refusal the doctor reports as HEALTHY.
+///
+/// `--assume-filename` beside the operand `-` is that option pair: Swift 6.0
+/// and Swift 6.1 each raise a `ValidationError` for it and exit 64, and the
+/// guard of the run block reads 64 as trouble, so the gate then judges
+/// nothing while the doctor says the rule is well.
+///
+/// Both directions are load-bearing. An option run and not checked leaves that
+/// hole open; an option checked and not run makes the doctor measure a
+/// toolchain answer the gate has no use for.
+#[test]
+fn the_shipped_swift_idioms_rule_doctor_measures_every_option_its_script_gives_the_tool() {
+    let loader = builtin_loader();
+    let shipped = required_shipped_tool_rule(&loader, SWIFT_IDIOMS_RULE);
+    let check = shipped
+        .check_command
+        .as_deref()
+        .unwrap_or_else(|| panic!("`{SWIFT_IDIOMS_RULE}` must carry a `doctor.check_command`"));
+
+    let run = swift_format_lint_options(&shipped.script, "run block");
+    let asked = swift_format_lint_options(check, "`doctor.check_command`");
+
+    assert_eq!(
+        run, asked,
+        "`doctor.check_command` of `{SWIFT_IDIOMS_RULE}` must give `swift format lint` the same \
+         options the run block gives it, or the check reports healthy over an option the run \
+         needs; the run block gives {run:?} and the check gives {asked:?}"
+    );
+}
+
+/// The Swift version this gate needs.
+///
+/// The `swift format` SUBCOMMAND arrived at Swift 6.0, but this gate hands the
+/// tool `--assume-filename` beside the operand `-`, and only Swift 6.2 and
+/// above accept that pair. `release/6.0` and `release/6.1` of
+/// `swiftlang/swift-format` each guard the option with
+/// `if assumeFilename != nil && !paths.isEmpty`, and `-` IS a path, so each
+/// raises a `ValidationError` and exits 64; `release/6.2` and `main` each read
+/// `!(paths.isEmpty || paths == ["-"])` instead.
+const SWIFT_IDIOMS_VERSION_FLOOR: &str = "6.2";
+
+/// The Xcode release that ships [`SWIFT_IDIOMS_VERSION_FLOOR`].
+///
+/// Read from `https://www.swift.org/api/v1/install/releases.json`, which names
+/// `Xcode 26` for Swift 6.2, released 2025-09-15.
+const SWIFT_IDIOMS_FLOOR_XCODE: &str = "26";
+
+/// What opens the sentence of the rule body that states the floor of the gate.
+const SWIFT_IDIOMS_BODY_FLOOR_HEAD: &str = "The floor of this GATE is **Swift ";
+
+/// What closes that sentence's version.
+const SWIFT_IDIOMS_BODY_FLOOR_END: &str = "**";
+
+/// What follows the Swift version `doctor.fix_hint` names.
+const SWIFT_IDIOMS_HINT_FLOOR_MARK: &str = " or newer";
+
+/// What follows the Xcode release the body and `doctor.fix_hint` each name.
+const SWIFT_IDIOMS_XCODE_MARK: &str = " and above ship it";
+
+/// The word standing immediately before the first `mark` of `text`.
+fn word_before(text: &str, mark: &str, what: &str) -> String {
+    let at = text
+        .find(mark)
+        .unwrap_or_else(|| panic!("the {what} of `{SWIFT_IDIOMS_RULE}` must state `{mark}`"));
+
+    text[..at]
+        .split_whitespace()
+        .next_back()
+        .unwrap_or_else(|| {
+            panic!("the {what} of `{SWIFT_IDIOMS_RULE}` must name a version before `{mark}`")
+        })
+        .to_string()
+}
+
+/// The text standing between the first `head` of `text` and the next `end`
+/// after it.
+fn text_between(text: &str, head: &str, end: &str, what: &str) -> String {
+    let at = text
+        .find(head)
+        .unwrap_or_else(|| panic!("the {what} of `{SWIFT_IDIOMS_RULE}` must state `{head}`"));
+    let rest = &text[at + head.len()..];
+    let shut = rest
+        .find(end)
+        .unwrap_or_else(|| panic!("the {what} of `{SWIFT_IDIOMS_RULE}` must close `{head}`"));
+
+    rest[..shut].to_string()
+}
+
+/// Acceptance: the rule states ONE Swift version floor, and it is the version
+/// that first accepts the option pair the run block gives the tool.
+///
+/// A person who reads an unhealthy doctor reads `doctor.fix_hint` and installs
+/// what it names. A hint that names a version under the floor sends that
+/// person to a toolchain that cannot run the gate, so the hint and the body
+/// must not be able to disagree, and neither may drift under
+/// [`SWIFT_IDIOMS_VERSION_FLOOR`].
+#[test]
+fn the_shipped_swift_idioms_rule_states_one_swift_version_floor() {
+    let loader = builtin_loader();
+    let source = shipped_swift_idioms_source(&loader);
+    let hint = shipped_swift_idioms_fix_hint(&loader);
+
+    let stated = text_between(
+        &source,
+        SWIFT_IDIOMS_BODY_FLOOR_HEAD,
+        SWIFT_IDIOMS_BODY_FLOOR_END,
+        "body",
+    );
+    let hinted = word_before(&hint, SWIFT_IDIOMS_HINT_FLOOR_MARK, "`doctor.fix_hint`");
+
+    assert_eq!(
+        stated, hinted,
+        "the body of `{SWIFT_IDIOMS_RULE}.md` and its `doctor.fix_hint` must state ONE Swift \
+         floor; the body states {stated:?} and the hint states {hinted:?}"
+    );
+    assert_eq!(
+        stated, SWIFT_IDIOMS_VERSION_FLOOR,
+        "`{SWIFT_IDIOMS_RULE}` must state the floor `--assume-filename` beside `-` first \
+         accepts; it states {stated:?}"
+    );
+
+    let body_xcode = word_before(&source, SWIFT_IDIOMS_XCODE_MARK, "body");
+    let hint_xcode = word_before(&hint, SWIFT_IDIOMS_XCODE_MARK, "`doctor.fix_hint`");
+
+    assert_eq!(
+        body_xcode, hint_xcode,
+        "the body of `{SWIFT_IDIOMS_RULE}.md` and its `doctor.fix_hint` must name ONE Xcode \
+         release for that floor; the body names {body_xcode:?} and the hint names \
+         {hint_xcode:?}"
+    );
+    assert_eq!(
+        body_xcode, SWIFT_IDIOMS_FLOOR_XCODE,
+        "`{SWIFT_IDIOMS_RULE}` must name the Xcode release that ships Swift \
+         {SWIFT_IDIOMS_VERSION_FLOOR}; it names {body_xcode:?}"
+    );
+}
+
 /// A Swift file written the way the two Swift prompt rules ASK for.
 ///
 /// Every declaration is a DO one of them states: the empty-collection
@@ -1372,6 +1555,16 @@ const SWIFT_FORMAT_RULE_COUNT: usize = 43;
 fn shipped_swift_idioms_source(loader: &ValidatorLoader) -> String {
     std::fs::read_to_string(shipped_asset(loader, &RULE_SOURCE_ASSET, SWIFT_IDIOMS_RULE))
         .expect("read the shipped Swift idioms rule source")
+}
+
+/// The `doctor.fix_hint` the set ships for the `idioms-swift` rule.
+///
+/// The hint is the one sentence a person reads when the doctor reports the
+/// rule unhealthy, so a guard over what it PROMISES reads the shipped bytes.
+fn shipped_swift_idioms_fix_hint(loader: &ValidatorLoader) -> String {
+    required_shipped_tool_rule(loader, SWIFT_IDIOMS_RULE)
+        .fix_hint
+        .unwrap_or_else(|| panic!("`{SWIFT_IDIOMS_RULE}` must carry a `doctor.fix_hint`"))
 }
 
 /// The `swift format` configuration of the installed toolchain, with every

@@ -80,9 +80,9 @@ tool:
       cat "$work/kept"
     done
   doctor:
-    check_command: "which swift mktemp awk cat rm sed sort paste && printf '' | swift format lint --strict -"
+    check_command: "which swift mktemp awk cat rm sed sort paste && printf '' | swift format lint --strict --configuration '{}' --assume-filename sah-probe.swift -"
     check_version_command: "swift --version"
-    fix_hint: "install the Swift toolchain, Swift 6.0 or newer — Xcode 16 and above ship it"
+    fix_hint: "install the Swift toolchain, Swift 6.2 or newer — Xcode 26 and above ship it"
 ---
 
 # Idioms — Swift
@@ -419,6 +419,11 @@ file is named. Measured over a file named
 `w: error: [UseShorthandTypeNames] s.swift` holding one `Array<Int>` parameter,
 the one output line reads `sah-probe.swift:2:39: error: [UseShorthandTypeNames]
 use shorthand syntax for this 'Array' type`, so the name reaches no line at all.
+
+That pair carries a version cost, and the section "The Swift version floor, and
+the version CI runs" states it: `--assume-filename` beside the path `-` is
+accepted only at Swift 6.2 and above, so the floor of this gate stands above
+the Swift 6.0 the `swift format` subcommand alone needs.
 
 **The bytes go second.** One `awk` reads the FIRST `sah-probe.swift:` of the
 line and asks for the head immediately after it:
@@ -795,32 +800,76 @@ written; it matters to an author who runs `swift format lint` by hand.
 
 ## The Swift version floor, and the version CI runs
 
-The floor is **Swift 6.0**, and the `swift format` SUBCOMMAND sets it. No rule
-of the allowlist sets it, because each shipped long before the subcommand did.
+The floor of this GATE is **Swift 6.2**, and the OPTION PAIR the run block gives
+the tool sets it. The `swift format` SUBCOMMAND arrived earlier, at Swift 6.0,
+and no rule of the allowlist sets a floor at all, because each shipped long
+before the subcommand did. The gate asks more of the tool than the subcommand
+alone, so its floor stands above both.
 
 | the question | how it was measured | the answer |
 |---|---|---|
 | when `UseWhereClausesInForLoops` first shipped | `Sources/SwiftFormatRules/UseWhereClausesInForLoops.swift` on `release/5.6` | HTTP 200, so Swift 5.6 or older |
 | when `AlwaysUseLiteralForEmptyCollectionInit` first shipped | the same directory on `release/5.9`, then `Sources/SwiftFormat/Rules/` on `release/5.10` | HTTP 404, then HTTP 200, so Swift 5.10 |
 | when `swift format` first ran | the `README.md` of `release/5.10` and of `release/6.0` | Swift 6.0 |
+| when `--assume-filename` beside `-` was first accepted | the guard in `Sources/swift-format/Subcommands/LintFormatOptions.swift` on `release/6.0`, `release/6.1`, `release/6.2` and `main` | Swift 6.2 |
+| which Xcode ships Swift 6.2 | `https://www.swift.org/api/v1/install/releases.json` | Xcode 26, released 2025-09-15 |
 
-Each row is one `curl` against the `swiftlang/swift-format` repository, over the
-release branch of each Swift version. The `README.md` of `release/6.0` states the
-answer to row 3 in its own words: "Xcode 16 and above include swift-format in the
-toolchain. You can run `swift-format` from anywhere on the system using
-`swift format` (notice the space instead of dash)." The `README.md` of
-`release/5.10` carries no such line.
+Rows 1 to 4 are each one `curl` against the `swiftlang/swift-format` repository,
+over the release branch of each Swift version. The `README.md` of `release/6.0`
+states the answer to row 3 in its own words: "Xcode 16 and above include
+swift-format in the toolchain. You can run `swift-format` from anywhere on the
+system using `swift format` (notice the space instead of dash)." The `README.md`
+of `release/5.10` carries no such line.
 
-Row 3 is what `doctor.check_command` measures. The subcommand runs at Swift 6.0
-and above and nowhere below it, so a run of the subcommand IS the floor test:
-the check ends in `printf '' | swift format lint --strict -`, which was measured
-to exit 0 on Apple Swift 6.4. `swift format --version` writes `main` and names
-no release, so `doctor.check_version_command` reads `swift --version`, which is
-the only version a person can compare with the floor.
+**Row 4 is the floor, and row 3 is not.** The run block reads each file on
+standing input under `--assume-filename sah-probe.swift -`, because that is what
+keeps the file NAME out of every line the tool writes. `release/6.0` and
+`release/6.1` each guard the option with
+`if assumeFilename != nil && !paths.isEmpty`, and `-` IS a path, so each raises
+`ValidationError("'--assume-filename' is only valid when reading from stdin")`
+and exits **64**. `release/6.2` and `main` each read
+`!(paths.isEmpty || paths == ["-"])` instead, which lets the lone `-` through.
+The guard at the foot of the file loop reads 64 as trouble, so under Swift 6.0
+or Swift 6.1 EVERY file is declined with
+`sah-diagnostic: idioms-swift declined <path>: swift format exited 64`, and the
+gate judges nothing.
+
+The guard shape was measured on Apple Swift 6.4 by giving the tool a NAMED path
+beside the option: `swift format lint --strict --configuration rules.json
+--assume-filename sah-probe.swift f.swift` writes
+`Error: '--assume-filename' is only valid when reading from stdin` and exits 64.
+The `release/6.0` and `release/6.1` sources were read rather than run, because
+neither toolchain was available on this machine.
+
+**To drop `-` does not lower the floor.** `release/6.0` `Frontend.swift` reads
+standing input only for an EMPTY path list and carries no `-` branch at all,
+while `release/6.1` and above write a ten-line deprecation warning for an empty
+path list, which opens `<unknown>: error: Running swift-format without input
+paths is deprecated`. The reading refuses each of those ten lines as trouble, so
+that form declines every file from Swift 6.1 upward. No ONE invocation spans
+Swift 6.0 to Swift 6.4, so the gate names 6.2 and asks for it.
+
+`doctor.check_command` measures row 4 rather than row 3, because the check must
+ask the toolchain for everything the run block asks it for. The check ends in
+`printf '' | swift format lint --strict --configuration '{}' --assume-filename
+sah-probe.swift -`, which gives the tool the same three options the run block
+gives it and was measured to exit 0 on Apple Swift 6.4. A check that left
+`--assume-filename` out would exit 0 at Swift 6.1 as well, and the rule would
+then report HEALTHY over a gate that declines every file.
+`the_shipped_swift_idioms_rule_doctor_measures_every_option_its_script_gives_the_tool`
+holds the two option sets equal in BOTH directions, so an option added to the
+run block and not to the check fails by name.
+
+`swift format --version` writes `main` and names no release, so
+`doctor.check_version_command` reads `swift --version`, which is the only
+version a person can compare with the floor.
 
 The rule declares no install commands, and `doctor.fix_hint` names the toolchain
-rather than a package. Homebrew does not install the Swift toolchain: Xcode 16
+rather than a package. Homebrew does not install the Swift toolchain: Xcode 26
 and above ship it, and it is not a formula this gate can name.
+`the_shipped_swift_idioms_rule_states_one_swift_version_floor` holds the floor
+this section states against the floor the hint states, and holds the Xcode
+release the same way, so the two cannot disagree.
 
 **No rule of the allowlist reads a Swift LANGUAGE version.**
 `swift format lint --help` names no option that states one, and the run states
@@ -835,14 +884,15 @@ fix:
 
 **The CI runner runs the same toolchain.** The self-hosted macOS runner writes
 `swift --version` in the step "Ensure the language toolchains the roster tests
-need are available". Read from run `34129568075`, at `2026-09-07T14:09:18Z`:
+need are available". Read from run `34135649101`, at `2026-09-07T14:57:21Z`:
 
     Apple Swift version 6.4 (swiftlang-6.4.0.33.1 clang-2100.3.33.1)
     Target: arm64-apple-macosx27.0.0
     swift-driver version: 1.168.6
 
-6.4 stands over the floor of 6.0, so the gate does not turn CI red for want of a
-toolchain.
+6.4 stands over the floor of 6.2, so the gate does not turn CI red for want of a
+toolchain, and the `--assume-filename` pair the run block gives the tool is
+accepted there.
 
 ## Why this rule supersedes nothing
 

@@ -4,10 +4,10 @@
 //! every input the later steps need: the sem-diff before/after content, the
 //! review-level change purpose, and blame's history anchor. Every path is
 //! confined to the repository root ([`confine_to_repo`]) and every scope's
-//! candidate file set passes the same `.reviewignore` + `.gitignore` filter
-//! BEFORE its content is read ([`split_ignored`]), so an escaping or ignored
-//! path can never reach the review agent — and an ignore pattern can exclude a
-//! path the engine could not read at all.
+//! candidate file set passes the same `.reviewignore` + `.gitignore` filter.
+//! [`split_ignored`] applies that filter BEFORE it reads any content. Thus an
+//! escaping or ignored path can never reach the review agent. Thus an ignore
+//! pattern can also exclude a path the engine could not read at all.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -48,16 +48,17 @@ pub(super) struct ResolvedScope {
 /// validator paired with them.
 ///
 /// The two travel together because the report names both: what a run reviewed,
-/// and what it did not. Their sum is how many files the scope reached, which is
-/// what makes "every file in scope was excluded" a claim the engine can prove
+/// and what it did not. Their sum is how many files the scope reached. That
+/// sum makes "every file in scope was excluded" a claim the engine can prove
 /// rather than infer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ScopeFiles {
     /// The reviewable file set: the candidates that survived the ignore filter
     /// and whose content the stage could read as text.
     pub(super) resolved: ResolvedScope,
-    /// One entry per candidate the stage dropped, in candidate order — a path
-    /// an ignore pattern matched, or a path whose bytes are not UTF-8 text.
+    /// One entry per candidate the stage dropped, in candidate order. A
+    /// dropped candidate is a path an ignore pattern matched, or a path whose
+    /// bytes are not UTF-8 text.
     pub(super) excluded: Vec<ExcludedFile>,
 }
 
@@ -70,12 +71,11 @@ pub(super) fn resolve_scope_files(scope: &Scope, repo_path: &Path) -> Result<Sco
     // and non-code, so it never enters the working scope resolved below.
     ensure_reviewignore(repo_path)?;
 
-    // The matcher is built BEFORE any resolver runs, and each resolver applies
-    // it to its candidate paths BEFORE reading their content — see
-    // `split_ignored`. Reading first, as this stage used to, made a pattern
-    // unable to reach a path the read itself failed on: a `*.png` line could not
-    // exclude a tracked picture, because the blob read raised before the matcher
-    // was ever consulted.
+    // The matcher is built BEFORE any resolver runs. Each resolver then
+    // applies it to its candidate paths BEFORE it reads their content. See
+    // `split_ignored`. This stage used to read first. A pattern could then not
+    // reach a path whose own read failed. A `*.png` line could not exclude a
+    // tracked picture, because the blob read raised first.
     let matcher = load_review_ignore_matcher(repo_path)?;
     match scope {
         Scope::Working => resolve_working(repo_path, &matcher),
@@ -88,14 +88,14 @@ pub(super) fn resolve_scope_files(scope: &Scope, repo_path: &Path) -> Result<Sco
 /// Split a scope's candidate paths into the ones left to read and one
 /// [`ExcludedFile`] per path the review-scope ignore `matcher` excludes.
 ///
-/// The uniform choke point every scope passes its candidates through, so a
-/// `.kanban/` board or a gitignored artifact is dropped identically whether it
-/// arrived via Working, Sha, File, or Glob. It runs BEFORE the content read,
-/// which is what lets a pattern exclude a path the engine cannot decode at all.
-/// Escaping paths are rejected independently and earlier by [`confine_to_repo`],
-/// so this filter is about relevance, not containment — and the matcher is only
-/// ever handed a repo-relative path, which is what
-/// [`Gitignore::matched_path_or_any_parents`] requires.
+/// The uniform choke point every scope passes its candidates through. Thus the
+/// stage drops a `.kanban/` board or a gitignored artifact identically. The
+/// scope that named it, Working, Sha, File or Glob, makes no difference. The
+/// filter runs BEFORE the content read. Thus a pattern can exclude a path the
+/// engine cannot decode at all. [`confine_to_repo`] rejects an escaping path
+/// independently and earlier. So this filter is about relevance, not
+/// containment. The matcher is only ever handed a repo-relative path, which is
+/// what [`Gitignore::matched_path_or_any_parents`] requires.
 ///
 /// A `Scope::File` naming an ignored path therefore resolves to a scope with
 /// nothing left to review — consistent with the other scopes, never an error.
@@ -127,10 +127,10 @@ fn split_ignored(files: Vec<String>, matcher: &Gitignore) -> (Vec<String>, Vec<E
 /// (paths, sem-diff inputs, after-content) mutually consistent.
 ///
 /// The single place a scope-stage filter narrows an already-built
-/// [`ResolvedScope`], used by the validator-fixture split in
-/// [`super::fixtures`], so no filter can drop a path from one view and leave it
-/// in another. The ignore filter needs none of this: it runs on the candidate
-/// paths, before a [`ResolvedScope`] exists at all.
+/// [`ResolvedScope`]. The validator-fixture split in [`super::fixtures`] uses
+/// it. Thus no filter can drop a path from one view and leave it in another.
+/// The ignore filter needs none of this. It runs on the candidate paths,
+/// before a [`ResolvedScope`] exists at all.
 pub(super) fn retain_scope_files(resolved: ResolvedScope, kept: Vec<String>) -> ResolvedScope {
     let ResolvedScope {
         files: _,
@@ -250,15 +250,15 @@ pub(super) fn confine_to_repo(repo_path: &Path, path: &str) -> Result<PathBuf, A
 /// so a `review file` caller can never make the pipeline read a file outside the
 /// repository into the review agent's context.
 ///
-/// Returns [`FileText::Absent`] only when the (contained) path is **absent**
-/// (the intended deletion/added signal — a file gone from the working tree),
-/// and [`FileText::NotUtf8`] when the file is there but
-/// [`read_to_string`](std::fs::read_to_string) cannot decode it. The two states
-/// stay apart so an unreadable tracked file is never silently diffed as wholly
-/// added/removed; its caller drops it out of scope and reports it instead. Any
-/// *other* failure — a permission error, for one — is propagated as
-/// [`AvpError::Context`]. A containment violation surfaces as
-/// [`AvpError::Validator`].
+/// Returns [`FileText::Absent`] only when the contained path is **absent**.
+/// That is the intended deletion or added signal for a file gone from the
+/// working tree. Returns [`FileText::NotUtf8`] when the file is there and
+/// [`read_to_string`](std::fs::read_to_string) cannot decode it. The two
+/// states stay apart. Thus the stage never silently diffs an unreadable
+/// tracked file as wholly added or wholly removed. Its caller drops that file
+/// out of scope and reports it instead. Any *other* failure, a permission
+/// error for one, is propagated as [`AvpError::Context`]. A containment
+/// violation surfaces as [`AvpError::Validator`].
 ///
 /// # Errors
 ///
@@ -358,19 +358,20 @@ impl std::fmt::Display for FilePath {
 /// [`FilePath`]) so no call site can transpose them.
 ///
 /// Returns [`FileText::Absent`] only when the path does **not exist** at the
-/// ref (the intended Added/Deleted signal — `revparse_single` resolving to
-/// not-found, or the object not being a blob), and [`FileText::NotUtf8`] when
-/// the blob is there and its bytes are not text. The two states stay apart so an
-/// undecodable tracked file is never silently diffed as wholly added/removed;
-/// its caller drops it out of scope and reports it instead. Any other libgit2
+/// ref. That is the intended Added or Deleted signal. It happens when
+/// `revparse_single` resolves to not-found, and when the object is not a blob.
+/// Returns [`FileText::NotUtf8`] when the blob is there and its bytes are not
+/// text. The two states stay apart. Thus the stage never silently diffs an
+/// undecodable tracked file as wholly added or wholly removed. Its caller
+/// drops that file out of scope and reports it instead. Any other libgit2
 /// failure is propagated as [`AvpError::Context`].
 pub(super) fn read_at_ref(
     repo: &GitOperations,
     refspec: GitRefSpec,
     path: FilePath,
 ) -> Result<FileText, AvpError> {
-    // The blob address, composed once and reused by the read, the failure
-    // message and the undecodable log, so the `refspec:path` form lives in a
+    // The blob address, composed once. The read, the failure message and the
+    // undecodable log all reuse it. Thus the `refspec:path` form lives in a
     // single place.
     let spec = format!("{refspec}:{path}");
     let inner = repo.repository().inner();
@@ -397,36 +398,46 @@ pub(super) fn read_at_ref(
     }
 }
 
-/// A file's content at one revision: its text, the fact that it is not there, or
-/// the fact that its bytes are not text at all.
+/// One side of a file as the semantic diff takes it. The side holds text, or
+/// holds no content at all, or holds bytes that are not text.
 ///
-/// The third state is what keeps a binary file out of the diff without failing
-/// the run, and the `Option<String>` this replaces could carry neither half of
-/// that. `None` already means "absent at this revision", which is the
-/// Added/Deleted signal, so folding an undecodable file into it would hand the
-/// review a picture presented as wholly added or wholly removed work. Raising
-/// instead — which is what the two readers above used to do — threw the WHOLE
-/// run away for one tracked picture, report and all. A third state lets the
-/// caller drop that one file, and only that file, into the report's
-/// not-reviewed list.
+/// The third state keeps a binary file out of the diff and does not fail the
+/// run. The `Option<String>` this replaces could carry neither half of that.
+/// `None` already means the side holds no content. To fold an undecodable file
+/// into `None` would hand the review a picture. The review would then read
+/// that picture as wholly added or wholly removed work. The two readers above
+/// used to raise instead. One tracked picture then threw the WHOLE run away,
+/// report and all. A third state lets the caller drop that one file, and only
+/// that file, into the report's not-reviewed list.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum FileText {
     /// The file's text at this revision.
     Text(String),
-    /// The file does not exist at this revision — the Added/Deleted signal.
+    /// The side holds no content.
+    ///
+    /// Two producers answer `Absent`, and they mean different things. A
+    /// reader answers `Absent` when the file does not exist at the revision.
+    /// That is the Added or Deleted signal. A resolver instead CHOOSES
+    /// `Absent` for a base side it never reads, because its scope reviews
+    /// whole content. The file can be present at that revision. See the base
+    /// side of `resolve_file` and of `resolve_glob`.
+    ///
+    /// Both producers mean one thing to the diff. There is no before text, so
+    /// every entity in the file reads as added work. The variant states that
+    /// one downstream fact, never the cause behind it.
     Absent,
     /// The file is there and its bytes are not UTF-8, so it carries no text.
     NotUtf8,
 }
 
 impl FileText {
-    /// This side as the sem differ takes it: `Some(None)` for a file absent at
-    /// the revision, `Some(Some(text))` for one that is there, and `None` for
-    /// one whose bytes are not text.
+    /// This side as the sem differ takes it. A side with no content gives
+    /// `Some(None)`. A side that holds text gives `Some(Some(text))`. A side
+    /// whose bytes are not text gives `None`.
     ///
-    /// The outer option is whether the side could be READ and the inner one is
-    /// whether the file was THERE. They are never the same question, which is
-    /// exactly what a bare `Option<String>` could not say.
+    /// The outer option is whether the side could be READ. The inner one is
+    /// whether the side holds any CONTENT. They are never the same question,
+    /// which is exactly what a bare `Option<String>` could not say.
     fn text(self) -> Option<Option<String>> {
         match self {
             FileText::Text(text) => Some(Some(text)),
@@ -439,11 +450,11 @@ impl FileText {
 /// The two sides of one file as [`FileChangeBuilder::push`] takes them, or
 /// `None` when either side is not text.
 ///
-/// The single place a [`FileText`] becomes a [`BeforeContent`]/[`AfterContent`]
-/// pair, so no resolver can quietly turn an undecodable side into an absent one:
-/// a caller handed `None` has no content to record and must exclude the file
-/// instead. One undecodable side is enough — a file that is binary at either
-/// revision cannot be diffed at all.
+/// The single place a [`FileText`] becomes a [`BeforeContent`] and
+/// [`AfterContent`] pair. Thus no resolver can quietly turn an undecodable
+/// side into an absent one. A caller handed `None` has no content to record,
+/// and must exclude the file instead. One undecodable side is enough. A file
+/// that is binary at either revision cannot be diffed at all.
 fn readable_sides(before: FileText, after: FileText) -> Option<(BeforeContent, AfterContent)> {
     let before = BeforeContent::new(before.text()?);
     let after = AfterContent::new(after.text()?);
@@ -454,8 +465,8 @@ fn readable_sides(before: FileText, after: FileText) -> Option<(BeforeContent, A
 /// [`FileChangeBuilder`] and dropping the paths whose content is not text into
 /// `excluded` instead.
 ///
-/// The shared tail of all four resolvers: each computes its candidate set and
-/// reads its two sides from a different place, and then records them
+/// The shared tail of all four resolvers. Each one computes its candidate set
+/// and reads its two sides from a different place. Each one then records them
 /// identically. `sides` reads one path's base and post-change content, so a
 /// resolver's only job is to say where each side comes from.
 ///
@@ -685,7 +696,7 @@ pub(super) fn resolve_working(
     let renames = working_rename_sources(&repo);
 
     // Each candidate's working-tree content is read once. A file with no
-    // content (a deletion) reads as absent and is diffed as a deletion.
+    // content is a deletion. It reads as absent and is diffed as a deletion.
     let (files, builder) = read_candidates(&candidates, &renames, &mut excluded, |path| {
         let after = read_working(repo_path, path)?;
         let base = base_path(&renames, path);
@@ -752,12 +763,13 @@ pub(super) fn resolve_sha(
 /// Resolve a single-file scope: its working-tree changes if any, else its whole
 /// content reviewed as all-added work.
 ///
-/// `path` is repo-relative by contract, and is contained through
-/// [`confine_to_repo`] BEFORE anything else reads it, so a `review file` target
-/// that is absolute or escapes the repository root (via `..` or a symlink) is
-/// rejected with [`AvpError::Validator`] and its content is never read into
-/// scope. Containing it first is also what keeps the ignore matcher's own
-/// repo-relative precondition true for the one scope whose path a caller names.
+/// `path` is repo-relative by contract. [`confine_to_repo`] contains it BEFORE
+/// anything else reads it. Thus the stage rejects a `review file` target that
+/// is absolute, or that escapes the repository root through `..` or a symlink.
+/// It rejects that target with [`AvpError::Validator`], and never reads its
+/// content into scope. Containment first also keeps the ignore matcher's own
+/// repo-relative precondition true. This is the one scope whose path a caller
+/// names.
 pub(super) fn resolve_file(
     repo_path: &Path,
     path: &str,
@@ -774,14 +786,19 @@ pub(super) fn resolve_file(
     let (files, builder) = read_candidates(&candidates, &renames, &mut excluded, |candidate| {
         let working = read_working(repo_path, candidate)?;
         let head = read_at_ref(&repo, GitRefSpec::head(), FilePath::new(candidate))?;
-        // A file with no working-tree change carries NO base side, so every
-        // entity in it diffs as added work — the same whole-content shape
-        // `resolve_glob` gives each of its files. Keeping the identical HEAD
-        // revision here would leave the semantic diff empty, and an
-        // entity-bound probe with no entity emits no result at all. A
-        // candidate-probe validator cannot tell that silence apart from "the
-        // probe ran and found no candidates", so it judges from nothing and
-        // answers differently on each run.
+        // A file with no working-tree change carries NO base side. Every
+        // entity in it then diffs as added work. That is the same
+        // whole-content shape `resolve_glob` gives each of its files.
+        //
+        // `FileText::Absent` states that missing base side. Here it does NOT
+        // mean the file is gone from HEAD, because the file IS at HEAD. This
+        // scope reviews whole content, so it chooses to hold no base at all.
+        //
+        // Keeping the identical HEAD revision here would leave the semantic
+        // diff empty, and an entity-bound probe with no entity emits no result
+        // at all. A candidate-probe validator cannot tell that silence apart
+        // from "the probe ran and found no candidates". So it judges from
+        // nothing and answers differently on each run.
         let before = if head == working {
             FileText::Absent
         } else {
@@ -825,8 +842,13 @@ pub(super) fn resolve_glob(
 
     let (candidates, mut excluded) = split_ignored(candidates, matcher);
 
-    // A glob scope has no base side: every matched file diffs as all-added, and
-    // nothing moved, so there is no rename source to look up either.
+    // A glob scope has no base side. Every matched file diffs as all-added.
+    // Nothing moved, so there is no rename source to look up either.
+    //
+    // `FileText::Absent` states that missing base side below. Here it does NOT
+    // mean the file is gone from HEAD, because every matched file is tracked
+    // and present. This scope reviews whole content, so it chooses to hold no
+    // base at all.
     let renames = BTreeMap::new();
     let (files, builder) = read_candidates(&candidates, &renames, &mut excluded, |path| {
         Ok((FileText::Absent, read_working(repo_path, path)?))

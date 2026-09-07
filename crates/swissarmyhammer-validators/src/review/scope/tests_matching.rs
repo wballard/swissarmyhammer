@@ -778,8 +778,8 @@ async fn reviewignore_excludes_a_file_that_is_not_utf8() {
 /// it. Models a binary/unreadable tracked blob.
 const BINARY_BYTES: &[u8] = &[0xff, 0xfe, 0x00, 0x01];
 
-/// An absent working-tree path reads as [`FileText::Absent`] — the intended
-/// deletion signal — not an error.
+/// An absent working-tree path reads as [`FileText::Absent`]. That is the
+/// intended deletion signal. It is not an error.
 #[test]
 fn read_working_maps_an_absent_path_to_absent() {
     let repo = TestRepo::new();
@@ -801,9 +801,10 @@ fn read_working_reads_a_present_file() {
     assert_eq!(got, FileText::Text("pub fn compute() {}\n".to_string()));
 }
 
-/// A binary/non-UTF8 working-tree file reads as [`FileText::NotUtf8`], its own
-/// state — never the deletion signal, which would diff the whole file as
-/// removed, and never an error, which would fail the whole run.
+/// A binary or non-UTF8 working-tree file reads as [`FileText::NotUtf8`], its
+/// own state. It never reads as the deletion signal, which would diff the
+/// whole file as removed. It never reads as an error, which would fail the
+/// whole run.
 #[test]
 fn read_working_reads_a_non_utf8_file_as_its_own_state() {
     let repo = TestRepo::new();
@@ -981,9 +982,10 @@ fn read_at_ref_addresses_the_path_within_the_refspec_never_the_transposition() {
     );
 }
 
-/// A binary/non-UTF8 blob committed at the ref reads as [`FileText::NotUtf8`],
-/// its own state — never the missing-path signal, which would diff the whole
-/// file as added, and never an error, which would fail the whole run.
+/// A binary or non-UTF8 blob committed at the ref reads as
+/// [`FileText::NotUtf8`], its own state. It never reads as the missing-path
+/// signal, which would diff the whole file as added. It never reads as an
+/// error, which would fail the whole run.
 #[test]
 fn read_at_ref_reads_a_non_utf8_blob_as_its_own_state() {
     let repo = TestRepo::new();

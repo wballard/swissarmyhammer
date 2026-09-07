@@ -16,20 +16,21 @@
 //! validator pairing in [`super::scope_review`].
 //!
 //! Only the ignore filter and the fixture split are deliberate. A file no
-//! validator matched, and a file whose bytes are not text, are each a coverage
-//! GAP: nothing asked for either to go unread, so each is reported the same way
-//! but never counted toward the clean full-exclusion claim
-//! ([`ExclusionKind::is_deliberate`]).
+//! validator matched is a coverage GAP. A file whose bytes are not text is a
+//! coverage GAP too. Nobody asked for either one to go unread. So the report
+//! names each one the same way, and never counts it toward the clean
+//! full-exclusion claim. See [`ExclusionKind::is_deliberate`].
 
 use serde::Serialize;
 
 /// Why the scope stage dropped a file.
 ///
-/// The report renders each kind differently — an ignore exclusion is grouped
-/// under the pattern that excluded it, a fixture exclusion, a file that is not
-/// text and an unmatched file are named per file under their own heading — so a
-/// reader sees at a glance whether a configuration, the validator store, the
-/// file's own bytes, or a plain lack of coverage took the file out of scope.
+/// The report renders each kind differently. It groups an ignore exclusion
+/// under the pattern that excluded it. It names a fixture exclusion, a file
+/// that is not text and an unmatched file one by one, under their own heading.
+/// Thus a reader sees at a glance what took the file out of scope. The cause
+/// is a configuration, the validator store, the file's own bytes, or a plain
+/// lack of coverage.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum ExclusionKind {
     /// A pattern in `.reviewignore` or `.gitignore` matched the file.
@@ -52,10 +53,10 @@ impl ExclusionKind {
     /// a scope covered entirely by them is a clean, passing review. No
     /// validator matching a file means nothing read it and nothing intended
     /// that, so it can never carry that claim — it is the exact reading
-    /// `^g7d3tzq` exists to prevent. A file that is not text is the same
-    /// reading: nobody asked for a picture to go unreviewed, and a repository
-    /// that wants one deliberately excluded writes the `.reviewignore` pattern,
-    /// which makes it [`ExclusionKind::ReviewIgnore`] instead.
+    /// `^g7d3tzq` exists to prevent. A file that is not text gives the same
+    /// reading. Nobody asked for a picture to go unreviewed. A repository that
+    /// wants one deliberately excluded writes the `.reviewignore` pattern.
+    /// That pattern makes it [`ExclusionKind::ReviewIgnore`] instead.
     pub fn is_deliberate(self) -> bool {
         match self {
             ExclusionKind::ReviewIgnore | ExclusionKind::ValidatorFixture => true,
@@ -119,12 +120,12 @@ impl ExcludedFile {
     /// The file dropped because its bytes are not UTF-8, so the scope stage
     /// could read no text side for it.
     ///
-    /// A picture, an archive or any other binary blob reaches this. It is
-    /// reported rather than diffed: a file the engine cannot decode has no
-    /// lines, so treating its absent text as an empty side would present the
-    /// whole file as added or removed work. It is reported rather than fatal
-    /// too — one such file in a commit range used to fail the whole run and
-    /// leave no report at all.
+    /// A picture, an archive or any other binary blob reaches this. The stage
+    /// reports it rather than diffs it. A file the engine cannot decode has no
+    /// lines. To treat its absent text as an empty side would present the
+    /// whole file as added or removed work. The stage reports it rather than
+    /// fails too. One such file in a commit range used to fail the whole run
+    /// and leave no report at all.
     pub(crate) fn not_utf8(path: &str) -> Self {
         Self {
             path: path.to_string(),

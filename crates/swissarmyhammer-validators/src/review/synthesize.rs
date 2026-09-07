@@ -553,9 +553,9 @@ fn not_reviewed_paths(
 ///
 /// A note rather than a warning, and never a finding: the reader needs to know
 /// the file went unread and why, not to fix it. The kinds render differently
-/// because they read differently — an ignore pattern is a repository's own
-/// configuration and covers whole directories at a time, while a fixture, a
-/// file that is not text and an unmatched file are each one named file.
+/// because they read differently. An ignore pattern is a repository's own
+/// configuration, and it covers whole directories at a time. A fixture, a file
+/// that is not text and an unmatched file are each one named file.
 fn render_excluded_files(markdown: &mut String, excluded: &[ExcludedFile]) {
     render_ignored_files(markdown, excluded);
     render_named_exclusions(

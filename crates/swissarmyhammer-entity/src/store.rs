@@ -21,7 +21,7 @@ use swissarmyhammer_store::{StoreError, TrackedStore};
 
 use crate::entity::Entity;
 use crate::id_types::EntityId;
-use swissarmyhammer_common::frontmatter::split_frontmatter_body;
+use swissarmyhammer_common::frontmatter::{join_frontmatter_body, split_frontmatter_body};
 
 /// Convenience alias matching the store crate's Result type.
 type StoreResult<T> = std::result::Result<T, StoreError>;
@@ -123,7 +123,11 @@ impl TrackedStore for EntityTypeStore {
     /// a field value is never emitted alone at column 0: it is written
     /// indented inside a block scalar, or escaped inside a quoted one. So
     /// [`split_frontmatter_body`] reads it back as frontmatter content rather
-    /// than as the closing delimiter.
+    /// than as the closing delimiter. [`join_frontmatter_body`] measures that
+    /// on every write rather than trusting it, and refuses the write with
+    /// [`StoreError::Serialize`] when it does not hold -- a card written with a
+    /// bare `---` line in its frontmatter loses its title and part of its body
+    /// on the next read, and keeps no record of what it held.
     fn serialize(&self, entity: &Entity) -> StoreResult<String> {
         if let Some(body_field) = &self.entity_def.body_field {
             let body = entity
@@ -146,7 +150,8 @@ impl TrackedStore for EntityTypeStore {
             let frontmatter_yaml =
                 serde_yaml_ng::to_string(&Value::Object(frontmatter.into_iter().collect()))?;
 
-            Ok(format!("---\n{}---\n{}", frontmatter_yaml, body))
+            join_frontmatter_body(&frontmatter_yaml, &body)
+                .map_err(|e| StoreError::Serialize(Box::new(e)))
         } else {
             // Plain YAML -- all fields except computed
             let mut map = BTreeMap::new();
@@ -550,6 +555,104 @@ That rule line is prose, not a delimiter."#;
                 parsed.get(key),
                 Some(value),
                 "field {key} did not survive the round trip\nserialized form:\n{text}"
+            );
+        }
+    }
+
+    /// A comment holding a markdown table must survive a write on the LIVE
+    /// kanban path.
+    ///
+    /// Kanban registers an [`EntityTypeStore`] for every entity type, so this
+    /// is the serializer that writes every card; `io.rs` is the no-store
+    /// fallback. Agents routinely put markdown tables in comments, and a
+    /// table's separator row is `|---|---|`, which holds the bare run `---`. A
+    /// writer or reader that treats that run as a SUBSTRING truncates the card:
+    /// the title, written after the comment, is lost, and the body starts
+    /// mid-row at `|---|`.
+    ///
+    /// Reduced from `.kanban/tasks/01M076YBBHE5ZQJCM518491BB0.md`.
+    #[test]
+    fn test_a_markdown_table_in_a_comment_survives_the_round_trip() {
+        let comment = "\
+RAW swiftlint, judged file beside the refusing path:
+
+| the refusing path | status | stdout | stderr |
+|---|---|---|---|
+| a path that holds no file | 2 | 1 entry | 0 bytes |
+
+The status is 2, and NOT the 0 the card carried over.";
+
+        let store = make_store(body_entity_def("task", "body"), vec![]);
+        let mut entity = Entity::new("task", "01ABC");
+        entity.set(
+            "title",
+            Value::String("swiftlint declines a file it cannot read".into()),
+        );
+        entity.set("position_column", Value::String("done".into()));
+        entity.set(
+            "comments",
+            serde_json::json!([{ "actor": "claude-code", "text": comment }]),
+        );
+        entity.set("body", Value::String("The card description.\n".into()));
+
+        let text = store.serialize(&entity).unwrap();
+        let parsed = store.deserialize(&EntityId::from("01ABC"), &text).unwrap();
+
+        for (key, value) in &entity.fields {
+            assert_eq!(
+                parsed.get(key),
+                Some(value),
+                "field {key} did not survive the round trip\nserialized form:\n{text}"
+            );
+        }
+    }
+
+    /// The written card must carry exactly two delimiter lines, whatever value
+    /// shapes the YAML emitter is handed.
+    ///
+    /// These shapes push the emitter between block-scalar and quoted style: a
+    /// trailing space or a CR on the line forces quoting, a plain newline
+    /// allows a block scalar, and blank lines inside a block scalar are written
+    /// at column 0 with no indent at all. A third delimiter line in any of them
+    /// would end the frontmatter early on the next read.
+    #[test]
+    fn test_serialize_writes_exactly_two_delimiter_lines() {
+        let long_line = "x".repeat(3000);
+        let comments = [
+            "---",
+            "  ---",
+            "---\n",
+            "Before.\n---\nAfter.",
+            "Before.\n\n---\n\nAfter.",
+            "Before. \n---\nAfter.",
+            "Before.\r\n---\r\nAfter.",
+            "Before.\n\t---\nAfter.",
+            "---\n---\n---",
+            "| a | b |\n|---|---|\n| 1 | 2 |",
+            &format!("{long_line}\n---\n"),
+        ];
+
+        let store = make_store(body_entity_def("task", "body"), vec![]);
+        for comment in comments {
+            let mut entity = Entity::new("task", "01ABC");
+            entity.set("title", Value::String("A card".into()));
+            entity.set(
+                "comments",
+                serde_json::json!([{ "actor": "claude-code", "text": comment }]),
+            );
+            entity.set("body", Value::String("Card description.\n".into()));
+
+            let text = store.serialize(&entity).unwrap();
+
+            let delimiter_lines = text.lines().filter(|line| *line == "---").count();
+            assert_eq!(delimiter_lines, 2, "comment {comment:?} produced\n{text}");
+
+            // And the write survives its own reader.
+            let parsed = store.deserialize(&EntityId::from("01ABC"), &text).unwrap();
+            assert_eq!(
+                parsed.get("comments"),
+                entity.get("comments"),
+                "comment {comment:?} produced\n{text}"
             );
         }
     }

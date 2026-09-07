@@ -33,6 +33,15 @@ pub enum StoreError {
     #[error("merge conflict: {0}")]
     MergeConflict(String),
 
+    /// Failed to serialize an item into its on-disk representation.
+    ///
+    /// The cause is boxed because this crate is a leaf with no workspace
+    /// dependencies (see `ARCHITECTURE.md`), so it cannot name the error types
+    /// its implementors raise. Boxing keeps `Error::source()` pointing at the
+    /// real cause rather than flattening it into a message.
+    #[error("serialization error: {0}")]
+    Serialize(#[source] Box<dyn std::error::Error + Send + Sync>),
+
     /// Failed to deserialize an item from its on-disk representation.
     #[error("deserialization error: {0}")]
     Deserialize(String),

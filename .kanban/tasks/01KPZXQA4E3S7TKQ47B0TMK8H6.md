@@ -122,15 +122,15 @@ Confirmed via `Grep "useEntityFocus|useFocusedScope" kanban-app/ui/src` (excludi
 ## Files
 
 - `kanban-app/ui/src/lib/entity-focus-context.tsx` — add `FocusStore`, new hooks, migrate provider. Keep `useEntityFocus` as deprecated compat shim. Keep `useFocusedScope` signature; rewrite its internals.
-- `kanban-app/ui/src/components/focus-scope.tsx` — migrate `FocusScope` and `FocusScopeInner` (#1,
-- `kanban-app/ui/src/components/data-table.tsx` — migrate `EntityRow` (#3).
+- `kanban-app/ui/src/components/focus-scope.tsx` — migrate `FocusScope` and `FocusScopeInner` (`#1`,
+- `kanban-app/ui/src/components/data-table.tsx` — migrate `EntityRow` (`#3`).
 - `kanban-app/ui/src/components/grid-view.tsx` — migrate `useGridNavigation` (
-- `kanban-app/ui/src/components/board-view.tsx` — migrate `BoardView`/`useBoardCommandRefs` (#5).
-- `kanban-app/ui/src/components/entity-inspector.tsx` — migrate `useFirstFieldFocus` (#6).
-- `kanban-app/ui/src/components/cursor-focus-bridge.tsx` — migrate (#7).
-- `kanban-app/ui/src/components/inspector-focus-bridge.tsx` — migrate (#8).
+- `kanban-app/ui/src/components/board-view.tsx` — migrate `BoardView`/`useBoardCommandRefs` (`#5`).
+- `kanban-app/ui/src/components/entity-inspector.tsx` — migrate `useFirstFieldFocus` (`#6`).
+- `kanban-app/ui/src/components/cursor-focus-bridge.tsx` — migrate (`#7`).
+- `kanban-app/ui/src/components/inspector-focus-bridge.tsx` — migrate (`#8`).
 - `kanban-app/ui/src/components/column-view.tsx` — migrate (
-- `kanban-app/ui/src/components/app-shell.tsx` — migrate (#10).
+- `kanban-app/ui/src/components/app-shell.tsx` — migrate (`#10`).
 - `kanban-app/ui/src/lib/entity-focus-context.test.tsx` — new tests for the store + selector hooks.
 
 ## Test mock inventory
@@ -188,7 +188,7 @@ Files that mock `useEntityFocus` — these continue to work via the compat shim 
 
 - Use `/tdd` — start with the `FocusStore` class and the per-moniker selective notification test (copy the shape from `FieldSubscriptions` tests), then hooks, then hot-path migrations, then cool consumers.
 - Land after **01KPZWP4YTYH76XTBH992RV2AS** (RenderProfiler) so the telemetry acceptance has something to measure against.
-- Lands independently of the other performance tasks — does not require #2/#3/#4/#6 first, and does not block them. The four tasks compound with this one but each is independently valuable. #performance #architecture #frontend
+- Lands independently of the other performance tasks — does not require `#2`/`#3`/`#4`/`#6` first, and does not block them. The four tasks compound with this one but each is independently valuable. #performance #architecture #frontend
 
 ## Review Findings (2026-04-24 12:24)
 

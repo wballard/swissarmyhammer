@@ -71,7 +71,7 @@ Investigation + fix for the core routing. The user-visible expectation is:
 
 ## Resolution Notes (implementation)
 
-**Root cause:** The investigation confirmed suspect #1 (perspective moniker absent from view-body right-clicks) and suspect #4 (missing `scope:` filter in YAML). The resolver logic in `resolve_perspective_id` was already correct — all six `perspective_context_menu_integration.rs` tests passed against the unmodified resolver, confirming the bug was upstream in how the scope chain is constructed.
+**Root cause:** The investigation confirmed suspect `#1` (perspective moniker absent from view-body right-clicks) and suspect `#4` (missing `scope:` filter in YAML). The resolver logic in `resolve_perspective_id` was already correct — all six `perspective_context_menu_integration.rs` tests passed against the unmodified resolver, confirming the bug was upstream in how the scope chain is constructed.
 
 **Fix:**
 

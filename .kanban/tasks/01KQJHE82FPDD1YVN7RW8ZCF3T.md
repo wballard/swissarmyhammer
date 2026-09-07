@@ -35,15 +35,15 @@ Radix Tooltip is the project's tooltip primitive (used in `nav-bar.tsx`, `entity
 - [x] `<FocusDebugOverlay>` renders a small (~10–12px) color-matched handle pinned to the top-left of its host's content box. The handle carries `pointer-events: auto`; the surrounding wrapper and dashed border keep `pointer-events: none`.
 - [x] The handle is wrapped in a Radix Tooltip. Hovering it opens a `TooltipContent` whose text is exactly the current `labelText` value (`${kind}:${label}` for layers, `${kind}:${label} (x,y)` otherwise).
 - [x] The dashed border, color coding, layer-aware z-index, and `data-debug={kind}` attribute are unchanged.
-- [x] Click routing on the host element is unchanged: clicking on the host's content (NOT on the handle) still reaches the host's click handler, not the overlay. (Existing click-passthrough invariant in `focus-debug-overlay.browser.test.tsx` assertion #4.)
+- [x] Click routing on the host element is unchanged: clicking on the host's content (NOT on the handle) still reaches the host's click handler, not the overlay. (Existing click-passthrough invariant in `focus-debug-overlay.browser.test.tsx` assertion `#4`.)
 - [x] When `useFocusDebug()` returns `false`, no overlay or handle DOM is mounted (already enforced upstream — verify nothing in this change makes it conditional on the new tooltip subtree).
 
 ## Tests
 - [x] Update `kanban-app/ui/src/components/focus-debug-overlay.browser.test.tsx`:
   - Existing "label mentions primitive's name / moniker" assertion (change to fire a hover on the handle and assert the tooltip content text matches `kind:moniker`. Use `@testing-library/user-event`'s `hover()` against `[data-debug=…] [data-tooltip-trigger]` (or whatever stable selector the handle exposes).
   - Existing "(x,y) coordinates" assertion (hover the handle and assert tooltip text contains the `"x,y"` substring.
-  - Existing "no overlay when provider disabled" assertion (#2): unchanged — still verifies no `[data-debug=…]` mounts.
-  - Existing "click passthrough" assertion (#4): unchanged — clicks on host content still reach the host. Add a sub-assertion: clicking on the *handle itself* must NOT reach the host (the handle is the only `pointer-events: auto` region; this is the explicit affordance for hover).
+  - Existing "no overlay when provider disabled" assertion (`#2`): unchanged — still verifies no `[data-debug=…]` mounts.
+  - Existing "click passthrough" assertion (`#4`): unchanged — clicks on host content still reach the host. Add a sub-assertion: clicking on the *handle itself* must NOT reach the host (the handle is the only `pointer-events: auto` region; this is the explicit affordance for hover).
 - [x] Update `kanban-app/ui/src/components/focus-debug-overlay.layer-z.browser.test.tsx` only if the z-tier read needs to move — preserve the existing layer-z assertions.
 - [x] Run `cd kanban-app/ui && pnpm vitest run src/components/focus-debug-overlay` and confirm green.
 

@@ -17,6 +17,30 @@ Perform a structured code review. You are a **thin driver**: detect the mode, ca
 Here is what the user provided: 
 $ARGUMENTS
 
+## Review Only This Repository
+
+Review only the repository that contains the current working directory.
+
+1. Get the repository root with `git rev-parse --show-toplevel`.
+2. Review only files below that root.
+3. Resolve each commit, range, branch and glob in that repository only.
+
+Do not review these targets:
+
+- A path outside the repository root.
+- A relative path that goes out of the root, for example `../other-project`.
+- A path in a different clone, a different checkout, or a nested repository with its own root.
+- A pull request, a branch, or a commit of a different repository.
+- A file in a package cache, a vendor directory, or a dependency source tree.
+
+If the user gives a target outside the root, do not review it. Tell the user that
+the target is outside this repository, and stop. Do not change the working
+directory, and do not clone or fetch a different repository, to make the target
+valid.
+
+If the working directory is not in a git repository, stop. Tell the user that
+there is no repository to review.
+
 {% include "_partials/review-column" %}
 
 ## Guidelines
@@ -71,6 +95,10 @@ wasted work.
 
 Every line of each named file is under review. The caller asked about those
 files, so answer about all of them.
+
+The path or glob must stay inside the repository root. Give it relative to that
+root. If the named target is outside the root, do not call the op — refuse as
+the scope rule above tells you.
 
 #### The two words the engine renders in every prompt
 

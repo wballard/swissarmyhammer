@@ -11,30 +11,63 @@ pub type Result<T> = std::result::Result<T, EntityError>;
 pub enum EntityError {
     /// Entity file not found.
     #[error("entity not found: {entity_type}/{id}")]
-    NotFound { entity_type: String, id: String },
+    NotFound {
+        /// The entity type that was read.
+        entity_type: String,
+        /// The id of the entity that does not exist.
+        id: String,
+    },
 
     /// Missing frontmatter delimiters in a body-field entity.
     #[error("invalid frontmatter in {path}: expected --- delimiters")]
-    InvalidFrontmatter { path: PathBuf },
+    InvalidFrontmatter {
+        /// The file that holds no frontmatter delimiters.
+        path: PathBuf,
+    },
+
+    /// A field value emitted a bare `---` line into the frontmatter, so the
+    /// entity could not be written without destroying it on the next read.
+    #[error("cannot write {path}: {source}")]
+    FrontmatterDelimiter {
+        /// The file the write was refused for.
+        path: PathBuf,
+        /// The delimiter line that made the write unsafe.
+        source: swissarmyhammer_common::frontmatter::DelimiterInFrontmatter,
+    },
 
     /// YAML parse error.
     #[error("YAML error in {path}: {source}")]
     Yaml {
+        /// The file whose YAML could not be read.
         path: PathBuf,
+        /// The YAML error from the parser.
         source: serde_yaml_ng::Error,
     },
 
     /// Unknown entity type (not defined in FieldsContext).
     #[error("unknown entity type: {entity_type}")]
-    UnknownEntityType { entity_type: String },
+    UnknownEntityType {
+        /// The entity type name that no `FieldsContext` defines.
+        entity_type: String,
+    },
 
     /// Field validation failed.
     #[error("validation failed for field '{field}': {message}")]
-    ValidationFailed { field: String, message: String },
+    ValidationFailed {
+        /// The name of the field that failed validation.
+        field: String,
+        /// The reason the value is not valid.
+        message: String,
+    },
 
     /// Computed field derivation failed.
     #[error("compute error for field '{field}': {message}")]
-    ComputeError { field: String, message: String },
+    ComputeError {
+        /// The name of the computed field.
+        field: String,
+        /// The reason the value could not be computed.
+        message: String,
+    },
 
     /// A text diff patch could not be parsed or applied.
     #[error("patch apply error: {0}")]
@@ -44,19 +77,28 @@ pub enum EntityError {
     /// match the expected value from the changelog entry.
     #[error("stale change on field '{field}': expected {expected}, found {actual}")]
     StaleChange {
+        /// The name of the field the change applies to.
         field: String,
+        /// The value the changelog entry expected to find.
         expected: serde_json::Value,
+        /// The value the entity holds now.
         actual: serde_json::Value,
     },
 
     /// An undo or redo was attempted on an unsupported operation type
     /// (e.g. trying to undo an "undo" or "redo" entry directly).
     #[error("unsupported undo/redo operation type: '{op}'")]
-    UnsupportedUndoOp { op: String },
+    UnsupportedUndoOp {
+        /// The name of the operation that undo and redo do not support.
+        op: String,
+    },
 
     /// A changelog ULID was not found in the index.
     #[error("changelog entry not found: {ulid}")]
-    ChangelogEntryNotFound { ulid: String },
+    ChangelogEntryNotFound {
+        /// The ULID of the changelog entry the index does not hold.
+        ulid: String,
+    },
 
     /// Transaction undo/redo failed partway through. Rollback was attempted.
     ///
@@ -83,28 +125,47 @@ pub enum EntityError {
 
     /// Cannot restore from trash because the data file is missing.
     #[error("cannot restore from trash: data file not found at {path}")]
-    RestoreFromTrashFailed { path: PathBuf },
+    RestoreFromTrashFailed {
+        /// The data file in the trash that does not exist.
+        path: PathBuf,
+    },
 
     /// A path required to have a parent directory or a filename component,
     /// but did not (e.g. the filesystem root, or an empty path).
     #[error("invalid path {path}: {reason}")]
-    InvalidPath { path: PathBuf, reason: String },
+    InvalidPath {
+        /// The path that is not valid.
+        path: PathBuf,
+        /// The component the path does not have.
+        reason: String,
+    },
 
     /// Attachment source file not found.
     #[error("attachment source file not found: {path}")]
-    AttachmentSourceNotFound { path: PathBuf },
+    AttachmentSourceNotFound {
+        /// The source file the attachment was to be copied from.
+        path: PathBuf,
+    },
 
     /// Enriched attachment object references a file that no longer exists.
     #[error("attachment file not found for field '{field}': {filename}")]
-    AttachmentNotFound { field: String, filename: String },
+    AttachmentNotFound {
+        /// The name of the attachment field.
+        field: String,
+        /// The name of the attachment file that does not exist.
+        filename: String,
+    },
 
     /// Attachment file exceeds max size.
     #[error(
         "attachment file too large for field '{field}': {size} bytes exceeds max {max_bytes} bytes"
     )]
     AttachmentTooLarge {
+        /// The name of the attachment field.
         field: String,
+        /// The size of the attachment file, in bytes.
         size: u64,
+        /// The largest size the field accepts, in bytes.
         max_bytes: u64,
     },
 

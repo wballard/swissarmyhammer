@@ -22,7 +22,7 @@ Part of the spatial-nav redesign. Full design: **`01KQQSXM2PEYR1WAQ7QXW3B8ME`** 
 
 ## Audit findings (2026-05-03)
 
-`drill_in` lives in `src/registry.rs` (NOT `navigate.rs` — the task body's note "or wherever drill_in currently lives" applies; #6 only touches the rect-validation parts of registry.rs, no overlap with `drill_in`). The function ALREADY implements the full contract per **Option A**:
+`drill_in` lives in `src/registry.rs` (NOT `navigate.rs` — the task body's note "or wherever drill_in currently lives" applies; `#6` only touches the rect-validation parts of registry.rs, no overlap with `drill_in`). The function ALREADY implements the full contract per **Option A**:
 
 1. Honor `zone.last_focused` when it still resolves to a registered scope.
 2. Otherwise fall back to first-child by `(top, left)` ordering.

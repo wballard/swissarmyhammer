@@ -6,6 +6,7 @@
 
 use super::McpServer;
 use std::path::PathBuf;
+use swissarmyhammer_kanban::auto_color::palette_color;
 use swissarmyhammer_templating::filters::slugify_string;
 
 impl McpServer {
@@ -62,22 +63,14 @@ const AGENT_COLORS: &[&str] = &[
     "38a169",
 ];
 
-/// The DJB2 starting hash. Part of the published algorithm, not a tunable.
-const DJB2_SEED: u64 = 5381;
-
-/// The DJB2 per-byte multiplier. Part of the published algorithm, not a tunable.
-const DJB2_MULTIPLIER: u64 = 33;
-
 /// Derive a deterministic hex color for an agent actor.
 ///
-/// The actor id is folded with djb2 — a short, stable, non-cryptographic string
-/// hash — and the digest picks one entry of [`AGENT_COLORS`]. The same client
-/// name therefore always arrives at the same colour.
+/// The actor id picks one entry of [`AGENT_COLORS`] through the shared djb2
+/// hash, so the same client name always arrives at the same colour. The
+/// palette stays here because it is this surface's own; only the hash is
+/// shared, with the kanban app that colours human actors.
 fn agent_deterministic_color(id: &str) -> String {
-    let hash: u64 = id.bytes().fold(DJB2_SEED, |h, b| {
-        h.wrapping_mul(DJB2_MULTIPLIER).wrapping_add(b as u64)
-    });
-    AGENT_COLORS[(hash as usize) % AGENT_COLORS.len()].to_string()
+    palette_color(AGENT_COLORS, id).to_string()
 }
 
 #[cfg(test)]
@@ -102,5 +95,35 @@ mod tests {
         let c2 = agent_deterministic_color("claude-code");
         assert_eq!(c1, c2);
         assert_eq!(c1.len(), 6);
+    }
+
+    /// The colour every listed actor id has always been given.
+    ///
+    /// A colour is written onto the actor the first time a client connects and
+    /// is read back on every board that already holds that actor, so a new
+    /// answer here re-colours agents that exist. The table was computed from
+    /// the djb2 definition and [`AGENT_COLORS`] alone, not from this module's
+    /// code, so it fails whenever the two stop agreeing.
+    const PINNED_AGENT_COLORS: &[(&str, &str)] = &[
+        ("claude-code", "6b46c1"),
+        ("claude", "2c7a7b"),
+        ("cursor", "2f855a"),
+        ("codex", "319795"),
+        ("my-agent", "3182ce"),
+        ("spaces", "805ad5"),
+        ("upper", "38a169"),
+        ("a-b", "2f855a"),
+        ("", "3182ce"),
+    ];
+
+    #[test]
+    fn test_agent_deterministic_color_matches_pinned_table() {
+        for (id, expected) in PINNED_AGENT_COLORS {
+            assert_eq!(
+                agent_deterministic_color(id),
+                *expected,
+                "the colour of agent {id:?} changed"
+            );
+        }
     }
 }

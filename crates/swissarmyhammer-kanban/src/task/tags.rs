@@ -10,8 +10,8 @@
 //! Creating the `Tag` entity for a name that does not exist yet is a separate
 //! pass: `shared::auto_create_body_tags` mints a `Tag` with an auto-color for
 //! each `#tag` in the written body. [`apply_tag_refs`] leaves that to its
-//! caller, because the caller owns the write; the single-ref front door
-//! [`apply_one_tag_ref`] owns both.
+//! caller, because the caller owns the write; the task-level front door
+//! [`apply_tag_refs_to_task`] owns both.
 
 use crate::context::KanbanContext;
 use crate::error::{KanbanError, Result};
@@ -77,34 +77,45 @@ pub(crate) async fn apply_tag_refs(
     Ok(true)
 }
 
-/// Apply one forgiving tag ref to a task and return the thin mutation ack.
+/// Apply forgiving tag refs to a task and return the thin mutation ack.
 ///
 /// The whole body of `tag task` and `untag task`: they differ only in `mode`,
 /// so they share this one function rather than carrying near-identical copies
 /// that can drift apart.
 ///
-/// Reads the task, routes the ref through [`apply_tag_refs`], writes only when
-/// the body actually changed, and mints the `Tag` entity for any name that is
-/// new. Minting is skipped for [`TagApply::Remove`], which can never introduce
-/// a name.
-pub(crate) async fn apply_one_tag_ref(
+/// Reads the task, routes every ref through [`apply_tag_refs`], writes only
+/// when the body actually changed, and mints the `Tag` entity for any name
+/// that is new. Minting is skipped for [`TagApply::Remove`], which can never
+/// introduce a name.
+///
+/// `refs` holds one ref per tag, so a caller that passes two refs applies two
+/// tags. An empty list is an error: neither op has anything to do, and acking
+/// it would report a write that never happened — the silent input loss this
+/// module exists to prevent. [`apply_tag_refs`] resolves the whole list before
+/// it edits the body, so one bad ref leaves the task exactly as it was.
+pub(crate) async fn apply_tag_refs_to_task(
     ctx: &KanbanContext,
     task_id: &str,
-    tag_ref: &str,
+    refs: &[String],
     mode: TagApply,
 ) -> Result<Value> {
+    if refs.is_empty() {
+        return Err(KanbanError::parse(
+            "no tag given: pass a tag name, a tag id, or a list of them",
+        ));
+    }
+
     let ectx = ctx.entity_context().await?;
     let mut entity = ectx.read("task", task_id).await?;
 
-    let refs = [tag_ref.to_string()];
-    if apply_tag_refs(&ectx, &mut entity, &refs, mode).await? {
+    if apply_tag_refs(&ectx, &mut entity, refs, mode).await? {
         ectx.write(&entity).await?;
     }
     if mode != TagApply::Remove {
         auto_create_body_tags(&ectx, &entity).await?;
     }
 
-    // Thin ack — success implies the tag took effect; `get task` is the escape
+    // Thin ack — success implies the tags took effect; `get task` is the escape
     // hatch for the post-op tag list.
     Ok(task_mutation_ack(&entity))
 }

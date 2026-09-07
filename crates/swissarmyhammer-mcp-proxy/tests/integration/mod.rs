@@ -4,3 +4,5 @@ mod end_to_end;
 mod handler_tests;
 mod proxys;
 mod securitys;
+mod upstream;
+mod workspace_isolation;

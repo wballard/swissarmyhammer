@@ -228,4 +228,4 @@ YAML front matter, where a quoted word is usual.
 The full finding text, with each measurement, stands in the comment
 `01kzs0eyrenn7a0j2125m11jf5` of ^6585731.
 
-#tool-validators #objectivity #tool-validators-objectivity
+#tool-validators #objectivity

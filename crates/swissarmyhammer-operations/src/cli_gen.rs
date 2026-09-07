@@ -14,6 +14,7 @@
 //! - [`build_commands_from_schema`] — schema → clap command tree.
 //! - [`extract_noun_verb_arguments`] — clap matches → `{ "op": "verb noun", ...args }`.
 
+use crate::forgiving::expand_list_entry;
 use clap::{Arg, ArgAction, Command};
 use once_cell::sync::Lazy;
 use serde_json::Value;
@@ -554,6 +555,11 @@ fn build_arguments_from_matches(
 ///   this is checked before the plain-boolean branch because [`primary_type`]
 ///   also reports `"boolean"` for the union;
 /// - a plain boolean (`"boolean"`) is a flag, emitting `true` only when set;
+/// - an array collects every occurrence of its repeatable flag, and each
+///   occurrence goes through [`expand_list_entry`], so one
+///   `--tags '["red","blue"]'` means the same two entries as two `--tags`
+///   flags — a shell argument carries one string, which is why the JSON-array
+///   form exists at all;
 /// - empty arrays collapse to `Ok(None)`.
 ///
 /// # Errors
@@ -596,7 +602,7 @@ fn extract_value_from_matches(
         Some(TYPE_ARRAY) => {
             let values: Vec<String> = matches
                 .get_many::<String>(name)
-                .map(|v| v.cloned().collect())
+                .map(|v| v.flat_map(|raw| expand_list_entry(raw)).collect())
                 .unwrap_or_default();
             if values.is_empty() {
                 None
@@ -894,6 +900,78 @@ mod tests {
         assert_eq!(assignees.len(), 2);
         assert_eq!(assignees[0], "alice");
         assert_eq!(assignees[1], "bob");
+    }
+
+    /// One `--flag '["a","b"]'` occurrence means one entry for each element.
+    ///
+    /// A shell argument carries one string, so a caller who means several
+    /// entries writes them as a JSON array inside that one value. Joining them
+    /// into a single entry silently invents a name nobody asked for.
+    #[test]
+    fn array_arg_expands_a_stringified_json_array() {
+        let schema = mock_schema();
+        let args = parse_and_extract(
+            &schema,
+            &[
+                "mock",
+                "task",
+                "add",
+                "--title",
+                "Fix bug",
+                "--assignees",
+                r#"["alice","bob"]"#,
+            ],
+        );
+        assert_eq!(args.get("assignees").unwrap(), &json!(["alice", "bob"]));
+    }
+
+    /// A scalar value is one entry, and a repeated flag beside a stringified
+    /// array contributes its own entries in the order they were given.
+    #[test]
+    fn array_arg_mixes_scalars_and_stringified_arrays() {
+        let schema = mock_schema();
+        let args = parse_and_extract(
+            &schema,
+            &[
+                "mock",
+                "task",
+                "add",
+                "--title",
+                "Fix bug",
+                "--assignees",
+                "alice",
+                "--assignees",
+                r#"["bob","carol"]"#,
+            ],
+        );
+        assert_eq!(
+            args.get("assignees").unwrap(),
+            &json!(["alice", "bob", "carol"])
+        );
+    }
+
+    /// A value that is not a JSON array of strings stays one entry, whole.
+    ///
+    /// Bracket characters are legal inside a ref, and a JSON array of numbers
+    /// names no refs at all, so neither is expanded.
+    #[test]
+    fn array_arg_keeps_a_value_that_is_not_a_string_array() {
+        let schema = mock_schema();
+        for raw in ["[not json", "[1,2]"] {
+            let args = parse_and_extract(
+                &schema,
+                &[
+                    "mock",
+                    "task",
+                    "add",
+                    "--title",
+                    "Fix bug",
+                    "--assignees",
+                    raw,
+                ],
+            );
+            assert_eq!(args.get("assignees").unwrap(), &json!([raw]));
+        }
     }
 
     #[test]

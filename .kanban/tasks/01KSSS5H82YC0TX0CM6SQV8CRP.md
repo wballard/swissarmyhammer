@@ -9,8 +9,8 @@ Scope: commit d4a69cbe8 vs parent e0d93d061 — crates/llama-agent (queue.rs, ac
 
 ## RESOLUTION (2026-05-29, follow-up commit pending)
 - [x] BLOCKER (partial KV save on disconnect/cancel) — FIXED. `queue.rs` now gates the save through `should_persist_stream_state(result_ok, cancelled, sender_closed)` = save only on clean completion with the receiver still attached. Disconnect (`sender.is_closed()`) and cancellation (`cancellation_token.is_cancelled()`) skip the save → correct cold start next turn instead of corruption. +2 unit tests.
-- [x] WARNING #2 (final assistant turn not persisted) — FIXED. `acp/server.rs` now adds the final assistant message (raw generated_text) before the no-tool-calls `break`, completing history and preserving cross-prompt cache validity.
-- [x] WARNING #3 (length-vs-content prefix guard) — DOCUMENTED in `prepare_streaming_kv_cache` (prefix assumption) + robust fix tracked in card 01KSSSPN67B23A0B8TRPCRNC34 (content fingerprint / longest-common-prefix).
+- [x] WARNING `#2` (final assistant turn not persisted) — FIXED. `acp/server.rs` now adds the final assistant message (raw generated_text) before the no-tool-calls `break`, completing history and preserving cross-prompt cache validity.
+- [x] WARNING `#3` (length-vs-content prefix guard) — DOCUMENTED in `prepare_streaming_kv_cache` (prefix assumption) + robust fix tracked in card 01KSSSPN67B23A0B8TRPCRNC34 (content fingerprint / longest-common-prefix).
 - [~] WARNING memory/eviction (full-state copy + non-LRU, count-based eviction) — tracked in 01KSSSPYEG33YZA2WJ8N9Y69V2 (true LRU + byte budget). Pre-existing in batch path.
 - [~] WARNING concurrency (no per-session lock; safe only at worker_threads=1) — tracked in 01KSSSQ6EP42C2TCHJWNY2JFNH.
 - [~] WARNING streaming/batch gate divergence — acceptable: a session is driven by exactly one path (ACP=streaming, validator/title=batch); noted in 01KSSSQ6EP42C2TCHJWNY2JFNH.

@@ -19,19 +19,27 @@ change what a task is blocked by, set `depends_on`.
 
 ## Task tags
 
-On `add task` and `update task`, `tags` applies tags. It is as forgiving as
-`depends_on`:
+On `add task`, `update task`, `tag task` and `untag task`, `tags` applies tags.
+It is as forgiving as `depends_on`:
 
 - Shape: a single tag, a JSON array, or a stringified JSON array all work. The
-  singular `tag` is accepted as a one-element alias.
+  singular `tag` is an alias for the same list and takes every shape `tags`
+  takes.
 - Ref format: each entry may be a tag name, a full tag ULID, `^<short>`, or a
   7-char short id. A name that names no tag yet creates it; an **id** reference
   that names no tag is an error, not a silent no-op.
+
+Each entry is one tag. A list of two refs applies two tags; it never becomes
+one joined name.
 
 `tags` on `add task` adds to whatever `#tag` markers the description carries.
 `tags` on `update task` **replaces** the whole set — an empty array clears every
 tag. One `add task { tags: [a, b, c] }` gives the same result as one `add task`
 plus three `tag task` calls; both run the same code.
+
+`tag task` and `untag task` require `tags` (or `tag`). An empty list is an
+error on both: there is nothing to apply, and an `ok` would report a write that
+never happened.
 
 Tags are stored as `#tag` markers in the description, so editing the description
 is the other way to change them. Because of that, replacing the tag set rewrites
@@ -57,3 +65,32 @@ create — it is left off the new task instead.
 
 `attachments` entries are source file paths to attach; the metadata objects
 `get task` returns are also accepted, so a task read can be sent straight back.
+
+## Scoping a listing
+
+`list tasks` takes a `filter` expression and four scoping params. Each scoping
+param is sugar for one filter atom, and each is AND-ed onto `filter` when both
+are given:
+
+| Param | Filter atom | Matches |
+|---|---|---|
+| `tag` | `#<tag>` | one tag name |
+| `assignee` | `@<assignee>` | one actor id, or the slug of the actor's name |
+| `project` | `$<project>` | one project id, or the slug of the project's name |
+| `column` | — | one column, structurally |
+
+So `{"op": "list tasks", "tag": "bug"}` returns exactly what
+`{"op": "list tasks", "filter": "#bug"}` returns. Matching is
+case-insensitive, and a value naming nothing gives an empty listing.
+
+Each of the three atom params takes ONE value. To combine several, write the
+`filter` expression: `#bug && @alice`, `#bug || #regression`, `!#done`.
+
+`exclude_done` decides whether the terminal (done) column is dropped. It
+defaults to `true` when no `column` is named and to `false` when one is, so an
+unscoped listing hides finished work while `column: "done"` returns it. Set
+`exclude_done: false` to list the whole board.
+
+Results are paged: `page_size` defaults to 10 and `count` reports the page
+while `total` reports the whole match. Read `total`, not `count`, to learn how
+many tasks matched.

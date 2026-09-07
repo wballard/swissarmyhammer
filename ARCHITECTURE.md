@@ -1,8 +1,8 @@
 # Architecture
 
-SwissArmyHammer is a monorepo producing CLI tools, MCP servers, and desktop apps for AI-assisted software engineering. The core domain is a file-backed kanban board engine with YAML-driven schema, a unified command system, and a Tauri desktop UI.
+SwissArmyHammer is a monorepo producing CLI tools and MCP servers for AI-assisted software engineering. The core domain is a file-backed kanban board engine with YAML-driven schema and a unified command system.
 
-Consult the root `Cargo.toml` for current workspace members and `kanban-app/package.json` for the frontend stack. This document describes the architectural concepts and rules that don't change with every commit.
+Consult the root `Cargo.toml` for the current workspace members. This document describes the architectural concepts and rules that don't change with every commit.
 
 ---
 
@@ -20,13 +20,13 @@ Crates are organized in dependency tiers. A crate may only depend on crates in t
 
 - **Tier 3 — Entity Layer**: Depends on Tier 0-2. A crate belongs here if it provides generic entity I/O — reading, writing, caching, searching entities against a schema. The `Entity` type and `EntityContext` (`swissarmyhammer-entity`) live here. They know about fields and storage but not about kanban boards, tasks, or columns.
 
-- **Tier 4 — Application Libraries**: Depends on anything below. A crate belongs here if it implements domain logic — kanban operations, skill resolution, tree-sitter indexing, web search. These are the "engines" that CLI and UI programs wire together.
+- **Tier 4 — Application Libraries**: Depends on anything below. A crate belongs here if it implements domain logic — kanban operations, skill resolution, tree-sitter indexing, web search. These are the "engines" that the CLI programs wire together.
 
-**The key structural constraint**: Application libraries have no knowledge of Tauri, React, or any specific CLI framework. They are pure domain libraries. The Tauri app and CLI tools are thin wiring layers over the engines.
+**The key structural constraint**: Application libraries have no knowledge of any specific CLI framework. They are pure domain libraries. The CLI tools are thin wiring layers over the engines.
 
 **LSP client owner — `swissarmyhammer-lsp`**: `swissarmyhammer-lsp` is the single workspace home for the LSP machinery. It owns the wire-level JSON-RPC client (`LspJsonRpcClient`) and its transport seam (`LspTransport`, with an in-memory fake for tests), the `SharedLspClient` handle, the server-spec schema (`OwnedLspServerSpec`/`LspServerConfig`/`LspServerHandle`), and the builtin server registry (`LSP_REGISTRY`, `load_lsp_servers`, `builtin_lsp_yaml_sources`) loaded from `builtin/lsp/*.yaml` — plus the daemon/supervisor lifecycle (`LspDaemon`, `LspSupervisorManager`). **The dependency edge runs `swissarmyhammer-lsp ← swissarmyhammer-code-context`**: code-context depends on `swissarmyhammer-lsp` (not the reverse) and re-exports the moved types so its own consumers compile unchanged. code-context keeps only the *indexing* layer on top of the transport — the free functions that collect document symbols and call-hierarchy edges and persist them to the SQLite index (`collect_and_persist_file_symbols`, `collect_and_persist_call_edges`), which operate over a `&mut LspJsonRpcClient`. `swissarmyhammer-lsp` carries no configuration-source dependency: the daemon's stderr-noise filter is an injected predicate (`LspSupervisorManager::with_stderr_filter`), and `swissarmyhammer-tools` supplies the code-context-config-backed filter when it spawns the supervisor.
 
-**Spatial focus engine — `swissarmyhammer-focus`**: The headless spatial-navigation kernel lives at Tier 0. It owns the focus state machine (per-window focus, layer forest, `last_focused_by_fq` memory) and the snapshot-driven pathfinder; scope geometry lives in React and rides on every IPC as a `NavSnapshot`. The only pluggable extension trait that survives is `FocusEventSink` for adapter-side event delivery. The kernel knows nothing about kanban tasks, columns, or boards. Its surface is intentionally generic: a pair of distinct branded newtypes — `FullyQualifiedMoniker` (a path through the focus hierarchy that uniquely identifies a scope) and `SegmentMoniker` (a single hierarchy step appended into a parent's path) — plus abstract `Rect`s and `WindowLabel`s. The path-monikers identity model eliminates the duplicate-registration ambiguity that a flat string moniker would otherwise admit. Its only workspace dependency is `swissarmyhammer-common` (for `define_id!`). Adapters in `kanban-app/src/commands.rs` translate Tauri window events into focus-engine calls and emit `FocusChangedEvent`s back to React; the kanban-specific helper `resolve_focused_column` is the small piece of focus code that *does* know about kanban and stays in `swissarmyhammer-kanban`. This split is what lets the same focus engine drive any future tier-4 application without dragging kanban semantics in.
+**Spatial focus engine — `swissarmyhammer-focus`**: The headless spatial-navigation kernel lives at Tier 0. It owns the focus state machine (per-window focus, layer forest, `last_focused_by_fq` memory) and the snapshot-driven pathfinder; a caller supplies the scope geometry as a `NavSnapshot`. The only pluggable extension trait that survives is `FocusEventSink` for adapter-side event delivery. The kernel knows nothing about kanban tasks, columns, or boards. Its surface is intentionally generic: a pair of distinct branded newtypes — `FullyQualifiedMoniker` (a path through the focus hierarchy that uniquely identifies a scope) and `SegmentMoniker` (a single hierarchy step appended into a parent's path) — plus abstract `Rect`s and `WindowLabel`s. The path-monikers identity model eliminates the duplicate-registration ambiguity that a flat string moniker would otherwise admit. Its only workspace dependency is `swissarmyhammer-common` (for `define_id!`). An adapter translates its host's window events into focus-engine calls and delivers `FocusChangedEvent`s through a `FocusEventSink`; the kanban-specific helper `resolve_focused_column` is the small piece of focus code that *does* know about kanban and stays in `swissarmyhammer-kanban`. This split is what lets the same focus engine drive any future tier-4 application without dragging kanban semantics in.
 
 ### Virtual File System and Content Stacking
 
@@ -564,215 +564,8 @@ Two shipped modules use the fact-producer path:
 
 Use the fact producer when the facts have a consumer other than doctor, or when the owning crate must not depend on the tool registry. Use `Doctorable` in all other cases.
 
-### Dual-Mode Tauri Apps
-
-Tauri apps operate in GUI mode by default but fall back to CLI mode when invoked with arguments. They share domain libraries with their CLI counterparts — the GUI and CLI are two views of the same engine.
-
 ### Practices
 
 1. **The kanban board is the single source of truth for task tracking.** Not markdown files, not built-in task tools.
 2. **Verify before claiming.** Always run tests, check logs, read output. Never guess, never ask the user to verify.
 
----
-
-## 5. UI Programs
-
-### Core Principle: State in Rust, Presentation in React
-
-The frontend is a **presentation and command dispatch layer**. All application state lives in the Rust backend. React reads state (via Tauri queries and events), renders it, and dispatches commands back to Rust. React never computes domain logic, never owns authoritative state, and never constructs command objects.
-
-### kanban-app
-
-The kanban desktop app is a Tauri 2 application with a React frontend.
-
-#### Rust Backend
-
-The Tauri backend is a thin wiring layer:
-
-- **AppState** holds the command registry, command impls, open boards (each a `BoardHandle` wrapping KanbanContext + StoreContext + EntityCache + SearchIndex + a per-board in-process full-SAH-toolset MCP server), UIState, and native menu.
-- **`dispatch_command`** is the single mutation entry point. All other `#[tauri::command]` functions are read-only queries.
-- **File watcher** monitors `.kanban/` directories for external changes. SHA-256 content hashing avoids double-firing on its own writes.
-- **Menu** is built dynamically from the CommandsRegistry and rebuilds on keymap changes, board switches, and focus changes.
-- **Bundled CLI** — the standalone `kanban` CLI is co-packaged inside `Kanban.app` as a Tauri sidecar (`Contents/MacOS/kanban`), so installing the app also provides the command-line tool. `cli_install` self-installs the CLI onto `PATH` at launch when no package manager (e.g. the Homebrew cask) already did. See `apps/kanban-app/README.md`.
-
-#### Frontend
-
-React 19 + Vite + TypeScript + Tailwind CSS 4 + Radix UI + dnd-kit + CodeMirror 6.
-
-##### Container / View Separation
-
-The frontend has two kinds of components with distinct roles:
-
-**Containers** own state, provide context, and manage command scopes. A Container:
-- Lives in one file
-- Owns a `CommandScopeProvider` with a moniker
-- Uses React context (providers, hooks) to expose state to descendants
-- Wraps `children` — never renders domain-specific UI directly
-- Handles event listeners, data fetching, and state management
-
-**Views** (presenters) display data and dispatch user interactions. A View:
-- Takes props or reads from context — never manages state
-- Renders UI: layout, styles, interactive elements
-- Dispatches commands via `useDispatchCommand` — never calls the backend directly
-- Has no `CommandScopeProvider` of its own (it lives inside one from a Container)
-
-This separation means Containers are testable for state management without rendering, and Views are testable for rendering without backend wiring.
-
-##### Container Architecture
-
-Each level of the scope hierarchy uses a Container component. The authoritative container tree is defined in `kanban-app/ui/src/App.tsx`, where each container has inline comments explaining its placement and dependencies. Refer to App.tsx for the current hierarchy rather than duplicating it here.
-
-`AppModeContainer` is the first container inside the window because the interaction mode governs the entire UI surface — which keybindings are active, whether the toolbar shows a search field, which commands are available. It wraps NavBar, the content area, and everything else. Mode transitions (normal → command → search) are command-driven through Rust UIState.
-
-##### Command Invocation Surfaces
-
-Commands are defined and run in Rust but invoked from the frontend through four surfaces:
-
-1. **Native menu bar** — built dynamically from CommandsRegistry YAML. Commands with `menu.path` appear in the macOS menu. Rebuilds on keymap/board/focus changes.
-2. **Context menus** — commands with `context_menu: true` appear in right-click menus. The scope chain at the click point determines which commands are available and what parameters they receive.
-3. **Command palette** — all commands with `visible: true` (default) appear in the Cmd+K palette. Fuzzy-searched by name.
-4. **Buttons** — occasional direct button clicks dispatch commands via `useDispatchCommand`. This is the exception, not the norm.
-
-All four surfaces use the same dispatch path: `useDispatchCommand` → scope chain resolution → Rust backend.
-
-##### The Scope Chain and Monikers
-
-A **moniker** is a `"type:id"` string that names a specific entity or scope boundary — for example `"window:main"`, `"board:01ABC"`, `"column:todo"`, or `"task:01XYZ"`. Monikers are the universal way to reference entities across the command system, inspector stack, context menus, and scope chain.
-
-The **scope chain** is an ordered list of monikers representing the current context, from innermost (most specific) to outermost (least specific). It is built by walking the React component tree from the focused element to the root, collecting each `CommandScopeProvider`'s moniker along the way.
-
-For example, when a user right-clicks a task card in the "To Do" column of the main window, the scope chain is:
-
-```
-["task:01XYZ", "column:todo", "view:board", "board:01ABC", "engine", "mode:normal", "window:main"]
-  ↑ innermost                                                                      outermost ↑
-```
-
-The key innovation: **a command knows _where_ in the app it is being invoked**, not just what arguments it was given. The same `"ui.inspect"` command behaves differently when invoked from a task card (inspects the task) versus from a column header (inspects the column) — because the scope chain tells it the context. Commands don't need explicit arguments for information that's implicit in the user's focus. The scope chain, an explicit target moniker, and explicit params combine to give every command full situational awareness.
-
-Commands use the scope chain in three ways:
-
-1. **Availability**: A command with `scope: "entity:column"` is only available when a column moniker is in the chain. The `task.add` command requires a column context to know where to create the task.
-
-2. **Parameter resolution**: A command parameter with `from: scope_chain` and `entity_type: column` resolves to `"todo"` by finding the nearest column moniker. No explicit argument is needed — the context provides it.
-
-3. **Command resolution**: Commands resolve by walking the chain innermost to outermost. If a scope registers `"task.delete"` and `available` returns true, it runs. If `available` returns false, the command is **blocked** — parent scopes are not searched. If the command is not registered at all, the search continues outward. If no scope handles it, the command dispatches to the Rust backend.
-
-`CommandScopeProvider` components form a linked list via React context. Each scope has:
-- A `Map<string, CommandDef>` of registered commands
-- A `parent: CommandScope | null` pointer
-- An optional `moniker` string
-
-The container tree directly produces the scope chain:
-
-```tsx
-<RustEngineContainer moniker="engine">              // outermost
-  <WindowContainer moniker="window:main">
-    <AppModeContainer moniker="mode:normal">        // wraps everything incl. toolbar
-      <BoardContainer moniker="board:01ABC">
-        <PerspectiveContainer moniker="perspective:p1">
-          <ViewContainer moniker="view:board">
-            <ColumnView moniker="column:todo">
-              <TaskCard moniker="task:01XYZ">       // innermost — focused element
-                {/* right-click here builds the chain above */}
-              </TaskCard>
-            </ColumnView>
-          </ViewContainer>
-        </PerspectiveContainer>
-      </BoardContainer>
-    </AppModeContainer>
-  </WindowContainer>
-</RustEngineContainer>
-```
-
-##### Command Flow: React to Rust
-
-```
-useDispatchCommand("task.add")
-  │
-  ├── Resolve scope chain from React context
-  ├── Check for frontend execute handler
-  │     ├── Found → call execute(), done
-  │     └── Not found ↓
-  │
-  invoke("dispatch_command", {
-    cmd: "task.add",
-    scopeChain: ["task:abc", "column:todo", "window:main"],
-    args: {...},
-    boardPath: "/path/to/.kanban"
-  })
-  │
-  ├── Prefix rewrite (view.switch:* → view.set)
-  ├── Look up CommandDef + Command impl
-  ├── Build CommandContext with extensions
-  ├── Check available(), execute()
-  ├── Handle side effects (board switch, window create, quit, etc.)
-  └── flush_and_emit() → entity events
-```
-
-##### Entity Flow: Rust to React
-
-```
-Command execution
-  │
-  flush_and_emit()
-  │
-  ├── StoreContext.flush_all() → detect changed files
-  ├── Emit Tauri events:
-  │     entity-created / entity-removed / entity-field-changed
-  │     ui-state-changed (if UIState mutated)
-  │
-  React event listeners
-  │
-  ├── Structural types (column, swimlane) → full refresh via list_entities
-  ├── entity-created → upsert from payload fields (fallback to get_entity if empty)
-  ├── entity-field-changed → patch field(s) in place from payload {field, value} pairs
-  ├── entity-removed → remove by id from store
-  └── EntityStoreProvider diffs by field → notify only subscribers whose field changed
-```
-
-For entity-level events (`entity-created`, `entity-field-changed`, `entity-removed`), the payload **is** the data — the handlers in `rust-engine-container.tsx` (`handleEntityCreated`, `handleEntityFieldChanged`, `handleEntityRemoved`) patch the entity store in place without re-fetching. Field cells subscribe via `useFieldValue(entityType, id, fieldName)` and redraw locally when `FieldSubscriptions.diff` notifies their specific `entityType:id:fieldName` key. The backend `EntityCache` remains the source of truth — the frontend store is a replicated projection kept in sync by the event stream, not a cache that needs refreshing on every change. Structural changes (columns, swimlanes) are the exception and still trigger a full `list_entities` refresh. The grid-nav regression test (`kanban-app/ui/src/components/grid-view.nav-is-eventdriven.test.tsx`) enforces that pure navigation never triggers a data-fetch IPC.
-
-##### Field-Level Subscriptions
-
-The `EntityStoreProvider` holds all entities keyed by type. The `FieldSubscriptions` class manages per-field subscriptions via `useSyncExternalStore`. When entities change, it diffs old vs new by field value (deep equality), notifying only subscribers whose specific field changed. A task card whose `title` changes does not re-render if only `ordinal` was updated.
-
-The same `Map<key, Set<cb>>` pattern is applied to focus via `FocusStore`, keyed by moniker; see `kanban-app/ui/src/lib/entity-focus-context.tsx`. A single arrow-key press in the grid wakes exactly the two FocusScopes whose focus state flipped (losing cell + gaining cell) rather than all ~12k cells.
-
-##### CodeMirror 6 as the Editor
-
-CodeMirror 6 is the standard editor component for all text editing in the UI. **`TextEditor` (`fields/text-editor.tsx`) is the single shared CM6 component.** All editing contexts — field editing, inline rename, filter expressions — use `TextEditor` extended with props. Never create alternative editor components or use CM6 directly.
-
-`TextEditor` provides:
-
-- **Keymap consistency** — CUA, Vim, and Emacs keymap modes read from UIState and applied via `keymapExtension(mode)`. Every editor instance shares the same keymap config.
-- **Smart rendering** — syntax highlighting, mention pills, markdown preview via `extraExtensions`
-- **Behavioral modes via props:**
-  - `singleLine` — Enter always commits (no newlines, even in vim insert mode), Escape commits immediately in vim (no two-escape normal-mode dance), blur commits. Use for inline rename, short inputs.
-  - `popup` — auto-enters vim insert mode on mount. Use for quick-capture and inline editing where the user expects to type immediately.
-  - `extraExtensions` — grammar/language support, autocomplete, mention decorations. Use to specialize editing behavior without forking the component.
-
-When a new editing context needs different behavior, add a prop to `TextEditor` — do not duplicate CM6 setup.
-
-### Patterns
-
-- **Single Dispatch Path**: ALL state mutations route through `dispatch_command`. This gives every mutation undo/redo, event emission, UIState persistence, and audit logging for free.
-- **Container / View Separation**: Containers own state and scope. Views take props and render. Never mix the two roles in one component.
-- **Events Carry Data for Entity Changes**: `entity-created` / `entity-field-changed` / `entity-removed` payloads are patched into the frontend store in place — no re-fetch. Structural events (column/swimlane adds or removes) still trigger a `list_entities` refresh. The backend `EntityCache` remains authoritative; the frontend store is a replicated projection kept in sync by the event stream.
-- **Scope Chain = Situational Awareness**: Commands know where they're invoked via the moniker chain. The same command behaves differently based on context.
-- **SHA-256 Deduplication in Watcher**: Content hashing distinguishes external changes from the app's own writes, preventing event feedback loops.
-
-### Practices
-
-1. **State in Rust, presentation in React.** React never owns authoritative state. It reads from the backend, renders, and dispatches commands back.
-2. **Commands in Rust.** All command logic lives in Rust. Never construct command objects or compute command results client-side.
-3. **`useDispatchCommand` is the only dispatch mechanism.** Every command execution — keybindings, palette, context menus, drag-and-drop, programmatic triggers — must flow through `useDispatchCommand`. This is what gives us busy tracking (`inflightCount`), scope chain resolution, and client-side command handling. When commands originate from Rust (native menus, context menus), emit a Tauri event back to the frontend and let it dispatch — never call `dispatch_command_internal` directly from the Rust side. Direct `invoke()` is allowed only for read-only queries (`get_entity`, `list_views`, etc.).
-4. **No new `#[tauri::command]` mutations.** All state changes go through `dispatch_command`.
-5. **UI interprets Field metadata.** Never hardcode field-specific rendering logic in React. The YAML field properties drive rendering.
-6. **No module-level dispatch functions.** Trace to the owning component and use the hook there.
-7. **Container components own scope boundaries.** One file per container, wraps children only, no presentation logic.
-8. **Views are pure presenters.** They receive data via props or context and dispatch commands via hooks. They never manage state or own scope providers.
-9. **Entity events patch the store in place; structural events re-fetch.** Handlers in `rust-engine-container.tsx` apply `entity-field-changed` payloads directly to the store — no `get_entity` round-trip. Grid navigation never triggers a data-fetch IPC (enforced by `grid-view.nav-is-eventdriven.test.tsx`). Structural changes (column/swimlane adds or removes) still trigger a `list_entities` refresh.
-10. **CodeMirror 6 is the only text editor.** Don't introduce alternative editor components.
-11. **TDD for new containers and commands.** Write tests first (RED), implement (GREEN), refactor. Every container gets a `.test.tsx` file.
-12. **`console.warn` for frontend instrumentation.** Check OS unified log, never ask the user to look at the browser console.

@@ -142,13 +142,13 @@ What this card delivered is the **regression guard** that pins the post-fix wiri
 `kanban-app/ui/src/components/board-view.cross-column-nav.spatial.test.tsx` (new file, 9 tests, all green):
 
 1. **Test — Registry shape audit.** Captures every `spatial_register_zone` / `spatial_register_scope` call at runtime and asserts: every `task:*` is registered as a scope (leaf), every `task:*` has `parent_zone` equal to its enclosing column zone key, every `column:*` has `parent_zone` equal to the `ui:board` zone key, and exactly one `layer_key` appears across all registrations. Pinpoints any structural regression (wrong nesting depth, extra layer, swapped zone/scope) on the next CI run.
-2. **Test #6 — No navOverride.** Asserts every register call carries an empty `overrides: {}`, locking the fix as structural rather than a workaround.
+2. **Test `#6` — No navOverride.** Asserts every register call carries an empty `overrides: {}`, locking the fix as structural rather than a workaround.
 3. **Test — Card-as-leaf invariant.** Re-asserts that no `task:*` moniker ever appears in a `spatial_register_zone` call.
-4. **Test #8 — No greedy board leaf.** Asserts pressing right from `task:1A` does not land on a `board:<id>` scope (the viewport-sized leaf at parent_zone=null is geometrically a candidate but must not win — verifies in production).
-5. **Test + #1.vim — Cross-column right.** Both keymaps; presses right from `task:1A` and asserts the resulting focused leaf is a `task:*` in column B.
-6. **Test #2 — Left mirror.** Press left from `task:1B`, asserts focus lands on a card in column A.
+4. **Test `#8` — No greedy board leaf.** Asserts pressing right from `task:1A` does not land on a `board:<id>` scope (the viewport-sized leaf at parent_zone=null is geometrically a candidate but must not win — verifies in production).
+5. **Test + `#1`.vim — Cross-column right.** Both keymaps; presses right from `task:1A` and asserts the resulting focused leaf is a `task:*` in column B.
+6. **Test `#2` — Left mirror.** Press left from `task:1B`, asserts focus lands on a card in column A.
 7. **Test — Repeated right cycles A → B → C.** Two right-presses; the second must NOT bounce back to column A.
-8. **Test #4 — Up/down still cycles within column.** Down from `task:1A` lands on `task:2A`, then `task:3A` — pins rule 1 against regressions.
+8. **Test `#4` — Up/down still cycles within column.** Down from `task:1A` lands on `task:2A`, then `task:3A` — pins rule 1 against regressions.
 
 ### Architecturally significant decisions in the test
 
@@ -162,9 +162,9 @@ To validate the test catches the trapped-in-column bug if it returned, I tempora
 
 - Test (registry shape) failed because `task:*` registered via `spatial_register_zone`.
 - Test (card-as-leaf) failed for the same reason.
-- Tests #1.cua, #2, all failed because rule 1 (sibling-zone navigation) returns no candidate to the right of `task:1A`'s zone, and rule 2 (cross-zone leaf fallback) does not fire for zone-level nav.
+- Tests `#1`.cua, `#2`, all failed because rule 1 (sibling-zone navigation) returns no candidate to the right of `task:1A`'s zone, and rule 2 (cross-zone leaf fallback) does not fire for zone-level nav.
 
-Tests #4 (down within column), #6 (no overrides), #8 (no greedy board leaf) still passed because they don't depend on the card-as-leaf invariant. The fault diagnosis is exactly what the card description predicted under root-cause hypothesis #2.
+Tests `#4` (down within column), `#6` (no overrides), `#8` (no greedy board leaf) still passed because they don't depend on the card-as-leaf invariant. The fault diagnosis is exactly what the card description predicted under root-cause hypothesis `#2`.
 
 I reverted the temporary change immediately; the working-tree `entity-card.tsx` is unmodified relative to its pre-experiment state.
 

@@ -16,7 +16,7 @@ Production code restored:
 
 ## Tests flipped (indicator-not-present → indicator-present on focused perspective tab wrapper)
 - `kanban-app/ui/src/components/perspective-tab-bar.focus-indicator.browser.test.tsx` — all 5 cases inverted; file-level docstring + `findTabNameKey` docstring updated.
-- `kanban-app/ui/src/components/perspective-bar.spatial.test.tsx` — test #4 (indicator on tab claim) and the multi-step belt-and-suspenders test (indicator follows focus across tabs) inverted.
+- `kanban-app/ui/src/components/perspective-bar.spatial.test.tsx` — test `#4` (indicator on tab claim) and the multi-step belt-and-suspenders test (indicator follows focus across tabs) inverted.
 - `kanban-app/ui/src/components/focus-on-click.regression.spatial.test.tsx` — perspective tab block inverted; assertion + comment now require indicator inside focused tab wrapper.
 
 ## Verification

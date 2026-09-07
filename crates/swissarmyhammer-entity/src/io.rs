@@ -20,7 +20,7 @@ use ulid::Ulid;
 
 use crate::entity::Entity;
 use crate::error::{EntityError, Result};
-use swissarmyhammer_common::frontmatter::split_frontmatter_body;
+use swissarmyhammer_common::frontmatter::{join_frontmatter_body, split_frontmatter_body};
 
 /// Maximum number of concurrent file reads issued by [`read_entity_dir`].
 ///
@@ -504,6 +504,11 @@ fn parse_plain_yaml(
 /// [`split_frontmatter_body`] reads it back as frontmatter content rather than
 /// as the closing delimiter. `format_writes_exactly_two_delimiter_lines` pins
 /// that over the value shapes that push the emitter between those two styles.
+///
+/// [`join_frontmatter_body`] measures it on every write as well, so a value
+/// that ever does emit a bare `---` line returns
+/// [`EntityError::FrontmatterDelimiter`] instead of writing a file that loses
+/// its fields on the next read.
 fn format_frontmatter_body(
     entity: &Entity,
     body_field: impl AsRef<str>,
@@ -524,7 +529,12 @@ fn format_frontmatter_body(
     let frontmatter_yaml =
         serde_yaml_ng::to_string(&frontmatter_value).map_err(|e| yaml_error(path, e))?;
 
-    Ok(format!("---\n{}---\n{}", frontmatter_yaml, body))
+    join_frontmatter_body(&frontmatter_yaml, &body).map_err(|source| {
+        EntityError::FrontmatterDelimiter {
+            path: path.to_path_buf(),
+            source,
+        }
+    })
 }
 
 /// Format an entity as plain YAML.
@@ -577,6 +587,20 @@ pub fn sanitize_filename(name: &str) -> String {
 ///
 /// Returns the stored filename (`{ulid}-{sanitized_name}`).
 /// Validates that the source exists and does not exceed `max_bytes`.
+///
+/// # Source directories
+///
+/// Any source the process can read is accepted, by design. `source` is not
+/// confined to `entity_type_dir`, to a staging directory, or to any other
+/// root. Attaching a file wherever it happens to sit — a downloads directory,
+/// a home directory, anywhere — is the capability this function exists to
+/// provide, and a caller that can reach it can already read the same bytes
+/// directly, so the copy grants no new access.
+///
+/// Every successful copy is audited instead: it emits one `info` record
+/// naming the source path, the destination path, and the byte count. The
+/// record is emitted here rather than in a caller because this function
+/// performs the copy, so no caller can bypass it.
 pub async fn copy_attachment(
     source: &Path,
     entity_type_dir: &Path,
@@ -622,6 +646,19 @@ pub async fn copy_attachment(
     // Copy to temp file, then atomic rename
     fs::copy(source, &temp_path).await?;
     rename_or_cleanup(&temp_path, &dest).await?;
+
+    // Audit record. The source may be any file the process can read, so the
+    // record is what makes each copy accountable after the fact. `info` is
+    // deliberate: the copy is a routine success, not a fault, and a lower
+    // level would be filtered out by the default subscriber, which would
+    // leave no record at all.
+    tracing::info!(
+        field = field_name,
+        source = %source.display(),
+        destination = %dest.display(),
+        bytes = size,
+        "attachment copied into entity storage"
+    );
 
     Ok(stored_name)
 }
@@ -684,6 +721,7 @@ pub fn detect_mime_type(path: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tracing_test::traced_test;
 
     fn task_entity_def() -> EntityDef {
         EntityDef {
@@ -2026,6 +2064,44 @@ mod tests {
         assert!(
             matches!(result.unwrap_err(), EntityError::AttachmentTooLarge { .. }),
             "should be AttachmentTooLarge"
+        );
+    }
+
+    /// A source that lives outside the entity storage tree is copied, and the
+    /// copy leaves an audit record naming the source, the destination, and
+    /// the byte count.
+    ///
+    /// Reading any file the process can already read is the intended
+    /// capability, so the record — not a rejection — is what this guarantees.
+    #[tokio::test]
+    #[traced_test]
+    async fn copy_attachment_audits_a_source_outside_the_entity_tree() {
+        let storage = tempfile::tempdir().unwrap();
+        let entity_type_dir = storage.path().join("tasks");
+
+        // A separate temp root, so the source shares no ancestor with the
+        // entity storage short of the system temp directory itself.
+        let outside = tempfile::tempdir().unwrap();
+        let source = outside.path().join("credentials.txt");
+        let body = b"root:x:0:0";
+        fs::write(&source, body).await.unwrap();
+
+        let stored = copy_attachment(&source, &entity_type_dir, "files", 10_000_000)
+            .await
+            .unwrap();
+        let dest = attachments_dir(&entity_type_dir).join(&stored);
+
+        assert!(
+            logs_contain(&source.display().to_string()),
+            "the audit record must name the source path"
+        );
+        assert!(
+            logs_contain(&dest.display().to_string()),
+            "the audit record must name the destination path"
+        );
+        assert!(
+            logs_contain(&format!("bytes={}", body.len())),
+            "the audit record must name the byte count"
         );
     }
 

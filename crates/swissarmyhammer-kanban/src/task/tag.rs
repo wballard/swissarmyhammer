@@ -2,35 +2,45 @@
 
 use crate::context::KanbanContext;
 use crate::error::KanbanError;
-use crate::task::tags::{apply_one_tag_ref, TagApply};
+use crate::task::tags::{apply_tag_refs_to_task, TagApply};
 use crate::types::TaskId;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use swissarmyhammer_operations::{async_trait, operation, Execute, ExecutionResult};
 
-/// Add a tag to a task by appending `#tag` to its description.
+/// Add tags to a task by appending a `#tag` marker for each to its
+/// description.
 ///
-/// The `tag` field is a forgiving tag reference — a tag name/slug (e.g.
+/// Each entry of `tags` is a forgiving tag reference — a tag name/slug (e.g.
 /// "bug"), a full tag ULID, `^<short>`, or a 7-char short id. See
 /// [`crate::task::tags::apply_tag_refs`] for the resolution rules shared with
 /// the `tags` parameter on `add task` / `update task`. If the Tag object
 /// doesn't exist yet, it is auto-created with an auto-color; an id reference
 /// that names no tag is an error.
+///
+/// One call applies one tag per entry. An empty list is an error, because
+/// there is nothing to apply and an ack would report a write that never
+/// happened.
 #[operation(verb = "tag", noun = "task", description = "Add a tag to a task")]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct TagTask {
     /// The task ID to tag
     pub id: TaskId,
-    /// The tag name (slug) to add (e.g. "bug")
-    pub tag: String,
+    /// The tag references to add, one tag for each entry (e.g. `["bug"]`)
+    pub tags: Vec<String>,
 }
 
 impl TagTask {
-    /// Create a new TagTask command for the given task and tag reference.
+    /// Create a new TagTask command for the given task and one tag reference.
     pub fn new(id: impl Into<TaskId>, tag: impl Into<String>) -> Self {
+        Self::with_tags(id, vec![tag.into()])
+    }
+
+    /// Create a TagTask that applies every reference in `tags` in one call.
+    pub fn with_tags(id: impl Into<TaskId>, tags: Vec<String>) -> Self {
         Self {
             id: id.into(),
-            tag: tag.into(),
+            tags,
         }
     }
 }
@@ -39,9 +49,10 @@ impl TagTask {
 impl Execute<KanbanContext, KanbanError> for TagTask {
     async fn execute(&self, ctx: &KanbanContext) -> ExecutionResult<Value, KanbanError> {
         // One shared path with `untag task` and with `add task`/`update task`:
-        // resolve the ref, append `#slug` to the body, mint the Tag entity if
-        // this name is new. Only the mode differs from `untag task`.
-        match apply_one_tag_ref(ctx, self.id.as_str(), &self.tag, TagApply::Append).await {
+        // resolve the refs, append a `#slug` to the body for each, mint the Tag
+        // entity for a name that is new. Only the mode differs from
+        // `untag task`.
+        match apply_tag_refs_to_task(ctx, self.id.as_str(), &self.tags, TagApply::Append).await {
             Ok(value) => ExecutionResult::Success { value },
             Err(error) => ExecutionResult::Failed { error },
         }

@@ -10,7 +10,7 @@ title: 'Spatial-nav: mark Direction::RowStart / RowEnd #[deprecated] after #5 la
 ---
 ## Reference
 
-Follow-up filed during review of spatial-nav #4 (`01KQQTZ7PSXEQF1WWX14ST8WRT`). Nit #2 from that review:
+Follow-up filed during review of spatial-nav `#4` (`01KQQTZ7PSXEQF1WWX14ST8WRT`). Nit `#2` from that review:
 
 > `swissarmyhammer-focus/src/types.rs:130-135` and `src/types.rs:167-172` — The `RowStart`/`RowEnd` doc paragraph correctly explains they are aliases, but neither variant carries a `#[deprecated(note = "use Direction::First / Direction::Last")]` attribute. The implementer's rationale (TS side still references them, task in flight) means a `#[deprecated]` attribute now would surface noise on every callsite — this is the right call for now. Recommend filing a follow-up task: "After spatial-nav lands, add `#[deprecated]` to `Direction::RowStart` / `Direction::RowEnd` and migrate any remaining callsites to `First` / `Last`."
 

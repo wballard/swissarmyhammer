@@ -97,6 +97,70 @@ pub fn split_frontmatter_body(content: &str) -> Option<(&str, &str)> {
     None
 }
 
+/// A frontmatter body could not be assembled: the YAML holds a line that reads
+/// as a closing delimiter.
+///
+/// Writing that text would put a third delimiter line in the file, and
+/// [`split_frontmatter_body`] would end the frontmatter there on the next read.
+/// Every field written after that line is lost, and the body starts in the
+/// middle of a value. Nothing in the written file records what it held before,
+/// so the write is refused rather than performed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error(
+    "frontmatter line {line} reads as a closing `---` delimiter, so writing it \
+     would truncate the file on the next read"
+)]
+pub struct DelimiterInFrontmatter {
+    /// The 1-based number of the offending line within the frontmatter YAML.
+    pub line: usize,
+}
+
+/// Assemble frontmatter YAML and a body into the text stored on disk.
+///
+/// This is the write-side twin of [`split_frontmatter_body`], and it holds the
+/// same rule: a delimiter is a WHOLE line that is exactly three hyphens. It
+/// writes an opening delimiter line, `frontmatter_yaml`, a closing delimiter
+/// line, then `body` byte for byte. Call this one from a new writer rather than
+/// formatting the delimiters by hand, so the two sides cannot drift.
+///
+/// Two conditions would let the result split back into different halves than it
+/// was built from, and this function answers both:
+///
+/// - A line of `frontmatter_yaml` that is itself a delimiter line makes the
+///   closing delimiter ambiguous. A YAML emitter writes a three-hyphen run
+///   inside a value indented in a block scalar, or escaped in a quoted one, so
+///   this is not expected to hold. A file written with it is destroyed on the
+///   next read, though, so it is measured rather than trusted.
+/// - `frontmatter_yaml` that does not end in a newline would put the closing
+///   `---` on the end of the last YAML line, where it is no longer a whole
+///   line. The terminator is added so the delimiter stands alone.
+///
+/// Pass an empty `frontmatter_yaml` for an entity that stores no fields; the
+/// result opens with two delimiter lines and the body follows.
+///
+/// # Errors
+///
+/// Returns [`DelimiterInFrontmatter`], naming the line, when `frontmatter_yaml`
+/// holds a delimiter line.
+pub fn join_frontmatter_body(
+    frontmatter_yaml: &str,
+    body: &str,
+) -> std::result::Result<String, DelimiterInFrontmatter> {
+    for (index, raw) in frontmatter_yaml.split_inclusive('\n').enumerate() {
+        if is_delimiter_line(raw) {
+            return Err(DelimiterInFrontmatter { line: index + 1 });
+        }
+    }
+
+    let terminator = if frontmatter_yaml.is_empty() || frontmatter_yaml.ends_with('\n') {
+        ""
+    } else {
+        "\n"
+    };
+
+    Ok(format!("---\n{frontmatter_yaml}{terminator}---\n{body}"))
+}
+
 /// Represents parsed frontmatter with metadata and content
 #[derive(Debug, Clone)]
 pub struct Frontmatter {
@@ -593,5 +657,104 @@ Content after empty frontmatter
         assert_eq!(split_frontmatter_body("---\ntitle: x\n"), None);
         assert_eq!(split_frontmatter_body("---\n"), None);
         assert_eq!(split_frontmatter_body("---"), None);
+    }
+
+    // --- join_frontmatter_body ---
+
+    #[test]
+    fn joins_into_text_that_splits_back_into_the_same_halves() {
+        let text = join_frontmatter_body("title: x\n", "body\n").unwrap();
+
+        assert_eq!(text, "---\ntitle: x\n---\nbody\n");
+        assert_eq!(
+            split_frontmatter_body(&text),
+            Some(("title: x\n", "body\n"))
+        );
+    }
+
+    #[test]
+    fn joins_an_empty_frontmatter_into_two_delimiter_lines() {
+        let text = join_frontmatter_body("", "body\n").unwrap();
+
+        assert_eq!(text, "---\n---\nbody\n");
+        assert_eq!(split_frontmatter_body(&text), Some(("", "body\n")));
+    }
+
+    #[test]
+    fn keeps_the_body_bytes_exactly_when_joining() {
+        // No trailing newline, CRLF, and a body that is only newlines.
+        assert_eq!(
+            join_frontmatter_body("title: x\n", "body").unwrap(),
+            "---\ntitle: x\n---\nbody"
+        );
+        assert_eq!(
+            join_frontmatter_body("title: x\n", "a\r\nb\r\n").unwrap(),
+            "---\ntitle: x\n---\na\r\nb\r\n"
+        );
+        assert_eq!(
+            join_frontmatter_body("title: x\n", "\n\n").unwrap(),
+            "---\ntitle: x\n---\n\n\n"
+        );
+    }
+
+    #[test]
+    fn adds_the_terminator_the_closing_delimiter_needs() {
+        // Without the added newline the closing `---` would land on the end of
+        // `title: x`, where it is not a whole line and does not delimit.
+        let text = join_frontmatter_body("title: x", "body\n").unwrap();
+
+        assert_eq!(text, "---\ntitle: x\n---\nbody\n");
+        assert_eq!(
+            split_frontmatter_body(&text),
+            Some(("title: x\n", "body\n"))
+        );
+    }
+
+    #[test]
+    fn refuses_frontmatter_holding_a_delimiter_line() {
+        // A bare run at column 0 anywhere in the frontmatter would become the
+        // closing delimiter, so every field after it is lost on the next read.
+        assert_eq!(
+            join_frontmatter_body("title: x\n---\ncolumn: doing\n", "body\n"),
+            Err(DelimiterInFrontmatter { line: 2 })
+        );
+        // The first line, and an unterminated last line, are both delimiters.
+        assert_eq!(
+            join_frontmatter_body("---\ntitle: x\n", "body\n"),
+            Err(DelimiterInFrontmatter { line: 1 })
+        );
+        assert_eq!(
+            join_frontmatter_body("title: x\n---", "body\n"),
+            Err(DelimiterInFrontmatter { line: 2 })
+        );
+        // CRLF frontmatter carries the same rule.
+        assert_eq!(
+            join_frontmatter_body("title: x\r\n---\r\n", "body\r\n"),
+            Err(DelimiterInFrontmatter { line: 2 })
+        );
+    }
+
+    #[test]
+    fn joins_a_three_hyphen_run_that_is_not_a_whole_line() {
+        // These are the shapes a YAML emitter actually writes a three-hyphen
+        // run in, and every one of them must be joined, not refused.
+        for frontmatter in [
+            // Indented inside a block scalar, as a comment's prose is written.
+            "text: |-\n  before\n  ---\n  after\n",
+            // A markdown table separator row inside a block scalar.
+            "text: |-\n  | a | b |\n  |---|---|\n  | 1 | 2 |\n",
+            // Escaped inside a quoted scalar, and embedded in a longer line.
+            "title: a --- b\n",
+            // A longer run of hyphens is not the delimiter.
+            "----\n",
+        ] {
+            let text = join_frontmatter_body(frontmatter, "body\n")
+                .unwrap_or_else(|e| panic!("frontmatter {frontmatter:?} was refused: {e}"));
+            assert_eq!(
+                split_frontmatter_body(&text),
+                Some((frontmatter, "body\n")),
+                "frontmatter {frontmatter:?} did not split back to itself"
+            );
+        }
     }
 }

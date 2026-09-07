@@ -66,7 +66,7 @@ Once done, swap the row's `<FocusScope renderContainer={false}>` to `<FocusZone 
 
 ### Notes on offender #2 (perspective-tab-bar)
 
-Per the task description, offender #2 (`<PerspectiveTabFocusable>`) is not currently a path-prefix violation — its descendants are plain `<button>` elements, not focus primitives. No action taken; the existing `<FocusScope>` is correct for the current DOM. If a future change wraps any inner button in a focus primitive, the path-prefix branch will catch it and a follow-up task will be filed.
+Per the task description, offender `#2` (`<PerspectiveTabFocusable>`) is not currently a path-prefix violation — its descendants are plain `<button>` elements, not focus primitives. No action taken; the existing `<FocusScope>` is correct for the current DOM. If a future change wraps any inner button in a focus primitive, the path-prefix branch will catch it and a follow-up task will be filed.
 
 ### Notes on grid-view navigation fix
 

@@ -14,7 +14,7 @@ Part of the spatial-nav redesign. Full design: **`01KQQSXM2PEYR1WAQ7QXW3B8ME`** 
 
 **This component owns:** verifying and enforcing the coordinate-system invariant that makes the geometric algorithm correct.
 
-**Why it's load-bearing:** geometric pick (component #1) is correct *iff* all candidate rects in the same layer were sampled in the same coordinate system. If some scopes register viewport-relative rects and others register document-relative rects, or if some rects are stale (sampled before a scroll), geometric distance is meaningless and the kernel produces wrong answers silently. No exceptions, no warnings — just bad nav.
+**Why it's load-bearing:** geometric pick (component `#1`) is correct *iff* all candidate rects in the same layer were sampled in the same coordinate system. If some scopes register viewport-relative rects and others register document-relative rects, or if some rects are stale (sampled before a scroll), geometric distance is meaningless and the kernel produces wrong answers silently. No exceptions, no warnings — just bad nav.
 
 **Contract (restated from design):**
 

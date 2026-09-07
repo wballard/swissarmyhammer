@@ -1,8 +1,47 @@
 ---
 assignees:
 - claude-code
-position_column: todo
-position_ordinal: f680
+comments:
+- actor: claude-code
+  id: 01m16retr024m1xhkx4t1fdbhq
+  text: |-
+    ## Decision (from the user, 2026-08-29)
+
+    **Any locally-readable path stays legal. Every attachment copy is audited.**
+
+    The card asked three questions and this answers all three:
+
+    - Should `copy_attachment`'s source be restricted to an allow-listed root? **No.** Attaching a file from anywhere the process can read it is the intended capability, and narrowing it to a staging directory or the board tree would break the ordinary "attach this file from my Downloads" flow for no gain in this threat model.
+    - Should `AddAttachment` require proven read access some other way, such as a prior stage step? **No.** That adds a round trip and new API surface to defend against a caller that is already trusted.
+    - Is this only a concern for untrusted or remote MCP clients? **It is not a concern here at all.** Every contributor to this board is the user's own agent on the user's own machine, running as the user's own OS account. A caller that can reach this MCP tool can already read the same files directly. The copy grants no access the caller did not have.
+
+    So the fix is not a restriction. It is a record.
+
+    ## What this changes the acceptance to
+
+    The card's original acceptance asked for a test proving a path outside the allowed roots is REJECTED. Under this decision nothing is rejected, so that item cannot stand as written. It becomes:
+
+    - The decision above is recorded on the card. Done by this comment.
+    - Every attachment copy emits an audit record naming the source path, the destination, and the byte count.
+    - A regression test proves the record is emitted for a copy from outside the board tree — the exact case the card called an exploit.
+
+    Use `tracing`, never `eprintln!`: stderr is swallowed under MCP, so an audit line on stderr would not survive the transport.
+  timestamp: 2026-08-29T12:38:35.520201+00:00
+- actor: claude-code
+  id: 01m16rt16ap7wrdjrhrew6g6kn
+  text: |-
+    ## Research
+
+    Picked up. Following the user decision in the comment above: no path restriction, an audit record instead.
+
+    Where the audit goes: `io::copy_attachment`. It is the single function that runs the `fs::copy`, so every copy passes through it and no caller can bypass it. `context.rs::resolve_attachment_value` is only ONE of its callers — `swissarmyhammer-kanban/src/commands/paste_handlers/attachment_onto_task.rs` reaches the same copy through a staged temp file, and any future caller would too. An audit emitted in the caller would miss those.
+
+    Level: `info!`. The copy is a routine success, not a fault, so `warn!`/`error!` would misreport it. `debug!`/`trace!` are filtered out at the default subscriber level, and an audit record that the default configuration discards is not an audit record. `info!` is the lowest level that survives the normal filter.
+
+    Log capture in tests: the workspace already standardises on `tracing-test` (`tracing-test = { version = "0.2", features = ["no-env-filter"] }` in the root `Cargo.toml`, used by 13 crates). Reference pattern: `crates/swissarmyhammer-kanban/tests/perspective_migration.rs` — `#[traced_test]` on the test plus `logs_contain(...)` assertions. `swissarmyhammer-entity` does not have the dev-dependency yet, so it gets added.
+  timestamp: 2026-08-29T12:44:42.570268+00:00
+position_column: doing
+position_ordinal: '8380'
 title: AddAttachment.path lets a caller copy any locally-readable file into the board's .attachments/ (unbounded local file read)
 ---
 ## Concrete exploit path
@@ -33,4 +72,4 @@ This is a product/security policy decision, not a code fix that can be inferred:
 
 ## Origin
 
-Spun out of ^t6a2952 (triage of 13 pre-existing findings against swissarmyhammer-entity io.rs/store.rs) per that task's own acceptance criterion: "Anything confirmed as a genuine security issue... is lifted into its own new kanban card with a concrete exploit path — not left buried in this triage list." #security #bug
+Spun out of ^t6a2952 (triage of 13 pre-existing findings against swissarmyhammer-entity io.rs/store.rs) per that task's own acceptance criterion: "Anything confirmed as a genuine security issue... is lifted into its own new kanban card with a concrete exploit path — not left buried in this triage list." #security #bug #kanban

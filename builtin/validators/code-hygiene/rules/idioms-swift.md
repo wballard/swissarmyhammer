@@ -37,14 +37,16 @@ tool:
       status=0
       swift format lint --strict --configuration "$work/rules.json" "$file" \
         > /dev/null 2> "$work/lint.err" || status=$?
-      trouble="$(grep -v ': error: \[' "$work/lint.err" | sed -n '1p')"
+      quoted="$(printf '%s' "$file" | sed -e 's/[][\\.^$*+?(){}|]/\\&/g')"
+      diagnostic="^$quoted:[0-9]+:[0-9]+: error: "
+      trouble="$(grep -v -E "$diagnostic\[[A-Za-z]+\] " "$work/lint.err" | sed -n '1p')"
       if [ -n "$trouble" ] || { [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; }; then
         printf 'sah-diagnostic: idioms-swift declined %s: %s\n' \
           "$file" "${trouble:-swift format exited $status}" >&2
         continue
       fi
-      grep -E ": error: \[($allowed)\] " "$work/lint.err" |
-        sed -e "s/^\(.*\):\([0-9][0-9]*\):[0-9][0-9]*: error: \[\([A-Za-z]*\)\] /\1:\2: \3: /"
+      grep -E "$diagnostic\[($allowed)\] " "$work/lint.err" |
+        sed -E "s|^($quoted):([0-9]+):[0-9]+: error: \[([A-Za-z]+)\] |\1:\2: \3: |"
     done
   doctor:
     check_command: "which swift mktemp sed sort paste grep && printf '' | swift format lint --strict -"
@@ -327,10 +329,12 @@ stdout would read an empty channel for a file that holds findings.
 
 **One status carries a finding and an error alike.** Rows 1, 4, 5 and 6 all
 exit 1, so the status cannot tell a judged file from a refused one. The script
-therefore reads the SHAPE of each stderr line: a line holding `: error: [` is a
-tagged finding, and every other line is trouble. A file that wrote a trouble
-line is declined whole, because a file the parser could not read is a file no
-rule judged.
+therefore reads the SHAPE of each stderr line: a line that opens with the path
+the run carried, and then `:<line>:<column>: error: [<Tag>] `, is a tagged
+finding, and every other line is trouble. A file that wrote a trouble line is
+declined whole, because a file the parser could not read is a file no rule
+judged. The section under this one states why that reading is anchored on the
+head of the line and not on the tag alone.
 
 `--strict` is what makes those lines say `error:`. Without it the same findings
 arrive as `warning:` and the run exits 0, and the filter would match nothing.
@@ -338,6 +342,52 @@ arrive as `warning:` and the run exits 0, and the filter would match nothing.
 `the_shipped_swift_idioms_rule_body_records_every_status_the_lint_run_writes`
 holds this table. It reads the run column and the status column out of this
 body, and it drives each shape through the live toolchain.
+
+## Each reading is anchored on the head of a real diagnostic
+
+`swift format` writes the PATH FIRST on every line it writes. So a reading of
+that output that matches its text at ANY position reads the name of the file as
+well, and a file NAME can then give the pattern the reading looks for.
+
+The script reads that one output twice — the decline guard, and the tag filter
+— and both readings carry the same risk. Each one is therefore anchored on the
+head of a real diagnostic:
+
+    quoted="$(printf '%s' "$file" | sed -e 's/[][\\.^$*+?(){}|]/\\&/g')"
+    diagnostic="^$quoted:[0-9]+:[0-9]+: error: "
+
+The `sed` puts a backslash in front of every character that is a pattern
+operator, so the path stands in the pattern as TEXT. `$diagnostic` then matches
+the line only where the path the run carried, a line number and a column number
+stand at the START of the line. The tool writes that head for a finding and for
+nothing else, so no file name can make one.
+
+Measured with Apple Swift 6.4. The loose script is the earlier shape of this
+run, with the guard spelled `grep -v ': error: \['` and the filter spelled
+`grep -E ": error: \[($allowed)\] "`, neither of them anchored:
+
+| the file name | what the file holds | the loose script | the shipped script |
+|---|---|---|---|
+| `Plain.swift` | one member indented 8 spaces | 0 findings, exit 0 | 0 findings, exit 0 |
+| `x: error: [UseShorthandTypeNames] y.swift` | the same member | 1 finding — `Indentation: unindent by 6 spaces` | 0 findings, exit 0 |
+| `PlainBroken.swift` | Swift the parser cannot read | 0 findings, 1 marked line | 0 findings, 1 marked line |
+| `z: error: [UseShorthandTypeNames] q.swift` | the same bytes | 3 findings, each a raw `error: expected name in attribute` line, and NO marked line | 0 findings, 1 marked line |
+| `w: error: [UseShorthandTypeNames] s.swift` | one `Array<Int>` parameter | 1 `UseShorthandTypeNames` finding | 1 `UseShorthandTypeNames` finding |
+
+Row 2 is a WRONG FINDING: `Indentation` is a layout tag, the allowlist does not
+name it, and review must never carry layout. Row 4 is worse than a wrong
+finding: the file is one no rule judged, the guard did not decline it, and the
+three lines the run gave as findings are the tool's own words, which the `sed`
+leaves unrewritten because they carry no tag.
+
+Row 5 is the other half of the answer. An anchor that dropped every line of a
+file with an unusual name would take a TRUE finding away as well, so the row
+holds the same crafted name over a file that holds one real defect.
+
+`the_shipped_swift_idioms_tool_rule_measures_a_file_named_for_a_diagnostic_head`
+holds rows 2 and 5, and
+`the_shipped_swift_idioms_tool_rule_declines_a_file_named_for_a_diagnostic_head`
+holds row 4.
 
 ## Why the script runs `swift format` once for each file
 

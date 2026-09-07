@@ -147,6 +147,98 @@ comments:
     - evidence: 8 files — builtin/validators/code-hygiene/rules/idioms-swift.md, builtin/validators/code-hygiene/fixtures/idioms-swift.fail.swift.tmpl, builtin/validators/code-hygiene/fixtures/idioms-swift.pass.swift.tmpl, crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs, crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped.rs, crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/swift_judgment_rules.rs, crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/swift_guidelines_partial.rs, crates/swissarmyhammer-validators/src/builtin/mod.rs. `cargo nextest run -p swissarmyhammer-validators swift` — 86 run, 86 passed. `cargo nextest run -p swissarmyhammer-validators` — 854 run, 816 passed, 38 failed; the same 38 names fail at HEAD with the change stashed, so every one is pre-existing (missing go, revive, staticcheck, golangci-lint and eslint-plugin-sonarjs). `cargo clippy -p swissarmyhammer-validators --tests` — 0 warnings. `cargo fmt --check` — clean.
     - next: /review
   timestamp: 2026-09-07T17:51:12.622142+00:00
+- actor: claude-code
+  id: 01m1ygnfqt7bs6jgh3m5ab7qac
+  text: |-
+    ### review — findings
+    - evidence: `review sha HEAD~1..HEAD` (checkpoint 7f5e52261) gave 0 findings over 5 Rust files. The engine matched no validator to `builtin/validators/code-hygiene/rules/idioms-swift.md`, which carries the gate script, so that file had no cover. Direct verification of the script found 3 items: idioms-swift.md:46, idioms-swift.md:40, and tests/shipped/idioms_swift.rs.
+    - The cause is one: both greps match `: error: [` as text anywhere in the line, and `swift format` writes the file path at the head of each line. A path that holds that text carries a tag outside the allowlist through the gate, and it also stops the decline guard.
+    - Measurements that hold as stated: fail fixture 11 findings over 7 rules; pass fixture 0 findings; 34 raw `[Indentation]` lines and 0 through the filter; two reporting files give the findings of both at exit 0; the run rewrites no file; `UseWhereClausesInForLoops` is OFF. `cargo nextest run -p swissarmyhammer-validators swift` — 86 passed.
+    - next: anchor both greps to the true `path:line:column:` head, then add the probe named for a diagnostic message that `missing_docs.rs` already sets as the pattern.
+  timestamp: 2026-09-07T18:04:11.386194+00:00
+- actor: claude-code
+  id: 01m1ygpdkxwwhrh77w4227chc1
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 8 files. The gate now runs `swift format lint`. One list of seven rule tags writes the configuration JSON and the output filter, thus the two cannot become different.
+    - test: green — cargo nextest -p swissarmyhammer-validators swift, 86 run, 86 passed; cargo fmt --all --check clean; cargo clippy -p swissarmyhammer-validators --all-targets -D warnings clean. The driver ran these.
+    - commit: 7f5e52261
+    - review: findings — builtin/validators/code-hygiene/rules/idioms-swift.md:40, builtin/validators/code-hygiene/rules/idioms-swift.md:46, crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs
+    - The defect is one cause at two sites. Both `grep` patterns read `: error: [` at ANY position of the line, and `swift format` writes the path at the head of each line. Thus a file with the name `x: error: [UseShorthandTypeNames] y.swift` puts a tag through the filter that the allowlist does not name, and it stops the decline of a file the parser cannot read. The fix is to anchor both patterns to the true `path:line:column:` head.
+    - Review confirmed every other measurement: 11 findings from the failing fixture carrying all 7 rules; 0 findings from the passing fixture through the filter; 34 raw `[Indentation]` lines from the same bytes; the file checksum does not change, thus the gate is read-only; `UseWhereClausesInForLoops` is absent from the written configuration.
+  timestamp: 2026-09-07T18:04:41.981247+00:00
+- actor: claude-code
+  id: 01m1yhpnng83k1gedgtfakbs4q
+  text: |
+    All three review findings are answered. One cause, removed from the whole
+    script.
+
+    The cause: `swift format` writes the PATH FIRST on every line. Both readings of
+    that output matched their text at ANY position, so a file NAME could give the
+    pattern the reading looks for.
+
+    The fix, at both sites: the script now builds the head of a real diagnostic
+    before it reads anything.
+
+        quoted="$(printf '%s' "$file" | sed -e 's/[][\\.^$*+?(){}|]/\\&/g')"
+        diagnostic="^$quoted:[0-9]+:[0-9]+: error: "
+
+    The `sed` puts a backslash in front of every pattern operator, so the path
+    stands in the pattern as TEXT. The decline guard reads
+    `grep -v -E "$diagnostic\[[A-Za-z]+\] "`, the tag filter reads
+    `grep -E "$diagnostic\[($allowed)\] "`, and the rewrite is a `sed -E` anchored
+    on the same head, with the path recaptured as group 1 rather than written back
+    as text. The tool makes that head for a finding and for nothing else.
+
+    TDD, both directions measured.
+
+    - RED: the two new tests were written first and run against the shipped
+      script. `..._measures_a_file_named_for_a_diagnostic_head` failed with "the
+      `[Indentation]` probe holds a layout defect and no idiom ... the run reported
+      [\"Indentation\"]". `..._declines_a_file_named_for_a_diagnostic_head` failed
+      with three findings, each a raw parser line, and no marked line. 2 run, 0
+      passed, 2 failed.
+    - GREEN: the same two tests, 2 run, 2 passed.
+    - `cargo nextest run -p swissarmyhammer-validators swift` — 88 run, 88 passed.
+      86 before, plus the two new ones.
+
+    Everything the review verified still holds, measured again with the shipped
+    script over the same bytes:
+
+    - the failing fixture: 11 findings, exit 0, carrying all 7 allowlist rules;
+    - the passing fixture: 0 findings through the filter, beside 34 raw
+      `[Indentation]` lines from the same bytes;
+    - two reporting files in one run give the findings of both, at exit 0, beside
+      one `sah-diagnostic:` line for a missing path;
+    - the gate is read-only: `shasum` over both judged files is the same before and
+      after the run;
+    - `UseWhereClausesInForLoops` stands nowhere in the shipped script.
+
+    Row 5 of the new body table is the half a reader could miss. An anchor tight
+    enough to drop the crafted layout line could take a TRUE finding away as well,
+    so `w: error: [UseShorthandTypeNames] s.swift`, holding one `Array<Int>`
+    parameter, is measured to still report its `UseShorthandTypeNames` finding. The
+    second half of `..._measures_a_file_named_for_a_diagnostic_head` holds it.
+
+    Notes for the next agent:
+
+    - The body carried the sentence that made the defect — "a line holding
+      `: error: [` is a tagged finding". That sentence is now corrected, and the new
+      section "Each reading is anchored on the head of a real diagnostic" states the
+      measurement in five rows, with the loose script beside the shipped one.
+    - `SwiftIdiomsFixtureRun` is renamed `SwiftIdiomsRun`, because a second helper
+      `swift_idioms_staged_run` now answers the same shape over a probe file rather
+      than over the fixture.
+    - The `[Indentation]` probe and its tag are now named constants, so the
+      tag-probe list and the new test read ONE file rather than two copies.
+  timestamp: 2026-09-07T18:22:18.800167+00:00
+- actor: claude-code
+  id: 01m1yhpxfsjachmh5qtht0sttt
+  text: |
+    ### implement — changed
+    - evidence: 2 files — builtin/validators/code-hygiene/rules/idioms-swift.md, crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs. All 3 review findings flipped to `- [x]`. `cargo nextest run -p swissarmyhammer-validators swift` — 88 run, 88 passed (86 before, plus 2 new). `cargo nextest run -p swissarmyhammer-validators` — 856 run, 818 passed, 38 failed; the failing name set is IDENTICAL with the change stashed, so every one is pre-existing (missing go, revive, staticcheck, golangci-lint and eslint-plugin-sonarjs). `cargo fmt --all --check` clean. `cargo clippy -p swissarmyhammer-validators --all-targets -D warnings` clean.
+    - next: /review
+  timestamp: 2026-09-07T18:22:26.809491+00:00
 depends_on:
 - 01M1Y65VQ8V4TEWXDXD4Y2ZQNX
 position_column: doing
@@ -229,3 +321,13 @@ Remove the `--rules` intersection with `swiftformat --rules`, the `--min-version
 
 ## Workflow
 - Use `/tdd` — write the failing tests first, then write the code that makes them pass. #swift
+
+## Review Findings (2026-09-07 13:05)
+
+> Scope: `review sha HEAD~1..HEAD` (checkpoint 7f5e52261). The engine reviewed the 5 Rust files and returned 0 findings. It did NOT review `builtin/validators/code-hygiene/rules/idioms-swift.md`, which carries the gate script, because no validator matches `*.md`. It also excluded the two `.swift.tmpl` fixtures as validator fixtures. The items below come from direct verification of that uncovered script. Each one carries a reproduction.
+
+> Verified as claimed: the failing fixture gives 11 findings that carry all 7 allowlist rules, at exit 0. The passing fixture gives 0 findings, at exit 0. A badly indented probe writes 34 raw `[Indentation]` lines and 0 through the filter. Two reporting files in one run give the findings of both, at exit 0, beside one `sah-diagnostic:` line for a missing path. The run never rewrites a file. `UseWhereClausesInForLoops` stands nowhere in the written configuration. `cargo nextest run -p swissarmyhammer-validators swift` — 86 tests, 86 passed.
+
+- [x] `builtin/validators/code-hygiene/rules/idioms-swift.md:46` `gate-script/tag-filter` — the tag filter `grep -E ": error: \[($allowed)\] "` matches the allowlisted text ANYWHERE in the line, and `swift format` writes the file path at the head of every line, so a path that itself holds `: error: [<AllowedTag>] ` carries any tag through the gate. Measured: a file named `x: error: [UseShorthandTypeNames] y.swift` that holds one over-indented member reports `[Indentation]` in the raw run, and the shipped script writes `x: error: [UseShorthandTypeNames] y.swift:2: Indentation: unindent by 6 spaces` — an `Indentation` finding that the allowlist does not name. Anchor the match to the start of the line and to the true `path:line:column:` head, so that the written path cannot give the pattern.
+- [x] `builtin/validators/code-hygiene/rules/idioms-swift.md:40` `gate-script/decline-guard` — the decline guard `grep -v ': error: \['` drops a line by the same unanchored text, so the same crafted path makes an UNTAGGED tool error look tagged, and the script never declines the file. Measured over a file the tool cannot parse: with an ordinary name the script correctly writes `sah-diagnostic: idioms-swift declined ...`; with the name `z: error: [UseShorthandTypeNames] q.swift` it writes no diagnostic and instead gives the two raw parser lines `error: expected expression in variable` and `error: expected '}' to end struct` as findings, which the `sed` leaves unrewritten. This is the same cause as the item above. Anchor both greps, not the tag filter alone.
+- [x] `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs` `tests/filter-coverage` — no test holds the tag filter against a path that carries a diagnostic-shaped name, although the sibling rule already sets that pattern: `missing_docs.rs` ships `the_shipped_swift_missing_docs_tool_rule_measures_a_file_named_for_the_configuration_message` and `the_shipped_swift_missing_docs_tool_rule_measures_a_file_named_for_the_decode_message`. Add the same probe here, so that a filter which reads the written path fails by name.

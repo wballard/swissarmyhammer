@@ -229,13 +229,19 @@ const SWIFT_IDIOMS_FAIL_FIXTURE_RULES: usize = SWIFT_IDIOMS_ALLOWLIST_SIZE;
 /// with, after the engine takes the `sah-diagnostic:` marker off.
 const SWIFT_IDIOMS_DECLINED_HEAD: &str = "idioms-swift found no file at";
 
+/// What the marked line opens with for a file the run READ and no rule judged.
+///
+/// A path that holds no file and a file the parser cannot read are two shapes
+/// and two messages, so a probe of one must not pass over the other.
+const SWIFT_IDIOMS_DECLINED_FILE_HEAD: &str = "idioms-swift declined";
+
 /// Drives the shipped script over the failing fixture beside `files`, and
 /// answers the findings and the declined items of that one run.
 ///
 /// The fixture is staged through `prepare` so the run reads the bytes the set
 /// ships. `files` is the argument list the run carries, which is where a probe
 /// names a path the repository holds no file at.
-fn swift_idioms_run(files: &[&str]) -> SwiftIdiomsFixtureRun {
+fn swift_idioms_run(files: &[&str]) -> SwiftIdiomsRun {
     let loader = builtin_loader();
     require_tool_installed(&loader, SWIFT_PROJECT_TYPES, SWIFT_IDIOMS_RULE);
 
@@ -260,15 +266,42 @@ fn swift_idioms_run(files: &[&str]) -> SwiftIdiomsFixtureRun {
         .outcome
         .expect("the shipped Swift idioms script must judge the probe files and exit 0");
 
-    SwiftIdiomsFixtureRun {
+    SwiftIdiomsRun {
         findings: finding_rows(&outcome, &run.repo_root),
         rules: finding_rule_names(&outcome, &run.repo_root),
         declined: script_diagnostics(&outcome, &run.repo_root),
     }
 }
 
-/// What one run of the shipped script over the failing fixture said.
-struct SwiftIdiomsFixtureRun {
+/// Drives the shipped script over `source` staged at `path`, with `path` as
+/// the whole work list, and answers what that one run said.
+///
+/// [`swift_gate_reporting_rules`] answers the finding names alone, so a probe
+/// of what the run DECLINED reaches the script through here instead.
+fn swift_idioms_staged_run(path: &str, source: &str) -> SwiftIdiomsRun {
+    let loader = builtin_loader();
+    require_tool_installed(&loader, SWIFT_PROJECT_TYPES, SWIFT_IDIOMS_RULE);
+
+    let staged = [(path, source)];
+    let run = drive_shipped_script_whole(
+        &loader,
+        SWIFT_IDIOMS_RULE,
+        &ShippedStaging::of(&staged),
+        &[path],
+    );
+    let outcome = run
+        .outcome
+        .expect("the shipped Swift idioms script must judge the probe file and exit 0");
+
+    SwiftIdiomsRun {
+        findings: finding_rows(&outcome, &run.repo_root),
+        rules: finding_rule_names(&outcome, &run.repo_root),
+        declined: script_diagnostics(&outcome, &run.repo_root),
+    }
+}
+
+/// What one run of the shipped script said.
+struct SwiftIdiomsRun {
     /// Each finding as the `path:line` row a probe states.
     findings: Vec<String>,
 
@@ -429,6 +462,111 @@ fn the_shipped_swift_idioms_tool_rule_drops_every_tag_outside_its_allowlist() {
              nothing over it; the run reported {reported:?}"
         );
     }
+}
+
+/// A file name that carries the head of an allowlisted `swift format`
+/// finding.
+///
+/// `swift format lint --strict` writes `<path>:<line>:<column>: error:
+/// [<Tag>] <reason>`, and it writes the PATH FIRST. So every reading of that
+/// output that matches the tag as loose text reads the NAME of the file as
+/// well. This name holds `: error: [UseShorthandTypeNames] `, and that tag
+/// stands in the allowlist, so a loose reading takes every line this file
+/// draws for an allowlisted finding.
+const SWIFT_IDIOMS_DIAGNOSTIC_NAME_PATH: &str = "x: error: [UseShorthandTypeNames] y.swift";
+
+/// The same name, for the probe that measures the decline guard.
+///
+/// A second name rather than the same one, because the two probes measure two
+/// readings of the same output and a shared path would tie them together.
+const SWIFT_IDIOMS_DIAGNOSTIC_NAME_BROKEN_PATH: &str = "z: error: [UseShorthandTypeNames] q.swift";
+
+/// Acceptance: the gate reads the tag off a `swift format` line and never off
+/// the name of the file that line reports.
+///
+/// `swift format` writes the path at the head of every line, so a reading
+/// spelled `grep -E ": error: \[($allowed)\] "` matches the written PATH. A
+/// file named for an allowlisted diagnostic then carries every tag through the
+/// gate. Measured with Apple Swift 6.4 over the `[Indentation]` probe staged
+/// at [`SWIFT_IDIOMS_DIAGNOSTIC_NAME_PATH`]: the loose reading wrote
+/// `x: error: [UseShorthandTypeNames] y.swift:3: Indentation: unindent by 6
+/// spaces`, which is a layout finding the allowlist does not name and review
+/// must never carry.
+///
+/// Both halves are load-bearing. The layout probe must report NOTHING, or the
+/// filter reads the written path; and the idiom probe must still report, or an
+/// anchor tight enough to drop the first also drops every finding a file with
+/// an unusual name draws.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_measures_a_file_named_for_a_diagnostic_head() {
+    let layout = swift_gate_reporting_rules(
+        SWIFT_IDIOMS_RULE,
+        SWIFT_IDIOMS_DIAGNOSTIC_NAME_PATH,
+        SWIFT_FORMAT_INDENTATION_PROBE,
+        NO_SUPPORT_FILES,
+    );
+    assert!(
+        layout.is_empty(),
+        "the `[{SWIFT_FORMAT_INDENTATION_TAG}]` probe holds a layout defect and no idiom, so \
+         the gate must report nothing over it whatever the file is named; staged at \
+         `{SWIFT_IDIOMS_DIAGNOSTIC_NAME_PATH}` the run reported {layout:?}"
+    );
+
+    let idiom = swift_gate_reporting_rules(
+        SWIFT_IDIOMS_RULE,
+        SWIFT_IDIOMS_DIAGNOSTIC_NAME_PATH,
+        SWIFT_IDIOMS_LONG_TYPE,
+        NO_SUPPORT_FILES,
+    );
+    assert!(
+        idiom.contains(&SWIFT_SHORTHAND_TYPE_RULE.to_string()),
+        "`{SWIFT_SHORTHAND_TYPE_RULE}` must report a long type name whatever the file is \
+         named; staged at `{SWIFT_IDIOMS_DIAGNOSTIC_NAME_PATH}` the run reported {idiom:?}"
+    );
+}
+
+/// Acceptance: the gate declines a file the parser cannot read, whatever that
+/// file is named.
+///
+/// The decline guard reads the same output as the tag filter, and it carried
+/// the same defect. A reading spelled `grep -v ': error: \['` drops a line by
+/// loose text, so a file named for an allowlisted diagnostic makes an
+/// UNTAGGED tool error look tagged and the file is never declined. Measured
+/// with Apple Swift 6.4 over Swift the parser cannot read, staged at
+/// [`SWIFT_IDIOMS_DIAGNOSTIC_NAME_BROKEN_PATH`]: the loose reading wrote no
+/// marked line and gave the tool's own `error: expected name in attribute`
+/// lines as findings, unrewritten.
+///
+/// Both halves are load-bearing. The run must report NOTHING, because a file
+/// no rule judged carries no finding; and it must state the path on the marked
+/// channel, because a run that judged nothing and said nothing reads as a
+/// clean file.
+#[test]
+fn the_shipped_swift_idioms_tool_rule_declines_a_file_named_for_a_diagnostic_head() {
+    let run = swift_idioms_staged_run(
+        SWIFT_IDIOMS_DIAGNOSTIC_NAME_BROKEN_PATH,
+        SWIFT_FORMAT_UNPARSABLE_SOURCE,
+    );
+
+    assert!(
+        run.findings.is_empty(),
+        "a file the parser cannot read is a file no rule judged, so the run must report \
+         nothing over it whatever the file is named; staged at \
+         `{SWIFT_IDIOMS_DIAGNOSTIC_NAME_BROKEN_PATH}` the run reported {:?}",
+        run.findings
+    );
+    assert_eq!(
+        run.declined.len(),
+        1,
+        "the run must state the one path it declined; it stated {:?}",
+        run.declined
+    );
+    assert!(
+        run.declined[0].starts_with(SWIFT_IDIOMS_DECLINED_FILE_HEAD)
+            && run.declined[0].contains(SWIFT_IDIOMS_DIAGNOSTIC_NAME_BROKEN_PATH),
+        "the marked line must name the file it declined; it reads `{}`",
+        run.declined[0]
+    );
 }
 
 /// A Swift file written the way the two Swift prompt rules ASK for.
@@ -738,6 +876,9 @@ fn the_shipped_swift_idioms_tool_rule_decides_both_halves_of_the_void_return_cla
     );
 }
 
+/// The rule that asks for the shorthand spelling of a long type name.
+const SWIFT_SHORTHAND_TYPE_RULE: &str = "UseShorthandTypeNames";
+
 /// One declaration for each long spelling the deleted `idioms.md` bullet
 /// named as its DON'T.
 ///
@@ -814,7 +955,7 @@ const SWIFT_IDIOMS_HOISTED_LET: &str = concat!(
 const SWIFT_IDIOMS_SUPERSEDED_BULLETS: &[SupersededSwiftBullet] = &[
     SupersededSwiftBullet {
         prompt_rule: SWIFT_IDIOMS_PROMPT_RULE,
-        tool_rule: "UseShorthandTypeNames",
+        tool_rule: SWIFT_SHORTHAND_TYPE_RULE,
         defect: SWIFT_IDIOMS_LONG_TYPE,
         words: "shorthand type sugar",
     },
@@ -1732,6 +1873,19 @@ const SWIFT_FORMAT_LINE_LENGTH_PROBE: &str = concat!(
 /// is named here, ahead of both of them.
 const SWIFT_FORMAT_DIRTY_SOURCE: &str = "let alpha = 1+2\n";
 
+/// The tag the whitespace linter writes for a member indented past the column
+/// the configuration asks for.
+const SWIFT_FORMAT_INDENTATION_TAG: &str = "Indentation";
+
+/// A file holding one member indented 8 spaces where 2 are asked for.
+///
+/// The tag-probe list below and
+/// `the_shipped_swift_idioms_tool_rule_measures_a_file_named_for_a_diagnostic_head`
+/// measure two different answers over this ONE file, so it is named here,
+/// ahead of both of them.
+const SWIFT_FORMAT_INDENTATION_PROBE: &str =
+    "struct Probe {\n  let alpha = 1\n        let beta = 2\n}\n";
+
 /// A file whose spacing is a TAB where the tool asks for a space.
 ///
 /// The TAB stands between the `=` and the value, so it is SPACING rather than
@@ -1757,10 +1911,7 @@ const SWIFT_FORMAT_TAG_PROBES: &[(&str, &str)] = &[
         "let alpha = 1  // an end of line comment long enough to push this line well past the \
          hundred column line the configuration states\n",
     ),
-    (
-        "Indentation",
-        "struct Probe {\n  let alpha = 1\n        let beta = 2\n}\n",
-    ),
+    (SWIFT_FORMAT_INDENTATION_TAG, SWIFT_FORMAT_INDENTATION_PROBE),
     ("LineLength", SWIFT_FORMAT_LINE_LENGTH_PROBE),
     ("RemoveLine", "let alpha = 1\n\n\n\nlet beta = 2\n"),
     ("Spacing", SWIFT_FORMAT_DIRTY_SOURCE),

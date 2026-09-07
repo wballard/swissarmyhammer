@@ -574,8 +574,10 @@ It holds 43 keys under `rules`, and each key is one rule.
 ## The tags no configuration can stop
 
 `swift format lint` writes one line for each finding, and each line carries a
-`[<Name>]` tag. Eight of those tags come from the PRETTY-PRINTER, not from the
-43 rules. No key of the configuration reaches them.
+`[<Name>]` tag. NINE of those tags come from two parts of the tool that stand
+beside the 43 rules. The PRETTY-PRINTER lays each file out again, and the
+WHITESPACE LINTER compares the file with that layout. Both parts run whatever
+the configuration says, and no key of the configuration reaches either one.
 
 Each row below was measured over its own probe file, with every one of the 43
 rules switched OFF:
@@ -591,21 +593,91 @@ rules switched OFF:
 | `LineLength` | a declaration that runs past column 100 | `line is too long` |
 | `RemoveLine` | four blank lines between two declarations | `remove line break`, at 1:14 and at 2:1 |
 | `Spacing` | `let alpha = 1+2` | `add 1 space`, at 1:14 and at 1:15 |
+| `SpacingCharacter` | a TAB between the `=` and the value, in `struct A {` then `  let x =<TAB>1` then `}` | `use spaces for spacing`, at 2:10 |
 | `TrailingComma` | an array literal over several lines, with no trailing comma | `add trailing comma to the last element in multiline collection literal` |
 | `TrailingWhitespace` | three spaces after a declaration | `remove trailing whitespace` |
 
-The eight names come from the tool itself. `PrettyPrintFindingCategory` stands
-in the binary, and the reflection data beside it lists the same eight cases the
-eight probes draw.
+### Where the nine names come from
+
+The nine names are the CASES of two enumerations of the tool. A case reaches
+the output with its first letter in upper case, so `spacingCharacter` is
+written as `[SpacingCharacter]`.
+
+- `PrettyPrintFindingCategory` holds TWO cases: `endOfLineComment` and
+  `trailingComma`. The PRETTY-PRINTER writes them.
+- `WhitespaceFindingCategory` holds SEVEN cases: `trailingWhitespace`,
+  `indentation`, `spacing`, `spacingCharacter`, `removeLine`, `addLines` and
+  `lineLength`. The WHITESPACE LINTER writes them.
+
+`strings` cannot answer this question, and an earlier version of this section
+was wrong because it tried. Six of the nine names are 15 bytes or shorter, so
+Swift keeps each of them inside the instruction stream and not as data:
+
+    strings -a "$(xcrun --find swift-format)" | grep -cx AddLines
+
+writes 0, and it writes 0 for `Indentation`, `LineLength`, `RemoveLine`,
+`Spacing` and `TrailingComma` as well.
+
+The CASE names do stand in the binary, in the `__swift5_fieldmd` section, which
+is Swift's own reflection metadata. This command reads them:
+
+    python3 cases.py "$(xcrun --find swift-format)"
+
+`cases.py` walks the field descriptor of each type of the image, and writes the
+cases of every type whose name ends in `FindingCategory`:
+
+    import struct, sys
+    b = open(sys.argv[1], "rb").read()
+    sects, o = [], 32
+    for _ in range(struct.unpack_from("<I", b, 16)[0]):
+        cmd, size = struct.unpack_from("<II", b, o)
+        if cmd == 0x19:
+            for i in range(struct.unpack_from("<I", b, o + 64)[0]):
+                s = o + 72 + i * 80
+                sects.append(struct.unpack_from("<QQI", b, s + 32) + (b[s : s + 16].rstrip(b"\0"),))
+        o += size
+    at = lambda a: next(f + a - v for v, n, f, _ in sects if v <= a < v + n)
+    cs = lambda a: b[at(a) : b.index(b"\0", at(a))]
+    rel = lambda a: a + struct.unpack_from("<i", b, at(a))[0]
+    vm, size, off, _ = next(s for s in sects if s[3] == b"__swift5_fieldmd")
+    p = 0
+    while p < size:
+        d = vm + p
+        name, _sup, _kind, rs, n = struct.unpack_from("<iiHHI", b, off + p)
+        t = cs(d + name)
+        if t[:1] == b"\x01":
+            t = cs(rel(rel(d + name + 1) + 8))
+        if t.endswith(b"FindingCategory"):
+            print(t.decode(), [cs(rel(d + 16 + i * rs + 8)).decode() for i in range(n)])
+        p += 16 + n * rs
+
+Measured with Apple Swift 6.4, it writes three lines:
+
+    RuleBasedFindingCategory ['ruleType']
+    PrettyPrintFindingCategory ['endOfLineComment', 'trailingComma']
+    WhitespaceFindingCategory ['trailingWhitespace', 'indentation', 'spacing', 'spacingCharacter', 'removeLine', 'addLines', 'lineLength']
+
+Those three are EVERY type of the binary whose name ends in `FindingCategory`.
+The third one, `RuleBasedFindingCategory`, carries the name of the RULE that
+reported, so its tags are the 43 rule names and a configuration key stops each
+one. The other two carry the nine tags of the table above, and no key reaches
+them.
+
+### What that costs a gate
 
 So the configuration is only a SECOND gate. A gate built on `swift format` must
 read the tag off each output line, and it must KEEP only a tag that stands in an
 allowlist the script states. A gate that kept every line would report layout.
 
 `the_shipped_swift_idioms_rule_body_names_every_tag_swift_format_writes` holds
-this table. It reads the tag column out of this body, and it drives one probe
-for each tag through the live toolchain. A release that stops writing a tag
-fails that test BY NAME.
+this table, and it reads THREE sources. It reads the tag column out of this
+body. It drives one probe for each tag through the live toolchain, so a release
+that stops writing a tag fails that test BY NAME. And it reads the case set of
+`PrettyPrintFindingCategory` and `WhitespaceFindingCategory` out of the
+reflection metadata of the toolchain binary, so a tag the tool owns and this
+table does not name fails that test as well. The third source is the necessary
+one: a person wrote this table and the probe list, and while the test held only
+those two to each other, `SpacingCharacter` stood in neither and broke no test.
 
 ## What the shipped passing fixture draws from the pretty-printer
 

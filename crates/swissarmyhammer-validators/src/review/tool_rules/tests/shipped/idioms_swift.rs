@@ -1084,6 +1084,12 @@ fn swift_format_lint(path: &Path, configuration: Option<&str>) -> SwiftFormatLin
     )
 }
 
+/// A throwaway directory to stage the probe files of one `swift format` run
+/// in.
+fn swift_format_probe_directory() -> tempfile::TempDir {
+    tempfile::tempdir().expect("stage a probe directory")
+}
+
 /// What opens and closes every cell of a markdown table row.
 const RULE_BODY_TABLE_EDGE: char = '|';
 
@@ -1141,8 +1147,373 @@ fn rule_body_table(body: &str, heading: &str) -> Vec<Vec<String>> {
     rows.split_off(1)
 }
 
+/// Reads the case names of a Swift type out of the reflection metadata a
+/// Mach-O image carries.
+///
+/// `swift format` writes a `[<Name>]` tag for every finding, and the tags the
+/// 43 configurable rules do NOT own are the cases of two enumerations inside
+/// the tool. Neither the command line nor `dump-configuration` names those
+/// cases, and `strings` cannot find them: six of the nine names are 15 bytes or
+/// shorter, so Swift keeps them inside the instruction stream rather than as
+/// data, and `strings -a <binary> | grep -cx AddLines` writes 0. The CASE names
+/// stand in the `__swift5_fieldmd` section of the image, which is what this
+/// module reads.
+///
+/// It reads a Mach-O image, so it stands under macOS alone. That is the image
+/// format of the toolchain the self-hosted CI runner ships, and it is the
+/// toolchain every measurement of `idioms-swift.md` was made with.
+#[cfg(target_os = "macos")]
+mod swift_reflection {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    /// The magic of a 64-bit little-endian Mach-O image.
+    const MACH_O_MAGIC_64: u32 = 0xfeed_facf;
+
+    /// The load command that describes one 64-bit segment.
+    const MACH_O_SEGMENT_COMMAND_64: u32 = 0x19;
+
+    /// Where the count of load commands stands in a 64-bit Mach-O header.
+    const MACH_O_COMMAND_COUNT_OFFSET: usize = 16;
+
+    /// Where the load commands themselves start.
+    const MACH_O_HEADER_SIZE: usize = 32;
+
+    /// Where the byte count of a load command stands inside it.
+    const MACH_O_COMMAND_SIZE_OFFSET: usize = 4;
+
+    /// Where the count of sections stands in a `segment_command_64`.
+    const MACH_O_SEGMENT_SECTION_COUNT_OFFSET: usize = 64;
+
+    /// Where the section records of a `segment_command_64` start.
+    const MACH_O_SEGMENT_SECTIONS_OFFSET: usize = 72;
+
+    /// How many bytes one `section_64` record holds.
+    const MACH_O_SECTION_SIZE: usize = 80;
+
+    /// How many bytes the name of a `section_64` holds.
+    const MACH_O_SECTION_NAME_SIZE: usize = 16;
+
+    /// Where the mapped address of a `section_64` stands inside its record.
+    const MACH_O_SECTION_ADDRESS_OFFSET: usize = 32;
+
+    /// Where the byte count of a `section_64` stands inside its record.
+    const MACH_O_SECTION_BYTES_OFFSET: usize = 40;
+
+    /// Where the file offset of a `section_64` stands inside its record.
+    const MACH_O_SECTION_FILE_OFFSET_OFFSET: usize = 48;
+
+    /// The section that holds one field descriptor for each type of the image.
+    const SWIFT_FIELD_METADATA_SECTION: &str = "__swift5_fieldmd";
+
+    /// How many bytes the head of a field descriptor holds, ahead of the
+    /// records of its own fields.
+    const SWIFT_FIELD_DESCRIPTOR_HEAD_SIZE: usize = 16;
+
+    /// Where the byte count of one field record stands in that head.
+    const SWIFT_FIELD_RECORD_SIZE_OFFSET: usize = 10;
+
+    /// Where the count of field records stands in that head.
+    const SWIFT_FIELD_RECORD_COUNT_OFFSET: usize = 12;
+
+    /// Where the name of a field record stands inside the record.
+    const SWIFT_FIELD_RECORD_NAME_OFFSET: u64 = 8;
+
+    /// Where the name of a nominal type descriptor stands inside it.
+    const SWIFT_TYPE_DESCRIPTOR_NAME_OFFSET: u64 = 8;
+
+    /// The byte that opens a DIRECT symbolic reference to a type descriptor.
+    ///
+    /// A mangled type name that opens with it is one byte of tag and a relative
+    /// pointer rather than text, and the name the descriptor carries is the one
+    /// a person reads.
+    const SWIFT_DIRECT_SYMBOLIC_REFERENCE: u8 = 0x01;
+
+    /// How many bytes a relative pointer holds.
+    const SWIFT_RELATIVE_POINTER_SIZE: usize = 4;
+
+    /// One section of a Mach-O image.
+    struct Section {
+        /// The section's own name, as `__swift5_fieldmd`.
+        name: String,
+
+        /// The address the image maps the section at.
+        address: u64,
+
+        /// How many bytes the section holds.
+        bytes: u64,
+
+        /// Where those bytes stand in the file.
+        file_offset: usize,
+    }
+
+    /// The four bytes at `offset`.
+    fn four_bytes(image: &[u8], offset: usize) -> [u8; SWIFT_RELATIVE_POINTER_SIZE] {
+        image[offset..offset + SWIFT_RELATIVE_POINTER_SIZE]
+            .try_into()
+            .expect("a four byte window inside the image")
+    }
+
+    /// The unsigned 32-bit word at `offset`.
+    fn word(image: &[u8], offset: usize) -> u32 {
+        u32::from_le_bytes(four_bytes(image, offset))
+    }
+
+    /// The signed 32-bit word at `offset`.
+    fn signed_word(image: &[u8], offset: usize) -> i32 {
+        i32::from_le_bytes(four_bytes(image, offset))
+    }
+
+    /// How many bytes a 16-bit word holds.
+    const HALF_WORD_SIZE: usize = 2;
+
+    /// How many bytes a 64-bit word holds.
+    const LONG_WORD_SIZE: usize = 8;
+
+    /// The unsigned 16-bit word at `offset`.
+    fn half_word(image: &[u8], offset: usize) -> u16 {
+        let bytes: [u8; HALF_WORD_SIZE] = image[offset..offset + HALF_WORD_SIZE]
+            .try_into()
+            .expect("a two byte window inside the image");
+        u16::from_le_bytes(bytes)
+    }
+
+    /// The unsigned 64-bit word at `offset`.
+    fn long_word(image: &[u8], offset: usize) -> u64 {
+        let bytes: [u8; LONG_WORD_SIZE] = image[offset..offset + LONG_WORD_SIZE]
+            .try_into()
+            .expect("an eight byte window inside the image");
+        u64::from_le_bytes(bytes)
+    }
+
+    /// The name a `section_64` record at `record` carries.
+    fn section_name(image: &[u8], record: usize) -> String {
+        let raw = &image[record..record + MACH_O_SECTION_NAME_SIZE];
+        let named = raw.split(|byte| *byte == 0).next().unwrap_or_default();
+        String::from_utf8_lossy(named).into_owned()
+    }
+
+    /// Every section of `image`, in the order the load commands name them.
+    fn sections(image: &[u8]) -> Vec<Section> {
+        assert_eq!(
+            word(image, 0),
+            MACH_O_MAGIC_64,
+            "the toolchain binary must be a 64-bit little-endian Mach-O image"
+        );
+
+        let mut found = Vec::new();
+        let mut command = MACH_O_HEADER_SIZE;
+
+        for _ in 0..word(image, MACH_O_COMMAND_COUNT_OFFSET) {
+            if word(image, command) == MACH_O_SEGMENT_COMMAND_64 {
+                let count = word(image, command + MACH_O_SEGMENT_SECTION_COUNT_OFFSET);
+                for index in 0..count as usize {
+                    let record =
+                        command + MACH_O_SEGMENT_SECTIONS_OFFSET + index * MACH_O_SECTION_SIZE;
+                    found.push(Section {
+                        name: section_name(image, record),
+                        address: long_word(image, record + MACH_O_SECTION_ADDRESS_OFFSET),
+                        bytes: long_word(image, record + MACH_O_SECTION_BYTES_OFFSET),
+                        file_offset: word(image, record + MACH_O_SECTION_FILE_OFFSET_OFFSET)
+                            as usize,
+                    });
+                }
+            }
+            command += word(image, command + MACH_O_COMMAND_SIZE_OFFSET) as usize;
+        }
+
+        found
+    }
+
+    /// Where the byte mapped at `address` stands in the file.
+    fn file_offset(sections: &[Section], address: u64) -> usize {
+        sections
+            .iter()
+            .find(|section| section.address <= address && address < section.address + section.bytes)
+            .map(|section| section.file_offset + (address - section.address) as usize)
+            .expect("a reflection address must stand inside a section of the image")
+    }
+
+    /// The NUL-terminated bytes that start at `address`.
+    fn text(image: &[u8], sections: &[Section], address: u64) -> Vec<u8> {
+        let start = file_offset(sections, address);
+        let length = image[start..]
+            .iter()
+            .position(|byte| *byte == 0)
+            .expect("a reflection string must be NUL terminated");
+        image[start..start + length].to_vec()
+    }
+
+    /// The address the Swift relative pointer at `address` names.
+    ///
+    /// Swift writes every pointer of its reflection metadata as a signed 32-bit
+    /// offset from the field that HOLDS it, so the image runs wherever it is
+    /// mapped.
+    fn relative_target(image: &[u8], sections: &[Section], address: u64) -> u64 {
+        let offset = signed_word(image, file_offset(sections, address));
+        address.wrapping_add(offset as i64 as u64)
+    }
+
+    /// The name of the type a field descriptor at `descriptor` describes.
+    ///
+    /// A descriptor whose mangled name is not a direct symbolic reference to a
+    /// nominal type descriptor answers NOTHING. This reads the shape the
+    /// measured toolchain writes, so a release that wrote another shape drops
+    /// the type out of the answer rather than making a name up for it.
+    fn type_name(image: &[u8], sections: &[Section], descriptor: u64) -> Option<String> {
+        if signed_word(image, file_offset(sections, descriptor)) == 0 {
+            return None;
+        }
+
+        let mangled = relative_target(image, sections, descriptor);
+        if text(image, sections, mangled).first() != Some(&SWIFT_DIRECT_SYMBOLIC_REFERENCE) {
+            return None;
+        }
+
+        let nominal = relative_target(image, sections, mangled + 1);
+        let named = relative_target(image, sections, nominal + SWIFT_TYPE_DESCRIPTOR_NAME_OFFSET);
+        Some(String::from_utf8_lossy(&text(image, sections, named)).into_owned())
+    }
+
+    /// The names of the `count` field records of the descriptor at
+    /// `descriptor`, each `record_size` bytes wide.
+    fn record_names(
+        image: &[u8],
+        sections: &[Section],
+        descriptor: u64,
+        record_size: u64,
+        count: u64,
+    ) -> Vec<String> {
+        (0..count)
+            .map(|index| {
+                let record =
+                    descriptor + SWIFT_FIELD_DESCRIPTOR_HEAD_SIZE as u64 + index * record_size;
+                let named =
+                    relative_target(image, sections, record + SWIFT_FIELD_RECORD_NAME_OFFSET);
+                String::from_utf8_lossy(&text(image, sections, named)).into_owned()
+            })
+            .collect()
+    }
+
+    /// The case names of every type of `image` whose name ends in `suffix`,
+    /// keyed by the type's own name.
+    pub fn cases_of_types_named(image: &[u8], suffix: &str) -> BTreeMap<String, Vec<String>> {
+        let sections = sections(image);
+        let metadata = sections
+            .iter()
+            .find(|section| section.name == SWIFT_FIELD_METADATA_SECTION)
+            .expect("the toolchain binary must carry a `__swift5_fieldmd` section");
+
+        let mut found = BTreeMap::new();
+        let mut walked: u64 = 0;
+
+        while walked + SWIFT_FIELD_DESCRIPTOR_HEAD_SIZE as u64 <= metadata.bytes {
+            let descriptor = metadata.address + walked;
+            let head = metadata.file_offset + walked as usize;
+            let record_size = u64::from(half_word(image, head + SWIFT_FIELD_RECORD_SIZE_OFFSET));
+            let count = u64::from(word(image, head + SWIFT_FIELD_RECORD_COUNT_OFFSET));
+
+            if let Some(name) = type_name(image, &sections, descriptor) {
+                if name.ends_with(suffix) {
+                    found.insert(
+                        name,
+                        record_names(image, &sections, descriptor, record_size, count),
+                    );
+                }
+            }
+
+            walked += SWIFT_FIELD_DESCRIPTOR_HEAD_SIZE as u64 + count * record_size;
+        }
+
+        found
+    }
+
+    /// The suffix the name of every `swift format` finding-category type ends
+    /// in.
+    const CATEGORY_SUFFIX: &str = "FindingCategory";
+
+    /// The finding-category type whose tag is the name of the RULE that
+    /// reported.
+    ///
+    /// Its tags are the 43 rule names, and a configuration key stops each one,
+    /// so it carries no tag the allowlist has to name.
+    const RULE_CATEGORY: &str = "RuleBasedFindingCategory";
+
+    /// The two finding-category types whose cases no configuration key can
+    /// stop.
+    ///
+    /// The pretty-printer writes the cases of the first, and the whitespace
+    /// linter writes the cases of the second. Both parts run whatever the
+    /// configuration says.
+    pub const UNSTOPPABLE_CATEGORIES: &[&str] =
+        &["PrettyPrintFindingCategory", "WhitespaceFindingCategory"];
+
+    /// The tool that answers where a toolchain command stands.
+    const XCRUN_TOOL: &str = "xcrun";
+
+    /// The flag that makes it write that path alone.
+    const XCRUN_FIND_FLAG: &str = "--find";
+
+    /// The binary the `swift format` subcommand runs.
+    const SWIFT_FORMAT_BINARY: &str = "swift-format";
+
+    /// The `[<Name>]` tag a finding-category case reaches the output as.
+    ///
+    /// `swift format` writes the case name with its first letter in upper
+    /// case, so `spacingCharacter` reaches the output as `[SpacingCharacter]`.
+    fn tag_of_case(case: &str) -> String {
+        let mut letters = case.chars();
+        match letters.next() {
+            Some(first) => first.to_uppercase().chain(letters).collect(),
+            None => String::new(),
+        }
+    }
+
+    /// Every tag `swift format` writes that no key of the configuration stops,
+    /// read out of the toolchain binary itself.
+    ///
+    /// This is a THIRD source, beside the tag column of the rule body and
+    /// `SWIFT_FORMAT_TAG_PROBES`. One person wrote those two lists, so a tag
+    /// that NEITHER list named failed nothing, which is how `SpacingCharacter`
+    /// stood outside both of them. The tool wrote this list.
+    ///
+    /// The guard on the type names is what keeps the answer whole. A release
+    /// that adds a finding-category type, renames one, or drops one fails
+    /// here, rather than answering a short list that the two hand-written
+    /// lists still match.
+    pub fn tags_no_configuration_stops() -> BTreeSet<String> {
+        let located = std::process::Command::new(XCRUN_TOOL)
+            .arg(XCRUN_FIND_FLAG)
+            .arg(SWIFT_FORMAT_BINARY)
+            .output()
+            .expect("the installed toolchain must state where `swift-format` stands");
+        let path = String::from_utf8_lossy(&located.stdout).trim().to_string();
+        let image = std::fs::read(&path).expect("read the toolchain's swift-format binary");
+
+        let categories = cases_of_types_named(&image, CATEGORY_SUFFIX);
+
+        let mut expected: Vec<&str> = UNSTOPPABLE_CATEGORIES.to_vec();
+        expected.push(RULE_CATEGORY);
+        expected.sort_unstable();
+        let named: Vec<&str> = categories.keys().map(String::as_str).collect();
+
+        assert_eq!(
+            named,
+            expected,
+            "the reflection metadata of `{path}` must carry the finding-category types the \
+             `{}.md` measurement names; it carries {named:?}",
+            super::SWIFT_IDIOMS_RULE
+        );
+
+        UNSTOPPABLE_CATEGORIES
+            .iter()
+            .flat_map(|category| categories[*category].iter())
+            .map(|case| tag_of_case(case))
+            .collect()
+    }
+}
+
 /// The heading of the rule-body table that names every tag the pretty-printer
-/// writes.
+/// and the whitespace linter write.
 const SWIFT_FORMAT_TAG_TABLE_HEADING: &str = "## The tags no configuration can stop";
 
 /// How many cells each row of that table holds.
@@ -1158,12 +1529,28 @@ const SWIFT_FORMAT_LINE_LENGTH_PROBE: &str = concat!(
      column line the default configuration states\"\n",
 );
 
-/// Swift that draws ONE pretty-printer tag, for each tag the rule body names.
+/// Swift holding one defect the shipped configuration reports.
+///
+/// The `Spacing` probe below and the "a file with findings" status probe
+/// further down measure two different answers over this ONE declaration, so it
+/// is named here, ahead of both of them.
+const SWIFT_FORMAT_DIRTY_SOURCE: &str = "let alpha = 1+2\n";
+
+/// A file whose spacing is a TAB where the tool asks for a space.
+///
+/// The TAB stands between the `=` and the value, so it is SPACING rather than
+/// indentation, which is what separates `SpacingCharacter` from `Spacing`.
+const SWIFT_FORMAT_SPACING_CHARACTER_PROBE: &str = "struct A {\n  let x =\t1\n}\n";
+
+/// Swift that draws ONE tag no configuration can stop, for each tag the rule
+/// body names.
 ///
 /// Each probe is the smallest file that draws its own tag, so the run names
 /// the tag that read the shape rather than a neighbour that read the same
 /// file. A tag the body names and this list does not, and a probe this list
-/// holds and the body does not, each fail the test below by name.
+/// holds and the body does not, each fail the test below by name. Neither list
+/// decides what the SET is: the test reads that out of the toolchain binary,
+/// through `swift_reflection::tags_no_configuration_stops`.
 const SWIFT_FORMAT_TAG_PROBES: &[(&str, &str)] = &[
     (
         "AddLines",
@@ -1180,7 +1567,8 @@ const SWIFT_FORMAT_TAG_PROBES: &[(&str, &str)] = &[
     ),
     ("LineLength", SWIFT_FORMAT_LINE_LENGTH_PROBE),
     ("RemoveLine", "let alpha = 1\n\n\n\nlet beta = 2\n"),
-    ("Spacing", "let alpha = 1+2\n"),
+    ("Spacing", SWIFT_FORMAT_DIRTY_SOURCE),
+    ("SpacingCharacter", SWIFT_FORMAT_SPACING_CHARACTER_PROBE),
     ("TrailingComma", "let alpha = [\n  1,\n  2\n]\n"),
     ("TrailingWhitespace", "let alpha = 1   \n"),
 ];
@@ -1189,9 +1577,10 @@ const SWIFT_FORMAT_TAG_PROBES: &[(&str, &str)] = &[
 /// stop is a tag the installed toolchain still writes.
 ///
 /// `swift format lint` writes a `[<Name>]` tag for each finding, and the tags
-/// this table names come from the PRETTY-PRINTER rather than from the 43
-/// rules. No key of the configuration reaches them: each probe below runs with
-/// every one of the 43 rules switched OFF and still draws its own tag.
+/// this table names come from the PRETTY-PRINTER and the WHITESPACE LINTER
+/// rather than from the 43 rules. No key of the configuration reaches them:
+/// each probe below runs with every one of the 43 rules switched OFF and still
+/// draws its own tag.
 ///
 /// That is why a gate built on `swift format` has to read the tag off each
 /// output line and keep only the tags an allowlist states. This test is what
@@ -1199,10 +1588,21 @@ const SWIFT_FORMAT_TAG_PROBES: &[(&str, &str)] = &[
 /// writes: a toolchain release that stops writing one fails here BY NAME,
 /// rather than leaving the gate filtering for a tag nothing sends.
 ///
-/// Both halves are load-bearing. The body must name the same tags this test
-/// probes, or the allowlist and the measurement drift apart; and each probe
+/// THREE sources meet here, and the third is what makes the test whole. The
+/// body's tag column and [`SWIFT_FORMAT_TAG_PROBES`] were both written by a
+/// person, so holding them to EACH OTHER lets a tag that neither one names
+/// pass unseen — which is how `SpacingCharacter`, the ninth tag, stood outside
+/// both lists. So the SET comes from the tool: the cases of
+/// `PrettyPrintFindingCategory` and `WhitespaceFindingCategory`, read out of
+/// the reflection metadata of the toolchain binary by
+/// `swift_reflection::tags_no_configuration_stops`. A tag the tool owns and
+/// the two lists miss now fails here.
+///
+/// Each of the three is load-bearing. The body must name the same tags this
+/// test probes, or the allowlist and the measurement drift apart; each probe
 /// must draw its tag from the live tool, or the row records a fact no run
-/// makes.
+/// makes; and the two lists together must hold the whole case set, or the
+/// allowlist is short.
 #[test]
 fn the_shipped_swift_idioms_rule_body_names_every_tag_swift_format_writes() {
     let loader = builtin_loader();
@@ -1232,8 +1632,23 @@ fn the_shipped_swift_idioms_rule_body_names_every_tag_swift_format_writes() {
          tags this test probes, in the order it probes them; it names {named:?}"
     );
 
+    #[cfg(target_os = "macos")]
+    {
+        let owned = swift_reflection::tags_no_configuration_stops();
+        let listed: std::collections::BTreeSet<String> = probed.iter().cloned().collect();
+
+        assert_eq!(
+            listed,
+            owned,
+            "the tag column of `{SWIFT_IDIOMS_RULE}.md` and `SWIFT_FORMAT_TAG_PROBES` must \
+             together name every case of {:?}, because those cases ARE the tags no configuration \
+             key stops; the two lists name {listed:?} and the toolchain owns {owned:?}",
+            swift_reflection::UNSTOPPABLE_CATEGORIES
+        );
+    }
+
     let configuration = swift_format_configuration_with_every_rule_off();
-    let probe = tempfile::tempdir().expect("stage a probe directory");
+    let probe = swift_format_probe_directory();
 
     for (tag, source) in SWIFT_FORMAT_TAG_PROBES {
         let path = probe.path().join(format!("{tag}.swift"));
@@ -1264,9 +1679,6 @@ const SWIFT_FORMAT_EMPTY_CHANNEL: &str = "0 bytes";
 
 /// Where a status probe stages the path the run carries.
 const SWIFT_FORMAT_STATUS_PROBE_PATH: &str = "Probe.swift";
-
-/// Swift holding one defect the shipped configuration reports.
-const SWIFT_FORMAT_DIRTY_SOURCE: &str = "let alpha = 1+2\n";
 
 /// The same declaration written the way the pretty-printer asks for.
 const SWIFT_FORMAT_CLEAN_SOURCE: &str = "let alpha = 1 + 2\n";
@@ -1411,7 +1823,7 @@ fn the_shipped_swift_idioms_rule_body_records_every_status_the_lint_run_writes()
             row[0], probe.run
         );
 
-        let staged = tempfile::tempdir().expect("stage a probe directory");
+        let staged = swift_format_probe_directory();
         let path = stage_swift_format_probe(staged.path(), &probe.shape);
         let (status, wrote_out, wrote_err) = swift_format_lint(&path, None);
 

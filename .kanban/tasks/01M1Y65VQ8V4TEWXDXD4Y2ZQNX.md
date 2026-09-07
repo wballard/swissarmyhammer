@@ -38,6 +38,65 @@ comments:
     - evidence: 2 files — `/Users/wballard/github/swissarmyhammer/swissarmyhammer/builtin/validators/code-hygiene/rules/idioms-swift.md` (+346 lines, appended after line 550; the front matter and the gate script are byte for byte unchanged), `/Users/wballard/github/swissarmyhammer/swissarmyhammer/crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs` (+465 lines, two new acceptance tests). `cargo nextest run -p swissarmyhammer-validators swift` — 85 tests run, 85 passed. `cargo fmt --check` clean, `cargo clippy --all-targets` clean.
     - next: `/review`
   timestamp: 2026-09-07T15:33:09.328855+00:00
+- actor: claude-code
+  id: 01m1y95n39q13nd7a3z62mnp5v
+  text: |-
+    ### review — findings
+    - evidence: 4 findings — crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs:1183, builtin/validators/code-hygiene/rules/idioms-swift.md:586, builtin/validators/code-hygiene/rules/idioms-swift.md:597, crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs:1167
+    - scope: review sha HEAD~1..HEAD (commit 07109ead7). The engine gave 1 finding over 1 file. No validator matches `*.md`, thus the engine read no line of `idioms-swift.md`, which is the deliverable. The driver measured that file and gave 3 more findings.
+    - next: add the ninth tag `SpacingCharacter` to the table and to the probe list, correct the two finding-category types, and name `SWIFT_FORMAT_DIRTY_SOURCE` one time.
+  timestamp: 2026-09-07T15:53:12.553973+00:00
+- actor: claude-code
+  id: 01m1y9684s67gpnjfswaqsen12
+  text: 'Correction to the section "Driver check — the rule body, which no validator reads": it says "The two items below" and it holds THREE items. The third item is on the test file, not on the rule body.'
+  timestamp: 2026-09-07T15:53:32.057382+00:00
+- actor: claude-code
+  id: 01m1y977a07002ekr5tmrk6gvs
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 2 files (idioms-swift.md measurement table, idioms_swift.rs tests)
+    - test: green — cargo nextest -p swissarmyhammer-validators swift, 85 run, 85 passed; full crate 853 run, 814 passed, 39 failed, all 39 proved pre-existing by a stash and a re-run on a clean tree; cargo fmt --check clean; cargo clippy --workspace --all-targets -D warnings clean
+    - commit: 07109ead7 (the subject was amended from "swiftformat" to "swift format", because the two are different programs)
+    - review: findings — crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs:1183, builtin/validators/code-hygiene/rules/idioms-swift.md:586, builtin/validators/code-hygiene/rules/idioms-swift.md:597, crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs:1167
+  timestamp: 2026-09-07T15:54:03.968374+00:00
+- actor: claude-code
+  id: 01m1yaamznym781xhthncd293r
+  text: |-
+    All four review findings are closed. What the measurements gave, for the next agent.
+
+    **The ninth tag.** `SpacingCharacter` reproduces exactly as the finding states. Probe `struct A {` then `  let x =<TAB>1` then `}`, with all 43 rules OFF: `P1.swift:2:10: error: [SpacingCharacter] use spaces for spacing`, and NO other tag. The TAB stands between the `=` and the value, so the tool reads it as SPACING and not as indentation, which is what separates `SpacingCharacter` from `Spacing`. The row and the probe are both in.
+
+    **Why `strings` failed, and what does work.** The driver was correct that `strings -a <binary> | grep -cx AddLines` writes 0. The cause: six of the nine tags are 15 bytes or shorter, so Swift keeps each of them inside the instruction stream as a small string and not as data. The three that DO appear — `EndOfLineComment`, `SpacingCharacter`, `TrailingWhitespace` — are each 16 bytes or longer. That is the whole pattern.
+
+    The CASE names, in lowerCamelCase, DO stand in the binary, in the `__swift5_fieldmd` reflection section. A 25-line python walk of the field descriptors of that section writes, with Apple Swift 6.4:
+
+        RuleBasedFindingCategory ['ruleType']
+        PrettyPrintFindingCategory ['endOfLineComment', 'trailingComma']
+        WhitespaceFindingCategory ['trailingWhitespace', 'indentation', 'spacing', 'spacingCharacter', 'removeLine', 'addLines', 'lineLength']
+
+    A tag is the case name with its first letter in upper case. Those three are EVERY type of the binary whose name ends in `FindingCategory` — `strings` finds no fourth. The third one, `RuleBasedFindingCategory`, carries the name of the RULE that reported, so its tags are the 43 rule names and a configuration key stops each. The other two carry the nine tags, and no key reaches them. The script and its output stand in the rule body, under a new `### Where the nine names come from` heading.
+
+    Two routes were tried and dropped. `swift format --help` and `swift format lint --help` name no category listing. `nm -a` on the binary writes 1162 symbols and 0 hits for `FindingCategory`, because the binary is stripped. There is no `swift-reflection-dump` in this toolchain.
+
+    **The third source in the test.** The test now reads the case set out of the Mach-O reflection metadata of the toolchain binary, through a new `swift_reflection` module in the test file. It first asserts the binary carries exactly `PrettyPrintFindingCategory`, `RuleBasedFindingCategory` and `WhitespaceFindingCategory`, so a release that adds, renames or drops a category type fails by name rather than answering a short list. Then it holds the union of the cases of the first and the third against the two hand-written lists.
+
+    Both halves were proved by breaking them on purpose and re-running:
+    - With `RULE_CATEGORY` set to `NoSuchFindingCategory`, the test fails and names the three real types the binary carries. The walk reads the live binary.
+    - With `SpacingCharacter` deleted from BOTH the body table and the probe list, the test fails on the new assertion and names the ninth tag. That is the exact hole the finding describes, now closed.
+
+    The module stands under `#[cfg(target_os = "macos")]`, because it reads a Mach-O image. Every CI runner of this repository is `self-hosted` macOS, so nothing is lost. On another image format the enumeration would need an ELF reader.
+
+    **The duplicated literals.** `SWIFT_FORMAT_DIRTY_SOURCE` is defined once, now ahead of `SWIFT_FORMAT_TAG_PROBES`, and the `Spacing` probe references it. Scanning the whole file for the same cause found one more duplicate in the new code: `tempfile::tempdir().expect("stage a probe directory")` stood twice. A `swift_format_probe_directory()` helper now holds it once. `"Probe.swift"` also stands twice, but the second is the named constant `SWIFT_FORMAT_STATUS_PROBE_PATH` and the first is a pre-existing probe of another rule, so they are not one literal repeated.
+
+    **The gate is untouched.** The front matter and the `run:` script of `idioms-swift.md` are byte for byte unchanged. `swiftformat` still runs the gate.
+  timestamp: 2026-09-07T16:13:24.853536+00:00
+- actor: claude-code
+  id: 01m1yabm275sgp6hfrcnr0gyd5
+  text: |-
+    ### implement — changed
+    - evidence: 2 files — `/Users/wballard/github/swissarmyhammer/swissarmyhammer/builtin/validators/code-hygiene/rules/idioms-swift.md` (+88/-4; the first changed line is 577, so the front matter and the `run:` gate script are untouched and `swiftformat` still runs the gate), `/Users/wballard/github/swissarmyhammer/swissarmyhammer/crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs` (+442/-19). All four review findings flipped to `- [x]`. `cargo nextest run -p swissarmyhammer-validators swift` — 85 run, 85 passed. Whole crate — 853 run, 814 passed, 39 failed, the same 39 the earlier pass proved pre-existing (no `go`, `revive`, `staticcheck`, `golangci-lint` or `dart` on this machine); no Swift test among them. `cargo fmt --all --check` clean. `cargo clippy -p swissarmyhammer-validators --all-targets -D warnings` clean.
+    - next: `/review`
+  timestamp: 2026-09-07T16:13:56.679269+00:00
 position_column: doing
 position_ordinal: '8380'
 title: Measure the Swift toolchain rules the gate needs
@@ -123,3 +182,23 @@ Measure which Swift version first gives `AlwaysUseLiteralForEmptyCollectionInit`
 
 ## Workflow
 - Use `/tdd` — write the failing tests first, then write the code that makes them pass. #swift
+
+## Review Findings (2026-09-07 10:44)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 1 file(s) reviewed, 21 not reviewed.
+
+> 20 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 20 file(s)
+
+> 1 file(s) not reviewed — no validator matched:
+> - `builtin/validators/code-hygiene/rules/idioms-swift.md` — no validator matches this file
+
+- [x] `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs:1183` `code-hygiene/magic-numbers` — The string literal `"let alpha = 1+2\n"` is repeated at line 1269 as the value of `SWIFT_FORMAT_DIRTY_SOURCE`. This literal should be named once, so changes are made in one place. Move the definition of `SWIFT_FORMAT_DIRTY_SOURCE` before the `SWIFT_FORMAT_TAG_PROBES` constant array, then reference it at line 1183 instead of the inline literal.
+
+### Driver check — the rule body, which no validator reads
+
+No validator matches `*.md`, thus the engine read no line of `idioms-swift.md`. That file is the deliverable of this task. The three items below come from measurement by the driver. The command and the output stand behind each one. The third of them is on the test file, not on the rule body.
+
+- [x] `builtin/validators/code-hygiene/rules/idioms-swift.md:586` `driver/measured` — The table of tags no configuration can stop names EIGHT tags, and the toolchain writes NINE. `SpacingCharacter` is absent. Measured with all 43 rules OFF, over a file that holds `struct A {` then `  let x =<TAB>1` then `}`: the command `swift format lint --strict --configuration all-off.json P1.swift` wrote `P1.swift:2:10: error: [SpacingCharacter] use spaces for spacing`. The acceptance criterion asks for the FULL list, because the allowlist filter of the future gate is built from this table. A gate built on the eight tags would not know the ninth. Add a `SpacingCharacter` row with its probe and its output, and add the same probe to `SWIFT_FORMAT_TAG_PROBES`.
+- [x] `builtin/validators/code-hygiene/rules/idioms-swift.md:597` `driver/measured` — The sentence "`PrettyPrintFindingCategory` stands in the binary, and the reflection data beside it lists the same eight cases the eight probes draw" is not correct, and it is the only support the body gives for the list being complete. `PrettyPrintFindingCategory` of `release/6.0` holds TWO cases: `EndOfLineComment` and `TrailingComma`. The other seven tags come from `WhitespaceFindingCategory`, whose seven cases are `TrailingWhitespace`, `Indentation`, `Spacing`, `SpacingCharacter`, `RemoveLine`, `AddLines` and `LineLength`. The command `strings -a <the swift-format binary> | grep -cx <tag>` writes 0 for `AddLines`, `Indentation`, `LineLength`, `RemoveLine`, `Spacing` and `TrailingComma`, thus the reflection data lists no such cases. Name both types, name the whitespace linter beside the pretty-printer at the head of the section, and give the command that enumerates the cases.
+- [x] `crates/swissarmyhammer-validators/src/review/tool_rules/tests/shipped/idioms_swift.rs:1167` `driver/measured` — The test `the_shipped_swift_idioms_rule_body_names_every_tag_swift_format_writes` holds the tag column of the body and `SWIFT_FORMAT_TAG_PROBES` to agreeing with each other. A person wrote both lists, and neither list is read from the tool. Thus a tag the toolchain writes and NEITHER list names fails no test, which is how `SpacingCharacter` passed. Hold the two lists to the case set of `PrettyPrintFindingCategory` and `WhitespaceFindingCategory`, or state in the test why the tool cannot give that set.

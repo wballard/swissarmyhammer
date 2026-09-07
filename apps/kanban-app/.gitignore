@@ -1,3 +1,0 @@
-# Staging directory for the kanban CLI sidecar binary.
-# Populated by scripts/stage-cli-sidecar.sh during the Tauri build; never committed.
-/binaries/

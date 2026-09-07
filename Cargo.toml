@@ -50,8 +50,6 @@ members = [
     "crates/swissarmyhammer-web",
     "crates/mirdan",
     "apps/mirdan-cli",
-    "apps/mirdan-app",
-    "apps/kanban-app",
     "apps/kanban-cli",
     "crates/swissarmyhammer-fields",
     "crates/swissarmyhammer-entity",

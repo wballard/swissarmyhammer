@@ -11,11 +11,11 @@ description = "Mirdan CLI - Command-line interface for the Mirdan package manage
 name = "mirdan"
 path = "src/main.rs"
 
-# No `formula = "..."` override: the Homebrew formula is named after the crate
-# (`mirdan-cli`). The short `mirdan` token belongs to the desktop app cask
-# (apps/mirdan-app). An override here would collide the CLI formula with the app
-# cask, same bug as kanban.
+# The Homebrew formula is named `mirdan`, not after the crate (`mirdan-cli`).
+# The short token is free: the desktop app that held it as a cask is gone, so
+# `brew install mirdan` now installs this command line interface.
 [package.metadata.dist]
+formula = "mirdan"
 
 [dependencies]
 mirdan = { workspace = true }

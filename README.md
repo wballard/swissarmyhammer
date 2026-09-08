@@ -60,6 +60,19 @@ sah init
 
 That's it. Your agent now has skills, tools, and workflows. 
 
+Then open your agent and ask for the tour:
+
+```
+> /sah-help
+```
+
+The agent lists every skill, tool, subagent, and validator that sah gives it, and tells you which one to use for what. Give it a topic to learn about one thing:
+
+```
+> /sah-help how do I plan
+> /sah-help commit
+```
+
 ## Two Ways to Plan
 
 The `/plan` skill is the front door to SwissArmyHammer. It works two ways:
@@ -117,6 +130,7 @@ SwissArmyHammer is different. Every stage of the software development lifecycle 
 
 | Stage | What happens | Command |
 |-------|-------------|---------|
+| **Help** | Tour the skills, tools, subagents, and validators sah gives your agent | `/sah-help` |
 | **Plan** | Read your spec, explore the codebase, create a kanban board with ordered tasks | `/plan` |
 | **Implement** | Pick up tasks one-by-one, write code, run tests, mark complete | `/implement` |
 | **Test** | Run the full suite, report failures as kanban tasks | `/test` |

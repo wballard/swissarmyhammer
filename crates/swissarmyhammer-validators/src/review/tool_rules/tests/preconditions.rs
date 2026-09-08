@@ -30,7 +30,7 @@ const ADVICE_PREFIX: &str = "advice for a person, not a command to run: ";
 /// whichever word of `which cargo-clippy jq` failed. Reading the names back
 /// out of the command is what lets a failure message state the binary that
 /// actually failed rather than the rule's headline tool.
-fn checked_binaries(check_command: &str) -> Vec<&str> {
+pub(super) fn checked_binaries(check_command: &str) -> Vec<&str> {
     let mut binaries = Vec::new();
     let mut reading = false;
     for word in check_command.split_whitespace() {

@@ -53,7 +53,7 @@ mod temp_directory;
 mod unused_dependencies;
 mod zero_argument;
 
-use super::preconditions::require_tool_installed;
+use super::preconditions::{checked_binaries, require_tool_installed};
 use super::*;
 
 use std::path::PathBuf;
@@ -165,8 +165,8 @@ const SWIFT_OPTIONALS_PROMPT_RULE: &str = "optionals";
 /// The prompt rule that decides how an empty collection is declared.
 const SWIFT_IDIOMS_PROMPT_RULE: &str = "idioms";
 
-/// The prompt rule that decides when a class is a value type.
-const SWIFT_VALUE_SEMANTICS_PROMPT_RULE: &str = "value-semantics";
+/// The prompt rule that decides where a value may be mutable.
+const SWIFT_IMMUTABILITY_PROMPT_RULE: &str = "immutability";
 
 /// The prompt rule that decides how a failure is raised and caught.
 const SWIFT_ERROR_HANDLING_PROMPT_RULE: &str = "error-handling";
@@ -760,7 +760,7 @@ struct ShippedEmptyRun {
 
 /// One shipped rule that carries a `tool` block.
 ///
-/// A guard over the whole set reads these four fields and no other, so one
+/// A guard over the whole set reads these five fields and no other, so one
 /// shape serves every guard and one walk of the set answers them all.
 struct ShippedToolRule {
     /// The name of the rule, for the failure messages.
@@ -776,6 +776,12 @@ struct ShippedToolRule {
     /// the rule carries no `doctor` block at all. A rule that names no check
     /// names no tool either.
     check_command: Option<String>,
+
+    /// The `doctor.fix_hint` the set ships for the rule, or `None` when the
+    /// rule carries no hint. The hint is the prose a person reads when the
+    /// check fails, so a guard that holds a rule to what it PROMISES a reader
+    /// reads it here.
+    fix_hint: Option<String>,
 }
 
 /// Every shipped rule that carries a `tool` block.
@@ -797,6 +803,11 @@ fn shipped_tool_rules(loader: &ValidatorLoader) -> Vec<ShippedToolRule> {
                 .doctor
                 .as_ref()
                 .map(|doctor| doctor.check_command.clone()),
+            fix_hint: tool
+                .doctor
+                .as_ref()
+                .and_then(|doctor| doctor.fix_hint.as_ref())
+                .map(std::string::ToString::to_string),
         })
         .collect()
 }
@@ -2225,20 +2236,6 @@ const RUST_PROJECT_TYPES: &[&str] = &["rust"];
 
 /// The project types a Swift workspace carries, as the plan holds them.
 const SWIFT_PROJECT_TYPES: &[&str] = &["swift"];
-
-/// The file a project states its Swift language version in.
-const SWIFT_VERSION_PATH: &str = ".swift-version";
-
-/// The Swift language version a probe repository states, which is the version
-/// Airbnb's own SwiftFormat configuration pins.
-const SWIFT_PROBE_VERSION: &str = "6.3\n";
-
-/// The support files a Swift probe stages to make every enabled rule live.
-///
-/// Five rules of the `idioms-swift` roster read the Swift language version, so
-/// a probe that stated none would buy its answer from the version gate rather
-/// than from the Swift it staged.
-const SWIFT_VERSION_SUPPORT: &[(&str, &str)] = &[(SWIFT_VERSION_PATH, SWIFT_PROBE_VERSION)];
 
 /// Drives the shipped script of `gate` over `source`, staged at `probe_path`
 /// beside `support`, and answers the rule name of each finding it reported.

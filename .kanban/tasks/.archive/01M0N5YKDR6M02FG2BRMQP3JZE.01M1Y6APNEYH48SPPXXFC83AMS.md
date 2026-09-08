@@ -1,6 +1,23 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01m1y6aazs1v8e1mnjn7pvw5j0
+  text: |-
+    ### obsolete — closed by the move to the Swift toolchain
+
+    This task asks if swiftformat's `redundantVoidReturnType` joins the `idioms-swift` roster. That roster stops existing. The `idioms-swift` gate moves to the Swift toolchain's own `swift format`, thus it runs swiftformat no longer, and the Airbnb roster, `SWIFT_IDIOMS_ROSTER_SIZE` and the `swiftformat --lint --rules` probes all go away.
+
+    The question the task asks is also answered. Measured on the Swift 6.4 toolchain, `NoVoidReturnOnFunctionSignature` reports BOTH halves of the bullet:
+
+    ```
+    Dirty.swift:9:26: error: [NoVoidReturnOnFunctionSignature] remove the explicit return type 'Void' from this function
+    Dirty.swift:10:28: error: [NoVoidReturnOnFunctionSignature] remove the explicit return type '()' from this function
+    ```
+
+    One toolchain rule decides the whole bullet, thus no second rule is needed. See the task "Measure the Swift toolchain rules the gate needs".
+  timestamp: 2026-09-07T15:03:20.313553+00:00
 position_column: todo
 position_ordinal: fff080
 project: swift-validator

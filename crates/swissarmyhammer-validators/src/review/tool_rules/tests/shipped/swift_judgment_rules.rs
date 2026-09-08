@@ -30,9 +30,6 @@ use super::*;
 /// branches lives.
 const SWIFT_INITIALIZATION_PROMPT_RULE: &str = "initialization";
 
-/// The prompt rule that decides where a value may be mutable.
-const SWIFT_IMMUTABILITY_PROMPT_RULE: &str = "immutability";
-
 /// The prompt rule that decides how a scope states its requirements.
 const SWIFT_PRECONDITIONS_PROMPT_RULE: &str = "preconditions";
 
@@ -194,11 +191,12 @@ const SWIFT_INITIALIZATION_ANSWER: &str = concat!(
 /// as its own DO — so the probe measures the line an author lands on by
 /// obeying that rule and reading no further.
 ///
-/// `Directory` carries the nested `if`, which is where the tool's own
-/// correction LANDS: measured on SwiftFormat 0.62.1, `swiftformat --rules
-/// preferForLoop --single-line-for-each convert` rewrites
-/// `users.forEach { if $0.isActive { names.append($0.name) } }` into exactly
-/// that line.
+/// `Directory` carries the nested `if`, which is the shape
+/// `UseWhereClausesInForLoops` reads. That rule is OFF in the shipped gate,
+/// and the body of `idioms-swift.md` records why: its fix rewrites the nested
+/// `if` into the `where` clause `immutability.md` names as its other DON'T. A
+/// gate that turned it on reports this probe, so the row is what would catch
+/// that.
 const SWIFT_IMMUTABILITY_REFUSAL: &str = concat!(
     "import Foundation\n\n",
     "struct User {\n",
@@ -430,21 +428,13 @@ const SWIFT_JUDGMENT_RULES: &[SwiftJudgmentRule] = &[
 /// [`SWIFT_JUDGMENT_PROBE_PATH`], and answers the rule name of each finding it
 /// reported.
 ///
-/// The probe stages a `.swift-version` beside the source, the way
-/// `idioms_swift.rs` does and for the same measured reason: five swiftformat
-/// rules of the `idioms-swift` roster read the Swift language version and stay
-/// silent without one. Measured on 0.62.1 over a file holding `let value: Int`
-/// beside an exhaustive `if`/`else` that assigns it — 0 findings with no
-/// `.swift-version`, 3 `conditionalAssignment` findings with `6.3`. Without the
-/// file this module would measure that gate with five of its rules disarmed,
-/// and the next bullet added below would be measured against it.
+/// The probe stages the source alone. No shipped Swift gate reads a
+/// `.swift-version` any longer: `idioms-swift` runs the toolchain's own
+/// `swift format`, which reads no such file — measured over two directories
+/// holding the same source, with and without one, at the same finding count —
+/// and the swiftlint gates never read it.
 fn swift_judgment_gate_rules(gate: &str, source: &str) -> Vec<String> {
-    swift_gate_reporting_rules(
-        gate,
-        SWIFT_JUDGMENT_PROBE_PATH,
-        source,
-        SWIFT_VERSION_SUPPORT,
-    )
+    swift_gate_reporting_rules(gate, SWIFT_JUDGMENT_PROBE_PATH, source, NO_SUPPORT_FILES)
 }
 
 /// Acceptance: every form the probes below are written in stands in the body of
@@ -491,9 +481,9 @@ fn every_swift_judgment_rule_states_the_forms_its_probes_hold() {
 /// A gate that reports the DO is worse: the prompt rule then walks the author
 /// into a tool finding no edit can satisfy while the bullet stands.
 ///
-/// Measured over the five shipped Swift gates that read a file list, with
-/// swiftformat 0.62.1 and swiftlint 0.65.0, each run beside a `.swift-version`
-/// of `6.3`: 10 probes, 50 runs, 0 findings.
+/// Measured over the five shipped Swift gates that read a file list, with the
+/// toolchain's `swift format` on Apple Swift 6.4 and with swiftlint 0.65.0: 10
+/// probes, 50 runs, 0 findings.
 #[test]
 fn no_shipped_swift_gate_decides_a_swift_judgment_rule() {
     for rule in SWIFT_JUDGMENT_RULES {
@@ -626,7 +616,7 @@ const SWIFT_SOLE_OWNERS: &[SwiftSoleOwner] = &[SwiftSoleOwner {
 /// sentence in BOTH of them.
 ///
 /// This test costs no tool run, and it holds the prompt side of the defect
-/// `the_shipped_swift_idioms_tool_rule_decides_no_shape_of_the_where_half`
+/// `the_shipped_swift_idioms_tool_rule_leaves_the_where_clause_rule_off`
 /// holds the tool side of. A rule that dropped its half of a boundary fails
 /// here by name, rather than leaving one DO free to write the other's DON'T.
 #[test]

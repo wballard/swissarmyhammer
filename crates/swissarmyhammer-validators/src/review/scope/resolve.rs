@@ -4,8 +4,10 @@
 //! every input the later steps need: the sem-diff before/after content, the
 //! review-level change purpose, and blame's history anchor. Every path is
 //! confined to the repository root ([`confine_to_repo`]) and every scope's
-//! resolved file set passes the same `.reviewignore` + `.gitignore` filter, so
-//! an escaping or ignored path can never reach the review agent.
+//! candidate file set passes the same `.reviewignore` + `.gitignore` filter.
+//! [`split_ignored`] applies that filter BEFORE it reads any content. Thus an
+//! escaping or ignored path can never reach the review agent. Thus an ignore
+//! pattern can also exclude a path the engine could not read at all.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -42,52 +44,59 @@ pub(super) struct ResolvedScope {
     pub(super) blame_at: Option<git2::Oid>,
 }
 
-/// The scope stage's reviewable file set, and the files an ignore pattern took
-/// out of it.
+/// The scope stage's reviewable file set, and the files it dropped before any
+/// validator paired with them.
 ///
 /// The two travel together because the report names both: what a run reviewed,
-/// and what it deliberately did not. Their sum is how many files the scope
-/// reached, which is what makes "every file in scope was excluded" a claim the
-/// engine can prove rather than infer.
+/// and what it did not. Their sum is how many files the scope reached. That
+/// sum makes "every file in scope was excluded" a claim the engine can prove
+/// rather than infer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ScopeFiles {
-    /// The reviewable file set, after the ignore filter.
+    /// The reviewable file set: the candidates that survived the ignore filter
+    /// and whose content the stage could read as text.
     pub(super) resolved: ResolvedScope,
-    /// One entry per file an ignore pattern excluded, in resolved order.
-    pub(super) ignored: Vec<ExcludedFile>,
+    /// One entry per candidate the stage dropped, in candidate order. A
+    /// dropped candidate is a path an ignore pattern matched, or a path whose
+    /// bytes are not UTF-8 text.
+    pub(super) excluded: Vec<ExcludedFile>,
 }
 
 /// Resolve a [`Scope`] to its changed-file set and the inputs every later step
 /// needs (sem-diff `FileChange`s, after-content, change purpose), alongside the
-/// files the ignore filter excluded.
+/// files the stage excluded.
 pub(super) fn resolve_scope_files(scope: &Scope, repo_path: &Path) -> Result<ScopeFiles, AvpError> {
     // Auto-generate `.reviewignore` (defaulting to `.kanban/`) on the first
     // review of any repo, never clobbering a user-edited one. It is untracked
     // and non-code, so it never enters the working scope resolved below.
     ensure_reviewignore(repo_path)?;
 
-    let resolved = match scope {
-        Scope::Working => resolve_working(repo_path)?,
-        Scope::Sha(range) => resolve_sha(repo_path, range)?,
-        Scope::File(path) => resolve_file(repo_path, path)?,
-        Scope::Glob(pattern) => resolve_glob(repo_path, pattern)?,
-    };
-
-    // Uniform choke point: every scope's resolved file set is filtered through
-    // the same `.reviewignore` + `.gitignore` matcher, so a `.kanban/` board or a
-    // gitignored artifact is dropped identically whether it arrived via Working,
-    // Sha, File, or Glob. The per-scope resolver above has already read each
-    // candidate's disk/blob content; the matcher discards an ignored path's entry
-    // here so that content never reaches the review agent. Escape paths are
-    // rejected independently and earlier by `confine_to_repo`, so this filter is
-    // about relevance, not containment.
+    // `resolve_scope_files` builds the matcher BEFORE any resolver runs. Each
+    // resolver then applies it to its candidate paths BEFORE it reads their
+    // content. See `split_ignored`. This stage used to read first. A pattern
+    // could then not reach a path whose own read failed. A `*.png` line could
+    // not exclude a tracked picture, because the blob read raised first.
     let matcher = load_review_ignore_matcher(repo_path)?;
-    Ok(filter_resolved_scope(resolved, &matcher))
+    match scope {
+        Scope::Working => resolve_working(repo_path, &matcher),
+        Scope::Sha(range) => resolve_sha(repo_path, range, &matcher),
+        Scope::File(path) => resolve_file(repo_path, path, &matcher),
+        Scope::Glob(pattern) => resolve_glob(repo_path, pattern, &matcher),
+    }
 }
 
-/// Drop every resolved file the review-scope ignore `matcher` excludes, keeping
-/// the three views of the scope (paths, sem-diff inputs, after-content) mutually
-/// consistent, and returning one [`ExcludedFile`] per dropped path.
+/// Split a scope's candidate paths into the ones this function keeps to read,
+/// and one [`ExcludedFile`] per path the review-scope ignore `matcher`
+/// excludes.
+///
+/// The uniform choke point every scope passes its candidates through. Thus the
+/// stage drops a `.kanban/` board or a gitignored artifact identically. The
+/// scope that named it, Working, Sha, File or Glob, makes no difference. The
+/// filter runs BEFORE the content read. Thus a pattern can exclude a path the
+/// engine cannot decode at all. [`confine_to_repo`] rejects an escaping path
+/// independently and earlier. So this filter is about relevance, not
+/// containment. This function only ever hands the matcher a repo-relative
+/// path, which is what [`Gitignore::matched_path_or_any_parents`] requires.
 ///
 /// A `Scope::File` naming an ignored path therefore resolves to a scope with
 /// nothing left to review — consistent with the other scopes, never an error.
@@ -96,36 +105,33 @@ pub(super) fn resolve_scope_files(scope: &Scope, repo_path: &Path) -> Result<Sco
 /// excluded scope names its own cause instead of reading as an empty scope.
 /// Each excluded path is also logged at DEBUG with its FULL path and the
 /// excluding pattern's source, never truncated.
-pub(super) fn filter_resolved_scope(resolved: ResolvedScope, matcher: &Gitignore) -> ScopeFiles {
-    let mut kept: Vec<String> = Vec::with_capacity(resolved.files.len());
+fn split_ignored(files: Vec<String>, matcher: &Gitignore) -> (Vec<String>, Vec<ExcludedFile>) {
+    let mut kept: Vec<String> = Vec::with_capacity(files.len());
     let mut ignored: Vec<ExcludedFile> = Vec::new();
-    for path in &resolved.files {
-        match review_ignore_reason(matcher, path) {
+    for path in files {
+        match review_ignore_reason(matcher, &path) {
             Some(pattern) => {
                 tracing::debug!(
                     path = %path,
                     pattern = %pattern,
                     "review scope: excluded ignored path"
                 );
-                ignored.push(ExcludedFile::review_ignored(path, pattern));
+                ignored.push(ExcludedFile::review_ignored(&path, pattern));
             }
-            None => kept.push(path.clone()),
+            None => kept.push(path),
         }
     }
-
-    ScopeFiles {
-        resolved: retain_scope_files(resolved, kept),
-        ignored,
-    }
+    (kept, ignored)
 }
 
 /// Narrow `resolved` to the `kept` paths, keeping its three views of the scope
 /// (paths, sem-diff inputs, after-content) mutually consistent.
 ///
-/// The single place a scope-stage filter narrows a [`ResolvedScope`], shared by
-/// the `.reviewignore` filter above and the validator-fixture split in
-/// [`super::fixtures`], so the two cannot drop a path from one view and leave it
-/// in another.
+/// The single place a scope-stage filter narrows an already-built
+/// [`ResolvedScope`]. The validator-fixture split in [`super::fixtures`] uses
+/// it. Thus no filter can drop a path from one view and leave it in another.
+/// The ignore filter needs none of this. It runs on the candidate paths,
+/// before a [`ResolvedScope`] exists at all.
 pub(super) fn retain_scope_files(resolved: ResolvedScope, kept: Vec<String>) -> ResolvedScope {
     let ResolvedScope {
         files: _,
@@ -245,23 +251,33 @@ pub(super) fn confine_to_repo(repo_path: &Path, path: &str) -> Result<PathBuf, A
 /// so a `review file` caller can never make the pipeline read a file outside the
 /// repository into the review agent's context.
 ///
-/// Returns `Ok(None)` only when the (contained) path is **absent** (the intended
-/// deletion/added signal — a file gone from the working tree). Any *other*
-/// failure — a permission error, or a binary/non-UTF8 file that
-/// [`read_to_string`](std::fs::read_to_string) rejects — is propagated as
-/// [`AvpError::Context`] rather than collapsed to `None`, so an unreadable
-/// tracked file is never silently diffed as wholly added/removed. A containment
-/// violation surfaces as [`AvpError::Validator`].
+/// Returns [`FileText::Absent`] only when the contained path is **absent**.
+/// That is the intended deletion or added signal for a file gone from the
+/// working tree. Returns [`FileText::NotUtf8`] when the file is there and
+/// [`read_to_string`](std::fs::read_to_string) cannot decode it. The two
+/// states stay apart. Thus the stage never silently diffs an unreadable
+/// tracked file as wholly added or wholly removed. Its caller drops that file
+/// out of scope and reports it instead. This function propagates any *other*
+/// failure, a permission error for one, as [`AvpError::Context`]. A
+/// containment violation surfaces as [`AvpError::Validator`].
 ///
 /// # Errors
 ///
 /// [`AvpError::Validator`] when `path` escapes the repository root (see
-/// [`confine_to_repo`]); [`AvpError::Context`] for a non-absent read failure.
-pub(super) fn read_working(repo_path: &Path, path: &str) -> Result<Option<String>, AvpError> {
+/// [`confine_to_repo`]); [`AvpError::Context`] for a read failure that is
+/// neither an absent path nor an undecodable one.
+pub(super) fn read_working(repo_path: &Path, path: &str) -> Result<FileText, AvpError> {
     let resolved = confine_to_repo(repo_path, path)?;
     match std::fs::read_to_string(resolved) {
-        Ok(content) => Ok(Some(content)),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Ok(content) => Ok(FileText::Text(content)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(FileText::Absent),
+        Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
+            tracing::debug!(
+                path = %path,
+                "review scope: working-tree file is not UTF-8 text"
+            );
+            Ok(FileText::NotUtf8)
+        }
         Err(e) => Err(AvpError::Context(format!(
             "failed to read working-tree file {path}: {e}"
         ))),
@@ -342,34 +358,153 @@ impl std::fmt::Display for FilePath {
 /// The two halves of the address are separate types ([`GitRefSpec`],
 /// [`FilePath`]) so no call site can transpose them.
 ///
-/// Returns `Ok(None)` only when the path does **not exist** at the ref (the
-/// intended Added/Deleted signal — `revparse_single` resolving to not-found, or
-/// the object not being a blob). A blob that exists but cannot be read — a
-/// binary/non-UTF8 tracked file, or any other libgit2 failure — is propagated as
-/// [`AvpError::Context`], so an unreadable tracked file is never silently diffed
-/// as wholly added/removed.
+/// Returns [`FileText::Absent`] only when the path does **not exist** at the
+/// ref. That is the intended Added or Deleted signal. It happens when
+/// `revparse_single` resolves to not-found, and when the object is not a blob.
+/// Returns [`FileText::NotUtf8`] when the blob is there and its bytes are not
+/// text. The two states stay apart. Thus the stage never silently diffs an
+/// undecodable tracked file as wholly added or wholly removed. Its caller
+/// drops that file out of scope and reports it instead. This function
+/// propagates any other libgit2 failure as [`AvpError::Context`].
 pub(super) fn read_at_ref(
     repo: &GitOperations,
     refspec: GitRefSpec,
     path: FilePath,
-) -> Result<Option<String>, AvpError> {
-    // The blob address, composed once and reused by the read and both failure
-    // messages, so the `refspec:path` form lives in a single place.
+) -> Result<FileText, AvpError> {
+    // The blob address. This function composes it one time. The read, the
+    // failure message and the undecodable log all reuse it. Thus the
+    // `refspec:path` form lives in a single place.
     let spec = format!("{refspec}:{path}");
     let inner = repo.repository().inner();
     let object = match inner.revparse_single(&spec) {
         Ok(object) => object,
         // The path is absent at this ref — the intended Added/Deleted signal.
-        Err(e) if e.code() == git2::ErrorCode::NotFound => return Ok(None),
+        Err(e) if e.code() == git2::ErrorCode::NotFound => return Ok(FileText::Absent),
         Err(e) => return Err(AvpError::Context(format!("failed to resolve {spec}: {e}"))),
     };
     // Not a blob (e.g. a tree at that path) — there is no file content to read.
     let Some(blob) = object.as_blob() else {
-        return Ok(None);
+        return Ok(FileText::Absent);
     };
-    String::from_utf8(blob.content().to_vec())
-        .map(Some)
-        .map_err(|e| AvpError::Context(format!("blob {spec} is not valid UTF-8: {e}")))
+    match String::from_utf8(blob.content().to_vec()) {
+        Ok(text) => Ok(FileText::Text(text)),
+        Err(e) => {
+            tracing::debug!(
+                spec = %spec,
+                error = %e,
+                "review scope: blob is not UTF-8 text"
+            );
+            Ok(FileText::NotUtf8)
+        }
+    }
+}
+
+/// One side of a file as the semantic diff takes it. The side holds text, or
+/// holds no content at all, or holds bytes that are not text.
+///
+/// The third state keeps a binary file out of the diff and does not fail the
+/// run. The `Option<String>` this replaces could carry neither half of that.
+/// `None` already means the side holds no content. To fold an undecodable file
+/// into `None` would hand the review a picture. The review would then read
+/// that picture as wholly added or wholly removed work. The two readers above
+/// used to raise instead. One tracked picture then threw the WHOLE run away,
+/// report and all. A third state lets the caller drop that one file, and only
+/// that file, into the report's not-reviewed list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum FileText {
+    /// The file's text at this revision.
+    Text(String),
+    /// The side holds no content.
+    ///
+    /// Two kinds of producer answer `Absent`, and they mean different things.
+    /// A reader answers `Absent` when the file does not exist at the
+    /// revision. That is the Added or Deleted signal. A resolver instead
+    /// CHOOSES `Absent` for a base side, because its scope reviews whole
+    /// content. The file can be present at that revision.
+    ///
+    /// The two resolvers reach that choice differently. `resolve_glob` reads
+    /// no base side at all, and it gives every matched file `Absent`.
+    /// `resolve_file` DOES read a base side, at HEAD. It keeps that side when
+    /// the bytes differ from the working side. It discards that side, and
+    /// records `Absent` instead, only when the two sides are equal.
+    ///
+    /// Both kinds mean one thing to the diff. There is no before text, so
+    /// every entity in the file reads as added work. The variant states that
+    /// one downstream fact, never the cause behind it.
+    Absent,
+    /// The file is there and its bytes are not UTF-8, so it carries no text.
+    NotUtf8,
+}
+
+impl FileText {
+    /// This side as the sem differ takes it. A side with no content gives
+    /// `Some(None)`. A side that holds text gives `Some(Some(text))`. A side
+    /// whose bytes are not text gives `None`.
+    ///
+    /// The outer option says whether a reader could READ the side. The inner
+    /// one says whether the side holds any CONTENT. They are never the same
+    /// question, which is exactly what a bare `Option<String>` could not say.
+    fn text(self) -> Option<Option<String>> {
+        match self {
+            FileText::Text(text) => Some(Some(text)),
+            FileText::Absent => Some(None),
+            FileText::NotUtf8 => None,
+        }
+    }
+}
+
+/// The two sides of one file as [`FileChangeBuilder::push`] takes them, or
+/// `None` when either side is not text.
+///
+/// The single place a [`FileText`] becomes a [`BeforeContent`] and
+/// [`AfterContent`] pair. Thus no resolver can quietly turn an undecodable
+/// side into an absent one. A caller that gets `None` has no content to
+/// record, and must exclude the file instead. One undecodable side is enough.
+/// The sem differ cannot diff a file that is binary at either revision.
+fn readable_sides(before: FileText, after: FileText) -> Option<(BeforeContent, AfterContent)> {
+    let before = BeforeContent::new(before.text()?);
+    let after = AfterContent::new(after.text()?);
+    Some((before, after))
+}
+
+/// Read the two sides of every candidate path, recording each on a
+/// [`FileChangeBuilder`] and dropping the paths whose content is not text into
+/// `excluded` instead.
+///
+/// The shared tail of all four resolvers. Each one computes its candidate set
+/// and reads its two sides from a different place. Each one then records them
+/// identically. `sides` reads one path's base and post-change content, so a
+/// resolver's only job is to say where each side comes from.
+///
+/// Returns the paths this function really read, in the candidate order, beside
+/// the builder holding their sem-diff inputs. A candidate missing from that
+/// list is in `excluded`, so reviewed plus excluded still accounts for every
+/// candidate.
+fn read_candidates<F>(
+    files: &[String],
+    renames: &BTreeMap<String, String>,
+    excluded: &mut Vec<ExcludedFile>,
+    mut sides: F,
+) -> Result<(Vec<String>, FileChangeBuilder), AvpError>
+where
+    F: FnMut(&str) -> Result<(FileText, FileText), AvpError>,
+{
+    let mut kept: Vec<String> = Vec::with_capacity(files.len());
+    let mut builder = FileChangeBuilder::new();
+    for path in files {
+        let (before, after) = sides(path)?;
+        let Some((before, after)) = readable_sides(before, after) else {
+            tracing::debug!(
+                path = %path,
+                "review scope: excluded a file whose content is not UTF-8 text"
+            );
+            excluded.push(ExcludedFile::not_utf8(path));
+            continue;
+        };
+        push_moved_file(&mut builder, path, before, after, renames);
+        kept.push(path.clone());
+    }
+    Ok((kept, builder))
 }
 
 /// The rename/copy detection thresholds a review diff is found with, as git
@@ -542,7 +677,10 @@ fn revspec_tree<'a>(repo: &'a GitOperations, refspec: &GitRefSpec) -> Option<git
 
 /// Resolve the working-tree scope: uncommitted changes vs HEAD (staged +
 /// unstaged + untracked), reusing the git tool's changed-file accounting.
-pub(super) fn resolve_working(repo_path: &Path) -> Result<ResolvedScope, AvpError> {
+pub(super) fn resolve_working(
+    repo_path: &Path,
+    matcher: &Gitignore,
+) -> Result<ScopeFiles, AvpError> {
     let repo = open_repo(repo_path)?;
     let status = repo
         .get_status()
@@ -552,48 +690,52 @@ pub(super) fn resolve_working(repo_path: &Path) -> Result<ResolvedScope, AvpErro
     // via the canonical `swissarmyhammer-sem` extension list: brand-new source
     // gets reviewed because it WILL be added, while unignored junk (logs, jsonl,
     // lockfiles) never has its content read into scope.
-    let mut files = status.all_changed_files();
-    files.extend(status.untracked.iter().filter(|p| is_code_file(p)).cloned());
-    files.sort();
-    files.dedup();
+    let mut candidates = status.all_changed_files();
+    candidates.extend(status.untracked.iter().filter(|p| is_code_file(p)).cloned());
+    candidates.sort();
+    candidates.dedup();
 
-    // Read each candidate's working-tree content once. A file with no readable
-    // content (a deletion) carries `None` here and is diffed as a deletion.
-    let after_by_path: BTreeMap<String, Option<String>> = files
-        .iter()
-        .map(|path| Ok((path.clone(), read_working(repo_path, path)?)))
-        .collect::<Result<_, AvpError>>()?;
+    let (candidates, mut excluded) = split_ignored(candidates, matcher);
 
     // Recognize a move as a move: a file relocated in the working tree reads
     // its base side from the path it came from, so its diff is the edit it
     // carries rather than the whole file over again.
     let renames = working_rename_sources(&repo);
 
-    let mut builder = FileChangeBuilder::new();
-    for path in &files {
-        let after = AfterContent::new(after_by_path.get(path).cloned().unwrap_or(None));
+    // This closure reads each candidate's working-tree content one time. A
+    // file with no content is a deletion. It reads as absent, so the sem
+    // differ treats it as a deletion.
+    let (files, builder) = read_candidates(&candidates, &renames, &mut excluded, |path| {
+        let after = read_working(repo_path, path)?;
         let base = base_path(&renames, path);
-        let before =
-            BeforeContent::new(read_at_ref(&repo, GitRefSpec::head(), FilePath::new(base))?);
-        push_moved_file(&mut builder, path, before, after, &renames);
-    }
+        let before = read_at_ref(&repo, GitRefSpec::head(), FilePath::new(base))?;
+        Ok((before, after))
+    })?;
+
     // Blame anchor: pinned to the branch's merge-base with main/master (see
     // `working_tree_blame_anchor`) so the sha column means the same thing on
     // every run for the life of this branch, rather than drifting with every
     // intervening commit. `None` when no stable anchor exists (falls back to
     // HEAD, the pre-existing behavior).
-    Ok(builder.finish(
-        files,
-        auto_purpose("working-tree changes"),
-        working_tree_blame_anchor(&repo),
-    ))
+    Ok(ScopeFiles {
+        resolved: builder.finish(
+            files,
+            auto_purpose("working-tree changes"),
+            working_tree_blame_anchor(&repo),
+        ),
+        excluded,
+    })
 }
 
 /// Resolve a commit/range scope, reusing the git tool's range semantics
 /// (`from..to`, or a single ref treated as `ref..HEAD`).
-pub(super) fn resolve_sha(repo_path: &Path, range: &str) -> Result<ResolvedScope, AvpError> {
+pub(super) fn resolve_sha(
+    repo_path: &Path,
+    range: &str,
+    matcher: &Gitignore,
+) -> Result<ScopeFiles, AvpError> {
     let repo = open_repo(repo_path)?;
-    let files = repo
+    let candidates = repo
         .get_changed_files_from_range(range)
         .map_err(|e| AvpError::Context(format!("failed to resolve range '{range}': {e}")))?;
 
@@ -602,71 +744,96 @@ pub(super) fn resolve_sha(repo_path: &Path, range: &str) -> Result<ResolvedScope
         None => (GitRefSpec::new(range), GitRefSpec::head()),
     };
 
+    let (candidates, mut excluded) = split_ignored(candidates, matcher);
+
     // Recognize a move as a move: a file relocated within the range reads its
     // base side from the path it came from, so a relocation commit reviews in
     // proportion to its real delta rather than as thousands of added lines.
     let renames = range_rename_sources(&repo, &from_ref, &to_ref);
 
-    let mut builder = FileChangeBuilder::new();
-    for path in &files {
+    let (files, builder) = read_candidates(&candidates, &renames, &mut excluded, |path| {
         let base = base_path(&renames, path);
-        let before = BeforeContent::new(read_at_ref(&repo, from_ref.clone(), FilePath::new(base))?);
-        let after = AfterContent::new(read_at_ref(&repo, to_ref.clone(), FilePath::new(path))?);
-        push_moved_file(&mut builder, path, before, after, &renames);
-    }
+        let before = read_at_ref(&repo, from_ref.clone(), FilePath::new(base))?;
+        let after = read_at_ref(&repo, to_ref.clone(), FilePath::new(path))?;
+        Ok((before, after))
+    })?;
 
     let purpose = commit_messages(&repo, &to_ref)
         .unwrap_or_else(|| auto_purpose(&format!("changes in range {range}")));
     // Bound blame to the range's "to" endpoint: a historical review must
     // never attribute a line to a commit past the point it reviews.
-    Ok(builder.finish(files, purpose, resolve_oid(&repo, &to_ref)))
+    Ok(ScopeFiles {
+        resolved: builder.finish(files, purpose, resolve_oid(&repo, &to_ref)),
+        excluded,
+    })
 }
 
 /// Resolve a single-file scope: its working-tree changes if any, else its whole
 /// content reviewed as all-added work.
 ///
-/// `path` is repo-relative by contract. Its working-tree read goes through
-/// [`read_working`] → [`confine_to_repo`], so a `review file` target that is
-/// absolute or escapes the repository root (via `..` or a symlink) is rejected
-/// with [`AvpError::Validator`] and its content is never read into scope.
-pub(super) fn resolve_file(repo_path: &Path, path: &str) -> Result<ResolvedScope, AvpError> {
+/// `path` is repo-relative by contract. [`confine_to_repo`] contains it BEFORE
+/// anything else reads it. Thus the stage rejects a `review file` target that
+/// is absolute, or that escapes the repository root through `..` or a symlink.
+/// It rejects that target with [`AvpError::Validator`], and never reads its
+/// content into scope. Containment first also keeps the ignore matcher's own
+/// repo-relative precondition true. This is the one scope whose path a caller
+/// names.
+pub(super) fn resolve_file(
+    repo_path: &Path,
+    path: &str,
+    matcher: &Gitignore,
+) -> Result<ScopeFiles, AvpError> {
+    confine_to_repo(repo_path, path)?;
     let repo = open_repo(repo_path)?;
-    let working = read_working(repo_path, path)?;
-    let head = read_at_ref(&repo, GitRefSpec::head(), FilePath::new(path))?;
-    // A file with no working-tree change carries NO base side, so every entity
-    // in it diffs as added work — the same whole-content shape `resolve_glob`
-    // gives each of its files. Keeping the identical HEAD revision here would
-    // leave the semantic diff empty, and an entity-bound probe with no entity
-    // emits no result at all. A candidate-probe validator cannot tell that
-    // silence apart from "the probe ran and found no candidates", so it judges
-    // from nothing and answers differently on each run.
-    let base = if head == working { None } else { head };
-    let after = AfterContent::new(working);
-    let before = BeforeContent::new(base);
 
-    let mut builder = FileChangeBuilder::new();
-    builder.push(
-        FilePath::new(path),
-        FileVersions {
-            before,
-            after,
-            // A single named file is reviewed whole, so there is no move to
-            // recognize: its base side is its own path at HEAD or nothing.
-            moved_from: None,
-        },
-    );
+    let (candidates, mut excluded) = split_ignored(vec![path.to_string()], matcher);
+
+    // This scope reviews a single named file whole, so there is no move to
+    // recognize. Its base side is its own path at HEAD, or nothing.
+    let renames = BTreeMap::new();
+    let (files, builder) = read_candidates(&candidates, &renames, &mut excluded, |candidate| {
+        let working = read_working(repo_path, candidate)?;
+        let head = read_at_ref(&repo, GitRefSpec::head(), FilePath::new(candidate))?;
+        // A file with no working-tree change carries NO base side. Every
+        // entity in it then diffs as added work. That is the same
+        // whole-content shape `resolve_glob` gives each of its files.
+        //
+        // `FileText::Absent` states that missing base side. Here it does NOT
+        // mean the file is gone from HEAD, because the file IS at HEAD. This
+        // scope reviews whole content, so it chooses to hold no base at all.
+        //
+        // Keeping the identical HEAD revision here would leave the semantic
+        // diff empty, and an entity-bound probe with no entity emits no result
+        // at all. A candidate-probe validator cannot tell that silence apart
+        // from "the probe ran and found no candidates". So it judges from
+        // nothing and answers differently on each run.
+        let before = if head == working {
+            FileText::Absent
+        } else {
+            head
+        };
+        Ok((before, working))
+    })?;
+
     // Blame anchor: same stable merge-base pin as `resolve_working` — see
     // `working_tree_blame_anchor`.
-    Ok(builder.finish(
-        vec![path.to_string()],
-        auto_purpose(&format!("review of {path}")),
-        working_tree_blame_anchor(&repo),
-    ))
+    Ok(ScopeFiles {
+        resolved: builder.finish(
+            files,
+            auto_purpose(&format!("review of {path}")),
+            working_tree_blame_anchor(&repo),
+        ),
+        excluded,
+    })
 }
 
 /// Resolve a glob scope: every matching tracked file as whole-content work (no
 /// before side, so each diffs as all-added).
-pub(super) fn resolve_glob(repo_path: &Path, pattern: &str) -> Result<ResolvedScope, AvpError> {
+pub(super) fn resolve_glob(
+    repo_path: &Path,
+    pattern: &str,
+    matcher: &Gitignore,
+) -> Result<ScopeFiles, AvpError> {
     let compiled = glob::Pattern::new(pattern).map_err(|e| AvpError::Validator {
         validator: SCOPE_VALIDATOR.to_string(),
         message: format!("invalid glob pattern '{pattern}': {e}"),
@@ -676,31 +843,35 @@ pub(super) fn resolve_glob(repo_path: &Path, pattern: &str) -> Result<ResolvedSc
     let tracked = repo
         .get_all_tracked_files()
         .map_err(|e| AvpError::Context(format!("failed to list tracked files: {e}")))?;
-    let files: Vec<String> = tracked
+    let candidates: Vec<String> = tracked
         .into_iter()
         .filter(|f| compiled.matches_with(f, crate::validators::GLOB_MATCH_OPTIONS))
         .collect();
 
-    let mut builder = FileChangeBuilder::new();
-    for path in &files {
-        // A glob scope has no base side: every matched file diffs as all-added.
-        let after = AfterContent::new(read_working(repo_path, path)?);
-        builder.push(
-            FilePath::new(path),
-            FileVersions {
-                before: BeforeContent::absent(),
-                after,
-                moved_from: None,
-            },
-        );
-    }
+    let (candidates, mut excluded) = split_ignored(candidates, matcher);
+
+    // A glob scope has no base side. Every matched file diffs as all-added.
+    // Nothing moved, so there is no rename source to look up either.
+    //
+    // `FileText::Absent` states that missing base side below. Here it does NOT
+    // mean the file is gone from HEAD, because every matched file is tracked
+    // and present. This scope reviews whole content, so it chooses to hold no
+    // base at all.
+    let renames = BTreeMap::new();
+    let (files, builder) = read_candidates(&candidates, &renames, &mut excluded, |path| {
+        Ok((FileText::Absent, read_working(repo_path, path)?))
+    })?;
+
     // Blame anchor: same stable merge-base pin as `resolve_working` — see
     // `working_tree_blame_anchor`.
-    Ok(builder.finish(
-        files,
-        auto_purpose(&format!("files matching {pattern}")),
-        working_tree_blame_anchor(&repo),
-    ))
+    Ok(ScopeFiles {
+        resolved: builder.finish(
+            files,
+            auto_purpose(&format!("files matching {pattern}")),
+            working_tree_blame_anchor(&repo),
+        ),
+        excluded,
+    })
 }
 
 /// Wrap a one-line auto summary as the review-level change purpose.
@@ -788,11 +959,6 @@ impl BeforeContent {
     /// Wrap the base-revision content of a file.
     pub(super) fn new(content: Option<String>) -> Self {
         Self(content)
-    }
-
-    /// The absent base side — a file that did not exist before the change.
-    pub(super) fn absent() -> Self {
-        Self(None)
     }
 
     /// Unwrap for the sem-diff input.

@@ -2538,4 +2538,81 @@ for f in "$@"; do awk -v f="$f" '/TODO/ {{ print f ":" NR ": TODO left in code" 
             report.markdown()
         );
     }
+
+    // ---- a file whose bytes are not text ----------------------------------
+
+    /// A picture the test commits beside a source edit. Its bytes are not
+    /// text, so the scope stage can read no side of it.
+    const PICTURE_FILE: &str = "image.png";
+
+    /// Bytes that are not UTF-8. The first byte cannot start a UTF-8
+    /// sequence, so the blob read rejects them. This models a picture.
+    const PICTURE_BYTES: &[u8] = &[0xff, 0xfe, 0x00, 0x01];
+
+    /// The source edit the test commits beside [`PICTURE_FILE`]. It keeps the
+    /// TODO, so the tool rule still reports one finding on the file it can
+    /// read.
+    const SOURCE_EDITED_BESIDE_THE_PICTURE: &str = "fn a() {}\n// TODO: fix this\nfn added() {}\n";
+
+    /// Acceptance: a range that holds a file which is not text still gives a
+    /// report, and that report names the file and the reason.
+    ///
+    /// The reason phrase is the whole signal to a reader. Without it the
+    /// picture leaves the run in silence. Zero findings over a file nothing
+    /// read must never look like zero findings over a file the engine read.
+    /// The source edit beside the picture proves the run still reviews the
+    /// rest of the range.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn review_sha_over_a_file_that_is_not_text_names_the_reason_in_the_report() {
+        let (repo, conn) = todo_repo();
+        repo.write("src/lib.rs", SOURCE_EDITED_BESIDE_THE_PICTURE);
+        std::fs::write(repo.path().join(PICTURE_FILE), PICTURE_BYTES)
+            .expect("the test repository must accept the picture");
+        repo.commit("add a picture beside a source edit");
+        let base = tempfile::tempdir().expect("tool rule base dir");
+        crate::review::test_support::write_tool_rule_fixtures(base.path(), "docs-tool");
+        let loader = tool_rule_loader(base.path(), "true");
+
+        let (notify_tx, notification_rx) = broadcast::channel(BACKEND_BROADCAST_CAPACITY);
+        let agent = broadcast_agent(vec![], notify_tx, true);
+
+        let report = drive_review(
+            agent,
+            notification_rx,
+            &repo,
+            &conn,
+            &loader,
+            None,
+            Scope::Sha("HEAD~1..HEAD".to_string()),
+        )
+        .await;
+
+        assert!(
+            report
+                .markdown()
+                .contains("the file holds no text to review"),
+            "the report must state why the picture went unread: {}",
+            report.markdown()
+        );
+        assert!(
+            report.markdown().contains(&format!("`{PICTURE_FILE}`")),
+            "the report must name the picture it did not review: {}",
+            report.markdown()
+        );
+        assert_eq!(
+            report.counts().skipped_files(),
+            [PICTURE_FILE.to_string()],
+            "the picture is the one file the run did not review, and a clean \
+             pass leaves this list empty: {}",
+            report.markdown()
+        );
+        assert!(
+            !report
+                .markdown()
+                .contains("Every file in scope was excluded"),
+            "a file that is not text is a coverage gap, never the deliberate \
+             exclusion that passes clean: {}",
+            report.markdown()
+        );
+    }
 }

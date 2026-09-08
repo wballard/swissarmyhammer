@@ -9,11 +9,11 @@
 //! The partial is read through `get_builtin_partials`, the table
 //! `PromptResolver::load_builtin_partials` serves from, so an assertion here
 //! measures the text an agent actually RECEIVES rather than a file on disk.
-//! What the partial is HELD TO is read the same way. The swiftformat options
-//! and the version floor come out of the shipped `idioms-swift` script, and
-//! the two empty-collection forms come out of the shipped `idioms` prompt
-//! rule, so each value has ONE owner and a change to either gate fails a test
-//! here rather than leaving the partial to drift.
+//! What the partial is HELD TO is read the same way. The lint command comes
+//! out of the shipped `idioms-swift` script, and the two empty-collection
+//! forms come out of the shipped `idioms` prompt rule, so each value has ONE
+//! owner and a change to either gate fails a test here rather than leaving the
+//! partial to drift.
 //!
 //! This module stands in this crate rather than beside the partial in
 //! `swissarmyhammer-templating`, because that crate cannot read a validator:
@@ -149,89 +149,12 @@ fn swift_partial_documents_the_airbnb_plugin_commands() {
 
 /// The head of the lint command the shipped `idioms-swift` script runs.
 ///
-/// Every option that decides the SHAPE of the code stands on that one command,
-/// over as many lines as the script writes, so reading it is reading the gate.
-const SWIFT_IDIOMS_LINT_HEAD: &str = "swiftformat --lint";
-
-/// What opens a swiftformat option name on that command line.
-const SWIFT_IDIOMS_OPTION_MARK: &str = "--";
-
-/// The options of that command the ENGINE owns rather than the guidelines.
-///
-/// `--reporter` and `--cache` decide how the engine reads the run, and
-/// `--rules` carries the roster
-/// `the_shipped_swift_idioms_tool_rule_names_only_rules_swiftformat_knows`
-/// already holds. An author running swiftformat by hand needs none of the
-/// three. Every OTHER option of the command is one the guidelines have to
-/// agree with, so a style option added to the gate reaches the test below with
-/// no edit here.
-const SWIFT_IDIOMS_ENGINE_OPTIONS: &[&str] = &["--reporter", "--cache", "--rules"];
-
-/// The option that states the swiftformat version floor.
-///
-/// The guidelines advise a MINIMUM version in prose rather than writing the
-/// flag, so the test holds the partial to the VALUE and not to the whole pair.
-const SWIFT_IDIOMS_VERSION_FLOOR_OPTION: &str = "--min-version";
-
-/// How many options of the shipped lint command the guidelines must agree
-/// with.
-///
-/// Five: the version floor, and the four style options whose swiftformat
-/// defaults all point the other way. The count is what stops the reading below
-/// from going quiet — a parse that found nothing would leave the loop under it
-/// with nothing to check, and a test that cannot fail is not a gate.
-const SWIFT_IDIOMS_AGREED_OPTION_COUNT: usize = 5;
-
-/// Each `--option value` pair of the shipped `idioms-swift` lint command that
-/// the guidelines partial has to agree with.
-///
-/// The command runs over several lines, each continued with a trailing
-/// backslash, so the words are gathered from the head to the first line
-/// carrying no continuation. A word opening `--` whose next word does not is
-/// an option with a value; every other word is a bare flag, a redirection or
-/// the file argument. [`SWIFT_IDIOMS_ENGINE_OPTIONS`] then drops the pairs the
-/// engine owns.
-fn swift_idioms_agreed_options(script: &str) -> Vec<(&str, &str)> {
-    let mut words: Vec<&str> = Vec::new();
-    let mut inside = false;
-
-    for line in script.lines() {
-        let trimmed = line.trim();
-        if !inside && !trimmed.starts_with(SWIFT_IDIOMS_LINT_HEAD) {
-            continue;
-        }
-        inside = true;
-        words.extend(
-            trimmed
-                .trim_end_matches(SWIFT_IDIOMS_LINE_JOIN)
-                .split_whitespace(),
-        );
-        if !trimmed.ends_with(SWIFT_IDIOMS_LINE_JOIN) {
-            break;
-        }
-    }
-
-    let mut agreed = Vec::new();
-    let mut index = 0;
-    while index < words.len() {
-        let option = words[index];
-        index += 1;
-        let Some(value) = words.get(index) else {
-            break;
-        };
-        if !option.starts_with(SWIFT_IDIOMS_OPTION_MARK)
-            || value.starts_with(SWIFT_IDIOMS_OPTION_MARK)
-        {
-            continue;
-        }
-        index += 1;
-        if !SWIFT_IDIOMS_ENGINE_OPTIONS.contains(&option) {
-            agreed.push((option, *value));
-        }
-    }
-
-    agreed
-}
+/// The gate moved from Nick Lockwood's `swiftformat` to the toolchain's own
+/// `swift format`, and the guidelines have to send an author to the SAME tool.
+/// Reading the head off the shipped script is what keeps the two together: a
+/// gate that moved again fails the test below rather than leaving the partial
+/// to name a tool no review runs.
+const SWIFT_IDIOMS_LINT_HEAD: &str = "swift format lint";
 
 /// What the shipped `idioms` prompt rule writes before the swiftformat option
 /// that rewrites its DO into its DON'T.
@@ -288,48 +211,33 @@ fn stated_after(bullet: &str, mark: &str) -> String {
 /// out of those gates.
 ///
 /// Guidance that disagrees with a gate walks an author into a finding from
-/// this project's own review, and two shipped gates disagree with the tools'
-/// own defaults in opposite directions:
+/// this project's own review, and two shipped rules could disagree with what
+/// the guidelines say:
 ///
-/// - `builtin/validators/code-hygiene/rules/idioms-swift.md` runs swiftformat
-///   above a version floor with four style options whose defaults all point
-///   the other way, so a bare `swiftformat .` writes code that gate reports.
+/// - `builtin/validators/code-hygiene/rules/idioms-swift.md` runs the
+///   toolchain's own `swift format`, so an author the guidelines send to
+///   another formatter writes code that gate reports.
 /// - `builtin/validators/swift/rules/idioms.md` wants the annotated
 ///   empty-collection literal that the Airbnb plugin's own
 ///   `--property-types inferred` rewrites away.
 ///
 /// Every value below is READ from the shipped rule rather than written here,
-/// so the option set, the version floor and the two declaration forms each
-/// have one owner. Change either gate and this test fails.
+/// so the tool name and the two declaration forms each have one owner. Change
+/// either gate and this test fails.
 #[test]
 fn swift_partial_agrees_with_the_shipped_swift_tool_validators() {
     let loader = builtin_loader();
 
     let script = required_shipped_tool_rule(&loader, SWIFT_IDIOMS_RULE).script;
-    let agreed = swift_idioms_agreed_options(&script);
-    assert_eq!(
-        agreed.len(),
-        SWIFT_IDIOMS_AGREED_OPTION_COUNT,
-        "the shipped `{SWIFT_IDIOMS_RULE}` lint command must carry \
-         {SWIFT_IDIOMS_AGREED_OPTION_COUNT} options the guidelines agree with; it \
-         carries {agreed:?}. An option added to the gate has to be stated in the \
-         guidelines as well"
+    assert!(
+        script.contains(SWIFT_IDIOMS_LINT_HEAD),
+        "the shipped `{SWIFT_IDIOMS_RULE}` script must run `{SWIFT_IDIOMS_LINT_HEAD}`, or the \
+         guidelines below name a tool no review runs"
     );
-
-    for (option, value) in agreed {
-        let (stated, requirement) = if option == SWIFT_IDIOMS_VERSION_FLOOR_OPTION {
-            (
-                value.to_string(),
-                "state the swiftformat version floor the idioms-swift gate enforces",
-            )
-        } else {
-            (
-                format!("{option} {value}"),
-                "pin every style option the idioms-swift gate's lint command carries",
-            )
-        };
-        assert_swift_partial_states(&[(stated.as_str(), requirement)]);
-    }
+    assert_swift_partial_states(&[(
+        SWIFT_IDIOMS_LINT_HEAD,
+        "name the lint command the idioms-swift gate itself runs",
+    )]);
 
     let idioms = swift_prompt_rule_body(&loader, SWIFT_IDIOMS_PROMPT_RULE);
     let bullet = swift_empty_collection_bullet(&idioms);
